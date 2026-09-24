@@ -4,7 +4,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -359,11 +358,7 @@ func (m *Model) contentWidth() int {
 
 // forgesStatusLine muestra la última actualización y el estado de cada forge.
 func (m *Model) forgesStatusLine(now time.Time) string {
-	names := make([]string, 0, len(m.statuses))
-	for name := range m.statuses {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := m.sortedForgeNames()
 
 	parts := make([]string, 0, len(names))
 	for _, name := range names {
