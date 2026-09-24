@@ -220,6 +220,56 @@ func TestParseGLGraphQL(t *testing.T) {
 	}
 }
 
+func TestGHChecksJSON(t *testing.T) {
+	c, err := ParseGHChecks(`[{"name":"ci","state":"SUCCESS","bucket":"pass"}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.State != model.ChecksPassing || c.Total != 1 {
+		t.Fatalf("checks = %+v", c)
+	}
+}
+
+// TestGLReviewDecisionFromApprovals comprueba la traducción de aprobación a
+// decisión homóloga a GitHub.
+func TestGLReviewDecisionFromApprovals(t *testing.T) {
+	raw := func(approved bool, left int) string {
+		return `{"data":{"currentUser":{"authoredMergeRequests":{"nodes":[
+			{"iid":1,"title":"t","state":"opened","approved":` + boolStr(approved) + `,"approvalsLeft":` + itoa(left) + `,"project":{"fullPath":"g/p","name":"p"}}
+		]}}}}`
+	}
+	items, _, err := ParseGLGraphQL(raw(false, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].ReviewDecision != "REVIEW_REQUIRED" {
+		t.Errorf("reviewDecision = %q", items[0].ReviewDecision)
+	}
+	items, _, _ = ParseGLGraphQL(raw(true, 0))
+	if items[0].ReviewDecision != "APPROVED" {
+		t.Errorf("reviewDecision = %q", items[0].ReviewDecision)
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	return string(b)
+}
+
 func TestParseGLMRList(t *testing.T) {
 	raw := `[
 		{"iid":12,"title":"MR","web_url":"u","state":"opened","source_branch":"a","target_branch":"main","updated_at":"2026-09-21T07:00:00Z","author":{"username":"me"},"references":{"full":"grp/sub/proj!12","short":"!12"}}
