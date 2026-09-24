@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -16,17 +17,25 @@ import (
 	"prdash/internal/state"
 )
 
-// printTimeout acota la consulta total del modo print.
+// printTimeout acota la consulta de cada forge.
 const printTimeout = 60 * time.Second
 
 func runPrint(cfg config.Config, adapters []forge.Adapter) {
-	ctx, cancel := context.WithTimeout(context.Background(), printTimeout)
-	defer cancel()
-
-	results := make([]inbox.ForgeResult, 0, len(adapters))
-	for _, a := range adapters {
-		results = append(results, forge.Collect(ctx, a))
+	// Una goroutine por forge con su propio timeout: una forge lenta no
+	// bloquea a las demás. El orden de impresión queda fijado por índice.
+	results := make([]inbox.ForgeResult, len(adapters))
+	var wg sync.WaitGroup
+	for i, a := range adapters {
+		wg.Add(1)
+		go func(i int, a forge.Adapter) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), printTimeout)
+			defer cancel()
+			results[i] = forge.Collect(ctx, a)
+		}(i, a)
 	}
+	wg.Wait()
+
 	box := inbox.Build(results)
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
