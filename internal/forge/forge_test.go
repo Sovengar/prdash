@@ -9,6 +9,10 @@ import (
 	"prdash/internal/testutil"
 )
 
+func mkItem(forgeName, host, project string, number int) model.Item {
+	return model.NewItem(model.RepoRef{Forge: forgeName, Host: host, Project: project, Owner: "acme", Name: "widget"}, number)
+}
+
 func TestRegistryRegisterAndGet(t *testing.T) {
 	reg := forge.NewRegistry()
 	gh := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
@@ -37,44 +41,39 @@ func TestRegistryRegisterNilIgnored(t *testing.T) {
 	}
 }
 
-// TestCollectAggregatesItemsAndWarnings comprueba que la consulta de un forge
-// devuelve ítems y que los warnings quedan etiquetados con su sección.
-func TestCollectAggregatesItemsAndWarnings(t *testing.T) {
-	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 1)
+// TestCollectPagesThroughAllStreams cubre la paginación sin tope: agota las
+// páginas de una lista y consulta las cuatro listas.
+func TestCollectPagesThroughAllStreams(t *testing.T) {
+	key := testutil.FakeKey{Section: model.SectionAuthored}
 	fake := &testutil.FakeAdapter{
-		ForgeName:     "github",
-		HostName:      "github.com",
-		AuthoredItems: []model.Item{it},
-		ReviewWarnings: []model.Warning{
-			{Forge: "github", Kind: "network", Msg: "boom"},
+		ForgeName: "github",
+		HostName:  "github.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			key: {
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 1)}, Next: "c1", More: true},
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 2)}, More: false},
+			},
 		},
 	}
 
 	res := forge.Collect(context.Background(), fake)
 
-	if res.Forge != "github" || res.Host != "github.com" {
-		t.Errorf("forge/host = %s/%s", res.Forge, res.Host)
+	if len(res.Authored) != 2 {
+		t.Fatalf("authored = %d, want 2 (dos páginas)", len(res.Authored))
 	}
-	if len(res.Authored) != 1 {
-		t.Errorf("authored = %d", len(res.Authored))
-	}
-	if len(res.Warnings) != 1 {
-		t.Fatalf("warnings = %+v", res.Warnings)
-	}
-	if res.Warnings[0].Section != model.SectionReview {
-		t.Errorf("warning debería quedar etiquetado a review: %+v", res.Warnings[0])
+	if fake.ListCallCount() < len(forge.Streams) {
+		t.Errorf("List se llamó %d veces, want >= %d", fake.ListCallCount(), len(forge.Streams))
 	}
 }
 
-// TestCollectAuthFailureDoesNotDropData comprueba que un fallo de auth no
-// vacía el inbox: se registra el warning pero los ítems se conservan.
 func TestCollectAuthFailureDoesNotDropData(t *testing.T) {
-	it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grp/proj"}, 4)
 	fake := &testutil.FakeAdapter{
-		ForgeName:     "gitlab",
-		HostName:      "gitlab.example.com",
-		AuthState:     model.AuthState{Forge: "gitlab", OK: false, Reason: "401"},
-		AuthoredItems: []model.Item{it},
+		ForgeName: "gitlab",
+		HostName:  "gitlab.example.com",
+		AuthState: model.AuthState{Forge: "gitlab", OK: false, Reason: "401"},
+		Pages: map[testutil.FakeKey][]forge.Page{
+			{Section: model.SectionAuthored}: {{Items: []model.Item{mkItem("gitlab", "gitlab.example.com", "grp/proj", 4)}}},
+		},
 	}
 
 	res := forge.Collect(context.Background(), fake)
@@ -82,13 +81,133 @@ func TestCollectAuthFailureDoesNotDropData(t *testing.T) {
 	if len(res.Authored) != 1 {
 		t.Errorf("authored = %d, want 1", len(res.Authored))
 	}
-	hasAuth := false
-	for _, w := range res.Warnings {
-		if w.Kind == "auth" {
-			hasAuth = true
+	assertKind(t, res.Warnings, "auth")
+}
+
+// TestStreamEmitsPages cubre la carga progresiva: la primera página llega
+// marcada como First y las siguientes como continuación.
+func TestStreamEmitsPages(t *testing.T) {
+	key := testutil.FakeKey{Section: model.SectionReview, Kind: model.ReviewRequested}
+	fake := &testutil.FakeAdapter{
+		ForgeName: "github",
+		HostName:  "github.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			key: {
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 1)}, Next: "c1", More: true},
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 2)}, More: false},
+			},
+		},
+	}
+
+	var firsts, nexts int
+	forge.Stream(context.Background(), fake, func(p forge.PageResult) {
+		if p.Query.Section != model.SectionReview || p.Query.ReviewKind != model.ReviewRequested {
+			return // ignora las listas vacías
+		}
+		if len(p.Items) == 0 {
+			return
+		}
+		if p.First {
+			firsts++
+		} else {
+			nexts++
+		}
+	})
+
+	if firsts != 1 || nexts != 1 {
+		t.Fatalf("firsts=%d nexts=%d, want 1 y 1", firsts, nexts)
+	}
+}
+
+func TestRunActionApproveOK(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 1)
+	item.State = "OPEN"
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 1): item},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 1)
+	if !out.OK || out.Conflict || out.Perm {
+		t.Fatalf("outcome = %+v", out)
+	}
+	if !out.HasItem {
+		t.Error("debería traer el estado releído")
+	}
+}
+
+// TestRunActionConflictWhenMerged cubre "el ítem cambió en el forge entre
+// refresco y acción": si ya está mergeado, no se ejecuta acción y se reporta
+// conflicto con el estado releído.
+func TestRunActionConflictWhenMerged(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 2)
+	item.State = "MERGED"
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 2): item},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 2)
+	if !out.Conflict || out.OK {
+		t.Fatalf("outcome = %+v", out)
+	}
+	if !out.HasItem || out.Item.State != "MERGED" {
+		t.Errorf("debería traer el estado releído: %+v", out.Item)
+	}
+}
+
+func TestRunActionConflictWhenNotFound(t *testing.T) {
+	item := mkItem("gitlab", "gitlab.example.com", "grp/proj", 3)
+	fake := &testutil.FakeAdapter{
+		ForgeName:     "gitlab",
+		HostName:      "gitlab.example.com",
+		StateWarnings: map[string][]model.Warning{testutil.ItemKey("grp/proj", 3): {{Forge: "gitlab", Kind: "notfound", Msg: "404"}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 3)
+	if !out.Conflict {
+		t.Fatalf("outcome = %+v", out)
+	}
+}
+
+func TestRunActionPermissionDisabled(t *testing.T) {
+	item := mkItem("gitlab", "gitlab.example.com", "grp/proj", 4)
+	fake := &testutil.FakeAdapter{
+		ForgeName:      "gitlab",
+		HostName:       "gitlab.example.com",
+		ItemStates:     map[string]model.Item{testutil.ItemKey("grp/proj", 4): item},
+		ActionWarnings: map[string][]model.Warning{"approve:grp/proj#4": {{Forge: "gitlab", Kind: "permission", Msg: "no tienes permiso"}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 4)
+	if !out.Perm || out.OK {
+		t.Fatalf("outcome = %+v", out)
+	}
+}
+
+func TestRunActionUnsupportedDisabled(t *testing.T) {
+	item := mkItem("bitbucket", "bitbucket.org", "acme/widget", 5)
+	fake := &testutil.FakeAdapter{
+		ForgeName:      "bitbucket",
+		HostName:       "bitbucket.org",
+		ItemStates:     map[string]model.Item{testutil.ItemKey("acme/widget", 5): item},
+		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#5": {{Forge: "bitbucket", Kind: "unsupported", Msg: "no soportado"}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5)
+	if !out.Perm {
+		t.Fatalf("outcome = %+v", out)
+	}
+}
+
+func assertKind(t *testing.T, warns []model.Warning, kind string) {
+	t.Helper()
+	for _, w := range warns {
+		if w.Kind == kind {
+			return
 		}
 	}
-	if !hasAuth {
-		t.Errorf("faltó el warning de auth: %+v", res.Warnings)
-	}
+	t.Fatalf("no hay warning de tipo %q en %+v", kind, warns)
 }

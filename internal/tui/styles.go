@@ -33,6 +33,12 @@ var (
 	styleEmpty  = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
 	styleWarn   = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
 	styleHint   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	styleInfo   = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	styleOK     = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+	styleError  = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+
+	styleDetailKey   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	styleDetailTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 
 	styleStateError    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	styleStateChanges  = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))

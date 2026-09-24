@@ -2,18 +2,21 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"prdash/internal/forge"
 	"prdash/internal/forge/model"
-	"prdash/internal/inbox"
+	"prdash/internal/state"
 )
 
-// Update procesa mensajes: resultados de forges, teclas y resize.
+// Update procesa mensajes: eventos de los forges, teclas, tick y resize.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -25,13 +28,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
-	case forgeResultMsg:
-		m.applyResult(msg.result, time.Now())
+	case authMsg:
+		if msg.cycle != m.cycle {
+			return m, nil
+		}
+		if st := m.statuses[msg.forge]; st != nil {
+			st.auth = msg.auth
+		}
+		return m.withPump(nil)
+
+	case pageMsg:
+		if msg.cycle != m.cycle {
+			return m, nil
+		}
+		m.applyPage(msg)
+		return m.withPump(nil)
+
+	case forgeDoneMsg:
+		if msg.cycle != m.cycle {
+			return m, nil
+		}
+		if st := m.statuses[msg.forge]; st != nil {
+			st.loading = false
+		}
 		return m.withPump(nil)
 
 	case refreshDoneMsg:
+		if msg.cycle != m.cycle {
+			return m, nil
+		}
 		m.loading = false
 		m.lastRefresh = time.Now()
+		m.recomputeBackoff()
+		m.saveSnapshot()
+		return m.withPump(m.tickCmd())
+
+	case tickMsg:
+		if m.paused() {
+			return m, m.tickCmd() // reprograma sin refrescar
+		}
+		updated, cmd := m.beginRefresh()
+		return updated, tea.Batch(cmd, waitForEvent(m.events))
+
+	case actionMsg:
+		m.applyAction(msg.outcome)
 		return m.withPump(nil)
 
 	case tea.KeyPressMsg:
@@ -45,43 +85,33 @@ func (m Model) withPump(cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, waitForEvent(m.events))
 }
 
-// applyResult reemplaza el resultado de un forge y recompone el inbox.
-func (m *Model) applyResult(res inbox.ForgeResult, now time.Time) {
-	replaced := false
-	for i := range m.results {
-		if m.results[i].Forge == res.Forge && m.results[i].Host == res.Host {
-			m.results[i] = res
-			replaced = true
-			break
-		}
+// applyAction vuelca el resultado de una acción en el estado: refresca el ítem,
+// registra la denegación por permisos o avisa del conflicto.
+func (m *Model) applyAction(out forge.Outcome) {
+	m.actionBusy = false
+	if out.HasItem {
+		m.applyItemUpdate(out.Item)
 	}
-	if !replaced {
-		m.results = append(m.results, res)
+	switch {
+	case out.Perm:
+		m.denied[out.ID] = out.Msg
+		m.setNotice(string(out.Kind)+" deshabilitado: "+out.Msg, levelWarn)
+	case out.Conflict:
+		m.setNotice("conflicto en el forge: "+out.Msg, levelError)
+	case out.OK:
+		m.setNotice(string(out.Kind)+" ok", levelOK)
+	default:
+		m.setNotice("error: "+out.Msg, levelError)
 	}
-	for i := range m.statuses {
-		if m.statuses[i].Forge == res.Forge && m.statuses[i].Host == res.Host {
-			m.statuses[i].Warnings = res.Warnings
-			m.statuses[i].UpdatedAt = now
-			m.statuses[i].Auth = authFromWarnings(res)
-		}
-	}
-	m.rebuild()
 }
 
-// authFromWarnings deduce el estado de autenticación de un resultado: un
-// warning de tipo auth significa forge no operativo.
-func authFromWarnings(res inbox.ForgeResult) model.AuthState {
-	for _, w := range res.Warnings {
-		if w.Kind == "auth" {
-			return model.AuthState{Forge: res.Forge, OK: false, Reason: w.Msg}
-		}
-	}
-	return model.AuthState{Forge: res.Forge, OK: true}
-}
-
-// handleKey enruta las teclas: navegación fija y acciones configurables.
+// handleKey enruta las teclas: detalle, navegación y acciones configurables.
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+
+	if m.detailOpen {
+		return m.handleDetailKey(key)
+	}
 
 	switch key {
 	case "q", "ctrl+c":
@@ -104,15 +134,110 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch m.cfg.KeyFor(key) {
+	switch m.cfg.ActionForKey(key) {
 	case "refresh":
-		cmd := m.startRefreshCmd()
-		return m, cmd
+		updated, cmd := m.beginRefresh()
+		return updated, tea.Batch(cmd, waitForEvent(m.events))
+	case "detail":
+		m.openDetail()
+		return m, nil
+	case "approve":
+		return m, m.startAction(forge.ActionApprove)
+	case "merge":
+		return m, m.startAction(forge.ActionMerge)
+	case "mount-review":
+		m.setNotice("montar review requiere Herdr (etapa posterior)", levelWarn)
+		return m, nil
+	case "open-browser":
+		if it, ok := m.selected(); ok && it.URL != "" {
+			m.setNotice("abrir "+it.URL, levelInfo)
+		}
+		return m, nil
 	case "quit":
 		m.cancel()
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// handleDetailKey gestiona las teclas mientras el detalle está abierto. Volver
+// no toca el cursor: la selección del inbox se conserva.
+func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc", "q", "ctrl+c":
+		m.detailOpen = false
+		return m, nil
+	}
+	switch m.cfg.ActionForKey(key) {
+	case "detail":
+		m.detailOpen = false
+		return m, nil
+	case "quit":
+		m.cancel()
+		return m, tea.Quit
+	case "refresh":
+		updated, cmd := m.beginRefresh()
+		return updated, tea.Batch(cmd, waitForEvent(m.events))
+	case "approve":
+		return m, m.startAction(forge.ActionApprove)
+	case "merge":
+		return m, m.startAction(forge.ActionMerge)
+	}
+	return m, nil
+}
+
+// openDetail abre el detalle del ítem seleccionado sin mover el cursor.
+func (m *Model) openDetail() {
+	it, ok := m.selected()
+	if !ok {
+		return
+	}
+	m.detailItem = it
+	m.detailOpen = true
+}
+
+// startAction lanza una acción rápida sobre el ítem seleccionado tras los
+// guards de disponibilidad.
+func (m *Model) startAction(kind forge.ActionKind) tea.Cmd {
+	it, ok := m.selected()
+	if !ok {
+		m.setNotice("selecciona un ítem", levelWarn)
+		return nil
+	}
+	a := m.byForge[it.Forge]
+	if a == nil {
+		m.setNotice("forge desconocido: "+it.Forge, levelError)
+		return nil
+	}
+	if st := m.statuses[it.Forge]; st != nil && !st.auth.OK {
+		m.setNotice("acción deshabilitada: "+it.Forge+" sin autenticar", levelWarn)
+		return nil
+	}
+	if reason := m.denied[it.ID()]; reason != "" {
+		m.setNotice(string(kind)+" deshabilitado: "+reason, levelWarn)
+		return nil
+	}
+	if m.actionBusy {
+		m.setNotice("ya hay una acción en curso", levelWarn)
+		return nil
+	}
+	if ok, reason := state.Actionable(it); !ok {
+		m.setNotice(reason, levelWarn)
+		return nil
+	}
+
+	m.actionBusy = true
+	m.setNotice(string(kind)+" en curso…", levelInfo)
+
+	appCtx := m.ctx
+	events := m.events
+	ref, number := it.Ref, it.Number
+	go func() {
+		ctx, cancel := context.WithTimeout(appCtx, actionTimeout)
+		defer cancel()
+		sendEvent(appCtx, events, actionMsg{outcome: forge.RunAction(ctx, a, kind, ref, number)})
+	}()
+	return nil
 }
 
 // gotoNextSection mueve el cursor al primer ítem de la siguiente sección con
@@ -156,15 +281,19 @@ func (m *Model) sectionIndexAtCursor() int {
 	return idx
 }
 
-// View compone la pantalla del inbox.
+// View compone la pantalla: detalle o inbox.
 func (m Model) View() tea.View {
-	v := tea.NewView(m.render())
+	content := m.renderInbox()
+	if m.detailOpen {
+		content = m.renderDetail()
+	}
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
 
-// render pinta la cabecera, las tres secciones y los hints.
-func (m *Model) render() string {
+// renderInbox pinta la cabecera, las tres secciones y los hints.
+func (m *Model) renderInbox() string {
 	var b strings.Builder
 	inner := m.contentWidth()
 
@@ -172,14 +301,21 @@ func (m *Model) render() string {
 	if m.loading {
 		b.WriteString(" " + m.spinner.View() + styleCount.Render(" refreshing…"))
 	}
-	b.WriteString("  " + styleCount.Render("updated "+m.lastRefreshLabel(time.Now())))
-	b.WriteString("  " + forgesStatusLine(m.statuses))
-	b.WriteString("\n\n")
+	b.WriteString("  " + m.forgesStatusLine(time.Now()))
+	b.WriteString("\n")
+	if m.notice != "" {
+		b.WriteString(styleNotice(m.level).Render("  "+m.notice) + "\n")
+	}
+	b.WriteString("\n")
 
 	row := 0
 	for _, sec := range m.inbox.Sections {
 		problems := m.sectionProblems(sec.Kind)
-		b.WriteString(styleHeader.Render(fmt.Sprintf("%s (%d)", sec.Kind.String(), len(sec.Items))))
+		header := fmt.Sprintf("%s (%d)", sec.Kind.String(), len(sec.Items))
+		if m.sectionLoadingMore(sec.Kind) {
+			header += " · cargando más…"
+		}
+		b.WriteString(styleHeader.Render(header))
 		b.WriteString("\n")
 
 		for _, p := range problems {
@@ -221,11 +357,44 @@ func (m *Model) contentWidth() int {
 	return max(40, m.width-4)
 }
 
+// forgesStatusLine muestra la última actualización y el estado de cada forge.
+func (m *Model) forgesStatusLine(now time.Time) string {
+	names := make([]string, 0, len(m.statuses))
+	for name := range m.statuses {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		st := m.statuses[name]
+		mark := "✓"
+		if !st.auth.OK {
+			mark = "✗"
+		}
+		label := name + " " + mark + " " + lastRefreshLabel(st.updatedAt, now)
+		if st.loading {
+			label += "…"
+		}
+		parts = append(parts, label)
+	}
+	return styleCount.Render(strings.Join(parts, " · "))
+}
+
 // hintLine compone la barra de hints con las acciones disponibles.
 func (m *Model) hintLine() string {
 	parts := []string{"j/k move"}
 	if k := m.cfg.KeyFor("section-next"); k != "" {
 		parts = append(parts, k+" section")
+	}
+	if k := m.cfg.KeyFor("detail"); k != "" {
+		parts = append(parts, k+" detail")
+	}
+	if k := m.cfg.KeyFor("approve"); k != "" {
+		parts = append(parts, k+" approve")
+	}
+	if k := m.cfg.KeyFor("merge"); k != "" {
+		parts = append(parts, k+" merge")
 	}
 	if k := m.cfg.KeyFor("refresh"); k != "" {
 		parts = append(parts, k+" refresh")
@@ -236,17 +405,16 @@ func (m *Model) hintLine() string {
 	return strings.Join(parts, " · ")
 }
 
-// forgesStatusLine resume si cada forge está operativo.
-func forgesStatusLine(statuses []forgeStatus) string {
-	parts := make([]string, 0, len(statuses))
-	for _, s := range statuses {
-		label := s.Forge
-		if s.Auth.OK {
-			label += " ✓"
-		} else {
-			label += " ✗"
-		}
-		parts = append(parts, label)
+// styleNotice elige el estilo del aviso de cabecera.
+func styleNotice(level noticeLevel) lipglossStyle {
+	switch level {
+	case levelOK:
+		return styleOK
+	case levelWarn:
+		return styleWarn
+	case levelError:
+		return styleError
+	default:
+		return styleInfo
 	}
-	return strings.Join(parts, " · ")
 }

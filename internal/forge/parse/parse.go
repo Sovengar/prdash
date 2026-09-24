@@ -30,6 +30,13 @@ type Error struct {
 	Err  error
 }
 
+// PageInfo describe la paginación de una respuesta: Next es el cursor (GraphQL)
+// o el número de página siguiente (REST) y More indica si quedan páginas.
+type PageInfo struct {
+	Next string
+	More bool
+}
+
 // Error implementa el contrato de error.
 func (e *Error) Error() string {
 	if e.Err != nil {
@@ -88,6 +95,10 @@ type ghPRNode struct {
 type ghGraphQLResp struct {
 	Data struct {
 		Search *struct {
+			PageInfo struct {
+				HasNextPage bool   `json:"hasNextPage"`
+				EndCursor   string `json:"endCursor"`
+			} `json:"pageInfo"`
 			Nodes []ghPRNode `json:"nodes"`
 		} `json:"search"`
 		Repository *struct {
@@ -101,32 +112,39 @@ type ghGraphQLResp struct {
 
 // ParseGHGraphQLSearch interpreta la respuesta de una query GraphQL de PRs
 // (búsqueda con `search.nodes` o un `repository.pullRequest` individual).
-// Devuelve los ítems leídos y un error tipado si la entrada no es válida o la
-// API reporta errores.
-func ParseGHGraphQLSearch(raw string) ([]model.Item, error) {
+// Devuelve los ítems leídos, la paginación de la búsqueda y un error tipado si
+// la entrada no es válida o la API reporta errores.
+func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 	var resp ghGraphQLResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		return nil, &Error{Tool: "gh-graphql", Msg: "JSON inválido", Err: err}
+		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "JSON inválido", Err: err}
 	}
 	if len(resp.Errors) > 0 {
-		return nil, &Error{Tool: "gh-graphql", Msg: resp.Errors[0].Message}
+		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: resp.Errors[0].Message}
 	}
 
-	var nodes []ghPRNode
+	var (
+		nodes []ghPRNode
+		page  PageInfo
+	)
 	switch {
 	case resp.Data.Search != nil:
 		nodes = resp.Data.Search.Nodes
+		page = PageInfo{
+			Next: resp.Data.Search.PageInfo.EndCursor,
+			More: resp.Data.Search.PageInfo.HasNextPage,
+		}
 	case resp.Data.Repository != nil && resp.Data.Repository.PullRequest != nil:
 		nodes = []ghPRNode{*resp.Data.Repository.PullRequest}
 	default:
-		return nil, &Error{Tool: "gh-graphql", Msg: "respuesta sin datos de pull requests"}
+		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "respuesta sin datos de pull requests"}
 	}
 
 	items := make([]model.Item, 0, len(nodes))
 	for _, n := range nodes {
 		items = append(items, itemFromGHNode(n))
 	}
-	return items, nil
+	return items, page, nil
 }
 
 func itemFromGHNode(n ghPRNode) model.Item {
@@ -355,24 +373,42 @@ type glGraphQLResp struct {
 }
 
 type glConn struct {
+	PageInfo struct {
+		HasNextPage bool   `json:"hasNextPage"`
+		EndCursor   string `json:"endCursor"`
+	} `json:"pageInfo"`
 	Nodes []glMR `json:"nodes"`
 }
 
-// ParseGLGraphQL interpreta la respuesta GraphQL del GitLab: las tres listas
-// del `currentUser` (authored, reviewRequested, assigned) y, si está, un
+// ParseGLGraphQL interpreta la respuesta GraphQL del GitLab: las listas del
+// `currentUser` (authored, reviewRequested, assigned) y, si está, un
 // `project.mergeRequest` individual. Cada ítem sale con su sección y su
-// ReviewKind ya resueltos.
-func ParseGLGraphQL(raw string) ([]model.Item, error) {
+// ReviewKind ya resueltos; la paginación corresponde a la primera conexión
+// presente (cada consulta pide una sola).
+func ParseGLGraphQL(raw string) ([]model.Item, PageInfo, error) {
 	var resp glGraphQLResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		return nil, &Error{Tool: "gl-graphql", Msg: "JSON inválido", Err: err}
+		return nil, PageInfo{}, &Error{Tool: "gl-graphql", Msg: "JSON inválido", Err: err}
 	}
 	if len(resp.Errors) > 0 {
-		return nil, &Error{Tool: "gl-graphql", Msg: resp.Errors[0].Message}
+		return nil, PageInfo{}, &Error{Tool: "gl-graphql", Msg: resp.Errors[0].Message}
 	}
 
-	items := []model.Item{}
+	var (
+		items []model.Item
+		page  PageInfo
+	)
+	pageable := false
 	if cu := resp.Data.CurrentUser; cu != nil {
+		for _, conn := range []*glConn{cu.AuthoredMergeRequests, cu.ReviewRequestedMergeRequests, cu.AssignedMergeRequests} {
+			if conn == nil {
+				continue
+			}
+			if !pageable {
+				page = PageInfo{Next: conn.PageInfo.EndCursor, More: conn.PageInfo.HasNextPage}
+				pageable = true
+			}
+		}
 		items = append(items, glItems(cu.AuthoredMergeRequests, model.SectionAuthored, "")...)
 		items = append(items, glItems(cu.ReviewRequestedMergeRequests, model.SectionReview, model.ReviewRequested)...)
 		items = append(items, glItems(cu.AssignedMergeRequests, model.SectionReview, model.ReviewAssigned)...)
@@ -380,7 +416,7 @@ func ParseGLGraphQL(raw string) ([]model.Item, error) {
 	if resp.Data.Project != nil && resp.Data.Project.MergeRequest != nil {
 		items = append(items, itemFromGLMR(*resp.Data.Project.MergeRequest, "", ""))
 	}
-	return items, nil
+	return items, page, nil
 }
 
 func glItems(conn *glConn, section model.Section, kind model.ReviewKind) []model.Item {
@@ -510,11 +546,12 @@ type glTodo struct {
 
 // ParseGLTodos interpreta la API de Todos del GitLab y devuelve como ítems
 // solo las menciones sobre merge requests, que son las que alimentan la
-// sección de menciones.
-func ParseGLTodos(raw string) ([]model.Item, error) {
+// sección de menciones. El segundo valor es el número de todos de la página
+// (antes de filtrar), que el adapter usa para saber si quedan páginas.
+func ParseGLTodos(raw string) ([]model.Item, int, error) {
 	var todos []glTodo
 	if err := json.Unmarshal([]byte(raw), &todos); err != nil {
-		return nil, &Error{Tool: "gl-todos", Msg: "JSON inválido", Err: err}
+		return nil, 0, &Error{Tool: "gl-todos", Msg: "JSON inválido", Err: err}
 	}
 
 	items := []model.Item{}
@@ -544,7 +581,7 @@ func ParseGLTodos(raw string) ([]model.Item, error) {
 		it.UpdatedAt = parseTime(td.UpdatedAt)
 		items = append(items, it)
 	}
-	return items, nil
+	return items, len(todos), nil
 }
 
 // ---- utilidades ----

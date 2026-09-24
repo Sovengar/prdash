@@ -14,6 +14,7 @@ import (
 
 	"prdash/internal/config"
 	"prdash/internal/forge"
+	"prdash/internal/forge/bitbucket"
 	"prdash/internal/forge/github"
 	"prdash/internal/forge/gitlab"
 	"prdash/internal/tui"
@@ -46,7 +47,7 @@ func main() {
 }
 
 // buildAdapters construye los adapters de los forges habilitados. Bitbucket se
-// registra en una etapa posterior.
+// registra aunque no esté operativo, para que el inbox lo reporte.
 func buildAdapters(cfg config.Config) []forge.Adapter {
 	var adapters []forge.Adapter
 	if cfg.Forges.GitHub.Enabled {
@@ -54,6 +55,9 @@ func buildAdapters(cfg config.Config) []forge.Adapter {
 	}
 	if cfg.Forges.GitLab.Enabled {
 		adapters = append(adapters, gitlab.New(cfg.Forges.GitLab.Host, cfg.Tools.Glab, cfg.Forges.GitLab.APIBase))
+	}
+	if cfg.Forges.Bitbucket.Enabled {
+		adapters = append(adapters, bitbucket.New("bitbucket.org"))
 	}
 	return adapters
 }
