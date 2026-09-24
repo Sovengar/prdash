@@ -9,6 +9,7 @@ package parse
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +48,33 @@ func (e *Error) Error() string {
 
 // Unwrap permite inspeccionar la causa subyacente.
 func (e *Error) Unwrap() error { return e.Err }
+
+// flexInt acepta un entero serializado como número JSON o como string: GraphQL
+// expone los `ID!` (p. ej. `iid`) como string y REST los devuelve como número.
+// Un valor nulo, ausente o no numérico se lee como 0; quien lo consuma decide
+// si descarta el ítem (no se inventa un número).
+type flexInt int
+
+// UnmarshalJSON implementa la tolerancia de tipo sin fallar el parseo entero.
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	s = strings.Trim(s, `"`)
+	if s == "" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		*f = 0
+		return nil
+	}
+	*f = flexInt(n)
+	return nil
+}
 
 // ---- GitHub: búsqueda GraphQL ----
 
@@ -348,14 +376,14 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 // ---- GitLab: GraphQL (currentUser / project) ----
 
 type glMR struct {
-	IID          int    `json:"iid"`
-	Title        string `json:"title"`
-	WebURL       string `json:"webUrl"`
-	State        string `json:"state"`
-	SourceBranch string `json:"sourceBranch"`
-	TargetBranch string `json:"targetBranch"`
-	Approved     bool   `json:"approved"`
-	UpdatedAt    string `json:"updatedAt"`
+	IID          flexInt `json:"iid"`
+	Title        string  `json:"title"`
+	WebURL       string  `json:"webUrl"`
+	State        string  `json:"state"`
+	SourceBranch string  `json:"sourceBranch"`
+	TargetBranch string  `json:"targetBranch"`
+	Approved     bool    `json:"approved"`
+	UpdatedAt    string  `json:"updatedAt"`
 	Author       struct {
 		Username string `json:"username"`
 	} `json:"author"`
@@ -437,6 +465,9 @@ func glItems(conn *glConn, section model.Section, kind model.ReviewKind) []model
 	}
 	out := make([]model.Item, 0, len(conn.Nodes))
 	for _, mr := range conn.Nodes {
+		if mr.IID == 0 {
+			continue // nodo sin iid utilizable
+		}
 		out = append(out, itemFromGLMR(mr, section, kind))
 	}
 	return out
@@ -455,7 +486,7 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 		Project: mr.Project.FullPath,
 		Owner:   owner,
 		Name:    mr.Project.Name,
-	}, mr.IID)
+	}, int(mr.IID))
 	it.Section = section
 	it.ReviewKind = kind
 	it.Title = mr.Title
@@ -482,13 +513,13 @@ func glReviewDecision(mr glMR) string {
 // ---- GitLab: REST merge_requests (BasicMergeRequest) ----
 
 type glBasicMR struct {
-	IID          int    `json:"iid"`
-	Title        string `json:"title"`
-	WebURL       string `json:"web_url"`
-	State        string `json:"state"`
-	SourceBranch string `json:"source_branch"`
-	TargetBranch string `json:"target_branch"`
-	UpdatedAt    string `json:"updated_at"`
+	IID          flexInt `json:"iid"`
+	Title        string  `json:"title"`
+	WebURL       string  `json:"web_url"`
+	State        string  `json:"state"`
+	SourceBranch string  `json:"source_branch"`
+	TargetBranch string  `json:"target_branch"`
+	UpdatedAt    string  `json:"updated_at"`
 	Author       struct {
 		Username string `json:"username"`
 	} `json:"author"`
@@ -516,7 +547,7 @@ func ParseGLMRList(raw string) ([]model.Item, error) {
 			Project: project,
 			Owner:   owner,
 			Name:    name,
-		}, mr.IID)
+		}, int(mr.IID))
 		it.Title = mr.Title
 		it.Author = mr.Author.Username
 		it.SourceBranch = mr.SourceBranch
@@ -532,18 +563,18 @@ func ParseGLMRList(raw string) ([]model.Item, error) {
 // ---- GitLab: API de Todos ----
 
 type glTodo struct {
-	ID         int    `json:"id"`
-	ActionName string `json:"action_name"`
-	TargetType string `json:"target_type"`
-	TargetURL  string `json:"target_url"`
-	UpdatedAt  string `json:"updated_at"`
+	ID         flexInt `json:"id"`
+	ActionName string  `json:"action_name"`
+	TargetType string  `json:"target_type"`
+	TargetURL  string  `json:"target_url"`
+	UpdatedAt  string  `json:"updated_at"`
 	Target     *struct {
-		IID          int    `json:"iid"`
-		Title        string `json:"title"`
-		WebURL       string `json:"web_url"`
-		State        string `json:"state"`
-		SourceBranch string `json:"source_branch"`
-		TargetBranch string `json:"target_branch"`
+		IID          flexInt `json:"iid"`
+		Title        string  `json:"title"`
+		WebURL       string  `json:"web_url"`
+		State        string  `json:"state"`
+		SourceBranch string  `json:"source_branch"`
+		TargetBranch string  `json:"target_branch"`
 		Author       struct {
 			Username string `json:"username"`
 		} `json:"author"`
@@ -571,6 +602,9 @@ func ParseGLTodos(raw string) ([]model.Item, int, error) {
 		if td.ActionName != "mentioned" && td.ActionName != "directly_addressed" {
 			continue
 		}
+		if td.Target.IID == 0 {
+			continue // sin iid utilizable
+		}
 		project := projectFromRef(td.Target.References.Full)
 		owner, name := splitProject(project)
 		it := model.NewItem(model.RepoRef{
@@ -579,7 +613,7 @@ func ParseGLTodos(raw string) ([]model.Item, int, error) {
 			Project: project,
 			Owner:   owner,
 			Name:    name,
-		}, td.Target.IID)
+		}, int(td.Target.IID))
 		it.Section = model.SectionMentions
 		it.Title = td.Target.Title
 		it.Author = td.Target.Author.Username
