@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -276,6 +277,25 @@ func (c Config) KeyFor(action string) string {
 		return k
 	}
 	return DefaultKeybindings()[action]
+}
+
+// ActionForKey devuelve la acción configurada para una tecla, o "" si ninguna.
+// Se resuelve sobre el mapa ya fusionado (defaults + overrides del usuario).
+func (c Config) ActionForKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	actions := make([]string, 0, len(c.Keybindings))
+	for action := range c.Keybindings {
+		actions = append(actions, action)
+	}
+	sort.Strings(actions)
+	for _, action := range actions {
+		if c.Keybindings[action] == key {
+			return action
+		}
+	}
+	return ""
 }
 
 // CmdArgs devuelve el argv base de un comando, separado por espacios.

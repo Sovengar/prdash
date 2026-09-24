@@ -178,3 +178,30 @@ func TestDefaultKeybindingsCoverActions(t *testing.T) {
 		}
 	}
 }
+
+func TestActionForKey(t *testing.T) {
+	cfg := Defaults()
+	if got := cfg.ActionForKey("r"); got != "refresh" {
+		t.Errorf("ActionForKey(r) = %q", got)
+	}
+	if got := cfg.ActionForKey("a"); got != "approve" {
+		t.Errorf("ActionForKey(a) = %q", got)
+	}
+	if got := cfg.ActionForKey("M"); got != "merge" {
+		t.Errorf("ActionForKey(M) = %q", got)
+	}
+	if got := cfg.ActionForKey("z"); got != "" {
+		t.Errorf("ActionForKey(z) = %q, want vacío", got)
+	}
+}
+
+func TestActionForKeyHonorsOverride(t *testing.T) {
+	cfg := Defaults()
+	cfg.Keybindings["refresh"] = "R"
+	if got := cfg.ActionForKey("R"); got != "refresh" {
+		t.Errorf("ActionForKey(R) = %q", got)
+	}
+	if got := cfg.ActionForKey("r"); got == "refresh" {
+		t.Error("la tecla vieja no debería seguir mapeada tras el override")
+	}
+}
