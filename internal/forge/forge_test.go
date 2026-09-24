@@ -2,6 +2,7 @@ package forge_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"prdash/internal/forge"
@@ -261,4 +262,18 @@ func TestCollectStopsOnRateLimit(t *testing.T) {
 		t.Fatalf("List se llamó %d veces; con rate limit debería parar en la primera página", fake.ListCallCount())
 	}
 	assertKind(t, res.Warnings, "ratelimit")
+}
+
+// TestEscapeGraphQL comprueba que el escapado también cubre saltos de línea.
+func TestEscapeGraphQL(t *testing.T) {
+	in := "x\"y\\z\nw\tv\ru"
+	out := forge.EscapeGraphQL(in)
+	if strings.ContainsAny(out, "\n\t\r") {
+		t.Fatalf("no debe quedar control crudo: %q", out)
+	}
+	for _, want := range []string{`\"`, `\\`, `\n`, `\t`, `\r`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("falta el escape %q en %q", want, out)
+		}
+	}
 }

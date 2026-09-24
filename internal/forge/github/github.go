@@ -238,17 +238,8 @@ func prQuery(owner, name string, number int) string {
 	)
 }
 
-// escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL:
-// barras, comillas y saltos de línea (que romperían la query en una sola línea).
-func escapeGraphQL(s string) string {
-	return strings.NewReplacer(
-		`\`, `\\`,
-		`"`, `\"`,
-		"\n", `\n`,
-		"\r", `\r`,
-		"\t", `\t`,
-	).Replace(s)
-}
+// escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL.
+func escapeGraphQL(s string) string { return forge.EscapeGraphQL(s) }
 
 // splitProject separa "owner/repo" en sus dos partes.
 func splitProject(project string) (string, string) {

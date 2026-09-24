@@ -10,6 +10,7 @@ package forge
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 
 	"prdash/internal/forge/model"
@@ -305,4 +306,16 @@ func firstMsg(warns []model.Warning) string {
 		return ""
 	}
 	return warns[0].Msg
+}
+
+// EscapeGraphQL escapa un valor para incrustarlo como literal de GraphQL:
+// barras, comillas y saltos de línea (que romperían la query en una línea).
+func EscapeGraphQL(s string) string {
+	return strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		"\n", `\n`,
+		"\r", `\r`,
+		"\t", `\t`,
+	).Replace(s)
 }

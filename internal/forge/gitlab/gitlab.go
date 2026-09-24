@@ -294,12 +294,4 @@ func afterArg(cursor string) string {
 }
 
 // escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL.
-func escapeGraphQL(s string) string {
-	return strings.NewReplacer(
-		`\`, `\\`,
-		`"`, `\"`,
-		"\n", `\n`,
-		"\r", `\r`,
-		"\t", `\t`,
-	).Replace(s)
-}
+func escapeGraphQL(s string) string { return forge.EscapeGraphQL(s) }
