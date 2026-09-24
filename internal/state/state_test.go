@@ -60,14 +60,14 @@ func TestScorePrecedence(t *testing.T) {
 
 func TestStateString(t *testing.T) {
 	cases := map[State]string{
-		StateDraft:             "draft",
-		StatePending:           "pending",
-		StateApproved:          "approved",
-		StateReviewRequired:    "review required",
-		StateChangesRequested:  "changes requested",
-		StateMerged:            "merged",
-		StateClosed:            "closed",
-		StateError:             "error",
+		StateDraft:            "draft",
+		StatePending:          "pending",
+		StateApproved:         "approved",
+		StateReviewRequired:   "review required",
+		StateChangesRequested: "changes requested",
+		StateMerged:           "merged",
+		StateClosed:           "closed",
+		StateError:            "error",
 	}
 	for st, want := range cases {
 		if got := st.String(); got != want {

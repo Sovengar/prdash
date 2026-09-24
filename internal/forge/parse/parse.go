@@ -220,13 +220,13 @@ func checksStateFromRollup(state string) model.CheckState {
 type ghSearchIssuesResp struct {
 	TotalCount int `json:"total_count"`
 	Items      []struct {
-		Number        int    `json:"number"`
-		Title         string `json:"title"`
-		HTMLURL       string `json:"html_url"`
-		State         string `json:"state"`
-		Draft         bool   `json:"draft"`
-		UpdatedAt     string `json:"updated_at"`
-		User          struct {
+		Number    int    `json:"number"`
+		Title     string `json:"title"`
+		HTMLURL   string `json:"html_url"`
+		State     string `json:"state"`
+		Draft     bool   `json:"draft"`
+		UpdatedAt string `json:"updated_at"`
+		User      struct {
 			Login string `json:"login"`
 		} `json:"user"`
 		PullRequest *struct {
