@@ -55,23 +55,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.withPump(nil)
 
 	case refreshDoneMsg:
-		if msg.cycle == m.cycle {
-			m.lastRefresh = time.Now()
-			m.recomputeBackoff()
-			m.saveSnapshot()
+		if msg.cycle != m.cycle {
+			// Ciclo obsoleto (no debería ocurrir: no se solapan ciclos). No
+			// toca datos, ni `loading`, ni la cadena de ticks; solo rearma la
+			// bomba porque consumió un evento del canal.
+			return m.withPump(nil)
 		}
-		// Cualquier fin de ciclo baja la carga y reprograma el tick: un
-		// refreshDoneMsg obsoleto no debe dejar `loading` atascado (pausaría el
-		// auto-refresco para siempre).
 		m.loading = false
-		return m.withPump(m.tickCmd())
+		m.lastRefresh = time.Now()
+		m.recomputeBackoff()
+		m.saveSnapshot()
+		return m.withPump(m.armTick())
 
 	case tickMsg:
+		// El tick pendiente acaba de dispararse.
+		m.tickPending = false
 		if m.paused() {
-			return m, m.tickCmd() // reprograma sin refrescar
+			return m, m.armTick()
 		}
 		updated, cmd := m.beginRefresh()
-		return updated, tea.Batch(cmd, waitForEvent(m.events))
+		return updated, cmd
 
 	case actionMsg:
 		m.applyAction(msg.outcome, msg.cycle)
@@ -87,9 +90,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// withPump rearma la bomba de eventos tras procesar un evento del canal.
+// withPump rearma la bomba de eventos tras procesar un evento del canal: el
+// mensaje consumió un lector y aquí se arma exactamente uno de nuevo.
 func (m Model) withPump(cmd tea.Cmd) (tea.Model, tea.Cmd) {
-	return m, tea.Batch(cmd, waitForEvent(m.events))
+	m.releaseReader()
+	return m, tea.Batch(cmd, m.armReader())
+}
+
+// releaseReader marca que un lector del canal terminó (un evento entregado).
+func (m *Model) releaseReader() {
+	if m.readers > 0 {
+		m.readers--
+	}
 }
 
 // applyAction vuelca el resultado de una acción en el estado: refresca el ítem,
@@ -149,8 +161,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch m.cfg.ActionForKey(key) {
 	case "refresh":
-		updated, cmd := m.beginRefresh()
-		return updated, tea.Batch(cmd, waitForEvent(m.events))
+		return m.startRefresh()
 	case "detail":
 		m.openDetail()
 		return m, nil
@@ -191,14 +202,25 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		m.cancel()
 		return m, tea.Quit
 	case "refresh":
-		updated, cmd := m.beginRefresh()
-		return updated, tea.Batch(cmd, waitForEvent(m.events))
+		return m.startRefresh()
 	case "approve":
 		return m, m.startAction(forge.ActionApprove)
 	case "merge":
 		return m, m.startAction(forge.ActionMerge)
 	}
 	return m, nil
+}
+
+// startRefresh arranca un ciclo de refresco si no hay uno en vuelo (no se
+// solapan ciclos). No arma un lector del canal: el refresco local no consume
+// eventos del canal, así que la bomba sigue con su único lector.
+func (m Model) startRefresh() (tea.Model, tea.Cmd) {
+	if m.loading {
+		m.setNotice("refresco en curso", levelInfo)
+		return m, nil
+	}
+	updated, cmd := m.beginRefresh()
+	return updated, cmd
 }
 
 // openDetail abre el detalle del ítem seleccionado sin mover el cursor. Guarda

@@ -151,6 +151,15 @@ type Model struct {
 	backoff       time.Duration
 	lastRefresh   time.Time
 
+	// tickPending evita armar una segunda cadena de auto-refresco mientras ya
+	// hay un tick agendado.
+	tickPending bool
+
+	// readers es el número de lectores del canal en vuelo. El invariante es 1:
+	// cada evento del canal consume un lector y withPump lo rearma; ninguna
+	// rama que no lea del canal debe armar uno (si no, se filtran goroutines).
+	readers int
+
 	actionBusy bool
 	denied     map[model.ID]string
 
@@ -163,6 +172,9 @@ type Model struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	spinner spinner.Model
+
+	// cachePath es la ruta del snapshot; vacía = sin cache (tests).
+	cachePath string
 }
 
 // New construye el modelo con la config y los adapters habilitados. Pinta el
@@ -194,10 +206,14 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		cancel:   cancel,
 		loading:  true,
 		cycle:    1, // el primer ciclo lo lanza Init
+		readers:  1, // Init arma el primer lector del canal
 	}
+	// Init arma el primer tick si el auto-refresco está habilitado.
+	m.tickPending = cfg.RefreshInterval > 0
 	m.spinner = spinner.New(spinner.WithSpinner(spinner.Dot))
 
 	if path, err := cache.Path(); err == nil {
+		m.cachePath = path
 		if f, ok := cache.Load(path); ok {
 			m.applySnapshot(f)
 		}
@@ -226,6 +242,12 @@ func waitForEvent(ch <-chan event) tea.Cmd {
 		}
 		return ev
 	}
+}
+
+// armReader arma un lector del canal y refleja el invariante en el contador.
+func (m *Model) armReader() tea.Cmd {
+	m.readers++
+	return waitForEvent(m.events)
 }
 
 // sendEvent publica en el canal respetando la cancelación.
@@ -313,6 +335,16 @@ func (m *Model) tickCmd() tea.Cmd {
 		return nil
 	}
 	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+// armTick arma el siguiente tick solo si no hay uno pendiente y el
+// auto-refresco está habilitado: garantiza una única cadena de ticks.
+func (m *Model) armTick() tea.Cmd {
+	if m.tickPending || m.tickInterval() <= 0 {
+		return nil
+	}
+	m.tickPending = true
+	return m.tickCmd()
 }
 
 // tickInterval es el intervalo efectivo del auto-refresco, con backoff.
@@ -642,11 +674,11 @@ func (m *Model) snapshot() cache.File {
 
 // saveSnapshot persiste el snapshot sin bloquear la UI.
 func (m *Model) saveSnapshot() {
-	path, err := cache.Path()
-	if err != nil {
+	if m.cachePath == "" {
 		return
 	}
 	f := m.snapshot()
+	path := m.cachePath
 	go func() { _ = cache.Save(path, f) }()
 }
 
