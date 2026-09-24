@@ -105,6 +105,19 @@ func Derive(it model.Item) State {
 	return StatePending
 }
 
+// Actionable indica si un ítem admite una acción de approve/merge y, si no,
+// el motivo. Un ítem cerrado o mergeado ya no es accionable.
+func Actionable(it model.Item) (bool, string) {
+	switch Derive(it) {
+	case StateMerged:
+		return false, "el ítem ya está mergeado"
+	case StateClosed:
+		return false, "el ítem ya está cerrado"
+	default:
+		return true, ""
+	}
+}
+
 // normalize compara estados sin depender de mayúsculas ni separadores.
 func normalize(s string) string {
 	out := make([]rune, 0, len(s))

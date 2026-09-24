@@ -58,6 +58,29 @@ func TestScorePrecedence(t *testing.T) {
 	}
 }
 
+func TestActionable(t *testing.T) {
+	cases := []struct {
+		name string
+		item model.Item
+		want bool
+	}{
+		{"abierto", item("OPEN", "APPROVED", model.Checks{}), true},
+		{"mergeado", item("MERGED", "", model.Checks{}), false},
+		{"cerrado", item("CLOSED", "", model.Checks{}), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ok, reason := Actionable(c.item)
+			if ok != c.want {
+				t.Fatalf("Actionable = %v (%s), want %v", ok, reason, c.want)
+			}
+			if !ok && reason == "" {
+				t.Error("una acción no permitida debería traer motivo")
+			}
+		})
+	}
+}
+
 func TestStateString(t *testing.T) {
 	cases := map[State]string{
 		StateDraft:            "draft",
