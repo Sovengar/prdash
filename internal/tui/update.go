@@ -29,7 +29,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case authMsg:
 		if msg.cycle != m.cycle {
-			return m, nil
+			// Ciclo obsoleto: se descarta su dato pero SIEMPRE se rearma la
+			// bomba (si no, se pierden lectores del canal y el refresco muere).
+			return m.withPump(nil)
 		}
 		if st := m.statuses[msg.forge]; st != nil {
 			st.auth = msg.auth
@@ -38,14 +40,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pageMsg:
 		if msg.cycle != m.cycle {
-			return m, nil
+			return m.withPump(nil)
 		}
 		m.applyPage(msg)
 		return m.withPump(nil)
 
 	case forgeDoneMsg:
 		if msg.cycle != m.cycle {
-			return m, nil
+			return m.withPump(nil)
 		}
 		if st := m.statuses[msg.forge]; st != nil {
 			st.loading = false
@@ -53,13 +55,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.withPump(nil)
 
 	case refreshDoneMsg:
-		if msg.cycle != m.cycle {
-			return m, nil
+		if msg.cycle == m.cycle {
+			m.lastRefresh = time.Now()
+			m.recomputeBackoff()
+			m.saveSnapshot()
 		}
+		// Cualquier fin de ciclo baja la carga y reprograma el tick: un
+		// refreshDoneMsg obsoleto no debe dejar `loading` atascado (pausaría el
+		// auto-refresco para siempre).
 		m.loading = false
-		m.lastRefresh = time.Now()
-		m.recomputeBackoff()
-		m.saveSnapshot()
 		return m.withPump(m.tickCmd())
 
 	case tickMsg:
@@ -70,8 +74,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return updated, tea.Batch(cmd, waitForEvent(m.events))
 
 	case actionMsg:
-		m.applyAction(msg.outcome)
+		m.applyAction(msg.outcome, msg.cycle)
 		return m.withPump(nil)
+
+	case notifyMsg:
+		m.setNotice(msg.text, msg.level)
+		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -86,7 +94,13 @@ func (m Model) withPump(cmd tea.Cmd) (tea.Model, tea.Cmd) {
 
 // applyAction vuelca el resultado de una acción en el estado: refresca el ítem,
 // registra la denegación por permisos o avisa del conflicto.
-func (m *Model) applyAction(out forge.Outcome) {
+//
+// Política de ciclo: el `Item` releído es el estado más reciente que existe del
+// forge (se lee DESPUÉS de la acción), así que se aplica siempre, aunque el
+// ciclo de refresco haya avanzado. Descartarlo revertiría el ítem a un estado
+// anterior; el ciclo solo se registra para diagnóstico.
+func (m *Model) applyAction(out forge.Outcome, cycle int) {
+	_ = cycle
 	m.actionBusy = false
 	if out.HasItem {
 		m.applyItemUpdate(out.Item)
@@ -148,10 +162,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.setNotice("montar review requiere Herdr (etapa posterior)", levelWarn)
 		return m, nil
 	case "open-browser":
-		if it, ok := m.selected(); ok && it.URL != "" {
-			m.setNotice("abrir "+it.URL, levelInfo)
+		it, ok := m.selected()
+		if !ok || it.URL == "" {
+			m.setNotice("no hay URL que abrir", levelWarn)
+			return m, nil
 		}
-		return m, nil
+		return m, m.openBrowserCmd(it.URL)
 	case "quit":
 		m.cancel()
 		return m, tea.Quit
@@ -185,12 +201,14 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// openDetail abre el detalle del ítem seleccionado sin mover el cursor.
+// openDetail abre el detalle del ítem seleccionado sin mover el cursor. Guarda
+// solo su identidad: el contenido se deriva del estado vivo (liveDetail).
 func (m *Model) openDetail() {
 	it, ok := m.selected()
 	if !ok {
 		return
 	}
+	m.detailID = it.ID()
 	m.detailItem = it
 	m.detailOpen = true
 }
@@ -231,10 +249,11 @@ func (m *Model) startAction(kind forge.ActionKind) tea.Cmd {
 	appCtx := m.ctx
 	events := m.events
 	ref, number := it.Ref, it.Number
+	cycle := m.cycle
 	go func() {
 		ctx, cancel := context.WithTimeout(appCtx, actionTimeout)
 		defer cancel()
-		sendEvent(appCtx, events, actionMsg{outcome: forge.RunAction(ctx, a, kind, ref, number)})
+		sendEvent(appCtx, events, actionMsg{cycle: cycle, outcome: forge.RunAction(ctx, a, kind, ref, number)})
 	}()
 	return nil
 }

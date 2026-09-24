@@ -53,8 +53,18 @@ type forgeDoneMsg struct {
 // refreshDoneMsg marca el fin de un ciclo de refresco.
 type refreshDoneMsg struct{ cycle int }
 
-// actionMsg entrega el resultado de una acción rápida.
-type actionMsg struct{ outcome forge.Outcome }
+// actionMsg entrega el resultado de una acción rápida. cycle registra el ciclo
+// vigente al lanzarla (ver política en applyAction).
+type actionMsg struct {
+	cycle   int
+	outcome forge.Outcome
+}
+
+// notifyMsg entrega un aviso efímero para la cabecera.
+type notifyMsg struct {
+	text  string
+	level noticeLevel
+}
 
 // tickMsg dispara el refresco automático.
 type tickMsg struct{}
@@ -133,7 +143,8 @@ type Model struct {
 	cursor int
 
 	detailOpen bool
-	detailItem model.Item
+	detailID   model.ID
+	detailItem model.Item // último estado conocido, por si el ítem sale del inbox
 
 	width, height int
 	loading       bool
@@ -360,6 +371,12 @@ func (m *Model) applyPage(msg pageMsg) {
 		return
 	}
 
+	// Un ítem visto en un refresco exitoso deja de estar denegado: puede que
+	// los permisos ya estén (o el usuario reintente con estado renovado).
+	for i := range msg.items {
+		delete(m.denied, msg.items[i].ID())
+	}
+
 	if msg.first {
 		s.items = msg.items
 		s.headCursor = msg.next
@@ -368,13 +385,15 @@ func (m *Model) applyPage(msg pageMsg) {
 	}
 	s.cursor = msg.next
 	s.more = msg.more
-	if !msg.more {
+	// Un fallback degradado trae datos parciales: no se marca como completo,
+	// para que el refresco incremental no lo congele.
+	if !msg.more && !hasDegraded(msg.warnings) {
 		s.complete = true
 	}
 
 	if st := m.statuses[msg.key.forge]; st != nil {
 		st.updatedAt = time.Now()
-		st.warnings = appendWarnings(st.warnings, stampWarnings(msg.warnings, msg.key.section))
+		st.warnings = appendWarnings(st.warnings, forge.StampSection(msg.warnings, msg.key.section))
 	}
 	m.rebuild()
 }
@@ -486,13 +505,25 @@ func (m *Model) selected() (model.Item, bool) {
 	return rows[m.cursor], true
 }
 
+// liveDetail deriva el ítem del detalle del estado vivo del inbox por su
+// identidad, de modo que refleje refrescos y acciones sin volver a abrirlo. Si
+// el ítem ya no está en el inbox, devuelve el último estado conocido.
+func (m *Model) liveDetail() model.Item {
+	for _, it := range m.rows() {
+		if it.ID() == m.detailID {
+			return it
+		}
+	}
+	return m.detailItem
+}
+
 // sectionItems devuelve los ítems de una sección.
 func (m *Model) sectionItems(kind model.Section) []model.Item {
 	return m.inbox.Section(kind).Items
 }
 
-// sectionProblems devuelve los mensajes de "no se pudo consultar" de una
-// sección, derivados de los warnings de esa sección en cualquier forge.
+// sectionProblems devuelve los mensajes de "no se pudo consultar" o de datos
+// parciales de una sección, derivados de los warnings de esa sección.
 func (m *Model) sectionProblems(kind model.Section) []string {
 	var out []string
 	for _, name := range m.sortedForgeNames() {
@@ -501,10 +532,28 @@ func (m *Model) sectionProblems(kind model.Section) []string {
 			if w.Section != kind {
 				continue
 			}
-			out = append(out, fmt.Sprintf("%s: no se pudo consultar (%s)", name, problemLabel(w.Kind)))
+			out = append(out, problemText(name, w))
 		}
 	}
 	return out
+}
+
+// problemText compone el aviso de un warning para una sección.
+func problemText(forgeName string, w model.Warning) string {
+	if w.Kind == "degraded" {
+		return fmt.Sprintf("%s: %s", forgeName, w.Msg)
+	}
+	return fmt.Sprintf("%s: no se pudo consultar (%s)", forgeName, problemLabel(w.Kind))
+}
+
+// hasDegraded indica si algún warning marca datos parciales.
+func hasDegraded(warns []model.Warning) bool {
+	for _, w := range warns {
+		if w.Kind == "degraded" {
+			return true
+		}
+	}
+	return false
 }
 
 // problemLabel traduce el tipo de warning a una etiqueta corta.
@@ -643,16 +692,6 @@ func appendWarnings(dst, src []model.Warning) []model.Warning {
 		}
 	}
 	return dst
-}
-
-// stampWarnings etiqueta con su sección los warnings que no la traigan.
-func stampWarnings(warns []model.Warning, section model.Section) []model.Warning {
-	for i := range warns {
-		if warns[i].Section == "" {
-			warns[i].Section = section
-		}
-	}
-	return warns
 }
 
 // setNotice fija el aviso de la cabecera.
