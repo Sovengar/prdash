@@ -19,6 +19,21 @@ const (
 	SectionMentions Section = "mentions"
 )
 
+// String devuelve el título visible de la sección, compartido por la TUI y el
+// modo de impresión para que no diverjan.
+func (s Section) String() string {
+	switch s {
+	case SectionAuthored:
+		return "Creados por mí"
+	case SectionReview:
+		return "Review / asignados"
+	case SectionMentions:
+		return "Menciones"
+	default:
+		return string(s)
+	}
+}
+
 // ReviewKind distingue, dentro de la sección de review, si el ítem llegó por
 // una petición de review o por una asignación.
 type ReviewKind string

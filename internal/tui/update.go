@@ -173,13 +173,13 @@ func (m *Model) render() string {
 		b.WriteString(" " + m.spinner.View() + styleCount.Render(" refreshing…"))
 	}
 	b.WriteString("  " + styleCount.Render("updated "+m.lastRefreshLabel(time.Now())))
-	b.WriteString("  " + styleForgeStatus(m.statuses))
+	b.WriteString("  " + forgesStatusLine(m.statuses))
 	b.WriteString("\n\n")
 
 	row := 0
 	for _, sec := range m.inbox.Sections {
 		problems := m.sectionProblems(sec.Kind)
-		b.WriteString(styleHeader.Render(fmt.Sprintf("%s (%d)", sectionLabel(sec.Kind), len(sec.Items))))
+		b.WriteString(styleHeader.Render(fmt.Sprintf("%s (%d)", sec.Kind.String(), len(sec.Items))))
 		b.WriteString("\n")
 
 		for _, p := range problems {
@@ -236,22 +236,8 @@ func (m *Model) hintLine() string {
 	return strings.Join(parts, " · ")
 }
 
-// sectionLabel es el título visible de cada sección.
-func sectionLabel(kind model.Section) string {
-	switch kind {
-	case model.SectionAuthored:
-		return "Creados por mí"
-	case model.SectionReview:
-		return "Review / asignados"
-	case model.SectionMentions:
-		return "Menciones"
-	default:
-		return string(kind)
-	}
-}
-
-// styleForgeStatus resume si cada forge está operativo.
-func styleForgeStatus(statuses []forgeStatus) string {
+// forgesStatusLine resume si cada forge está operativo.
+func forgesStatusLine(statuses []forgeStatus) string {
 	parts := make([]string, 0, len(statuses))
 	for _, s := range statuses {
 		label := s.Forge

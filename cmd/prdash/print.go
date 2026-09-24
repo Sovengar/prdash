@@ -12,7 +12,6 @@ import (
 
 	"prdash/internal/config"
 	"prdash/internal/forge"
-	"prdash/internal/forge/model"
 	"prdash/internal/inbox"
 	"prdash/internal/state"
 )
@@ -32,7 +31,7 @@ func runPrint(cfg config.Config, adapters []forge.Adapter) {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	for _, sec := range box.Sections {
-		fmt.Fprintf(w, "%s (%d)\n", sectionTitle(sec.Kind), len(sec.Items))
+		fmt.Fprintf(w, "%s (%d)\n", sec.Kind.String(), len(sec.Items))
 		for _, it := range sec.Items {
 			fmt.Fprintf(w, "  %s@%s\t%s#%d\t%s\t%s\n",
 				it.Forge, it.Host, it.Ref.Project, it.Number, state.Derive(it), it.Title)
@@ -42,19 +41,5 @@ func runPrint(cfg config.Config, adapters []forge.Adapter) {
 
 	for _, warning := range box.Warnings {
 		fmt.Fprintf(os.Stderr, "prdash: %s: %s (%s)\n", warning.Forge, warning.Msg, warning.Kind)
-	}
-}
-
-// sectionTitle es el título de sección en texto plano.
-func sectionTitle(kind model.Section) string {
-	switch kind {
-	case model.SectionAuthored:
-		return "Creados por mí"
-	case model.SectionReview:
-		return "Review / asignados"
-	case model.SectionMentions:
-		return "Menciones"
-	default:
-		return string(kind)
 	}
 }
