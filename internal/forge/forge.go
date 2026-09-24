@@ -233,30 +233,11 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	out := Outcome{Kind: kind, ID: model.With(ref.Forge, ref.Host, ref.Project, number)}
 
 	cur, warns := a.ItemState(ctx, ref, number)
-	switch {
-	case hasKind(warns, "notfound"):
-		out.Conflict = true
-		out.Msg = "el ítem ya no existe en el forge"
-		return out
-	case hasKind(warns, "permission"), hasKind(warns, "auth"):
-		out.Perm = true
-		out.Msg = firstMsg(warns)
-		return out
-	case len(warns) > 0 || cur.Number == 0:
-		out.Conflict = true
-		out.Msg = firstMsg(warns)
-		if out.Msg == "" {
-			out.Msg = "no se pudo releer el ítem"
-		}
-		return out
+	if stage := checkBeforeAction(cur, warns); stage != nil {
+		stage.Kind, stage.ID = kind, out.ID
+		return *stage
 	}
-
 	out.Item, out.HasItem = cur, true
-	if ok, reason := state.Actionable(cur); !ok {
-		out.Conflict = true
-		out.Msg = reason
-		return out
-	}
 
 	var actionWarns []model.Warning
 	switch kind {
@@ -265,27 +246,56 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	case ActionMerge:
 		actionWarns = a.Merge(ctx, ref, number)
 	}
-	if hasKind(actionWarns, "permission") || hasKind(actionWarns, "auth") || hasKind(actionWarns, "unsupported") {
-		out.Perm = true
-		out.Msg = firstMsg(actionWarns)
-		return out
-	}
-
-	out.OK = len(actionWarns) == 0
-	if !out.OK {
-		out.Msg = firstMsg(actionWarns)
-		for _, k := range []string{"notfound", "conflict", "ratelimit", "network", "timeout"} {
-			if hasKind(actionWarns, k) {
-				out.Conflict = true
-			}
-		}
-	}
+	out.OK, out.Conflict, out.Perm, out.Msg = classifyAction(actionWarns)
 
 	// Relee el estado para dejar el ítem consistente tras la acción o el fallo.
 	if it, w := a.ItemState(ctx, ref, number); len(w) == 0 && it.Number != 0 {
 		out.Item, out.HasItem = it, true
 	}
 	return out
+}
+
+// checkBeforeAction decide si el ítem puede accionarse según su estado releído.
+// Devuelve un Outcome de conflicto o permiso, o nil si se puede continuar.
+func checkBeforeAction(cur model.Item, warns []model.Warning) *Outcome {
+	switch {
+	case hasKind(warns, "notfound"):
+		return &Outcome{Conflict: true, Msg: "el ítem ya no existe en el forge"}
+	case hasKind(warns, "permission"), hasKind(warns, "auth"):
+		return &Outcome{Perm: true, Msg: firstMsg(warns)}
+	case len(warns) > 0 || cur.Number == 0:
+		msg := firstMsg(warns)
+		if msg == "" {
+			msg = "no se pudo releer el ítem"
+		}
+		out := &Outcome{Conflict: true, Msg: msg}
+		if cur.Number != 0 {
+			out.Item, out.HasItem = cur, true
+		}
+		return out
+	}
+	if ok, reason := state.Actionable(cur); !ok {
+		return &Outcome{Conflict: true, Msg: reason, Item: cur, HasItem: true}
+	}
+	return nil
+}
+
+// classifyAction traduce los warnings de una acción a (ok, conflicto, permiso,
+// motivo).
+func classifyAction(warns []model.Warning) (ok, conflict, perm bool, msg string) {
+	if len(warns) == 0 {
+		return true, false, false, ""
+	}
+	msg = firstMsg(warns)
+	switch {
+	case hasKind(warns, "permission"), hasKind(warns, "auth"), hasKind(warns, "unsupported"):
+		return false, false, true, msg
+	case hasKind(warns, "notfound"), hasKind(warns, "conflict"),
+		hasKind(warns, "ratelimit"), hasKind(warns, "network"), hasKind(warns, "timeout"):
+		return false, true, false, msg
+	default:
+		return false, false, false, msg
+	}
 }
 
 func firstMsg(warns []model.Warning) string {

@@ -260,35 +260,38 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 			wg.Add(1)
 			go func(a forge.Adapter) {
 				defer wg.Done()
-				sendEvent(ctx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(ctx)})
-				forge.Stream(ctx, a, func(p forge.PageResult) bool {
-					key := streamKey{
-						forge:   a.Forge(),
-						section: p.Query.Section,
-						kind:    p.Query.ReviewKind,
-					}
-					if p.First && unchangedHead(prev[key], forge.Page{Next: p.Next, More: p.More}) {
-						sendEvent(ctx, events, pageMsg{cycle: cycle, key: key, unchanged: true})
-						return false // sin cambios: no hace falta seguir paginando
-					}
-					sendEvent(ctx, events, pageMsg{
-						cycle:    cycle,
-						key:      key,
-						items:    p.Items,
-						next:     p.Next,
-						more:     p.More,
-						first:    p.First,
-						warnings: p.Warnings,
-					})
-					return true
-				})
-				sendEvent(ctx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
+				streamForge(ctx, events, a, cycle, prev)
 			}(a)
 		}
 		wg.Wait()
 		sendEvent(appCtx, events, refreshDoneMsg{cycle: cycle})
 	}()
 	return nil
+}
+
+// streamForge consulta un forge y emite sus páginas, aplicando el corte del
+// refresco incremental por cursor: si la cabecera de una lista no cambió, se
+// emite un mensaje "unchanged" y no se sigue paginando.
+func streamForge(ctx context.Context, events chan<- event, a forge.Adapter, cycle int, prev map[streamKey]streamHead) {
+	sendEvent(ctx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(ctx)})
+	forge.Stream(ctx, a, func(p forge.PageResult) bool {
+		key := streamKey{forge: a.Forge(), section: p.Query.Section, kind: p.Query.ReviewKind}
+		if p.First && unchangedHead(prev[key], forge.Page{Next: p.Next, More: p.More}) {
+			sendEvent(ctx, events, pageMsg{cycle: cycle, key: key, unchanged: true})
+			return false
+		}
+		sendEvent(ctx, events, pageMsg{
+			cycle:    cycle,
+			key:      key,
+			items:    p.Items,
+			next:     p.Next,
+			more:     p.More,
+			first:    p.First,
+			warnings: p.Warnings,
+		})
+		return true
+	})
+	sendEvent(ctx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
 }
 
 // tickCmd programa el siguiente refresco automático. Devuelve nil si el
@@ -418,14 +421,9 @@ func (m *Model) rebuild() {
 
 // forgeResults compone un resultado por forge de forma determinista.
 func (m *Model) forgeResults() []inbox.ForgeResult {
-	forges := make([]string, 0, len(m.statuses))
-	for name := range m.statuses {
-		forges = append(forges, name)
-	}
-	sort.Strings(forges)
-
-	out := make([]inbox.ForgeResult, 0, len(forges))
-	for _, name := range forges {
+	names := m.sortedForgeNames()
+	out := make([]inbox.ForgeResult, 0, len(names))
+	for _, name := range names {
 		st := m.statuses[name]
 		r := inbox.ForgeResult{
 			Forge:    name,
@@ -439,6 +437,16 @@ func (m *Model) forgeResults() []inbox.ForgeResult {
 		out = append(out, r)
 	}
 	return out
+}
+
+// sortedForgeNames devuelve los nombres de forge ordenados.
+func (m *Model) sortedForgeNames() []string {
+	names := make([]string, 0, len(m.statuses))
+	for name := range m.statuses {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // streamItems devuelve los ítems de un stream concreto.
@@ -486,14 +494,8 @@ func (m *Model) sectionItems(kind model.Section) []model.Item {
 // sectionProblems devuelve los mensajes de "no se pudo consultar" de una
 // sección, derivados de los warnings de esa sección en cualquier forge.
 func (m *Model) sectionProblems(kind model.Section) []string {
-	names := make([]string, 0, len(m.statuses))
-	for name := range m.statuses {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
 	var out []string
-	for _, name := range names {
+	for _, name := range m.sortedForgeNames() {
 		st := m.statuses[name]
 		for _, w := range st.warnings {
 			if w.Section != kind {
