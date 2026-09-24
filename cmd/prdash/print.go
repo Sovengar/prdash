@@ -11,7 +11,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"prdash/internal/config"
 	"prdash/internal/forge"
 	"prdash/internal/inbox"
 	"prdash/internal/state"
@@ -20,7 +19,7 @@ import (
 // printTimeout acota la consulta de cada forge.
 const printTimeout = 60 * time.Second
 
-func runPrint(cfg config.Config, adapters []forge.Adapter) {
+func runPrint(adapters []forge.Adapter) {
 	// Una goroutine por forge con su propio timeout: una forge lenta no
 	// bloquea a las demás. El orden de impresión queda fijado por índice.
 	results := make([]inbox.ForgeResult, len(adapters))

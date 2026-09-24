@@ -46,7 +46,7 @@ func TestRunPrint(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { runPrint(config.Defaults(), []forge.Adapter{fake}) })
+	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}) })
 
 	for _, want := range []string{"Creados por mí", "github@github.com", "acme/widget#7", "Add widget"} {
 		if !strings.Contains(out, want) {
@@ -70,7 +70,7 @@ func TestRunPrintKeepsOrder(t *testing.T) {
 		}
 	}
 	out := captureStdout(t, func() {
-		runPrint(config.Defaults(), []forge.Adapter{mk("github"), mk("gitlab")})
+		runPrint([]forge.Adapter{mk("github"), mk("gitlab")})
 	})
 	if strings.Index(out, "T-github") > strings.Index(out, "T-gitlab") {
 		t.Errorf("el orden de impresión debe seguir el de los adapters:\n%s", out)
