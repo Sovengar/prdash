@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -79,4 +80,72 @@ func TestListUnknownSectionReportsUnsupported(t *testing.T) {
 	if len(warns) == 0 || warns[0].Kind != "unsupported" {
 		t.Fatalf("warnings = %+v", warns)
 	}
+}
+
+// TestSearchQueryUsesUnionFragments cubre C1: search.nodes es la unión
+// SearchResultItem y contexts.nodes la unión StatusCheckRollupContext.
+func TestSearchQueryUsesUnionFragments(t *testing.T) {
+	q := searchQuery("author:@me", "")
+	for _, want := range []string{"... on PullRequest", "... on CheckRun", "... on StatusContext", "reviewDecision", "statusCheckRollup"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("searchQuery no contiene %q:\n%s", want, q)
+		}
+	}
+	if p := prQuery("o", "r", 1); !strings.Contains(p, "statusCheckRollup") {
+		t.Errorf("prQuery debería pedir los checks:\n%s", p)
+	}
+}
+
+// TestListAuthoredFallsBackToRESTDegraded cubre C7/M3: el respaldo REST real no
+// trae ramas; debe avisarse como degradado.
+func TestListAuthoredFallsBackToRESTDegraded(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "gh", `#!/bin/sh
+case "$*" in
+  *graphql*) echo "HTTP 500: server error" >&2; exit 1;;
+  *search/issues*) cat <<'JSON'
+{"total_count":1,"items":[{"number":7,"title":"Fix","html_url":"u","state":"open","updated_at":"2026-09-20T08:00:00Z","user":{"login":"me"},"repository_url":"https://api.github.com/repos/acme/lib"}]}
+JSON
+    exit 0;;
+esac
+exit 1
+`)
+	a := New("github.com", script)
+	page, warns := a.List(context.Background(), forge.Query{Section: model.SectionAuthored})
+	if len(page.Items) != 1 || page.Items[0].Ref.Project != "acme/lib" {
+		t.Fatalf("items = %+v", page.Items)
+	}
+	if page.Items[0].SourceBranch != "" {
+		t.Errorf("el fallback REST no trae ramas: %+v", page.Items[0])
+	}
+	if len(warns) == 0 || warns[0].Kind != "degraded" {
+		t.Fatalf("warnings = %+v", warns)
+	}
+}
+
+// TestChecksKeepsPendingOnExit8 cubre C8: exit 8 (pendiente) trae JSON válido.
+func TestChecksKeepsPendingOnExit8(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "gh", `#!/bin/sh
+echo '[{"name":"ci","state":"PENDING","bucket":"pending"}]'
+exit 8
+`)
+	a := New("github.com", script)
+	c, warns := a.checks(context.Background(), "acme/widget", 1)
+	if len(warns) != 0 {
+		t.Fatalf("warnings = %+v", warns)
+	}
+	if c.State != model.ChecksPending || c.Pending != 1 {
+		t.Fatalf("checks = %+v", c)
+	}
+}
+
+// writeScript crea un binario falso ejecutable y devuelve su ruta.
+func writeScript(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

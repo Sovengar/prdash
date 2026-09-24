@@ -67,7 +67,7 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 		// Respaldo REST solo para la primera página de los PRs propios.
 		if q.Section == model.SectionAuthored && q.Cursor == "" {
 			if p, ok := a.restAuthored(ctx); ok {
-				return p, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
+				return p, []model.Warning{a.degraded(q.Section, err)}
 			}
 		}
 		return forge.Page{}, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
@@ -126,19 +126,19 @@ func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
 	return nil
 }
 
-// checks consulta el estado de los checks del PR. Un PR sin checks hace que
-// `gh` falle: se trata como "sin checks", no como error fatal.
+// checks consulta el estado de los checks del PR. `gh pr checks` sale con
+// exit 8 (pendiente) o 1 (fallo) trayendo el JSON igualmente: si la salida es
+// parseable cuenta como estado válido, no como error.
 func (a *Adapter) checks(ctx context.Context, project string, number int) (model.Checks, []model.Warning) {
 	raw, err := a.runner.Run(ctx, "pr", "checks", strconv.Itoa(number),
 		"--repo", project, "--json", "name,state,bucket")
+	if c, perr := parse.ParseGHChecks(raw); perr == nil {
+		return c, nil
+	}
 	if err != nil {
 		return model.Checks{}, []model.Warning{a.warn("", tool.Kind(err), err)}
 	}
-	c, perr := parse.ParseGHChecks(raw)
-	if perr != nil {
-		return model.Checks{}, []model.Warning{a.warn("", "parse", perr)}
-	}
-	return c, nil
+	return model.Checks{}, []model.Warning{a.warn("", "parse", fmt.Errorf("salida de checks ilegible"))}
 }
 
 // restAuthored consulta el respaldo REST (una sola página) de los PRs propios.
@@ -179,6 +179,17 @@ func (a *Adapter) warn(section model.Section, kind string, err error) model.Warn
 	return model.Warning{Forge: ForgeName, Section: section, Kind: kind, Msg: err.Error()}
 }
 
+// degraded avisa de datos parciales procedentes del respaldo REST: no trae
+// ramas ni decisión de review.
+func (a *Adapter) degraded(section model.Section, err error) model.Warning {
+	return model.Warning{
+		Forge:   ForgeName,
+		Section: section,
+		Kind:    "degraded",
+		Msg:     "GraphQL no disponible; datos parciales vía REST (sin ramas ni checks): " + tool.FirstLine(err.Error()),
+	}
+}
+
 // qualifierFor traduce una lista del inbox al qualifier de búsqueda de GitHub.
 func qualifierFor(q forge.Query) (string, bool) {
 	switch q.Section {
@@ -196,8 +207,16 @@ func qualifierFor(q forge.Query) (string, bool) {
 	}
 }
 
+// ghPRFields son los campos GraphQL de un pull request que el inbox consume.
+// `statusCheckRollup.contexts.nodes` es la unión StatusCheckRollupContext
+// (CheckRun | StatusContext): cada rama pide sus campos reales.
+const ghPRFields = `number title url state isDraft reviewDecision updatedAt headRefName baseRefName ` +
+	`author { login } repository { nameWithOwner name owner { login } } ` +
+	`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
+
 // searchQuery compone la query GraphQL de búsqueda, con paginación por cursor y
-// los campos ricos que el inbox necesita.
+// los campos ricos que el inbox necesita. `search.nodes` es la unión
+// SearchResultItem, así que los campos del PR van en un fragmento PullRequest.
 func searchQuery(qualifier, cursor string) string {
 	after := ""
 	if cursor != "" {
@@ -206,29 +225,29 @@ func searchQuery(qualifier, cursor string) string {
 	return fmt.Sprintf(
 		`query { search(query: "is:pr is:open %s", type: ISSUE, first: %d%s) { `+
 			`pageInfo { hasNextPage endCursor } `+
-			`nodes { number title url state isDraft reviewDecision updatedAt headRefName baseRefName `+
-			`author { login } repository { nameWithOwner name owner { login } } `+
-			`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename status conclusion state } } } } } } `+
-			`} } }`,
-		qualifier, pageSize, after,
+			`nodes { ... on PullRequest { %s } } } }`,
+		qualifier, pageSize, after, ghPRFields,
 	)
 }
 
 // prQuery compone la query GraphQL de un PR concreto.
 func prQuery(owner, name string, number int) string {
 	return fmt.Sprintf(
-		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { `+
-			`number title url state isDraft reviewDecision updatedAt headRefName baseRefName `+
-			`author { login } repository { nameWithOwner name owner { login } } } } }`,
-		escapeGraphQL(owner), escapeGraphQL(name), number,
+		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { %s } } }`,
+		escapeGraphQL(owner), escapeGraphQL(name), number, ghPRFields,
 	)
 }
 
-// escapeGraphQL escapa comillas y barras para incrustar un valor como literal
-// de GraphQL.
+// escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL:
+// barras, comillas y saltos de línea (que romperían la query en una sola línea).
 func escapeGraphQL(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	return strings.ReplaceAll(s, `"`, `\"`)
+	return strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		"\n", `\n`,
+		"\r", `\r`,
+		"\t", `\t`,
+	).Replace(s)
 }
 
 // splitProject separa "owner/repo" en sus dos partes.
