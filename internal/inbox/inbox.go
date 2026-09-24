@@ -48,46 +48,59 @@ var sectionOrder = []model.Section{
 // autoridad; el resto de sus apariciones se descarta. Cada sección sale
 // ordenada por score de atención y, a igual score, por actualización y número.
 func Build(inputs []ForgeResult) Inbox {
+	collected, warnings := collectBySection(inputs)
+	authority := assignAuthority(collected)
+
+	out := make([]Section, 0, len(sectionOrder))
+	for _, kind := range sectionOrder {
+		out = append(out, Section{Kind: kind, Items: dedupeAndSort(collected[kind], kind, authority)})
+	}
+	return Inbox{Sections: out, Warnings: warnings}
+}
+
+// collectBySection agrupa los ítems de cada sección y acumula los warnings.
+func collectBySection(inputs []ForgeResult) (map[model.Section][]model.Item, []model.Warning) {
 	collected := map[model.Section][]model.Item{}
 	var warnings []model.Warning
-
 	for _, in := range inputs {
 		collected[model.SectionAuthored] = append(collected[model.SectionAuthored], in.Authored...)
 		collected[model.SectionReview] = append(collected[model.SectionReview], in.Review...)
 		collected[model.SectionMentions] = append(collected[model.SectionMentions], in.Mentions...)
 		warnings = append(warnings, in.Warnings...)
 	}
+	return collected, warnings
+}
 
-	// Autoridad: la sección de mayor prioridad gana para cada identidad.
+// assignAuthority decide, para cada identidad, en qué sección debe aparecer.
+func assignAuthority(collected map[model.Section][]model.Item) map[model.ID]model.Section {
 	best := map[model.ID]model.Section{}
 	for _, kind := range sectionOrder {
 		for _, it := range collected[kind] {
 			id := it.ID()
-			prev, ok := best[id]
-			if !ok || rank(kind) < rank(prev) {
+			if prev, ok := best[id]; !ok || rank(kind) < rank(prev) {
 				best[id] = kind
 			}
 		}
 	}
+	return best
+}
 
-	out := make([]Section, 0, len(sectionOrder))
-	for _, kind := range sectionOrder {
-		seen := map[model.ID]bool{}
-		items := make([]model.Item, 0, len(collected[kind]))
-		for _, it := range collected[kind] {
-			id := it.ID()
-			if best[id] != kind || seen[id] {
-				continue
-			}
-			seen[id] = true
-			it.Section = kind
-			items = append(items, it)
+// dedupeAndSort conserva solo los ítems cuya autoridad cae en esta sección,
+// eliminando repeticiones, y los ordena por atención.
+func dedupeAndSort(items []model.Item, kind model.Section, authority map[model.ID]model.Section) []model.Item {
+	seen := map[model.ID]bool{}
+	out := make([]model.Item, 0, len(items))
+	for _, it := range items {
+		id := it.ID()
+		if authority[id] != kind || seen[id] {
+			continue
 		}
-		sortItems(items)
-		out = append(out, Section{Kind: kind, Items: items})
+		seen[id] = true
+		it.Section = kind
+		out = append(out, it)
 	}
-
-	return Inbox{Sections: out, Warnings: warnings}
+	sortItems(out)
+	return out
 }
 
 // Section devuelve la sección pedida; si no existe, una vacía.
