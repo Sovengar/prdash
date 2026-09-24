@@ -1,33 +1,30 @@
 // Package github implementa el adapter del forge GitHub hablando con la CLI
 // `gh` por subproceso. El inbox rico (reviewDecision + checks) se consulta por
-// GraphQL; la búsqueda REST queda como respaldo.
+// GraphQL paginando por cursor; la búsqueda REST queda como respaldo.
 package github
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
+	"strconv"
 	"strings"
-	"time"
 
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/forge/parse"
+	"prdash/internal/forge/tool"
 )
 
 // ForgeName es el identificador del forge.
 const ForgeName = "github"
 
-// defaultTimeout es el límite por invocación de `gh`.
-const defaultTimeout = 30 * time.Second
+// pageSize es el número de resultados por página que se pide a GraphQL.
+const pageSize = 50
 
 // Adapter implementa forge.Adapter sobre la CLI `gh`.
 type Adapter struct {
-	host    string
-	bin     string
-	timeout time.Duration
+	host   string
+	runner *tool.Runner
 }
 
 // Aseguramos en compilación que el adapter cumple el contrato.
@@ -41,7 +38,7 @@ func New(host, bin string) *Adapter {
 	if host == "" {
 		host = "github.com"
 	}
-	return &Adapter{host: host, bin: bin, timeout: defaultTimeout}
+	return &Adapter{host: host, runner: tool.New(bin, "GH_PROMPT_DISABLED=1")}
 }
 
 // Forge devuelve el nombre del forge.
@@ -52,176 +49,193 @@ func (a *Adapter) Host() string { return a.host }
 
 // Auth comprueba la sesión de `gh` contra el host.
 func (a *Adapter) Auth(ctx context.Context) model.AuthState {
-	_, err := a.run(ctx, "auth", "status", "--hostname", a.host)
-	if err != nil {
+	if _, err := a.runner.Run(ctx, "auth", "status", "--hostname", a.host); err != nil {
 		return model.AuthState{Forge: ForgeName, OK: false, Reason: err.Error()}
 	}
 	return model.AuthState{Forge: ForgeName, OK: true}
 }
 
-// Authored lista los PRs creados por el usuario.
-func (a *Adapter) Authored(ctx context.Context) ([]model.Item, []model.Warning) {
-	items, warnings := a.search(ctx, "author:@me", model.SectionAuthored)
-	if len(items) > 0 || len(warnings) == 0 {
-		return items, warnings
+// List devuelve una página de la lista pedida.
+func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
+	qualifier, ok := qualifierFor(q)
+	if !ok {
+		return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("lista no soportada: %s", q.Section))}
 	}
-	// Respaldo REST si GraphQL no devolvió nada.
-	if items, ok := a.restAuthored(ctx); ok {
-		return items, warnings
-	}
-	return items, warnings
-}
 
-// ReviewRequested lista los PRs con review pedido al usuario.
-func (a *Adapter) ReviewRequested(ctx context.Context) ([]model.Item, []model.Warning) {
-	return a.search(ctx, "review-requested:@me", model.SectionReview)
-}
-
-// Mentions lista los PRs donde mencionan al usuario.
-func (a *Adapter) Mentions(ctx context.Context) ([]model.Item, []model.Warning) {
-	return a.search(ctx, "mentions:@me", model.SectionMentions)
-}
-
-// ItemState relee el estado de un PR concreto. Se completa en la etapa de
-// detalle y acciones.
-func (a *Adapter) ItemState(_ context.Context, _ model.RepoRef, _ int) (model.Item, []model.Warning) {
-	return model.Item{}, unsupportedWarnings()
-}
-
-// Approve aprueba un PR. Se completa en la etapa de acciones.
-func (a *Adapter) Approve(_ context.Context, _ model.RepoRef, _ int) []model.Warning {
-	return unsupportedWarnings()
-}
-
-// Merge mergea un PR. Se completa en la etapa de acciones.
-func (a *Adapter) Merge(_ context.Context, _ model.RepoRef, _ int) []model.Warning {
-	return unsupportedWarnings()
-}
-
-func unsupportedWarnings() []model.Warning {
-	return []model.Warning{{
-		Forge: ForgeName,
-		Kind:  "unsupported",
-		Msg:   "acción disponible en una etapa posterior",
-	}}
-}
-
-// search ejecuta la query GraphQL de búsqueda con el qualifier dado y etiqueta
-// los ítems con su sección.
-func (a *Adapter) search(ctx context.Context, qualifier string, section model.Section) ([]model.Item, []model.Warning) {
-	raw, err := a.run(ctx, "api", "graphql", "-f", "query="+searchQuery(qualifier))
+	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+searchQuery(qualifier, q.Cursor))
 	if err != nil {
-		return nil, []model.Warning{a.warn(section, classify(err), err)}
+		// Respaldo REST solo para la primera página de los PRs propios.
+		if q.Section == model.SectionAuthored && q.Cursor == "" {
+			if p, ok := a.restAuthored(ctx); ok {
+				return p, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
+			}
+		}
+		return forge.Page{}, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
 	}
-	items, perr := parse.ParseGHGraphQLSearch(raw)
+
+	items, page, perr := parse.ParseGHGraphQLSearch(raw)
 	if perr != nil {
-		return nil, []model.Warning{a.warn(section, "parse", perr)}
+		return forge.Page{}, []model.Warning{a.warn(q.Section, "parse", perr)}
 	}
-	a.stamp(items, section)
-	return items, nil
+	a.stamp(items, q)
+	return forge.Page{Items: items, Next: page.Next, More: page.More}, nil
 }
 
-// restAuthored consulta el respaldo REST de la búsqueda de PRs propios.
-func (a *Adapter) restAuthored(ctx context.Context) ([]model.Item, bool) {
-	raw, err := a.run(ctx, "api", "-X", "GET", "search/issues",
-		"-f", "q=is:pr is:open author:@me", "-f", "per_page=50")
+// ItemState relee el estado rich de un PR concreto (decisión de review y
+// checks) para refrescarlo tras una acción o un cambio en el forge.
+func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
+	owner, name := splitProject(ref.Project)
+	if owner == "" || name == "" {
+		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("referencia de repo inválida: %q", ref.Project))}
+	}
+
+	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+prQuery(owner, name, number))
 	if err != nil {
-		return nil, false
+		return model.Item{}, []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	items, _, perr := parse.ParseGHGraphQLSearch(raw)
+	if perr != nil {
+		return model.Item{}, []model.Warning{a.warn("", "parse", perr)}
+	}
+	if len(items) == 0 {
+		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("PR #%d no encontrado en %s", number, ref.Project))}
+	}
+
+	it := items[0]
+	a.identity(&it)
+	if checks, warns := a.checks(ctx, ref.Project, number); warns == nil {
+		it.Checks = checks
+	}
+	return it, nil
+}
+
+// Approve aprueba un PR con `gh pr review --approve`.
+func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
+	return a.action(ctx, "pr", "review", strconv.Itoa(number), "--repo", ref.Project, "--approve")
+}
+
+// Merge mergea un PR con `gh pr merge --squash`.
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
+	return a.action(ctx, "pr", "merge", strconv.Itoa(number), "--repo", ref.Project, "--squash")
+}
+
+func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
+	if _, err := a.runner.Run(ctx, args...); err != nil {
+		return []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	return nil
+}
+
+// checks consulta el estado de los checks del PR. Un PR sin checks hace que
+// `gh` falle: se trata como "sin checks", no como error fatal.
+func (a *Adapter) checks(ctx context.Context, project string, number int) (model.Checks, []model.Warning) {
+	raw, err := a.runner.Run(ctx, "pr", "checks", strconv.Itoa(number),
+		"--repo", project, "--json", "name,state,bucket")
+	if err != nil {
+		return model.Checks{}, []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	c, perr := parse.ParseGHChecks(raw)
+	if perr != nil {
+		return model.Checks{}, []model.Warning{a.warn("", "parse", perr)}
+	}
+	return c, nil
+}
+
+// restAuthored consulta el respaldo REST (una sola página) de los PRs propios.
+func (a *Adapter) restAuthored(ctx context.Context) (forge.Page, bool) {
+	raw, err := a.runner.Run(ctx, "api", "-X", "GET", "search/issues",
+		"-f", "q=is:pr is:open author:@me", "-f", "per_page="+strconv.Itoa(pageSize))
+	if err != nil {
+		return forge.Page{}, false
 	}
 	items, perr := parse.ParseGHAuthored(raw)
 	if perr != nil {
-		return nil, false
+		return forge.Page{}, false
 	}
-	a.stamp(items, model.SectionAuthored)
-	return items, true
+	a.stamp(items, forge.Query{Section: model.SectionAuthored})
+	return forge.Page{Items: items}, true
 }
 
-// stamp fija la sección y la identidad de forge/host en los ítems parseados.
-func (a *Adapter) stamp(items []model.Item, section model.Section) {
+// stamp fija la sección, el tipo de review y la identidad de forge/host.
+func (a *Adapter) stamp(items []model.Item, q forge.Query) {
 	for i := range items {
-		items[i].Section = section
-		items[i].Forge = ForgeName
-		items[i].Host = a.host
-		items[i].Ref.Forge = ForgeName
-		items[i].Ref.Host = a.host
+		items[i].Section = q.Section
+		if q.Section == model.SectionReview {
+			items[i].ReviewKind = q.ReviewKind
+		}
+		a.identity(&items[i])
 	}
+}
+
+// identity normaliza forge y host del ítem.
+func (a *Adapter) identity(it *model.Item) {
+	it.Forge = ForgeName
+	it.Host = a.host
+	it.Ref.Forge = ForgeName
+	it.Ref.Host = a.host
 }
 
 func (a *Adapter) warn(section model.Section, kind string, err error) model.Warning {
 	return model.Warning{Forge: ForgeName, Section: section, Kind: kind, Msg: err.Error()}
 }
 
-// run ejecuta `gh` con timeout y entorno no interactivo, devolviendo stdout.
-func (a *Adapter) run(ctx context.Context, args ...string) (string, error) {
-	cctx, cancel := context.WithTimeout(ctx, a.timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(cctx, a.bin, args...)
-	cmd.Env = toolEnv()
-	var out, errb bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &errb
-	if err := cmd.Run(); err != nil {
-		msg := firstLine(strings.TrimSpace(errb.String()))
-		if msg == "" {
-			msg = err.Error()
+// qualifierFor traduce una lista del inbox al qualifier de búsqueda de GitHub.
+func qualifierFor(q forge.Query) (string, bool) {
+	switch q.Section {
+	case model.SectionAuthored:
+		return "author:@me", true
+	case model.SectionReview:
+		if q.ReviewKind == model.ReviewAssigned {
+			return "assignee:@me", true
 		}
-		return out.String(), fmt.Errorf("%s %s: %s", a.bin, strings.Join(args, " "), msg)
+		return "review-requested:@me", true
+	case model.SectionMentions:
+		return "mentions:@me", true
+	default:
+		return "", false
 	}
-	return out.String(), nil
 }
 
-// searchQuery compone la query GraphQL de búsqueda de PRs con los campos ricos
-// que el inbox necesita (reviewDecision y checks del último commit).
-func searchQuery(qualifier string) string {
+// searchQuery compone la query GraphQL de búsqueda, con paginación por cursor y
+// los campos ricos que el inbox necesita.
+func searchQuery(qualifier, cursor string) string {
+	after := ""
+	if cursor != "" {
+		after = fmt.Sprintf(`, after: "%s"`, escapeGraphQL(cursor))
+	}
 	return fmt.Sprintf(
-		`query { search(query: "is:pr is:open %s", type: ISSUE, first: 50) { nodes { `+
-			`number title url state isDraft reviewDecision updatedAt headRefName baseRefName `+
+		`query { search(query: "is:pr is:open %s", type: ISSUE, first: %d%s) { `+
+			`pageInfo { hasNextPage endCursor } `+
+			`nodes { number title url state isDraft reviewDecision updatedAt headRefName baseRefName `+
 			`author { login } repository { nameWithOwner name owner { login } } `+
 			`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename status conclusion state } } } } } } `+
 			`} } }`,
-		qualifier,
+		qualifier, pageSize, after,
 	)
 }
 
-// toolEnv devuelve el entorno de los subprocesos: locale inglés para poder
-// reconocer los mensajes de error y modo no interactivo.
-func toolEnv() []string {
-	env := os.Environ()
-	out := env[:0]
-	for _, kv := range env {
-		switch {
-		case strings.HasPrefix(kv, "LC_ALL="),
-			strings.HasPrefix(kv, "LANG="),
-			strings.HasPrefix(kv, "LANGUAGE="),
-			strings.HasPrefix(kv, "LC_MESSAGES="):
-			continue
-		}
-		out = append(out, kv)
-	}
-	return append(out,
-		"LC_ALL=C",
-		"GIT_TERMINAL_PROMPT=0",
-		"GH_PROMPT_DISABLED=1",
-		"NO_COLOR=1",
+// prQuery compone la query GraphQL de un PR concreto.
+func prQuery(owner, name string, number int) string {
+	return fmt.Sprintf(
+		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { `+
+			`number title url state isDraft reviewDecision updatedAt headRefName baseRefName `+
+			`author { login } repository { nameWithOwner name owner { login } } } } }`,
+		escapeGraphQL(owner), escapeGraphQL(name), number,
 	)
 }
 
-// classify etiqueta el warning según el error: timeout, red o auth.
-func classify(err error) string {
-	switch {
-	case strings.Contains(err.Error(), "context deadline exceeded"):
-		return "timeout"
-	case strings.Contains(err.Error(), "401"), strings.Contains(err.Error(), "auth"):
-		return "auth"
-	default:
-		return "network"
-	}
+// escapeGraphQL escapa comillas y barras para incrustar un valor como literal
+// de GraphQL.
+func escapeGraphQL(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return strings.ReplaceAll(s, `"`, `\"`)
 }
 
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+// splitProject separa "owner/repo" en sus dos partes.
+func splitProject(project string) (string, string) {
+	project = strings.Trim(project, "/")
+	if i := strings.Index(project, "/"); i >= 0 {
+		return project[:i], project[i+1:]
 	}
-	return s
+	return "", project
 }

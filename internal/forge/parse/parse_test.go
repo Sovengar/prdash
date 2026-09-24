@@ -11,6 +11,7 @@ import (
 const ghSearchFixture = `{
   "data": {
     "search": {
+      "pageInfo": {"hasNextPage": true, "endCursor": "CURSOR1"},
       "nodes": [
         {
           "number": 42,
@@ -49,12 +50,15 @@ const ghSearchFixture = `{
 }`
 
 func TestParseGHGraphQLSearch(t *testing.T) {
-	items, err := ParseGHGraphQLSearch(ghSearchFixture)
+	items, page, err := ParseGHGraphQLSearch(ghSearchFixture)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 	if len(items) != 2 {
 		t.Fatalf("items = %d, want 2", len(items))
+	}
+	if !page.More || page.Next != "CURSOR1" {
+		t.Errorf("pageInfo = %+v", page)
 	}
 
 	first := items[0]
@@ -94,7 +98,7 @@ func TestParseGHGraphQLSearchSinglePR(t *testing.T) {
 		"headRefName": "a", "baseRefName": "b", "author": {"login": "me"},
 		"repository": {"nameWithOwner": "o/r", "name": "r", "owner": {"login": "o"}}
 	}}}}`
-	items, err := ParseGHGraphQLSearch(raw)
+	items, _, err := ParseGHGraphQLSearch(raw)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -104,7 +108,7 @@ func TestParseGHGraphQLSearchSinglePR(t *testing.T) {
 }
 
 func TestParseGHGraphQLSearchErrors(t *testing.T) {
-	_, err := ParseGHGraphQLSearch(`{"errors":[{"message":"boom"}]}`)
+	_, _, err := ParseGHGraphQLSearch(`{"errors":[{"message":"boom"}]}`)
 	if err == nil {
 		t.Fatal("se esperaba error de GraphQL")
 	}
@@ -112,7 +116,7 @@ func TestParseGHGraphQLSearchErrors(t *testing.T) {
 }
 
 func TestParseGHGraphQLSearchMalformed(t *testing.T) {
-	_, err := ParseGHGraphQLSearch("not json")
+	_, _, err := ParseGHGraphQLSearch("not json")
 	if err == nil {
 		t.Fatal("se esperaba error de parseo")
 	}
@@ -173,7 +177,8 @@ func TestParseGHChecks(t *testing.T) {
 const glGraphQLFixture = `{
   "data": {
     "currentUser": {
-      "authoredMergeRequests": {"nodes": [
+      "authoredMergeRequests": {"pageInfo": {"hasNextPage": true, "endCursor": "GL_CURSOR"},
+        "nodes": [
         {"iid":5,"title":"Add","webUrl":"u5","state":"opened","sourceBranch":"feat","targetBranch":"main","approved":true,"approvalsLeft":0,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
       ]},
       "reviewRequestedMergeRequests": {"nodes": [
@@ -187,12 +192,15 @@ const glGraphQLFixture = `{
 }`
 
 func TestParseGLGraphQL(t *testing.T) {
-	items, err := ParseGLGraphQL(glGraphQLFixture)
+	items, page, err := ParseGLGraphQL(glGraphQLFixture)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 	if len(items) != 3 {
 		t.Fatalf("items = %d, want 3", len(items))
+	}
+	if !page.More || page.Next != "GL_CURSOR" {
+		t.Errorf("pageInfo = %+v", page)
 	}
 
 	if items[0].Section != model.SectionAuthored || items[0].Number != 5 {
@@ -235,12 +243,15 @@ func TestParseGLTodos(t *testing.T) {
 		{"id":2,"action_name":"assigned","target_type":"MergeRequest","target":{"iid":4,"title":"Assigned","references":{"full":"grp/proj!4"}}},
 		{"id":3,"action_name":"mentioned","target_type":"Issue","target":{"iid":9,"title":"An issue","references":{"full":"grp/proj#9"}}}
 	]`
-	items, err := ParseGLTodos(raw)
+	items, total, err := ParseGLTodos(raw)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("items = %d, want 1 (solo menciones de MR)", len(items))
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3 (todos de la página)", total)
 	}
 	it := items[0]
 	if it.Section != model.SectionMentions || it.Number != 3 || it.Ref.Project != "grp/proj" {
@@ -256,19 +267,19 @@ func TestParseGLTodos(t *testing.T) {
 func TestParseNeverPanics(t *testing.T) {
 	inputs := []string{"", "null", "[]", "{}", "{", "\x00", "12345"}
 	for _, in := range inputs {
-		if _, err := ParseGHGraphQLSearch(in); err != nil {
+		if _, _, err := ParseGHGraphQLSearch(in); err != nil {
 			assertParseError(t, err)
 		}
 		if _, err := ParseGHAuthored(in); err != nil {
 			assertParseError(t, err)
 		}
-		if _, err := ParseGLGraphQL(in); err != nil {
+		if _, _, err := ParseGLGraphQL(in); err != nil {
 			assertParseError(t, err)
 		}
 		if _, err := ParseGLMRList(in); err != nil {
 			assertParseError(t, err)
 		}
-		if _, err := ParseGLTodos(in); err != nil {
+		if _, _, err := ParseGLTodos(in); err != nil {
 			assertParseError(t, err)
 		}
 		if _, err := ParseGHChecks(in); err != nil {
