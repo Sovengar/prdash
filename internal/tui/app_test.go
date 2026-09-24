@@ -468,3 +468,115 @@ func TestManualOnlyRefreshHasNoTick(t *testing.T) {
 		t.Fatalf("tickInterval = %v, want 0", m.tickInterval())
 	}
 }
+
+// TestStaleRefreshDoneClearsLoading cubre H1: un refreshDoneMsg de un ciclo
+// obsoleto baja la carga y deja el auto-refresco vivo.
+func TestStaleRefreshDoneClearsLoading(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = press(t, m, "r") // ciclo n
+	m = press(t, m, "r") // ciclo n+1
+	stale := m.cycle - 1
+
+	m = send(t, m, refreshDoneMsg{cycle: stale})
+	if m.loading {
+		t.Fatal("un refreshDone obsoleto no debe dejar loading atascado")
+	}
+	before := m.cycle
+	m = send(t, m, tickMsg{})
+	if m.cycle == before {
+		t.Fatalf("el tick debe volver a refrescar (cycle=%d)", m.cycle)
+	}
+}
+
+// TestDetailReflectsActionUpdate cubre H2: el detalle se deriva del estado vivo.
+func TestDetailReflectsActionUpdate(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
+	m = press(t, m, "enter")
+
+	refreshed := item
+	refreshed.State = "MERGED"
+	m = send(t, m, actionMsg{cycle: m.cycle, outcome: forge.Outcome{
+		Kind: forge.ActionMerge, ID: item.ID(), Conflict: true, Msg: "ya mergeado",
+		Item: refreshed, HasItem: true,
+	}})
+
+	if view := stripANSI(m.View().Content); !strings.Contains(view, "merged") {
+		t.Errorf("el detalle debería reflejar el estado nuevo\n%s", view)
+	}
+}
+
+// TestStaleActionAppliesReread cubre M6: el ítem releído es el estado más
+// reciente y se aplica aunque el ciclo haya avanzado (no se revierte).
+func TestStaleActionAppliesReread(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
+
+	newer := item
+	newer.State = "MERGED"
+	m = send(t, m, actionMsg{cycle: m.cycle - 1, outcome: forge.Outcome{
+		Kind: forge.ActionMerge, ID: item.ID(), Item: newer, HasItem: true, OK: true,
+	}})
+
+	items := m.sectionItems(model.SectionAuthored)
+	if len(items) != 1 || items[0].State != "MERGED" {
+		t.Fatalf("el estado releído debería aplicarse: %+v", items)
+	}
+}
+
+// TestRefreshClearsDenied cubre M4: un refresco exitoso limpia la denegación.
+func TestRefreshClearsDenied(t *testing.T) {
+	item := mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR", 4, "")
+	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
+	m.denied[item.ID()] = "no tienes permiso"
+
+	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionAuthored, "", []model.Item{item}, false))
+	if _, ok := m.denied[item.ID()]; ok {
+		t.Fatal("el refresco exitoso debería limpiar la denegación")
+	}
+}
+
+// TestDegradedDoesNotComplete cubre M3: un fallback degradado no marca el
+// stream como completo (no se congela en el refresco incremental).
+func TestDegradedDoesNotComplete(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, pageMsg{
+		cycle: m.cycle,
+		key:   streamKey{forge: "github", section: model.SectionAuthored},
+		items: []model.Item{mkItem("github", "github.com", "acme/widget", "X", 1, "")},
+		first: true,
+		warnings: []model.Warning{
+			{Forge: "github", Section: model.SectionAuthored, Kind: "degraded", Msg: "datos parciales vía REST"},
+		},
+	})
+	if m.streams[streamKey{forge: "github", section: model.SectionAuthored}].complete {
+		t.Fatal("un fallback degradado no debe marcarse como completo")
+	}
+	if view := stripANSI(m.View().Content); !strings.Contains(view, "datos parciales") {
+		t.Errorf("la sección debería avisar de datos parciales\n%s", view)
+	}
+}
+
+// TestBrowserCommand cubre M1: el abridor se elige por plataforma.
+func TestBrowserCommand(t *testing.T) {
+	cases := map[string]string{
+		"linux":   "xdg-open",
+		"darwin":  "open",
+		"windows": "rundll32",
+	}
+	for goos, want := range cases {
+		if bin, args := browserCommand(goos, "http://x/y"); bin != want || args[len(args)-1] != "http://x/y" {
+			t.Errorf("browserCommand(%s) = %s %v", goos, bin, args)
+		}
+	}
+}
+
+func TestOpenBrowserWithoutURL(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = press(t, m, "o")
+	if !strings.Contains(m.notice, "no hay URL") {
+		t.Fatalf("notice = %q", m.notice)
+	}
+}

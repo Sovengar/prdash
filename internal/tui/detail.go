@@ -11,9 +11,9 @@ import (
 )
 
 // renderDetail pinta el detalle del ítem: identidad, ramas, estado de review y
-// de checks, sin salir de la TUI.
+// de checks, sin salir de la TUI. El ítem se deriva del estado vivo.
 func (m *Model) renderDetail() string {
-	it := m.detailItem
+	it := m.liveDetail()
 
 	var b strings.Builder
 	b.WriteString(styleDetailTitle.Render(it.Title))
