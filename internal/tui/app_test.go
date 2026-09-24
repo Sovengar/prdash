@@ -24,6 +24,7 @@ func newTestModel(t *testing.T, adapters ...forge.Adapter) Model {
 	m := New(config.Defaults(), adapters)
 	m.width, m.height = 160, 40
 	m.loading = false
+	m.cachePath = "" // aísla el cache real en tests
 	return m
 }
 
@@ -469,22 +470,86 @@ func TestManualOnlyRefreshHasNoTick(t *testing.T) {
 	}
 }
 
-// TestStaleRefreshDoneClearsLoading cubre H1: un refreshDoneMsg de un ciclo
-// obsoleto baja la carga y deja el auto-refresco vivo.
-func TestStaleRefreshDoneClearsLoading(t *testing.T) {
+// TestCurrentCycleDrainsLoading cubre H1 con ciclo único (M-1): el ciclo
+// vigente siempre emite su refreshDone, que baja loading y rearma el tick.
+func TestCurrentCycleDrainsLoading(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = press(t, m, "r") // ciclo n
-	m = press(t, m, "r") // ciclo n+1
-	stale := m.cycle - 1
-
-	m = send(t, m, refreshDoneMsg{cycle: stale})
+	m = press(t, m, "r")
+	if !m.loading {
+		t.Fatal("el refresco debe quedar en carga")
+	}
+	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 	if m.loading {
-		t.Fatal("un refreshDone obsoleto no debe dejar loading atascado")
+		t.Fatal("el ciclo vigente debe bajar loading")
+	}
+	if !m.tickPending {
+		t.Fatal("debe rearmar el tick")
 	}
 	before := m.cycle
 	m = send(t, m, tickMsg{})
 	if m.cycle == before {
 		t.Fatalf("el tick debe volver a refrescar (cycle=%d)", m.cycle)
+	}
+}
+
+// TestRefreshDoesNotOverlap cubre M-1: no se solapan ciclos.
+func TestRefreshDoesNotOverlap(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = press(t, m, "r")
+	cycle := m.cycle
+	m = press(t, m, "r") // con el ciclo en vuelo
+	if m.cycle != cycle {
+		t.Fatalf("no debe arrancar un ciclo solapado (cycle=%d, want %d)", m.cycle, cycle)
+	}
+}
+
+// TestObsoleteRefreshDoneIsInert cubre M-1: un refreshDone obsoleto no baja
+// loading ni arma un tick (solo rearma la bomba).
+func TestObsoleteRefreshDoneIsInert(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m.loading = true
+	m.tickPending = false
+	m = send(t, m, refreshDoneMsg{cycle: m.cycle - 1})
+	if !m.loading {
+		t.Fatal("un refreshDone obsoleto no debe bajar loading")
+	}
+	if m.tickPending {
+		t.Fatal("un refreshDone obsoleto no debe armar tick")
+	}
+}
+
+// TestArmTickSingleChain cubre M-1: una sola cadena de ticks.
+func TestArmTickSingleChain(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m.tickPending = false
+	if m.armTick() == nil {
+		t.Fatal("sin tick pendiente debería armar uno")
+	}
+	if m.armTick() != nil {
+		t.Fatal("con tick pendiente no debería armar otro")
+	}
+}
+
+// TestSingleChannelReader cubre M-2: ticks y refrescos locales no añaden
+// lectores del canal (invariante: exactamente uno).
+func TestSingleChannelReader(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	if m.readers != 1 {
+		t.Fatalf("lectores iniciales = %d, want 1", m.readers)
+	}
+
+	for i := 0; i < 5; i++ {
+		m = send(t, m, tickMsg{})
+		m = send(t, m, refreshDoneMsg{cycle: m.cycle})
+	}
+	m = press(t, m, "r")
+	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
+
+	// Un evento del canal consume un lector y rearma exactamente uno.
+	m = send(t, m, authMsg{cycle: m.cycle, forge: "github", auth: model.AuthState{Forge: "github", OK: true}})
+
+	if m.readers != 1 {
+		t.Fatalf("lectores = %d, want 1 (no deben acumularse)", m.readers)
 	}
 }
 
