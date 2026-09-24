@@ -434,3 +434,37 @@ func TestIncrementalUnchangedKeepsItems(t *testing.T) {
 		t.Fatalf("el refresco sin cambios debería conservar los ítems: %d", got)
 	}
 }
+
+// TestBackoffOnRateLimit cubre el backoff del auto-refresco ante límite de
+// peticiones.
+func TestBackoffOnRateLimit(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	base := m.tickInterval()
+
+	m.statuses["github"].warnings = []model.Warning{{Forge: "github", Kind: "ratelimit", Msg: "429"}}
+	m.recomputeBackoff()
+	if m.backoff <= 0 {
+		t.Fatal("debería aplicar backoff ante rate limit")
+	}
+	if m.tickInterval() <= base {
+		t.Fatalf("tickInterval = %v, debería superar %v", m.tickInterval(), base)
+	}
+
+	m.statuses["github"].warnings = nil
+	m.recomputeBackoff()
+	if m.backoff != 0 {
+		t.Fatalf("backoff = %v, debería resetearse", m.backoff)
+	}
+}
+
+// TestManualOnlyRefreshHasNoTick: con intervalo 0, no hay auto-refresco.
+func TestManualOnlyRefreshHasNoTick(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m.cfg.RefreshInterval = 0
+	if m.tickCmd() != nil {
+		t.Fatal("con intervalo 0 no debería programarse tick")
+	}
+	if m.tickInterval() != 0 {
+		t.Fatalf("tickInterval = %v, want 0", m.tickInterval())
+	}
+}

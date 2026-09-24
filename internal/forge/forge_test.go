@@ -236,3 +236,29 @@ func assertKind(t *testing.T, warns []model.Warning, kind string) {
 	}
 	t.Fatalf("no hay warning de tipo %q en %+v", kind, warns)
 }
+
+// TestCollectStopsOnRateLimit: ante un warning de rate limit, no se insiste con
+// la página siguiente.
+func TestCollectStopsOnRateLimit(t *testing.T) {
+	key := testutil.FakeKey{Section: model.SectionAuthored}
+	fake := &testutil.FakeAdapter{
+		ForgeName: "github",
+		HostName:  "github.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			key: {
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 1)}, Next: "c1", More: true},
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 2)}, More: false},
+			},
+		},
+		ListWarnings: map[testutil.FakeKey][]model.Warning{
+			key: {{Forge: "github", Kind: "ratelimit", Msg: "429"}},
+		},
+	}
+
+	res := forge.Collect(context.Background(), fake)
+
+	if fake.ListCallCount() != len(forge.Streams) {
+		t.Fatalf("List se llamó %d veces; con rate limit debería parar en la primera página", fake.ListCallCount())
+	}
+	assertKind(t, res.Warnings, "ratelimit")
+}
