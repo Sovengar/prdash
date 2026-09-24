@@ -100,22 +100,47 @@ func TestStreamEmitsPages(t *testing.T) {
 	}
 
 	var firsts, nexts int
-	forge.Stream(context.Background(), fake, func(p forge.PageResult) {
+	forge.Stream(context.Background(), fake, func(p forge.PageResult) bool {
 		if p.Query.Section != model.SectionReview || p.Query.ReviewKind != model.ReviewRequested {
-			return // ignora las listas vacías
+			return true // ignora las listas vacías
 		}
 		if len(p.Items) == 0 {
-			return
+			return true
 		}
 		if p.First {
 			firsts++
 		} else {
 			nexts++
 		}
+		return true
 	})
 
 	if firsts != 1 || nexts != 1 {
 		t.Fatalf("firsts=%d nexts=%d, want 1 y 1", firsts, nexts)
+	}
+}
+
+// TestStreamStopsWhenEmitReturnsFalse cubre el corte del refresco incremental:
+// si emit pide parar tras la primera página, no se piden más.
+func TestStreamStopsWhenEmitReturnsFalse(t *testing.T) {
+	key := testutil.FakeKey{Section: model.SectionAuthored}
+	fake := &testutil.FakeAdapter{
+		ForgeName: "github",
+		HostName:  "github.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			key: {
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 1)}, Next: "c1", More: true},
+				{Items: []model.Item{mkItem("github", "github.com", "acme/widget", 2)}, More: false},
+			},
+		},
+	}
+
+	forge.Stream(context.Background(), fake, func(p forge.PageResult) bool {
+		return p.Query.Section != model.SectionAuthored // corta en authored
+	})
+
+	if got := fake.ListCallCount(); got > len(forge.Streams) {
+		t.Fatalf("List se llamó %d veces; el corte debería evitar la 2ª página de authored", got)
 	}
 }
 

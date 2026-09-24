@@ -107,8 +107,9 @@ func (r *Registry) All() []Adapter {
 // Stream consulta un forge de forma progresiva: lanza en paralelo la primera
 // página de cada lista y, según van llegando, continúa con las siguientes
 // hasta agotarlas. Cada página se emite por emit, que debe ser seguro para uso
-// concurrente. Bloquea hasta agotar o cancelarse por contexto.
-func Stream(ctx context.Context, a Adapter, emit func(PageResult)) {
+// concurrente y devuelve false para detener esa lista (p. ej. si su cabecera no
+// cambió). Bloquea hasta agotar o cancelarse por contexto.
+func Stream(ctx context.Context, a Adapter, emit func(PageResult) bool) {
 	var wg sync.WaitGroup
 	for _, q := range Streams {
 		wg.Add(1)
@@ -120,14 +121,14 @@ func Stream(ctx context.Context, a Adapter, emit func(PageResult)) {
 	wg.Wait()
 }
 
-// streamQuery recorre las páginas de una lista hasta agotarla. Ante un warning
-// de rate limit detiene la lista para no insistir.
-func streamQuery(ctx context.Context, a Adapter, q Query, emit func(PageResult)) {
+// streamQuery recorre las páginas de una lista hasta agotarla o hasta que emit
+// pida parar. Ante un warning de rate limit detiene la lista para no insistir.
+func streamQuery(ctx context.Context, a Adapter, q Query, emit func(PageResult) bool) {
 	cursor := q.Cursor
 	first := true
 	for {
 		page, warns := a.List(ctx, Query{Section: q.Section, ReviewKind: q.ReviewKind, Cursor: cursor})
-		emit(PageResult{
+		cont := emit(PageResult{
 			Query:    q,
 			Items:    page.Items,
 			Next:     page.Next,
@@ -135,7 +136,7 @@ func streamQuery(ctx context.Context, a Adapter, q Query, emit func(PageResult))
 			Warnings: warns,
 			First:    first,
 		})
-		if !page.More || page.Next == "" || ctx.Err() != nil || hasKind(warns, "ratelimit") {
+		if !cont || !page.More || page.Next == "" || ctx.Err() != nil || hasKind(warns, "ratelimit") {
 			return
 		}
 		cursor = page.Next
@@ -163,7 +164,7 @@ func Collect(ctx context.Context, a Adapter) inbox.ForgeResult {
 		wg.Add(1)
 		go func(q Query) {
 			defer wg.Done()
-			streamQuery(ctx, a, q, func(p PageResult) {
+			streamQuery(ctx, a, q, func(p PageResult) bool {
 				mu.Lock()
 				defer mu.Unlock()
 				switch q.Section {
@@ -175,6 +176,7 @@ func Collect(ctx context.Context, a Adapter) inbox.ForgeResult {
 					res.Mentions = append(res.Mentions, p.Items...)
 				}
 				res.Warnings = append(res.Warnings, stampSection(p.Warnings, q.Section)...)
+				return true
 			})
 		}(q)
 	}
