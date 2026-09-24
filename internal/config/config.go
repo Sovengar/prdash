@@ -37,9 +37,12 @@ type GitHubConfig struct {
 
 // GitLabConfig es la config del forge GitLab self-managed.
 type GitLabConfig struct {
-	Enabled  bool
-	Host     string
-	APIBase  string // subfolder del REST, p. ej. "/git/api/v4/"
+	Enabled bool
+	Host    string
+	// APIBase documenta el subfolder REST del self-managed (p. ej.
+	// "/git/api/v4/"). Es informativo: `glab` resuelve el host y su base API
+	// por sí solo, así que el adapter no construye la URL absoluta.
+	APIBase  string
 	TokenEnv string // nombre de la variable de entorno del token (lo maneja glab)
 }
 
@@ -298,7 +301,8 @@ func (c Config) ActionForKey(key string) string {
 	return ""
 }
 
-// CmdArgs devuelve el argv base de un comando, separado por espacios.
+// CmdArgs devuelve el argv base de un comando, separado por espacios. Es API
+// reservada para el orquestador F2 (comandos de tuicr/hunk/agente configurables).
 func (c Config) CmdArgs(action string) []string {
 	raw, ok := c.Commands[action]
 	if !ok {
@@ -320,7 +324,8 @@ var hintLabels = map[string]string{
 }
 
 // HintBarLines devuelve las líneas de hints, separadas por " · ", derivadas
-// de los keybindings configurados.
+// de los keybindings configurados. Es API reservada: la TUI compone hoy su
+// barra con las acciones realmente disponibles.
 func (c Config) HintBarLines() []string {
 	first := []string{"j/k move"}
 	second := []string{}

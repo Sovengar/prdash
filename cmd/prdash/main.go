@@ -54,7 +54,7 @@ func buildAdapters(cfg config.Config) []forge.Adapter {
 		adapters = append(adapters, github.New(cfg.Forges.GitHub.Host, cfg.Tools.GH))
 	}
 	if cfg.Forges.GitLab.Enabled {
-		adapters = append(adapters, gitlab.New(cfg.Forges.GitLab.Host, cfg.Tools.Glab, cfg.Forges.GitLab.APIBase))
+		adapters = append(adapters, gitlab.New(cfg.Forges.GitLab.Host, cfg.Tools.Glab))
 	}
 	if cfg.Forges.Bitbucket.Enabled {
 		adapters = append(adapters, bitbucket.New("bitbucket.org"))
