@@ -109,3 +109,20 @@ func TestRunKeepsStdoutOnNonZeroExit(t *testing.T) {
 		t.Errorf("stdout debería conservarse pese al exit != 0: %q", out)
 	}
 }
+
+// TestKindRateLimit403 cubre H-1: GitHub usa 403 tanto para permiso como para
+// primary/secondary rate limit; el texto delata el límite.
+func TestKindRateLimit403(t *testing.T) {
+	cases := map[string]string{
+		"HTTP 403: API rate limit exceeded for user ID 123":         "ratelimit",
+		"gh: HTTP 403: You have exceeded a secondary rate limit":    "ratelimit",
+		"HTTP 403: You have triggered an abuse detection mechanism": "ratelimit",
+		"HTTP 403: Forbidden":                              "permission",
+		"HTTP 403: Resource not accessible by integration": "permission",
+	}
+	for msg, want := range cases {
+		if got := Kind(errors.New(msg)); got != want {
+			t.Errorf("Kind(%q) = %q, want %q", msg, got, want)
+		}
+	}
+}
