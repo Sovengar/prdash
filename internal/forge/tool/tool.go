@@ -137,11 +137,17 @@ func HTTPStatus(msg string) int {
 }
 
 // Kind clasifica un error de CLI en la clase de warning correspondiente.
-// Prioriza el código HTTP (o de salida) y solo usa el texto como último
-// recurso, porque las CLIs varían el fraseo entre versiones e idiomas.
+// El texto de rate limit se mira antes que el código HTTP porque GitHub usa
+// 403 tanto para permiso como para primary/secondary rate limit; después manda
+// el código HTTP y el texto queda como último recurso.
 func Kind(err error) string {
 	if err == nil {
 		return ""
+	}
+	msg := strings.ToLower(err.Error())
+
+	if isRateLimitText(msg) {
+		return "ratelimit"
 	}
 	if code := HTTPStatus(err.Error()); code != 0 {
 		if k := kindForHTTP(code); k != "" {
@@ -149,7 +155,6 @@ func Kind(err error) string {
 		}
 	}
 
-	msg := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(msg, "deadline exceeded"), strings.Contains(msg, "timed out"):
 		return "timeout"
@@ -170,6 +175,14 @@ func Kind(err error) string {
 	default:
 		return "network"
 	}
+}
+
+// isRateLimitText reconoce los textos de límite de peticiones que GitHub y
+// GitLab devuelven con 403 o 429.
+func isRateLimitText(lower string) bool {
+	return strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "abuse") ||
+		strings.Contains(lower, "too many requests")
 }
 
 // kindForHTTP traduce un código HTTP a la clase de warning.
