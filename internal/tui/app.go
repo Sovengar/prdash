@@ -31,15 +31,17 @@ type authMsg struct {
 	auth  model.AuthState
 }
 
-// pageMsg entrega una página de una lista de un forge.
+// pageMsg entrega una página de una lista de un forge. unchanged señala que la
+// cabecera no cambió y que se conserva lo ya cargado.
 type pageMsg struct {
-	cycle    int
-	key      streamKey
-	items    []model.Item
-	next     string
-	more     bool
-	first    bool
-	warnings []model.Warning
+	cycle     int
+	key       streamKey
+	items     []model.Item
+	next      string
+	more      bool
+	first     bool
+	unchanged bool
+	warnings  []model.Warning
 }
 
 // forgeDoneMsg marca el fin de la consulta de un forge.
@@ -76,9 +78,25 @@ type streamKey struct {
 
 // stream acumula las páginas de una lista.
 type stream struct {
-	items  []model.Item
-	cursor string
-	more   bool
+	items      []model.Item
+	cursor     string // cursor de la última página recibida
+	headCursor string // cursor "next" de la primera página del último ciclo completo
+	complete   bool   // la lista se paginó entera en el último ciclo
+	more       bool
+}
+
+// streamHead es la cabecera recordada de un stream, para decidir si un refresco
+// cambió algo sin volver a paginar todo.
+type streamHead struct {
+	cursor   string
+	complete bool
+}
+
+// unchangedHead indica si la primera página de un refresco coincide con la
+// cabecera del último ciclo completo: en ese caso no hace falta seguir
+// paginando (el resto tampoco cambió) y se conserva lo cacheado.
+func unchangedHead(prev streamHead, page forge.Page) bool {
+	return prev.complete && page.More && page.Next != "" && page.Next == prev.cursor
 }
 
 // forgeStatus es el estado de consulta de un forge.
@@ -227,6 +245,12 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 	events := m.events
 	adapters := append([]forge.Adapter(nil), m.adapters...)
 
+	// Cabeceras recordadas para el refresco incremental (comparación por cursor).
+	prev := make(map[streamKey]streamHead, len(m.streams))
+	for key, s := range m.streams {
+		prev[key] = streamHead{cursor: s.headCursor, complete: s.complete}
+	}
+
 	go func() {
 		ctx, cancel := context.WithTimeout(appCtx, refreshTimeout)
 		defer cancel()
@@ -237,20 +261,26 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 			go func(a forge.Adapter) {
 				defer wg.Done()
 				sendEvent(ctx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(ctx)})
-				forge.Stream(ctx, a, func(p forge.PageResult) {
+				forge.Stream(ctx, a, func(p forge.PageResult) bool {
+					key := streamKey{
+						forge:   a.Forge(),
+						section: p.Query.Section,
+						kind:    p.Query.ReviewKind,
+					}
+					if p.First && unchangedHead(prev[key], forge.Page{Next: p.Next, More: p.More}) {
+						sendEvent(ctx, events, pageMsg{cycle: cycle, key: key, unchanged: true})
+						return false // sin cambios: no hace falta seguir paginando
+					}
 					sendEvent(ctx, events, pageMsg{
-						cycle: cycle,
-						key: streamKey{
-							forge:   a.Forge(),
-							section: p.Query.Section,
-							kind:    p.Query.ReviewKind,
-						},
+						cycle:    cycle,
+						key:      key,
 						items:    p.Items,
 						next:     p.Next,
 						more:     p.More,
 						first:    p.First,
 						warnings: p.Warnings,
 					})
+					return true
 				})
 				sendEvent(ctx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
 			}(a)
@@ -308,20 +338,36 @@ func (m *Model) sectionLoadingMore(kind model.Section) bool {
 
 // applyPage incorpora una página al stream correspondiente. La primera página
 // reemplaza la lista (refresco incremental: el resto de listas conservan su
-// contenido hasta que llegue su página).
+// contenido hasta que llegue su página). Un mensaje unchanged conserva lo ya
+// cargado y cierra la paginación del stream.
 func (m *Model) applyPage(msg pageMsg) {
 	s := m.streams[msg.key]
 	if s == nil {
 		s = &stream{}
 		m.streams[msg.key] = s
 	}
+
+	if msg.unchanged {
+		s.more = false
+		s.complete = true
+		if st := m.statuses[msg.key.forge]; st != nil {
+			st.updatedAt = time.Now()
+		}
+		m.rebuild()
+		return
+	}
+
 	if msg.first {
 		s.items = msg.items
+		s.headCursor = msg.next
 	} else {
 		s.items = append(s.items, msg.items...)
 	}
 	s.cursor = msg.next
 	s.more = msg.more
+	if !msg.more {
+		s.complete = true
+	}
 
 	if st := m.statuses[msg.key.forge]; st != nil {
 		st.updatedAt = time.Now()

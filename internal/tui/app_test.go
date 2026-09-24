@@ -389,3 +389,48 @@ func TestUnsupportedForgeShowsReason(t *testing.T) {
 		t.Errorf("bitbucket no debería reportarse operativo\n%s", view)
 	}
 }
+
+// TestUnchangedHead fija la decisión del refresco incremental por cursor.
+func TestUnchangedHead(t *testing.T) {
+	cases := []struct {
+		name string
+		prev streamHead
+		page forge.Page
+		want bool
+	}{
+		{"cabecera igual", streamHead{cursor: "c1", complete: true}, forge.Page{Next: "c1", More: true}, true},
+		{"no completo aún", streamHead{cursor: "c1", complete: false}, forge.Page{Next: "c1", More: true}, false},
+		{"cabecera distinta", streamHead{cursor: "c1", complete: true}, forge.Page{Next: "c2", More: true}, false},
+		{"una sola página", streamHead{cursor: "", complete: true}, forge.Page{Next: "", More: false}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := unchangedHead(c.prev, c.page); got != c.want {
+				t.Fatalf("unchangedHead = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestIncrementalUnchangedKeepsItems cubre "refresco incremental": si la
+// cabecera no cambió, se conserva lo ya cargado y no se vuelve a paginar.
+func TestIncrementalUnchangedKeepsItems(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "A", 1, "")}, true))
+	cont := page(m.cycle, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "B", 2, "")}, false)
+	cont.first = false
+	m = send(t, m, cont)
+
+	if got := len(m.sectionItems(model.SectionAuthored)); got != 2 {
+		t.Fatalf("authored = %d, want 2", got)
+	}
+	if m.sectionLoadingMore(model.SectionAuthored) {
+		t.Fatal("no debería quedar paginación pendiente")
+	}
+
+	// Nuevo ciclo: la cabecera no cambió.
+	m = send(t, m, pageMsg{cycle: m.cycle, key: streamKey{forge: "github", section: model.SectionAuthored}, unchanged: true})
+	if got := len(m.sectionItems(model.SectionAuthored)); got != 2 {
+		t.Fatalf("el refresco sin cambios debería conservar los ítems: %d", got)
+	}
+}
