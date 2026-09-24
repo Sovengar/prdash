@@ -1,7 +1,11 @@
 // Package gitlab implementa el adapter del GitLab self-managed hablando con
 // la CLI `glab`. El inbox usa GraphQL paginado por cursor y la API de Todos
-// para las menciones; el REST vive bajo el subfolder configurable
-// (`/git/api/v4/`).
+// para las menciones.
+//
+// `glab` resuelve por sí solo el host y su subfolder REST (p. ej. `/git/`), así
+// que las rutas que se le pasan son relativas (nunca construimos la URL
+// absoluta). El host se fija con `--hostname` y con `GITLAB_HOST` para que
+// ninguna llamada caiga por defecto en gitlab.com.
 package gitlab
 
 import (
@@ -24,24 +28,27 @@ const pageSize = 50
 
 // Adapter implementa forge.Adapter sobre la CLI `glab`.
 type Adapter struct {
-	host    string
-	apiBase string
-	runner  *tool.Runner
+	host   string
+	runner *tool.Runner
 }
 
 // Aseguramos en compilación que el adapter cumple el contrato.
 var _ forge.Adapter = (*Adapter)(nil)
 
-// New construye el adapter para un host, un binario de `glab` y el subfolder
-// del REST (p. ej. "/git/api/v4/").
-func New(host, bin, apiBase string) *Adapter {
+// New construye el adapter para un host y un binario de `glab`.
+func New(host, bin string) *Adapter {
 	if bin == "" {
 		bin = "glab"
 	}
 	if host == "" {
 		host = "gitlab.example.com"
 	}
-	return &Adapter{host: host, apiBase: normalizeBase(apiBase), runner: tool.New(bin, "GLAB_NO_PROMPT=1")}
+	return &Adapter{
+		host: host,
+		// GITLAB_HOST fija el host por defecto de todas las llamadas (incluidas
+		// las de `glab mr`, que no aceptan `--hostname`).
+		runner: tool.New(bin, "GLAB_NO_PROMPT=1", "GITLAB_HOST="+host),
+	}
 }
 
 // Forge devuelve el nombre del forge.
@@ -50,12 +57,39 @@ func (a *Adapter) Forge() string { return ForgeName }
 // Host devuelve el host configurado.
 func (a *Adapter) Host() string { return a.host }
 
-// Auth comprueba la sesión de `glab`.
+// Auth comprueba la sesión de `glab` para este host (no de todas las
+// instancias configuradas).
 func (a *Adapter) Auth(ctx context.Context) model.AuthState {
-	if _, err := a.runner.Run(ctx, "auth", "status"); err != nil {
+	if _, err := a.runner.Run(ctx, a.authArgs()...); err != nil {
 		return model.AuthState{Forge: ForgeName, OK: false, Reason: err.Error()}
 	}
 	return model.AuthState{Forge: ForgeName, OK: true}
+}
+
+// authArgs compone `glab auth status` acotado al host.
+func (a *Adapter) authArgs() []string {
+	return []string{"auth", "status", "--hostname", a.host}
+}
+
+// graphqlArgs compone una llamada GraphQL con el host fijado.
+func (a *Adapter) graphqlArgs(query string) []string {
+	return []string{"api", "--hostname", a.host, "graphql", "-f", "query=" + query}
+}
+
+// getArgs compone una llamada REST por GET con el host fijado. Sin `-X GET`,
+// pasar campos convertiría la petición en POST.
+func (a *Adapter) getArgs(endpoint string, fields ...string) []string {
+	args := []string{"api", "--hostname", a.host, "-X", "GET", endpoint}
+	for _, f := range fields {
+		args = append(args, "-f", f)
+	}
+	return args
+}
+
+// mrArgs compone una acción `glab mr` sobre un proyecto.
+func (a *Adapter) mrArgs(sub string, number int, project string, extra ...string) []string {
+	args := []string{"mr", sub, strconv.Itoa(number), "-R", project}
+	return append(args, extra...)
 }
 
 // List devuelve una página de la lista pedida.
@@ -80,7 +114,7 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("referencia de repo vacía"))}
 	}
 
-	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+glMRQuery(ref.Project, number))
+	raw, err := a.runner.Run(ctx, a.graphqlArgs(glMRQuery(ref.Project, number))...)
 	if err != nil {
 		return model.Item{}, []model.Warning{a.warn("", tool.Kind(err), err)}
 	}
@@ -98,12 +132,12 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 
 // Approve aprueba un MR con `glab mr approve`.
 func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
-	return a.action(ctx, "mr", "approve", strconv.Itoa(number), "-R", ref.Project)
+	return a.action(ctx, a.mrArgs("approve", number, ref.Project)...)
 }
 
 // Merge mergea un MR con `glab mr merge`.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
-	return a.action(ctx, "mr", "merge", strconv.Itoa(number), "-R", ref.Project, "--yes")
+	return a.action(ctx, a.mrArgs("merge", number, ref.Project, "--yes")...)
 }
 
 func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
@@ -115,12 +149,12 @@ func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
 
 // graphqlList ejecuta una query GraphQL paginada y etiqueta los ítems.
 func (a *Adapter) graphqlList(ctx context.Context, q forge.Query, query string) (forge.Page, []model.Warning) {
-	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+query)
+	raw, err := a.runner.Run(ctx, a.graphqlArgs(query)...)
 	if err != nil {
 		// Respaldo REST solo para la primera página de los MRs propios.
 		if q.Section == model.SectionAuthored && q.Cursor == "" {
 			if p, ok := a.restAuthored(ctx); ok {
-				return p, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
+				return p, []model.Warning{a.degraded(q.Section, err)}
 			}
 		}
 		return forge.Page{}, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
@@ -140,10 +174,10 @@ func (a *Adapter) todosList(ctx context.Context, q forge.Query) (forge.Page, []m
 	if n, err := strconv.Atoi(q.Cursor); err == nil && n > 0 {
 		pageNum = n
 	}
-	raw, err := a.runner.Run(ctx, "api", a.restEndpoint("todos"),
-		"-f", "action=mentioned",
-		"-f", "per_page="+strconv.Itoa(pageSize),
-		"-f", "page="+strconv.Itoa(pageNum))
+	raw, err := a.runner.Run(ctx, a.getArgs("todos",
+		"action=mentioned",
+		"per_page="+strconv.Itoa(pageSize),
+		"page="+strconv.Itoa(pageNum))...)
 	if err != nil {
 		return forge.Page{}, []model.Warning{a.warn(q.Section, tool.Kind(err), err)}
 	}
@@ -163,8 +197,8 @@ func (a *Adapter) todosList(ctx context.Context, q forge.Query) (forge.Page, []m
 
 // restAuthored consulta el respaldo REST (una sola página) de los MRs propios.
 func (a *Adapter) restAuthored(ctx context.Context) (forge.Page, bool) {
-	raw, err := a.runner.Run(ctx, "api", a.restEndpoint("merge_requests"),
-		"-f", "scope=created_by_me", "-f", "state=opened", "-f", "per_page="+strconv.Itoa(pageSize))
+	raw, err := a.runner.Run(ctx, a.getArgs("merge_requests",
+		"scope=created_by_me", "state=opened", "per_page="+strconv.Itoa(pageSize))...)
 	if err != nil {
 		return forge.Page{}, false
 	}
@@ -199,25 +233,26 @@ func (a *Adapter) warn(section model.Section, kind string, err error) model.Warn
 	return model.Warning{Forge: ForgeName, Section: section, Kind: kind, Msg: err.Error()}
 }
 
-// restEndpoint compone la ruta REST bajo el subfolder configurado. El
-// self-managed expone el API en `/git/api/v4/`, así que el path absoluto
-// empieza por ese prefijo.
-func (a *Adapter) restEndpoint(resource string) string {
-	resource = strings.TrimLeft(resource, "/")
-	if a.apiBase == "" {
-		return resource
+// degraded avisa de datos parciales procedentes del respaldo REST.
+func (a *Adapter) degraded(section model.Section, err error) model.Warning {
+	return model.Warning{
+		Forge:   ForgeName,
+		Section: section,
+		Kind:    "degraded",
+		Msg:     "GraphQL no disponible; datos parciales vía REST: " + tool.FirstLine(err.Error()),
 	}
-	return "/" + a.apiBase + "/" + resource
 }
 
-// normalizeBase deja el subfolder sin barras sobrantes: "/git/api/v4/" →
-// "git/api/v4".
-func normalizeBase(base string) string {
-	return strings.Trim(base, "/")
+// restEndpoint devuelve el recurso REST relativo. `glab api` ya resuelve el
+// host y su subfolder (p. ej. `/git/api/v4/`) contra su base configurada: pasar
+// la ruta absoluta da 404.
+func restEndpoint(resource string) string {
+	return strings.TrimLeft(resource, "/")
 }
 
-// mrFields son los campos GraphQL de un merge request que el inbox consume.
-const mrFields = `iid title webUrl state sourceBranch targetBranch approved approvalsLeft updatedAt author { username } project { fullPath name group { fullPath } }`
+// mrFields son los campos GraphQL de un merge request que el inbox consume. La
+// instancia CE no expone `approvalsLeft`, así que solo se pide `approved`.
+const mrFields = `iid title webUrl state sourceBranch targetBranch approved updatedAt author { username } project { fullPath name group { fullPath } }`
 
 // glConn cierra una conexión GraphQL con paginación.
 const glConn = `pageInfo { hasNextPage endCursor } nodes { %s }`
@@ -258,7 +293,13 @@ func afterArg(cursor string) string {
 	return fmt.Sprintf(`, after: "%s"`, escapeGraphQL(cursor))
 }
 
+// escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL.
 func escapeGraphQL(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	return strings.ReplaceAll(s, `"`, `\"`)
+	return strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		"\n", `\n`,
+		"\r", `\r`,
+		"\t", `\t`,
+	).Replace(s)
 }
