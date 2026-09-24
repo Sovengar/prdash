@@ -6,9 +6,11 @@ package tool
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -28,8 +30,31 @@ func New(bin string, extra ...string) *Runner {
 	return &Runner{Bin: bin, Timeout: DefaultTimeout, Extra: extra}
 }
 
+// Error es el fallo de una CLI, con el código de salida y la causa preservada
+// (Unwrap) para poder clasificarlo sin depender solo del texto.
+type Error struct {
+	Bin      string
+	Args     []string
+	ExitCode int
+	Msg      string
+	Err      error
+}
+
+// Error compone el mensaje del fallo incluyendo el código de salida.
+func (e *Error) Error() string {
+	base := fmt.Sprintf("%s %s: %s", e.Bin, strings.Join(e.Args, " "), e.Msg)
+	if e.ExitCode != 0 {
+		return fmt.Sprintf("%s (exit %d)", base, e.ExitCode)
+	}
+	return base
+}
+
+// Unwrap expone la causa subyacente (p. ej. *exec.ExitError).
+func (e *Error) Unwrap() error { return e.Err }
+
 // Run ejecuta el binario con los args dados y devuelve stdout. Ante un fallo
-// devuelve un error que resume la primera línea de stderr.
+// devuelve stdout igualmente (algunas CLIs, como `gh pr checks`, traen salida
+// válida con exit != 0) más un *Error con el código de salida.
 func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 	timeout := r.Timeout
 	if timeout <= 0 {
@@ -48,7 +73,12 @@ func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return out.String(), fmt.Errorf("%s %s: %s", r.Bin, strings.Join(args, " "), msg)
+		cerr := &Error{Bin: r.Bin, Args: args, Msg: msg, Err: err}
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			cerr.ExitCode = exit.ExitCode()
+		}
+		return out.String(), cerr
 	}
 	return out.String(), nil
 }
@@ -73,11 +103,52 @@ func Env(extra ...string) []string {
 	return append(out, extra...)
 }
 
+// ExitCode devuelve el código de salida de un error de CLI, o 0.
+func ExitCode(err error) int {
+	var cerr *Error
+	if errors.As(err, &cerr) {
+		return cerr.ExitCode
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return exit.ExitCode()
+	}
+	return 0
+}
+
+// Re compila los patrones de código HTTP presentes en el stderr de las CLIs.
+var (
+	httpCodeRe   = regexp.MustCompile(`(?i)\bhttp(?:/\d(?:\.\d)?)?\s+(\d{3})\b`)
+	statusCodeRe = regexp.MustCompile(`(?i)\bstatus(?:\s+code)?[:\s]+(\d{3})\b`)
+)
+
+// HTTPStatus extrae el código HTTP de un mensaje de error, o 0 si no hay.
+func HTTPStatus(msg string) int {
+	for _, re := range []*regexp.Regexp{httpCodeRe, statusCodeRe} {
+		if m := re.FindStringSubmatch(msg); m != nil {
+			code := 0
+			for _, r := range m[1] {
+				code = code*10 + int(r-'0')
+			}
+			return code
+		}
+	}
+	return 0
+}
+
 // Kind clasifica un error de CLI en la clase de warning correspondiente.
+// Prioriza el código HTTP (o de salida) y solo usa el texto como último
+// recurso, porque las CLIs varían el fraseo entre versiones e idiomas.
 func Kind(err error) string {
 	if err == nil {
 		return ""
 	}
+	if code := HTTPStatus(err.Error()); code != 0 {
+		if k := kindForHTTP(code); k != "" {
+			return k
+		}
+	}
+
 	msg := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(msg, "deadline exceeded"), strings.Contains(msg, "timed out"):
@@ -98,6 +169,26 @@ func Kind(err error) string {
 		return "notfound"
 	default:
 		return "network"
+	}
+}
+
+// kindForHTTP traduce un código HTTP a la clase de warning.
+func kindForHTTP(code int) string {
+	switch {
+	case code == 401:
+		return "auth"
+	case code == 403:
+		return "permission"
+	case code == 404:
+		return "notfound"
+	case code == 409:
+		return "conflict"
+	case code == 429:
+		return "ratelimit"
+	case code >= 500:
+		return "network"
+	default:
+		return ""
 	}
 }
 
