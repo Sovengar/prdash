@@ -179,13 +179,13 @@ const glGraphQLFixture = `{
     "currentUser": {
       "authoredMergeRequests": {"pageInfo": {"hasNextPage": true, "endCursor": "GL_CURSOR"},
         "nodes": [
-        {"iid":5,"title":"Add","webUrl":"u5","state":"opened","sourceBranch":"feat","targetBranch":"main","approved":true,"approvalsLeft":0,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
+        {"iid":5,"title":"Add","webUrl":"u5","state":"opened","sourceBranch":"feat","targetBranch":"main","approved":true,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
       ]},
       "reviewRequestedMergeRequests": {"nodes": [
-        {"iid":6,"title":"Review me","webUrl":"u6","state":"opened","sourceBranch":"f","targetBranch":"main","approved":false,"approvalsLeft":2,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
+        {"iid":6,"title":"Review me","webUrl":"u6","state":"opened","sourceBranch":"f","targetBranch":"main","approved":false,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
       ]},
       "assignedMergeRequests": {"nodes": [
-        {"iid":8,"title":"Assigned","webUrl":"u8","state":"opened","sourceBranch":"g","targetBranch":"main","approved":false,"approvalsLeft":0,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/other","name":"other","group":{"fullPath":"grp"}}}
+        {"iid":8,"title":"Assigned","webUrl":"u8","state":"opened","sourceBranch":"g","targetBranch":"main","approved":false,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/other","name":"other","group":{"fullPath":"grp"}}}
       ]}
     }
   }
@@ -230,24 +230,25 @@ func TestGHChecksJSON(t *testing.T) {
 	}
 }
 
-// TestGLReviewDecisionFromApprovals comprueba la traducción de aprobación a
-// decisión homóloga a GitHub.
-func TestGLReviewDecisionFromApprovals(t *testing.T) {
-	raw := func(approved bool, left int) string {
+// TestGLReviewDecisionFromApproved cubre C5: en CE solo hay `approved`; un MR
+// no aprobado se reporta como desconocido (no se inventa "review required").
+func TestGLReviewDecisionFromApproved(t *testing.T) {
+	raw := func(approved bool) string {
 		return `{"data":{"currentUser":{"authoredMergeRequests":{"nodes":[
-			{"iid":1,"title":"t","state":"opened","approved":` + boolStr(approved) + `,"approvalsLeft":` + itoa(left) + `,"project":{"fullPath":"g/p","name":"p"}}
+			{"iid":1,"title":"t","state":"opened","approved":` + boolStr(approved) + `,"project":{"fullPath":"g/p","name":"p"}}
 		]}}}}`
 	}
-	items, _, err := ParseGLGraphQL(raw(false, 2))
+	items, _, err := ParseGLGraphQL(raw(true))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items[0].ReviewDecision != "REVIEW_REQUIRED" {
-		t.Errorf("reviewDecision = %q", items[0].ReviewDecision)
-	}
-	items, _, _ = ParseGLGraphQL(raw(true, 0))
 	if items[0].ReviewDecision != "APPROVED" {
-		t.Errorf("reviewDecision = %q", items[0].ReviewDecision)
+		t.Errorf("reviewDecision = %q, want APPROVED", items[0].ReviewDecision)
+	}
+
+	items, _, _ = ParseGLGraphQL(raw(false))
+	if items[0].ReviewDecision != "" {
+		t.Errorf("reviewDecision = %q, want vacío (desconocido)", items[0].ReviewDecision)
 	}
 }
 
@@ -256,18 +257,6 @@ func boolStr(b bool) string {
 		return "true"
 	}
 	return "false"
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
 }
 
 func TestParseGLMRList(t *testing.T) {
@@ -343,5 +332,59 @@ func assertParseError(t *testing.T, err error) {
 	var pe *Error
 	if !errors.As(err, &pe) {
 		t.Fatalf("error = %T (%v), want *parse.Error", err, err)
+	}
+}
+
+// TestParseGHChecksBuckets cubre C9: un check cancelado no debe pintarse como
+// correcto.
+func TestParseGHChecksBuckets(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want model.CheckState
+	}{
+		{"cancel falla", `[{"name":"a","state":"CANCELLED","bucket":"cancel"}]`, model.ChecksFailing},
+		{"skipping no falla", `[{"name":"a","state":"SKIPPED","bucket":"skipping"}]`, model.ChecksPassing},
+		{"pending", `[{"name":"a","state":"PENDING","bucket":"pending"}]`, model.ChecksPending},
+		{"pass", `[{"name":"a","state":"SUCCESS","bucket":"pass"}]`, model.ChecksPassing},
+		{"sin bucket usa estado", `[{"name":"a","state":"FAILURE"}]`, model.ChecksFailing},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := ParseGHChecks(c.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.State != c.want {
+				t.Fatalf("state = %s, want %s (%+v)", got.State, c.want, got)
+			}
+		})
+	}
+}
+
+// TestParseGHGraphQLSearchUnionFragments cubre C1: la respuesta real mezcla
+// StatusContext (state) y CheckRun (status/conclusion), y puede traer nodos que
+// no son PR (se descartan).
+func TestParseGHGraphQLSearchUnionFragments(t *testing.T) {
+	raw := `{"data":{"search":{"nodes":[
+		{"__typename":"PullRequest","number":5,"title":"t","url":"u","state":"OPEN",
+		 "headRefName":"a","baseRefName":"b","author":{"login":"me"},
+		 "repository":{"nameWithOwner":"o/r","name":"r","owner":{"login":"o"}},
+		 "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE","contexts":{"nodes":[
+			{"__typename":"CheckRun","status":"COMPLETED","conclusion":"FAILURE"},
+			{"__typename":"StatusContext","state":"SUCCESS","context":"ci/legacy"}
+		 ]}}}}]}},
+		{"__typename":"Repository","number":0}
+	]}}}`
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1 (el nodo no-PR se descarta)", len(items))
+	}
+	c := items[0].Checks
+	if c.State != model.ChecksFailing || c.Total != 2 || c.Failing != 1 {
+		t.Fatalf("checks = %+v", c)
 	}
 }

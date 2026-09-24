@@ -81,9 +81,10 @@ type ghPRNode struct {
 					Contexts struct {
 						Nodes []struct {
 							Typename   string `json:"__typename"`
-							Status     string `json:"status"`
-							Conclusion string `json:"conclusion"`
-							State      string `json:"state"`
+							Status     string `json:"status"`     // CheckRun
+							Conclusion string `json:"conclusion"` // CheckRun
+							State      string `json:"state"`      // StatusContext
+							Context    string `json:"context"`    // StatusContext
 						} `json:"nodes"`
 					} `json:"contexts"`
 				} `json:"statusCheckRollup"`
@@ -142,6 +143,9 @@ func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 
 	items := make([]model.Item, 0, len(nodes))
 	for _, n := range nodes {
+		if n.Number == 0 {
+			continue // nodos de otro tipo en la unión SearchResultItem
+		}
 		items = append(items, itemFromGHNode(n))
 	}
 	return items, page, nil
@@ -301,7 +305,8 @@ type ghCheck struct {
 }
 
 // ParseGHChecks interpreta la salida de `gh pr checks --json name,state,bucket`
-// y resume el estado de los checks.
+// y resume el estado de los checks. El bucket que normaliza `gh` manda; si
+// falta, se cae al estado crudo.
 func ParseGHChecks(raw string) (model.Checks, error) {
 	var checks []ghCheck
 	if err := json.Unmarshal([]byte(raw), &checks); err != nil {
@@ -311,12 +316,20 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 	var c model.Checks
 	for _, ch := range checks {
 		c.Total++
-		switch {
-		case ch.Bucket == "fail" || strings.EqualFold(ch.State, "FAILURE") || strings.EqualFold(ch.State, "ERROR"):
+		switch strings.ToLower(ch.Bucket) {
+		case "fail", "cancel":
 			c.Failing++
-		case ch.Bucket == "pending" || strings.EqualFold(ch.State, "PENDING") ||
-			strings.EqualFold(ch.State, "IN_PROGRESS") || strings.EqualFold(ch.State, "QUEUED"):
+		case "pending":
 			c.Pending++
+		case "pass", "skipping":
+			// cuenta como correcto
+		default:
+			switch {
+			case isGHFailure("", ch.State):
+				c.Failing++
+			case isGHPending("", ch.State):
+				c.Pending++
+			}
 		}
 	}
 	switch {
@@ -335,16 +348,15 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 // ---- GitLab: GraphQL (currentUser / project) ----
 
 type glMR struct {
-	IID           int    `json:"iid"`
-	Title         string `json:"title"`
-	WebURL        string `json:"webUrl"`
-	State         string `json:"state"`
-	SourceBranch  string `json:"sourceBranch"`
-	TargetBranch  string `json:"targetBranch"`
-	Approved      bool   `json:"approved"`
-	ApprovalsLeft int    `json:"approvalsLeft"`
-	UpdatedAt     string `json:"updatedAt"`
-	Author        struct {
+	IID          int    `json:"iid"`
+	Title        string `json:"title"`
+	WebURL       string `json:"webUrl"`
+	State        string `json:"state"`
+	SourceBranch string `json:"sourceBranch"`
+	TargetBranch string `json:"targetBranch"`
+	Approved     bool   `json:"approved"`
+	UpdatedAt    string `json:"updatedAt"`
+	Author       struct {
 		Username string `json:"username"`
 	} `json:"author"`
 	Project struct {
@@ -457,17 +469,14 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	return it
 }
 
-// glReviewDecision traduce aprobación/approvalsLeft a una decisión homóloga a
-// la de GitHub para que el estado derivado no dependa del forge.
+// glReviewDecision traduce la aprobación del MR a una decisión homóloga a la de
+// GitHub. La instancia CE no expone el recuento de aprobaciones, así que un MR
+// no aprobado se reporta como desconocido en vez de inventar "review required".
 func glReviewDecision(mr glMR) string {
-	switch {
-	case mr.Approved:
+	if mr.Approved {
 		return "APPROVED"
-	case mr.ApprovalsLeft > 0:
-		return "REVIEW_REQUIRED"
-	default:
-		return ""
 	}
+	return ""
 }
 
 // ---- GitLab: REST merge_requests (BasicMergeRequest) ----
