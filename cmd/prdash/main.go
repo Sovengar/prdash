@@ -35,7 +35,7 @@ func main() {
 	}
 
 	if *printMode {
-		runPrint(cfg, adapters)
+		runPrint(adapters)
 		return
 	}
 
