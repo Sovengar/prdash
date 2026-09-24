@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -179,13 +180,13 @@ const glGraphQLFixture = `{
     "currentUser": {
       "authoredMergeRequests": {"pageInfo": {"hasNextPage": true, "endCursor": "GL_CURSOR"},
         "nodes": [
-        {"iid":5,"title":"Add","webUrl":"u5","state":"opened","sourceBranch":"feat","targetBranch":"main","approved":true,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
+        {"iid":"5","title":"Add","webUrl":"u5","state":"opened","sourceBranch":"feat","targetBranch":"main","approved":true,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
       ]},
       "reviewRequestedMergeRequests": {"nodes": [
-        {"iid":6,"title":"Review me","webUrl":"u6","state":"opened","sourceBranch":"f","targetBranch":"main","approved":false,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
+        {"iid":"6","title":"Review me","webUrl":"u6","state":"opened","sourceBranch":"f","targetBranch":"main","approved":false,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
       ]},
       "assignedMergeRequests": {"nodes": [
-        {"iid":8,"title":"Assigned","webUrl":"u8","state":"opened","sourceBranch":"g","targetBranch":"main","approved":false,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/other","name":"other","group":{"fullPath":"grp"}}}
+        {"iid":"8","title":"Assigned","webUrl":"u8","state":"opened","sourceBranch":"g","targetBranch":"main","approved":false,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"other"},"project":{"fullPath":"grp/other","name":"other","group":{"fullPath":"grp"}}}
       ]}
     }
   }
@@ -235,7 +236,7 @@ func TestGHChecksJSON(t *testing.T) {
 func TestGLReviewDecisionFromApproved(t *testing.T) {
 	raw := func(approved bool) string {
 		return `{"data":{"currentUser":{"authoredMergeRequests":{"nodes":[
-			{"iid":1,"title":"t","state":"opened","approved":` + boolStr(approved) + `,"project":{"fullPath":"g/p","name":"p"}}
+			{"iid":"1","title":"t","state":"opened","approved":` + boolStr(approved) + `,"project":{"fullPath":"g/p","name":"p"}}
 		]}}}}`
 	}
 	items, _, err := ParseGLGraphQL(raw(true))
@@ -386,5 +387,79 @@ func TestParseGHGraphQLSearchUnionFragments(t *testing.T) {
 	c := items[0].Checks
 	if c.State != model.ChecksFailing || c.Total != 2 || c.Failing != 1 {
 		t.Fatalf("checks = %+v", c)
+	}
+}
+
+// glReviewRequestedRealFixture reproduce la forma real de
+// reviewRequestedMergeRequests (redactada): `iid` llega como string (ID!),
+// `pageInfo.endCursor` string y `hasNextPage` false.
+const glReviewRequestedRealFixture = `{
+  "data": {
+    "currentUser": {
+      "reviewRequestedMergeRequests": {
+        "pageInfo": {"hasNextPage": false, "endCursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0xNyJ9"},
+        "nodes": [
+          {
+            "iid": "1012",
+            "title": "MR de ejemplo",
+            "webUrl": "https://gitlab.example.com/g/p/-/merge_requests/1012",
+            "state": "opened",
+            "sourceBranch": "fix/x",
+            "targetBranch": "deploy/Y",
+            "approved": false,
+            "updatedAt": "2026-09-24T14:36:26Z",
+            "author": {"username": "someone"},
+            "project": {"fullPath": "grp/sub/proj", "name": "proj", "group": {"fullPath": "grp/sub"}}
+          }
+        ]
+      }
+    }
+  }
+}`
+
+// TestParseGLGraphQLStringIID cubre el tipo real de `iid` (ID! serializado como
+// string): sin esto las tres listas de GitLab fallan al parsear.
+func TestParseGLGraphQLStringIID(t *testing.T) {
+	items, page, err := ParseGLGraphQL(glReviewRequestedRealFixture)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	if items[0].Number != 1012 {
+		t.Errorf("Number = %d, want 1012", items[0].Number)
+	}
+	if items[0].Section != model.SectionReview || items[0].ReviewKind != model.ReviewRequested {
+		t.Errorf("sección/kind = %v/%v", items[0].Section, items[0].ReviewKind)
+	}
+	if items[0].Ref.Project != "grp/sub/proj" || items[0].Ref.Owner != "grp/sub" {
+		t.Errorf("ref = %+v", items[0].Ref)
+	}
+	if page.More || page.Next == "" {
+		t.Errorf("pageInfo = %+v (More=false con endCursor string)", page)
+	}
+}
+
+// TestFlexInt tolera número, string, nulo y valores no numéricos.
+func TestFlexInt(t *testing.T) {
+	cases := map[string]int{
+		`{"n":12}`:    12,
+		`{"n":"12"}`:  12,
+		`{"n":null}`:  0,
+		`{"n":""}`:    0,
+		`{"n":"abc"}`: 0,
+		`{}`:          0,
+	}
+	for raw, want := range cases {
+		var v struct {
+			N flexInt `json:"n"`
+		}
+		if err := json.Unmarshal([]byte(raw), &v); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", raw, err)
+		}
+		if int(v.N) != want {
+			t.Errorf("flexInt(%s) = %d, want %d", raw, int(v.N), want)
+		}
 	}
 }
