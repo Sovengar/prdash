@@ -68,7 +68,9 @@ type PageResult struct {
 	First    bool // primera página de la lista
 }
 
-// Registry mantiene los adapters habilitados por nombre de forge.
+// Registry mantiene los adapters habilitados por nombre de forge. Es API
+// reservada para el registro del plugin (F2/etapa del manifiesto); hoy el
+// wiring se hace con una lista ordenada en el entrypoint.
 type Registry struct {
 	adapters map[string]Adapter
 }
@@ -175,7 +177,7 @@ func Collect(ctx context.Context, a Adapter) inbox.ForgeResult {
 				case model.SectionMentions:
 					res.Mentions = append(res.Mentions, p.Items...)
 				}
-				res.Warnings = append(res.Warnings, stampSection(p.Warnings, q.Section)...)
+				res.Warnings = append(res.Warnings, StampSection(p.Warnings, q.Section)...)
 				return true
 			})
 		}(q)
@@ -184,8 +186,8 @@ func Collect(ctx context.Context, a Adapter) inbox.ForgeResult {
 	return res
 }
 
-// stampSection etiqueta con su sección los warnings que no la traigan.
-func stampSection(warns []model.Warning, section model.Section) []model.Warning {
+// StampSection etiqueta con su sección los warnings que no la traigan.
+func StampSection(warns []model.Warning, section model.Section) []model.Warning {
 	for i := range warns {
 		if warns[i].Section == "" {
 			warns[i].Section = section
