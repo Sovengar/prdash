@@ -223,14 +223,14 @@ func Path() (string, error) {
 // DefaultKeybindings devuelve el mapa de teclas por defecto.
 func DefaultKeybindings() Keybindings {
 	return Keybindings{
-		"quit":          "q",
-		"refresh":       "r",
-		"detail":        "enter",
-		"mount-review":  "m",
-		"approve":       "a",
-		"merge":         "M",
-		"section-next":  "tab",
-		"open-browser":  "o",
+		"quit":         "q",
+		"refresh":      "r",
+		"detail":       "enter",
+		"mount-review": "m",
+		"approve":      "a",
+		"merge":        "M",
+		"section-next": "tab",
+		"open-browser": "o",
 	}
 }
 

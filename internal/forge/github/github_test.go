@@ -7,9 +7,9 @@ import (
 
 func TestSearchQueryCoversQualifiers(t *testing.T) {
 	cases := map[string]string{
-		"author:@me":            `is:pr is:open author:@me`,
-		"review-requested:@me":  `is:pr is:open review-requested:@me`,
-		"mentions:@me":          `is:pr is:open mentions:@me`,
+		"author:@me":           `is:pr is:open author:@me`,
+		"review-requested:@me": `is:pr is:open review-requested:@me`,
+		"mentions:@me":         `is:pr is:open mentions:@me`,
 	}
 	for qualifier, want := range cases {
 		q := searchQuery(qualifier)

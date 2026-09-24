@@ -58,9 +58,9 @@ type Model struct {
 	loading     bool
 	lastRefresh time.Time
 
-	events chan event
-	ctx    context.Context
-	cancel context.CancelFunc
+	events  chan event
+	ctx     context.Context
+	cancel  context.CancelFunc
 	spinner spinner.Model
 }
 

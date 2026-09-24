@@ -178,8 +178,8 @@ func TestNavigationMovesCursor(t *testing.T) {
 	gh := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(gh)
 	m = applyResults(t, m, inbox.ForgeResult{
-		Forge:    "github",
-		Host:     "github.com",
+		Forge: "github",
+		Host:  "github.com",
 		Authored: []model.Item{
 			mkItem("github", "github.com", "acme/widget", "A", 1, ""),
 			mkItem("github", "github.com", "acme/widget", "B", 2, ""),
