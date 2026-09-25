@@ -1,10 +1,14 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"prdash/internal/config"
 	"prdash/internal/forge/model"
+	"prdash/internal/selection"
 )
 
 // TestReviewTargetPrefersArgument comprueba que una URL explícita manda sobre
@@ -106,6 +110,88 @@ func TestReviewItemKeepsIdentity(t *testing.T) {
 	want := model.With("gitlab", "gitlab.example.com", "git/sub/proj", 5)
 	if it.ID() != want {
 		t.Fatalf("ID = %+v, quiero %+v", it.ID(), want)
+	}
+}
+
+// TestMountFromTargetFallsBackToSelection comprueba que la acción invocada sin
+// URL (keybinding) monta el ítem que la TUI dejó seleccionado.
+func TestMountFromTargetFallsBackToSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "selection.json")
+	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}, 7)
+	if err := selection.Save(path, selection.FromItem(it, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+
+	var got model.Item
+	code := mountFromTarget(config.Defaults(), nil, envGet(nil),
+		func() (string, error) { return path, nil },
+		func(_ config.Config, mounted model.Item) int { got = mounted; return 0 })
+
+	if code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	if got.ID() != it.ID() {
+		t.Fatalf("montado = %+v, quiero %+v", got.ID(), it.ID())
+	}
+}
+
+// TestMountFromTargetPrefersURL comprueba que una URL explícita sigue mandando
+// sobre la selección persistida.
+func TestMountFromTargetPrefersURL(t *testing.T) {
+	var got model.Item
+	code := mountFromTarget(config.Defaults(), []string{"https://github.com/acme/widget/pull/9"}, envGet(nil),
+		func() (string, error) { return filepath.Join(t.TempDir(), "nope.json"), nil },
+		func(_ config.Config, mounted model.Item) int { got = mounted; return 0 })
+
+	if code != 0 || got.Number != 9 {
+		t.Fatalf("code=%d item=%+v", code, got.ID())
+	}
+}
+
+// TestMountFromTargetWithoutSelectionFailsClean comprueba que sin selección no
+// se monta nada y no hay side effects.
+func TestMountFromTargetWithoutSelectionFailsClean(t *testing.T) {
+	called := false
+	code := mountFromTarget(config.Defaults(), nil, envGet(nil),
+		func() (string, error) { return filepath.Join(t.TempDir(), "nope.json"), nil },
+		func(config.Config, model.Item) int { called = true; return 0 })
+
+	if code == 0 {
+		t.Fatal("sin selección debería fallar")
+	}
+	if called {
+		t.Fatal("no debería montarse nada sin selección")
+	}
+}
+
+// TestSelectedReviewRejectsStaleCorruptAndIncomplete cubre los estados que la
+// acción debe rechazar con error claro.
+func TestSelectedReviewRejectsStaleCorruptAndIncomplete(t *testing.T) {
+	dir := t.TempDir()
+	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
+
+	stale := filepath.Join(dir, "stale.json")
+	if err := selection.Save(stale, selection.FromItem(it, time.Now().Add(-2*selection.MaxAge))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := selectedReview(func() (string, error) { return stale, nil }, time.Now()); err == nil {
+		t.Fatal("una selección obsoleta debería fallar")
+	}
+
+	corrupt := filepath.Join(dir, "corrupt.json")
+	if err := os.WriteFile(corrupt, []byte("{no json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := selectedReview(func() (string, error) { return corrupt, nil }, time.Now()); err == nil {
+		t.Fatal("una selección corrupta debería fallar")
+	}
+
+	incomplete := filepath.Join(dir, "incomplete.json")
+	if err := os.WriteFile(incomplete, []byte(`{"forge":"github","host":"github.com"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := selectedReview(func() (string, error) { return incomplete, nil }, time.Now()); err == nil {
+		t.Fatal("una selección incompleta debería fallar")
 	}
 }
 

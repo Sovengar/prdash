@@ -13,8 +13,19 @@ import (
 	"prdash/internal/reporesolver"
 	"prdash/internal/review/executor"
 	"prdash/internal/review/plan"
+	"prdash/internal/selection"
+	"prdash/internal/tui"
 	"prdash/internal/worktree"
 )
+
+// trackSelection hace que la TUI persista el ítem seleccionado para que la
+// acción `prdash.mount-review` invocada sin URL pueda montarlo. Si la ruta de
+// estado no se puede resolver, la TUI sigue funcionando sin persistencia.
+func trackSelection(m *tui.Model) {
+	if p, err := selection.Path(); err == nil {
+		m.SetSelectionPath(p)
+	}
+}
 
 // buildExecutor arma el orquestador de review sobre la config. La selección del
 // provisioner la decide worktree.Select: el llamador no sabe cuál corre.

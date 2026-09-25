@@ -84,7 +84,7 @@ de los manifiestos.
 | Subcomando | Uso |
 |---|---|
 | `prdash herdr inbox` | Abre la TUI del inbox en el pane que declara el manifiesto. |
-| `prdash herdr mount [URL]` | Monta el review del PR/MR: la URL recibida por argumento o, si no, `HERDR_PLUGIN_CLICKED_URL` / `clicked_url` del contexto del plugin. |
+| `prdash herdr mount [URL]` | Monta el review del PR/MR: la URL recibida por argumento o, si no, `HERDR_PLUGIN_CLICKED_URL` / `clicked_url` del contexto del plugin. Sin URL, monta el **ítem seleccionado en la TUI** del inbox. |
 | `prdash herdr link` | Igual que `mount`, para el link handler de Ctrl+click (solo confía en `clicked_url`, nunca en `selected_text`). |
 
 ### Keybinding
@@ -104,6 +104,12 @@ description = "prdash: montar review del PR/MR"
 ```sh
 herdr server reload-config
 ```
+
+La acción resuelve qué montar en este orden: URL por argumento o `clicked_url`
+del contexto (link handler); si no hay, el **ítem seleccionado en la TUI** del
+inbox. La TUI persiste la selección en `$XDG_STATE_HOME/prdash/selection.json`
+(estado efímero de UI). Sin selección, con el estado corrupto o si está
+obsoleto, la acción falla con un aviso claro y no monta nada.
 
 ## Desarrollo
 
