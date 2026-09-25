@@ -88,6 +88,8 @@ de los manifiestos.
 | `prdash herdr mount [URL]` | Monta el review del PR/MR: la URL recibida por argumento o, si no, `HERDR_PLUGIN_CLICKED_URL` / `clicked_url` del contexto del plugin. Sin URL, monta el **ítem seleccionado en la TUI** del inbox. |
 | `prdash herdr link` | Igual que `mount`, para el link handler de Ctrl+click (solo confía en `clicked_url`, nunca en `selected_text`). |
 
+
+PR de prueba 10/10: nota de humo para practicar el ciclo de resolucion de PRs.
 ### Keybinding
 
 El manifiesto **no** declara teclas. Para bindear la acción de montar review,
