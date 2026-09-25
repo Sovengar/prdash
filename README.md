@@ -124,3 +124,5 @@ Diseño: `docs/planning/archive/0001-mvp/` (plan, comportamiento esperado,
 contexto, resumen de cierre);
 decisiones permanentes en `docs/adr/`; contrato de integración con Herdr en
 `docs/research/herdr-0.9.1-contract.md`.
+
+Hello world.
