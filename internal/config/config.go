@@ -33,6 +33,10 @@ type Commands map[string]string
 type GitHubConfig struct {
 	Enabled bool
 	Host    string
+	// CloneBase es el relative URL root de la instancia para clonado/web
+	// (p. ej. "git" en un GitHub Enterprise servido en https://host/git/).
+	// Vacío significa que la instancia vive en la raíz del host.
+	CloneBase string
 }
 
 // GitLabConfig es la config del forge GitLab self-managed.
@@ -40,10 +44,46 @@ type GitLabConfig struct {
 	Enabled bool
 	Host    string
 	// APIBase documenta el subfolder REST del self-managed (p. ej.
-	// "/git/api/v4/"). Es informativo: `glab` resuelve el host y su base API
-	// por sí solo, así que el adapter no construye la URL absoluta.
-	APIBase  string
-	TokenEnv string // nombre de la variable de entorno del token (lo maneja glab)
+	// "/git/api/v4/"). Además de informativo, se usa para derivar el relative
+	// URL root de clonado/web cuando CloneBase está vacío: `glab` resuelve el
+	// host y su base API por sí solo, pero el clon por git necesita el prefijo.
+	APIBase string
+	// CloneBase es un override explícito del relative URL root de clonado/web
+	// (p. ej. "git"). Vacío lo deriva de APIBase.
+	CloneBase string
+	TokenEnv  string // nombre de la variable de entorno del token (lo maneja glab)
+}
+
+// ClonePrefix devuelve el relative URL root de clonado/web de un GitHub
+// Enterprise configurado en subcarpeta. Normaliza las barras; vacío = raíz.
+func (g GitHubConfig) ClonePrefix() string { return normalizeBase(g.CloneBase) }
+
+// ClonePrefix devuelve el relative URL root de clonado/web de la instancia
+// GitLab. Prioriza CloneBase; si está vacío lo deriva de APIBase (p. ej.
+// "/git/api/v4/" → "git"). Vacío = la instancia vive en la raíz del host.
+func (g GitLabConfig) ClonePrefix() string {
+	if g.CloneBase != "" {
+		return normalizeBase(g.CloneBase)
+	}
+	return relativeRootFromAPIBase(g.APIBase)
+}
+
+// normalizeBase recorta las barras de un relative URL root; vacío = raíz.
+func normalizeBase(base string) string { return strings.Trim(base, "/") }
+
+// relativeRootFromAPIBase deriva el relative URL root del api_base REST de
+// GitLab quitando el sufijo "api/v4": "/git/api/v4/" → "git", "/api/v4/" → "".
+// Devuelve "" si api_base está vacío o no tiene la forma esperada (sin adivinar).
+func relativeRootFromAPIBase(apiBase string) string {
+	p := normalizeBase(apiBase)
+	const rest = "api/v4"
+	if p == rest {
+		return ""
+	}
+	if strings.HasSuffix(p, "/"+rest) {
+		return normalizeBase(strings.TrimSuffix(p, "/"+rest))
+	}
+	return ""
 }
 
 // BitbucketConfig es la config del forge Bitbucket.
@@ -109,15 +149,17 @@ type forgeFile struct {
 }
 
 type githubFile struct {
-	Enabled *bool   `toml:"enabled"`
-	Host    *string `toml:"host"`
+	Enabled   *bool   `toml:"enabled"`
+	Host      *string `toml:"host"`
+	CloneBase *string `toml:"clone_base"`
 }
 
 type gitlabFile struct {
-	Enabled  *bool   `toml:"enabled"`
-	Host     *string `toml:"host"`
-	APIBase  *string `toml:"api_base"`
-	TokenEnv *string `toml:"token_env"`
+	Enabled   *bool   `toml:"enabled"`
+	Host      *string `toml:"host"`
+	APIBase   *string `toml:"api_base"`
+	CloneBase *string `toml:"clone_base"`
+	TokenEnv  *string `toml:"token_env"`
 }
 
 type bitbucketFile struct {
@@ -412,6 +454,7 @@ func mergeForges(dst *Forges, src *forgeFile) {
 			dst.GitHub.Enabled = *src.GitHub.Enabled
 		}
 		mergeString(src.GitHub.Host, &dst.GitHub.Host)
+		mergeString(src.GitHub.CloneBase, &dst.GitHub.CloneBase)
 	}
 	if src.GitLab != nil {
 		if src.GitLab.Enabled != nil {
@@ -419,6 +462,7 @@ func mergeForges(dst *Forges, src *forgeFile) {
 		}
 		mergeString(src.GitLab.Host, &dst.GitLab.Host)
 		mergeString(src.GitLab.APIBase, &dst.GitLab.APIBase)
+		mergeString(src.GitLab.CloneBase, &dst.GitLab.CloneBase)
 		mergeString(src.GitLab.TokenEnv, &dst.GitLab.TokenEnv)
 	}
 	if src.Bitbucket != nil && src.Bitbucket.Enabled != nil {
