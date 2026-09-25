@@ -71,6 +71,16 @@ func (c *Client) env(key string) string {
 	return os.Getenv(key)
 }
 
+// guard veta toda operación mutante cuando Herdr no está disponible (fuera de
+// Herdr o por debajo de la versión mínima): el puerto nunca toca la sesión si
+// no puede hacerlo con garantías. Las lecturas (list/version) no pasan por aquí.
+func (c *Client) guard() error {
+	if !c.Available() {
+		return &Error{Msg: "herdr no disponible (se requiere HERDR_ENV=1 y versión >= " + MinVersion.String() + ")"}
+	}
+	return nil
+}
+
 // run ejecuta la CLI con timeout y devuelve stdout/stderr crudos.
 func (c *Client) run(ctx context.Context, args ...string) ([]byte, []byte, error) {
 	if c.execFn != nil {
@@ -127,6 +137,9 @@ func newError(args []string, err error, stderr []byte) *Error {
 // WorktreeCreate crea y abre un worktree nativo. La rama debe existir ya en
 // local; prdash nunca delega el fetch ni la creación de la rama.
 func (c *Client) WorktreeCreate(ctx context.Context, spec WorktreeSpec) (WorktreeInfo, error) {
+	if err := c.guard(); err != nil {
+		return WorktreeInfo{}, err
+	}
 	args := []string{"worktree", "create"}
 	if spec.Cwd != "" {
 		args = append(args, "--cwd", spec.Cwd)
@@ -169,6 +182,9 @@ func (c *Client) WorktreeList(ctx context.Context, cwd string) ([]WorktreeInfo, 
 
 // WorktreeRemove quita el checkout de un worktree ligado a un workspace.
 func (c *Client) WorktreeRemove(ctx context.Context, workspaceID string, force bool) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	args := []string{"worktree", "remove", "--workspace", workspaceID}
 	if force {
 		args = append(args, "--force")
@@ -179,6 +195,9 @@ func (c *Client) WorktreeRemove(ctx context.Context, workspaceID string, force b
 
 // WorkspaceCreate crea un workspace.
 func (c *Client) WorkspaceCreate(ctx context.Context, spec WorkspaceSpec) (WorkspaceInfo, error) {
+	if err := c.guard(); err != nil {
+		return WorkspaceInfo{}, err
+	}
 	args := []string{"workspace", "create"}
 	if spec.Cwd != "" {
 		args = append(args, "--cwd", spec.Cwd)
@@ -199,6 +218,9 @@ func (c *Client) WorkspaceCreate(ctx context.Context, spec WorkspaceSpec) (Works
 // WorkspaceClose cierra un workspace. Con group intenta cerrar el grupo de
 // worktrees vinculados (algunas versiones lo exigen).
 func (c *Client) WorkspaceClose(ctx context.Context, workspaceID string, group bool) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	args := []string{"workspace", "close", workspaceID}
 	if group {
 		args = append(args, "--group")
@@ -209,6 +231,9 @@ func (c *Client) WorkspaceClose(ctx context.Context, workspaceID string, group b
 
 // TabCreate crea una pestaña dentro de un workspace.
 func (c *Client) TabCreate(ctx context.Context, spec TabSpec) (TabInfo, error) {
+	if err := c.guard(); err != nil {
+		return TabInfo{}, err
+	}
 	args := []string{"tab", "create"}
 	if spec.WorkspaceID != "" {
 		args = append(args, "--workspace", spec.WorkspaceID)
@@ -231,6 +256,9 @@ func (c *Client) TabCreate(ctx context.Context, spec TabSpec) (TabInfo, error) {
 
 // PaneSplit divide un pane y devuelve el pane nuevo.
 func (c *Client) PaneSplit(ctx context.Context, spec SplitSpec) (PaneInfo, error) {
+	if err := c.guard(); err != nil {
+		return PaneInfo{}, err
+	}
 	args := []string{"pane", "split", "--pane", spec.PaneID, "--direction", spec.Direction}
 	if spec.Ratio > 0 {
 		args = append(args, "--ratio", strconv.FormatFloat(spec.Ratio, 'f', -1, 64))
@@ -261,12 +289,18 @@ func (c *Client) PaneRun(ctx context.Context, paneID string, argv []string) erro
 	if len(argv) == 0 {
 		return fmt.Errorf("pane run: argv vacío")
 	}
+	if err := c.guard(); err != nil {
+		return err
+	}
 	_, err := c.result(ctx, "pane", "run", paneID, strings.Join(argv, " "))
 	return err
 }
 
 // PaneWaitOutput espera a que la salida de un pane contenga match.
 func (c *Client) PaneWaitOutput(ctx context.Context, paneID, match string, timeout time.Duration) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	args := []string{"pane", "wait-output", "--match", match, paneID}
 	if timeout > 0 {
 		args = append(args, "--timeout", strconv.FormatInt(timeout.Milliseconds(), 10))
@@ -277,6 +311,9 @@ func (c *Client) PaneWaitOutput(ctx context.Context, paneID, match string, timeo
 
 // PaneRename etiqueta un pane.
 func (c *Client) PaneRename(ctx context.Context, paneID, label string) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	_, err := c.result(ctx, "pane", "rename", paneID, label)
 	return err
 }
@@ -286,6 +323,9 @@ func (c *Client) PaneRename(ctx context.Context, paneID, label string) error {
 func (c *Client) PaneFocus(ctx context.Context, direction string) error {
 	if direction == "" {
 		direction = "right"
+	}
+	if err := c.guard(); err != nil {
+		return err
 	}
 	_, err := c.result(ctx, "pane", "focus", "--direction", direction)
 	return err
@@ -306,6 +346,9 @@ func (c *Client) PaneList(ctx context.Context, workspaceID string) ([]PaneInfo, 
 
 // Notify muestra una notificación de Herdr.
 func (c *Client) Notify(ctx context.Context, title string, opts NotifyOptions) error {
+	if err := c.guard(); err != nil {
+		return err
+	}
 	args := []string{"notification", "show", title}
 	if opts.Body != "" {
 		args = append(args, "--body", opts.Body)
