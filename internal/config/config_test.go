@@ -160,6 +160,28 @@ func TestExpandAll(t *testing.T) {
 	}
 }
 
+func TestToolArgs(t *testing.T) {
+	cfg := Defaults()
+	if got := cfg.ToolArgs("agent"); len(got) != 1 || got[0] != "opencode" {
+		t.Fatalf("agent default = %v", got)
+	}
+	if got := cfg.ToolArgs("tuicr"); len(got) != 1 || got[0] != "tuicr" {
+		t.Fatalf("tuicr default = %v", got)
+	}
+	// `tools.<name>` define el binario; `commands.<name>` el argv completo.
+	cfg.Tools.Agent = "claude"
+	if got := cfg.ToolArgs("agent"); len(got) != 1 || got[0] != "claude" {
+		t.Fatalf("agent tools = %v", got)
+	}
+	cfg.Commands["agent"] = "claude --model opus"
+	if got := cfg.ToolArgs("agent"); len(got) != 3 || got[0] != "claude" || got[2] != "opus" {
+		t.Fatalf("agent commands = %v", got)
+	}
+	if got := cfg.ToolArgs("desconocido"); got != nil {
+		t.Fatalf("herramienta desconocida = %v", got)
+	}
+}
+
 func TestHintBarLines(t *testing.T) {
 	lines := Defaults().HintBarLines()
 	if len(lines) != 2 {
