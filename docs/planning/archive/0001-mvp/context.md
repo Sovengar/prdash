@@ -20,7 +20,7 @@ generated_by: codebase-researcher
 |---|---|
 | `README.md` | 5 líneas: descripción + "Estado: planificación (MVP)". |
 | `.gitignore` | `bin/` y `*.test`. |
-| `docs/planning/0001-mvp/` | `issue.md`, `behavior.feature`, `plan.md`, este `context.md`. |
+| `docs/planning/archive/0001-mvp/` | `issue.md`, `behavior.feature`, `plan.md`, este `context.md`. |
 | `docs/adr/0001-worktree-provisioning.md` | ADR aceptado: provisión de worktree. |
 
 No hay código, ni `cmd/`, ni `internal/`, ni `go.mod`, ni `scripts/`, ni `plugin/`.

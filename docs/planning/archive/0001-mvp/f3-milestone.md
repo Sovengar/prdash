@@ -2,7 +2,7 @@
 
 - **Estado**: milestone post-MVP. Diseño aprobado en `behavior.feature`; **no se
   implementa** en la feature 0001.
-- **Padre**: `docs/planning/0001-mvp/plan.md` (fase F3) y `behavior.feature`
+- **Padre**: `docs/planning/archive/0001-mvp/plan.md` (fase F3) y `behavior.feature`
   (bloque `@F3`, que es el comportamiento esperado y sirve de criterio futuro).
 - **Decisión**: la release actual termina al abrir los panes de review con su
   cwd, env y argv correctos. Aprobar o comentar es responsabilidad del usuario

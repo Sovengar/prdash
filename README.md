@@ -8,7 +8,7 @@ layout de 3 panes) para que el loop de comentarios ocurra sin montar nada a
 mano.
 
 Estado: **MVP F1 + F2**. F3 (auto-review con gate y allowlist) es un milestone
-documentado, sin implementar: ver `docs/planning/0001-mvp/f3-milestone.md`.
+documentado, sin implementar: ver `docs/planning/archive/0001-mvp/f3-milestone.md`.
 
 ## Requisitos
 
@@ -119,6 +119,7 @@ make fmt     # formatea
 make print   # comprueba el pipeline sin TUI
 ```
 
-Diseño: `docs/planning/0001-mvp/` (plan, comportamiento esperado, contexto);
+Diseño: `docs/planning/archive/0001-mvp/` (plan, comportamiento esperado,
+contexto, resumen de cierre);
 decisiones permanentes en `docs/adr/`; contrato de integración con Herdr en
 `docs/research/herdr-0.9.1-contract.md`.
