@@ -79,6 +79,27 @@ func TestAuditFlagsOrphanWhenSourceGone(t *testing.T) {
 	}
 }
 
+// TestListExcludesForeignWorktrees fija que el listado del puerto respeta el
+// ownership: los worktrees ajenos no se exponen.
+func TestListExcludesForeignWorktrees(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "propia")
+	testutil.RunGit(t, repo, "branch", "ajena")
+
+	base := t.TempDir()
+	owned := filepath.Join(base, "prdash-pr-1")
+	foreign := filepath.Join(base, "otra-herramienta")
+	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "propia", Path: owned, Label: "prdash-pr-1"}); err != nil {
+		t.Fatalf("preparar worktree propio: %v", err)
+	}
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "ajena")
+
+	list := NewGitDirect(base).List(context.Background())
+	if len(list) != 1 || list[0].Path != owned {
+		t.Fatalf("List = %+v, quiero solo el worktree propio", list)
+	}
+}
+
 // TestAuditSkipsNonWorktreeDirs ignora directorios normales bajo la raíz.
 func TestAuditSkipsNonWorktreeDirs(t *testing.T) {
 	base := t.TempDir()
