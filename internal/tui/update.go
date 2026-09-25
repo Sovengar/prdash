@@ -12,6 +12,7 @@ import (
 
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
+	"prdash/internal/review/executor"
 	"prdash/internal/state"
 )
 
@@ -83,6 +84,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case notifyMsg:
 		m.setNotice(msg.text, msg.level)
 		return m, nil
+
+	case mountMsg:
+		m.mountBusy = false
+		m.applyMount(msg.result, msg.err)
+		return m.withPump(nil)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -171,8 +177,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "merge":
 		return m, m.startAction(forge.ActionMerge)
 	case "mount-review":
-		m.setNotice("montar review requiere Herdr (etapa posterior)", levelWarn)
-		return m, nil
+		return m.startMount()
 	case "open-browser":
 		it, ok := m.selected()
 		if !ok || it.URL == "" {
@@ -279,6 +284,56 @@ func (m *Model) startAction(kind forge.ActionKind) tea.Cmd {
 		sendEvent(appCtx, events, actionMsg{cycle: cycle, outcome: forge.RunAction(ctx, a, kind, ref, number)})
 	}()
 	return nil
+}
+
+// startMount lanza el montaje del review del ítem seleccionado en segundo
+// plano. Sin montador inyectado informa que la acción requiere Herdr: es la
+// degradación fuera de Herdr, que no cuelga la TUI ni lanza procesos.
+func (m Model) startMount() (tea.Model, tea.Cmd) {
+	it, ok := m.selected()
+	if !ok {
+		m.setNotice("selecciona un ítem", levelWarn)
+		return m, nil
+	}
+	if m.mounter == nil {
+		m.setNotice("montar review requiere Herdr", levelWarn)
+		return m, nil
+	}
+	if m.mountBusy {
+		m.setNotice("ya hay un montaje de review en curso", levelWarn)
+		return m, nil
+	}
+	m.mountBusy = true
+	m.setNotice("montando review…", levelInfo)
+
+	appCtx := m.ctx
+	events := m.events
+	mounter := m.mounter
+	go func() {
+		ctx, cancel := context.WithTimeout(appCtx, mountTimeout)
+		defer cancel()
+		res, err := mounter.Mount(ctx, it)
+		sendEvent(appCtx, events, mountMsg{result: res, err: err})
+	}()
+	return m, nil
+}
+
+// applyMount vuelca el resultado del montaje en el aviso de la cabecera.
+func (m *Model) applyMount(res executor.Result, err error) {
+	text, level := mountNotice(res, err)
+	m.setNotice(text, level)
+}
+
+// mountNotice compone el aviso del montaje: error, layout montado o worktree
+// montado con el layout pendiente de Herdr.
+func mountNotice(res executor.Result, err error) (string, noticeLevel) {
+	if err != nil {
+		return "no se pudo montar review: " + err.Error(), levelError
+	}
+	if res.Herdr {
+		return fmt.Sprintf("review montado: %d panes en %s", len(res.Plan.Panes), res.Worktree.Path), levelOK
+	}
+	return "el layout de review requiere Herdr; el worktree quedó montado en " + res.Worktree.Path, levelWarn
 }
 
 // gotoNextSection mueve el cursor al primer ítem de la siguiente sección con
