@@ -29,6 +29,7 @@ func decodeResult[T any](raw []byte) (T, error) {
 type worktreeCreatedResult struct {
 	Workspace struct {
 		WorkspaceID string `json:"workspace_id"`
+		Label       string `json:"label"`
 	} `json:"workspace"`
 	Tab struct {
 		TabID string `json:"tab_id"`
@@ -56,6 +57,7 @@ func parseWorktreeCreated(raw []byte) (WorktreeInfo, error) {
 	}
 	return WorktreeInfo{
 		WorkspaceID:      r.Workspace.WorkspaceID,
+		WorkspaceLabel:   r.Workspace.Label,
 		TabID:            r.Tab.TabID,
 		RootPaneID:       r.RootPane.PaneID,
 		Path:             r.Worktree.Path,

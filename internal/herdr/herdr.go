@@ -67,11 +67,16 @@ type WorktreeSpec struct {
 
 // WorktreeInfo es el resultado de crear o listar un worktree nativo.
 type WorktreeInfo struct {
-	WorkspaceID      string
-	TabID            string
-	RootPaneID       string
-	Path             string
-	Branch           string
+	WorkspaceID string
+	// WorkspaceLabel es la etiqueta del workspace creado (la del --label del
+	// llamador). Solo la devuelve `worktree create`; `worktree list` no la trae.
+	WorkspaceLabel string
+	TabID          string
+	RootPaneID     string
+	Path           string
+	Branch         string
+	// Label es la etiqueta del worktree que reporta Herdr; en la práctica es el
+	// nombre del repo, NO la etiqueta de ownership que se pasó con --label.
 	Label            string
 	OpenWorkspaceID  string
 	IsLinkedWorktree bool

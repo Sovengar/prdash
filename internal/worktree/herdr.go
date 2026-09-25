@@ -79,11 +79,17 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	if info.Branch != "" {
 		wt.Branch = info.Branch
 	}
-	if info.Label != "" {
+	// La etiqueta de ownership es la que pidió el llamador: `--label` etiqueta
+	// el workspace, mientras que `worktree.label` del nativo es el nombre del
+	// repo y no sirve como identificador de prdash.
+	if wt.Label == "" {
+		wt.Label = info.WorkspaceLabel
+	}
+	if wt.Label == "" {
 		wt.Label = info.Label
 	}
 	if wt.Label == "" {
-		wt.Label = spec.Label
+		wt.Label = filepath.Base(wt.Path)
 	}
 	return wt, nil
 }
@@ -105,9 +111,6 @@ func (h *HerdrNative) reuse(ctx context.Context, spec Spec) Worktree {
 			wt.WorkspaceID = info.OpenWorkspaceID
 			if info.Branch != "" {
 				wt.Branch = info.Branch
-			}
-			if info.Label != "" {
-				wt.Label = info.Label
 			}
 			break
 		}
