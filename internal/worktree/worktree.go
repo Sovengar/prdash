@@ -97,15 +97,47 @@ func (g *GitDirect) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	return Worktree{ID: spec.Path, Label: label, Path: spec.Path, Branch: spec.Branch, Repo: spec.Repo}, nil
 }
 
-// Remove quita el worktree en id. Resuelve el repo principal desde el propio
-// worktree (fichero .git con gitdir:) para no depender de estado en memoria.
+// Remove quita el worktree en id, previa comprobación de ownership y de que la
+// ruta vive bajo la raíz gestionada: nunca toca worktrees ajenos. Resuelve el
+// repo principal desde el propio worktree (fichero .git con gitdir:) para no
+// depender de estado en memoria.
+//
+// Si el repo de origen existe, delega en `git worktree remove` y, si la entrada
+// está corrupta, poda el registro. Si el origen desapareció (huérfano), borra
+// el checkout directamente: no hay metadatos que podar.
 func (g *GitDirect) Remove(ctx context.Context, id string) error {
+	if err := g.removablePath(id); err != nil {
+		return err
+	}
 	repo := mainRepoOf(id)
 	if repo == "" {
 		return fmt.Errorf("worktree: no se pudo localizar el repo de %s", id)
 	}
-	if _, err := g.git.Run(ctx, repo, "worktree", "remove", "--force", id); err != nil {
-		return fmt.Errorf("quitar el worktree %s: %w", id, err)
+	if _, err := g.git.Run(ctx, repo, "worktree", "remove", "--force", id); err == nil {
+		return nil
+	}
+	if sourceReachable(id) {
+		// El repo vive pero la entrada no se pudo quitar (registro corrupto):
+		// se poda y se borra el residuo, siempre dentro del ownership.
+		_, _ = g.git.Run(ctx, repo, "worktree", "prune")
+	}
+	if err := os.RemoveAll(id); err != nil {
+		return fmt.Errorf("borrar el checkout del worktree %s: %w", id, err)
+	}
+	return nil
+}
+
+// removablePath exige ownership prdash y que la ruta viva bajo la raíz
+// gestionada. Es la barrera que garantiza que la limpieza nunca toca ajenos.
+func (g *GitDirect) removablePath(id string) error {
+	if !Owned(filepath.Base(id), id) {
+		return fmt.Errorf("worktree: %s no es un worktree de prdash; no se toca", id)
+	}
+	if g.Base != "" {
+		rel, err := filepath.Rel(g.Base, id)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("worktree: %s queda fuera de la raíz gestionada", id)
+		}
 	}
 	return nil
 }
