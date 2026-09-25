@@ -14,7 +14,7 @@ const fixtureWorktreeCreated = `{
     "worktree": {
       "path": "/home/u/.herdr/worktrees/prdash/feat-x",
       "branch": "prdash/pr-7",
-      "label": "prdash-pr-7",
+      "label": "repo",
       "is_linked_worktree": true,
       "is_prunable": false,
       "open_workspace_id": "w18"
@@ -91,8 +91,13 @@ func TestParseWorktreeCreated(t *testing.T) {
 	if info.WorkspaceID != "w18" || info.TabID != "w18:t1" || info.RootPaneID != "w18:p1" {
 		t.Fatalf("contenedor = %+v", info)
 	}
-	if info.Path != "/home/u/.herdr/worktrees/prdash/feat-x" || info.Branch != "prdash/pr-7" || info.Label != "prdash-pr-7" {
+	if info.Path != "/home/u/.herdr/worktrees/prdash/feat-x" || info.Branch != "prdash/pr-7" {
 		t.Fatalf("worktree = %+v", info)
+	}
+	// La etiqueta de ownership viene del workspace (--label); worktree.label es
+	// el nombre del repo en la salida real de Herdr 0.9.1.
+	if info.WorkspaceLabel != "prdash-pr-7" || info.Label != "repo" {
+		t.Fatalf("labels = %+v", info)
 	}
 	if !info.IsLinkedWorktree || info.OpenWorkspaceID != "w18" {
 		t.Fatalf("flags = %+v", info)

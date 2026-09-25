@@ -78,6 +78,31 @@ func TestHerdrNativeCreateMapsContainer(t *testing.T) {
 	}
 }
 
+// TestHerdrNativeCreateKeepsOwnershipLabel cubre que `worktree.label` que
+// reporta el nativo (el nombre del repo) no pise la etiqueta de ownership que
+// prdash pidió con --label. Verificado contra Herdr 0.9.1 real.
+func TestHerdrNativeCreateKeepsOwnershipLabel(t *testing.T) {
+	base := t.TempDir()
+	dest := filepath.Join(base, "prdash-pr-7")
+	runner := &fakeRunner{
+		available: true,
+		createInfo: herdr.WorktreeInfo{
+			WorkspaceID: "w18", RootPaneID: "w18:p1",
+			Path: dest, Branch: "prdash/pr-7",
+			WorkspaceLabel: "prdash-pr-7", Label: "origin.git",
+		},
+	}
+	wt, err := NewHerdrNative(runner, base).Create(context.Background(), Spec{
+		Repo: "/repo", Branch: "prdash/pr-7", Path: dest, Label: "prdash-pr-7",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if wt.Label != "prdash-pr-7" {
+		t.Fatalf("Label = %q, quiero la etiqueta de ownership", wt.Label)
+	}
+}
+
 func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -90,7 +115,7 @@ func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 
 	runner := &fakeRunner{
 		available:  true,
-		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", Label: "prdash-pr-1", OpenWorkspaceID: "w19"}},
+		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", Label: "origin.git", OpenWorkspaceID: "w19"}},
 	}
 	h := NewHerdrNative(runner, base)
 
@@ -103,6 +128,9 @@ func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 	}
 	if wt.WorkspaceID != "w19" {
 		t.Fatalf("debería resolver el workspace abierto: %+v", wt)
+	}
+	if wt.Label != "prdash-pr-1" {
+		t.Fatalf("la etiqueta de ownership no debería pisarse con el nombre del repo: %q", wt.Label)
 	}
 	if list := h.List(context.Background()); len(list) != 1 || list[0].Path != dest {
 		t.Fatalf("List = %+v", list)
