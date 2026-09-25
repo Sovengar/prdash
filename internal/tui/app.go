@@ -19,6 +19,7 @@ import (
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/inbox"
+	"prdash/internal/review/executor"
 )
 
 // event es el mensaje unificado del canal de trabajo en segundo plano.
@@ -69,8 +70,23 @@ type notifyMsg struct {
 // tickMsg dispara el refresco automático.
 type tickMsg struct{}
 
+// mountMsg entrega el resultado de un montaje de review en segundo plano.
+type mountMsg struct {
+	result executor.Result
+	err    error
+}
+
+// Mounter monta el review de un ítem (worktree + layout). Un Model sin montador
+// informa que la acción requiere Herdr.
+type Mounter interface {
+	Mount(ctx context.Context, it model.Item) (executor.Result, error)
+}
+
 // refreshTimeout es el límite de un ciclo completo de consulta a los forges.
 const refreshTimeout = 60 * time.Second
+
+// mountTimeout acota un montaje de review completo (puede clonar y bajar refs).
+const mountTimeout = 5 * time.Minute
 
 // actionTimeout es el límite de una acción approve/merge (incluye releer).
 const actionTimeout = 60 * time.Second
@@ -172,6 +188,10 @@ type Model struct {
 
 	cycle int
 
+	// mounter monta el review de un ítem; nil = sin Herdr/sin executor.
+	mounter   Mounter
+	mountBusy bool
+
 	events  chan event
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -226,6 +246,10 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 	m.rebuild()
 	return m
 }
+
+// SetMounter inyecta el montador de reviews. nil lo deshabilita: la acción de
+// montar review informa entonces que requiere Herdr.
+func (m *Model) SetMounter(mounter Mounter) { m.mounter = mounter }
 
 // Init lanza el primer refresco, la bomba de eventos, el spinner y el tick.
 func (m Model) Init() tea.Cmd {
