@@ -50,6 +50,8 @@ type Provisioner interface {
 	Remove(ctx context.Context, id string) error
 	// List devuelve los worktrees bajo la raíz con ownership prdash.
 	List(ctx context.Context) []Worktree
+	// Audit lista los worktrees con ownership prdash y marca los huérfanos.
+	Audit(ctx context.Context) []Entry
 }
 
 // GitDirect provisiona con `git worktree add` directo. Es la implementación
@@ -186,15 +188,10 @@ func isLinkedWorktree(path string) bool {
 
 // mainRepoOf deduce el repo principal desde el fichero .git de un worktree.
 func mainRepoOf(path string) string {
-	raw, err := os.ReadFile(filepath.Join(path, ".git"))
-	if err != nil {
-		return ""
-	}
-	rest, ok := strings.CutPrefix(strings.TrimSpace(string(raw)), "gitdir:")
-	if !ok {
+	gitdir := linkedGitDir(path)
+	if gitdir == "" {
 		return ""
 	}
 	// <main>/.git/worktrees/<nombre>
-	gitdir := strings.TrimSpace(rest)
 	return filepath.Dir(filepath.Dir(gitdir))
 }

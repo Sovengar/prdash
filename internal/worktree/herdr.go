@@ -139,3 +139,8 @@ func (h *HerdrNative) Remove(ctx context.Context, id string) error {
 // List delega en el escaneo de worktrees enlazados bajo la raíz. Los worktrees
 // nativos también son worktrees de git reales, así que el listado es el mismo.
 func (h *HerdrNative) List(ctx context.Context) []Worktree { return h.scan.List(ctx) }
+
+// Audit delega en el mismo escaneo con ownership y detección de huérfanos: los
+// worktrees nativos también son worktrees de git, de modo que la limpieza
+// funciona igual dentro y fuera de Herdr.
+func (h *HerdrNative) Audit(ctx context.Context) []Entry { return h.scan.Audit(ctx) }
