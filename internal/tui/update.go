@@ -151,18 +151,23 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "up", "k":
 		m.cursor = max(0, m.cursor-1)
+		m.syncSelection()
 		return m, nil
 	case "down", "j":
 		m.cursor = min(m.cursor+1, max(0, len(m.rows())-1))
+		m.syncSelection()
 		return m, nil
 	case "home":
 		m.cursor = 0
+		m.syncSelection()
 		return m, nil
 	case "end":
 		m.cursor = max(0, len(m.rows())-1)
+		m.syncSelection()
 		return m, nil
 	case "tab":
 		m.gotoNextSection()
+		m.syncSelection()
 		return m, nil
 	}
 

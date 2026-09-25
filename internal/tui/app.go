@@ -20,6 +20,7 @@ import (
 	"prdash/internal/forge/model"
 	"prdash/internal/inbox"
 	"prdash/internal/review/executor"
+	"prdash/internal/selection"
 )
 
 // event es el mensaje unificado del canal de trabajo en segundo plano.
@@ -199,6 +200,14 @@ type Model struct {
 
 	// cachePath es la ruta del snapshot; vacía = sin cache (tests).
 	cachePath string
+
+	// selectionPath es la ruta donde se persiste el ítem seleccionado para que
+	// la acción `prdash.mount-review` sin URL lo pueda montar; vacía = sin
+	// persistencia (tests).
+	selectionPath string
+	// selectionID es la identidad de la última selección persistida, para no
+	// reescribir el fichero en cada refresco.
+	selectionID model.ID
 }
 
 // New construye el modelo con la config y los adapters habilitados. Pinta el
@@ -250,6 +259,30 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 // SetMounter inyecta el montador de reviews. nil lo deshabilita: la acción de
 // montar review informa entonces que requiere Herdr.
 func (m *Model) SetMounter(mounter Mounter) { m.mounter = mounter }
+
+// SetSelectionPath fija dónde se persiste el ítem seleccionado y sincroniza la
+// selección actual. Vacío deshabilita la persistencia (tests).
+func (m *Model) SetSelectionPath(path string) {
+	m.selectionPath = path
+	m.syncSelection()
+}
+
+// syncSelection persiste la selección actual si cambió respecto a la última
+// escrita. Es best-effort: un fallo de disco no debe tumbar la TUI.
+func (m *Model) syncSelection() {
+	if m.selectionPath == "" {
+		return
+	}
+	it, ok := m.selected()
+	if !ok {
+		return
+	}
+	if it.ID() == m.selectionID {
+		return
+	}
+	m.selectionID = it.ID()
+	_ = selection.Save(m.selectionPath, selection.FromItem(it, time.Now()))
+}
 
 // Init lanza el primer refresco, la bomba de eventos, el spinner y el tick.
 func (m Model) Init() tea.Cmd {
@@ -537,6 +570,7 @@ func findItem(items []model.Item, id model.ID) (model.Item, bool) {
 func (m *Model) rebuild() {
 	m.inbox = inbox.Build(m.forgeResults())
 	m.clampCursor()
+	m.syncSelection()
 }
 
 // forgeResults compone un resultado por forge de forma determinista.

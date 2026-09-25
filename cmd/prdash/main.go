@@ -64,6 +64,7 @@ func main() {
 
 	model := tui.New(cfg, adapters)
 	model.SetMounter(buildExecutor(cfg))
+	trackSelection(&model)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "prdash:", err)
 		os.Exit(1)
