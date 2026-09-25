@@ -30,6 +30,8 @@ make config GITLAB_HOST=gitlab.miempresa.com   # crea ~/.config/prdash/config.to
 La config vive en `$XDG_CONFIG_HOME/prdash/config.toml`. Un fichero ausente o
 malformado degrada a defaults con un aviso; nunca aborta.
 
+PR de prueba 2/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ## Uso
 
 ```sh
