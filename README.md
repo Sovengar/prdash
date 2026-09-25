@@ -78,6 +78,36 @@ escribes tú (GitHub lo rechaza en la API y no hay opción para activarlo). prda
 lo detecta antes de llamar a la CLI, marca esos ítems con `ROLE: own` y explica
 el motivo; `merge` sí funciona sobre ellos.
 
+### Comandos de los panes (`[commands]`)
+
+El layout de review abre tres panes y cada uno se puede sustituir por completo
+desde `[commands]`:
+
+| Clave | Default | Qué abre |
+|---|---|---|
+| `tuicr` | `tuicr pr <URL del ítem>` | review de TUICR |
+| `hunk` | `hunk diff <rama destino>...HEAD` | diff del PR/MR con Hunk |
+| `agent` | `opencode` | agente |
+
+Si defines la clave, su valor se usa **verbatim** como argv completo del pane:
+no se le añade la URL del ítem ni el target del diff. Sin clave se usa el
+default. Las herramientas de forge (`gh`/`glab`) también se configuran aquí.
+
+La rama destino debe ser una **ref local**: prdash clona en bare
+(`git clone --bare`), así que las ramas remotas quedan en `refs/heads/*` y no
+existen las refs `origin/*`. En un worktree de review usa `main` (no
+`origin/main`).
+
+```toml
+[commands]
+# Forzar el diff de Hunk contra main con auto-reload:
+hunk = "hunk diff main...HEAD --watch"
+```
+
+Los panes reciben `PRDASH_BASE` con la rama destino del ítem, además de
+`PRDASH_REPO`, `PRDASH_NUMBER`, `PRDASH_WORKTREE`, `PRDASH_BRANCH` y
+`PRDASH_URL`.
+
 ### Gestión de worktrees (`prdash worktrees`)
 
 Los worktrees de review se identifican por su nombre/label `prdash-…`: prdash

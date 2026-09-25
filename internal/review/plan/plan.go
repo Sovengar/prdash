@@ -9,6 +9,7 @@ package plan
 
 import (
 	"strconv"
+	"strings"
 
 	"prdash/internal/forge/model"
 )
@@ -47,12 +48,71 @@ type Worktree struct {
 	Label  string
 }
 
-// Tools es el argv base configurable de cada herramienta. Un argv vacío deja el
-// pane sin comando y se omite con aviso.
+// Binarios por defecto de cada pane, usados cuando la herramienta no fija un
+// argv propio ni un override de `[commands]`.
+const (
+	defaultTuicrBin = "tuicr"
+	defaultHunkBin  = "hunk"
+	defaultAgentBin = "opencode"
+)
+
+// Tool es la configuración de argv de un pane. Con Override, Argv es el argv
+// completo fijado en `[commands]` y Build lo usa verbatim, sin añadir los
+// argumentos por defecto del pane. Sin Override, Argv es el binario/base de
+// `[tools]` y Build le añade esos argumentos (URL del ítem, target del diff).
+type Tool struct {
+	Argv     []string
+	Override bool
+}
+
+// Tools agrupa la configuración de argv de cada pane.
 type Tools struct {
-	Tuicr []string
-	Hunk  []string
-	Agent []string
+	Tuicr Tool
+	Hunk  Tool
+	Agent Tool
+}
+
+// Binary devuelve el ejecutable efectivo de un pane (override, base de `[tools]`
+// o binario por defecto), para comprobar su disponibilidad. Vacío = sin comando.
+func (t Tools) Binary(kind Kind) string {
+	switch kind {
+	case KindTuicr:
+		return t.Tuicr.binary(defaultTuicrBin)
+	case KindHunk:
+		return t.Hunk.binary(defaultHunkBin)
+	case KindAgent:
+		return t.Agent.binary(defaultAgentBin)
+	}
+	return ""
+}
+
+// effective devuelve el argv con el que lanzar el pane: el override verbatim si
+// lo hay; si no, el base configurado (o el binario por defecto) más los
+// argumentos propios del pane.
+func (t Tool) effective(defaultBin string, extra ...string) []string {
+	if t.Override {
+		return append([]string(nil), t.Argv...)
+	}
+	base := t.Argv
+	if len(base) == 0 {
+		base = []string{defaultBin}
+	}
+	argv := make([]string, 0, len(base)+len(extra))
+	argv = append(argv, base...)
+	argv = append(argv, extra...)
+	return argv
+}
+
+// binary devuelve el primer argv efectivo del pane. Un override vacío no tiene
+// ejecutable (pane omitido); un base vacío sin override cae al default.
+func (t Tool) binary(defaultBin string) string {
+	if len(t.Argv) > 0 {
+		return t.Argv[0]
+	}
+	if t.Override {
+		return ""
+	}
+	return defaultBin
 }
 
 // Env describe el entorno del montaje. Available nil asume que todas las
@@ -67,18 +127,16 @@ type Env struct {
 func Build(pr model.Item, wt Worktree, tools Tools, env Env) Plan {
 	var p Plan
 
-	add := func(kind Kind, label string, base []string, extra ...string) {
+	add := func(kind Kind, label string, tool Tool, defaultBin string, extra ...string) {
 		if !env.available(string(kind)) {
 			p.Warnings = append(p.Warnings, label+" is not installed: pane omitted")
 			return
 		}
-		if len(base) == 0 {
+		argv := tool.effective(defaultBin, extra...)
+		if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
 			p.Warnings = append(p.Warnings, label+" has no configured command: pane omitted")
 			return
 		}
-		argv := make([]string, 0, len(base)+len(extra))
-		argv = append(argv, base...)
-		argv = append(argv, extra...)
 		p.Panes = append(p.Panes, Pane{
 			Kind:  kind,
 			Label: label,
@@ -88,10 +146,23 @@ func Build(pr model.Item, wt Worktree, tools Tools, env Env) Plan {
 		})
 	}
 
-	add(KindTuicr, "TUICR", tools.Tuicr, "pr", ReviewTarget(pr))
-	add(KindHunk, "Hunk", tools.Hunk, "session", "review")
-	add(KindAgent, "Agente", tools.Agent)
+	add(KindTuicr, "TUICR", tools.Tuicr, defaultTuicrBin, "pr", ReviewTarget(pr))
+	add(KindHunk, "Hunk", tools.Hunk, defaultHunkBin, hunkArgs(pr)...)
+	add(KindAgent, "Agente", tools.Agent, defaultAgentBin)
 	return p
+}
+
+// hunkArgs son los argumentos del diff del PR/MR para el pane de Hunk: compara
+// contra la rama destino en su merge-base (`<base>...HEAD`), la misma semántica
+// que GitHub/GitLab muestran para un PR/MR. Sin rama destino cae a `hunk diff`
+// (cambios del worktree). Hunk 0.16.0 acepta el revspec de tres puntos como
+// target único de `hunk diff`; no se usa `hunk session review`, que exporta una
+// sesión viva y exige `<session-id>`/`--repo` en vez de abrir una review.
+func hunkArgs(pr model.Item) []string {
+	if pr.TargetBranch == "" {
+		return []string{"diff"}
+	}
+	return []string{"diff", pr.TargetBranch + "...HEAD"}
 }
 
 // ReviewTarget es el argumento con el que TUICR identifica el ítem: su URL si
@@ -122,6 +193,9 @@ func paneEnv(pr model.Item, wt Worktree) []string {
 	}
 	if wt.Branch != "" {
 		env = append(env, "PRDASH_BRANCH="+wt.Branch)
+	}
+	if pr.TargetBranch != "" {
+		env = append(env, "PRDASH_BASE="+pr.TargetBranch)
 	}
 	if pr.URL != "" {
 		env = append(env, "PRDASH_URL="+pr.URL)

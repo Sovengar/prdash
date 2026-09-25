@@ -32,9 +32,9 @@ func trackSelection(m *tui.Model) {
 func buildExecutor(cfg config.Config) *executor.Executor {
 	client := herdr.New()
 	tools := plan.Tools{
-		Tuicr: cfg.ToolArgs("tuicr"),
-		Hunk:  cfg.ToolArgs("hunk"),
-		Agent: cfg.ToolArgs("agent"),
+		Tuicr: paneTool(cfg, "tuicr"),
+		Hunk:  paneTool(cfg, "hunk"),
+		Agent: paneTool(cfg, "agent"),
 	}
 	return &executor.Executor{
 		Resolver: reporesolver.New(reporesolver.Options{
@@ -81,26 +81,36 @@ func clonePrefixesOf(cfg config.Config) map[string]string {
 	return prefixes
 }
 
+// paneTool resuelve el argv de un pane: si `[commands]` define la clave, ese
+// argv se usa verbatim como comando completo del pane; si no, el binario/base de
+// `[tools]` (o el default del propio plan).
+func paneTool(cfg config.Config, name string) plan.Tool {
+	if argv, ok := cfg.PaneOverride(name); ok {
+		return plan.Tool{Argv: argv, Override: true}
+	}
+	return plan.Tool{Argv: cfg.ToolArgs(name)}
+}
+
 // toolAvailability comprueba qué binarios del plan están instalados, de modo
 // que un pane ausente se omita con aviso en vez de tumbar el layout.
 func toolAvailability(tools plan.Tools) map[string]bool {
 	return map[string]bool{
-		string(plan.KindTuicr): binaryAvailable(tools.Tuicr),
-		string(plan.KindHunk):  binaryAvailable(tools.Hunk),
-		string(plan.KindAgent): binaryAvailable(tools.Agent),
+		string(plan.KindTuicr): binaryAvailable(tools.Binary(plan.KindTuicr)),
+		string(plan.KindHunk):  binaryAvailable(tools.Binary(plan.KindHunk)),
+		string(plan.KindAgent): binaryAvailable(tools.Binary(plan.KindAgent)),
 	}
 }
 
-// binaryAvailable informa si el argv de una herramienta se puede ejecutar. Un
-// argv vacío se considera no disponible (pane omitido).
-func binaryAvailable(argv []string) bool {
-	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
+// binaryAvailable informa si el binario de una herramienta se puede ejecutar.
+// Un nombre vacío se considera no disponible (pane omitido).
+func binaryAvailable(name string) bool {
+	if strings.TrimSpace(name) == "" {
 		return false
 	}
-	if strings.ContainsRune(argv[0], os.PathSeparator) {
-		info, err := os.Stat(argv[0])
+	if strings.ContainsRune(name, os.PathSeparator) {
+		info, err := os.Stat(name)
 		return err == nil && !info.IsDir()
 	}
-	_, err := exec.LookPath(argv[0])
+	_, err := exec.LookPath(name)
 	return err == nil
 }
