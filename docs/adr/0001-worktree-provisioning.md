@@ -39,5 +39,5 @@ prdash (F2) debe, al elegir un PR/MR, obtener su código y montar un layout de r
 - prdash debe implementar y mantener su propio fetch y resolución de refs por forge (dos rutas de ref distintas).
 - Dependencia de la CLI de Herdr 0.9.x (drift): se mitiga con parseo aislado por comando, versión mínima declarada en el manifiesto y fallback localizado.
 
-**Verificación pendiente**
-- `herdr worktree create` desde un **clon bare** con rama local ya creada y `--path` destino (heredado al catálogo de verificaciones del plan).
+**Verificación (cerrada)**
+- **OK** `herdr worktree create` desde un **clon bare** con rama local ya creada y `--path` destino, contra `herdr 0.9.1-preview.2026-09-21-0ff0f27e2226`. Evidencia y hallazgos asociados (semántica de `--label`) en `docs/research/herdr-0.9.1-contract.md` §Verificación local.
