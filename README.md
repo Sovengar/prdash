@@ -112,6 +112,8 @@ inbox. La TUI persiste la selección en `$XDG_STATE_HOME/prdash/selection.json`
 (estado efímero de UI). Sin selección, con el estado corrupto o si está
 obsoleto, la acción falla con un aviso claro y no monta nada.
 
+PR de prueba 6/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ## Desarrollo
 
 ```sh
