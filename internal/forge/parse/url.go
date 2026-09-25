@@ -17,9 +17,11 @@ import (
 // del repo y su número.
 //
 // hosts mapea host → nombre de forge (p. ej. github.com → "github"); si el host
-// no está en el mapa, el forge se deduce por la forma de la URL. Devuelve ok
-// false si la URL no es de review o le falta el número.
-func ParseReviewURL(raw string, hosts map[string]string) (model.RepoRef, int, bool) {
+// no está en el mapa, el forge se deduce por la forma de la URL. prefixes mapea
+// host → relative URL root de la instancia: un host servido en subcarpeta se
+// normaliza al MISMO Project que la vía API (sin el prefijo). Devuelve ok false
+// si la URL no es de review o le falta el número.
+func ParseReviewURL(raw string, hosts map[string]string, prefixes map[string]string) (model.RepoRef, int, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return model.RepoRef{}, 0, false
@@ -38,38 +40,58 @@ func ParseReviewURL(raw string, hosts map[string]string) (model.RepoRef, int, bo
 	// GitLab: …/-/merge_requests/<n>; GitHub: …/pull/<n>.
 	if i := indexOf(segments, "-"); i >= 0 && i+2 < len(segments) && segments[i+1] == "merge_requests" {
 		number, ok := numberAt(segments, i+2)
-		if !ok || i < 2 {
+		if !ok {
 			return model.RepoRef{}, 0, false
 		}
-		return repoRef(host, segments[:i], hosts, "gitlab"), number, true
+		ref, ok := repoRef(host, segments[:i], hosts, prefixes, "gitlab")
+		return ref, number, ok
 	}
-	if i := indexOf(segments, "pull"); i >= 0 && i+1 < len(segments) && i >= 2 {
+	if i := indexOf(segments, "pull"); i >= 0 && i+1 < len(segments) {
 		number, ok := numberAt(segments, i+1)
 		if !ok {
 			return model.RepoRef{}, 0, false
 		}
-		return repoRef(host, segments[:i], hosts, "github"), number, true
+		ref, ok := repoRef(host, segments[:i], hosts, prefixes, "github")
+		return ref, number, ok
 	}
 	return model.RepoRef{}, 0, false
 }
 
-// repoRef compone la referencia a partir de los segmentos de proyecto.
-func repoRef(host string, project []string, hosts map[string]string, fallback string) model.RepoRef {
+// repoRef compone la referencia a partir de los segmentos de proyecto, quitando
+// primero el relative URL root de la instancia para que la identidad coincida
+// con la de la vía API.
+func repoRef(host string, project []string, hosts map[string]string, prefixes map[string]string, fallback string) (model.RepoRef, bool) {
+	project = stripPrefix(project, prefixes[host])
+	if len(project) < 2 {
+		return model.RepoRef{}, false
+	}
 	forge := fallback
 	if name, ok := hosts[host]; ok && name != "" {
 		forge = name
 	}
-	path := strings.Join(project, "/")
-	owner := ""
-	name := ""
-	if len(project) > 0 {
-		owner = project[len(project)-1]
-		name = project[len(project)-1]
+	return model.RepoRef{
+		Forge:   forge,
+		Host:    host,
+		Project: strings.Join(project, "/"),
+		Owner:   project[len(project)-2],
+		Name:    project[len(project)-1],
+	}, true
+}
+
+// stripPrefix quita el relative URL root de la instancia de los segmentos del
+// proyecto (p. ej. "git" de [git sub proj] → [sub proj]). prefixes puede ser
+// multi-segmento ("git/repos") y solo se quita si coincide el prefijo completo.
+func stripPrefix(project []string, prefix string) []string {
+	parts := splitPath(prefix)
+	if len(parts) == 0 || len(project) < len(parts) {
+		return project
 	}
-	if len(project) >= 2 {
-		owner = project[len(project)-2]
+	for i, p := range parts {
+		if project[i] != p {
+			return project
+		}
 	}
-	return model.RepoRef{Forge: forge, Host: host, Project: path, Owner: owner, Name: name}
+	return project[len(parts):]
 }
 
 // splitPath parte el path de una URL en segmentos no vacíos.
