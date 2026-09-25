@@ -86,9 +86,8 @@ type mountItemFunc func(cfg config.Config, it model.Item) int
 // testeable del subcomando.
 func mountFromTarget(cfg config.Config, args []string, getenv func(string) string, statePath func() (string, error), mount mountItemFunc) int {
 	if target, ok := reviewTarget(args, getenv); ok {
-		it, ok := reviewItem(target, hostsOf(cfg))
+		it, ok := resolveTargetItem(cfg, target)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "prdash herdr: %q no es una URL de PR/MR reconocida\n", target)
 			return 1
 		}
 		return mount(cfg, it)
@@ -124,12 +123,22 @@ func selectedReview(statePath func() (string, error), now time.Time) (model.Item
 
 // mountReview resuelve la URL, monta el review y reporta el resultado.
 func mountReview(cfg config.Config, target string) int {
-	it, ok := reviewItem(target, hostsOf(cfg))
+	it, ok := resolveTargetItem(cfg, target)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "prdash herdr: %q no es una URL de PR/MR reconocida\n", target)
 		return 1
 	}
 	return mountItem(cfg, it)
+}
+
+// resolveTargetItem traduce una URL de PR/MR al ítem del montaje; avisa si la
+// URL no es reconocible.
+func resolveTargetItem(cfg config.Config, target string) (model.Item, bool) {
+	it, ok := reviewItem(target, hostsOf(cfg))
+	if !ok {
+		fmt.Fprintf(os.Stderr, "prdash herdr: %q no es una URL de PR/MR reconocida\n", target)
+		return model.Item{}, false
+	}
+	return it, true
 }
 
 // mountItem monta el review de un ítem ya resuelto y reporta el resultado.
