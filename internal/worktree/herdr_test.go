@@ -3,6 +3,7 @@ package worktree
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"prdash/internal/herdr"
@@ -156,6 +157,26 @@ func TestHerdrNativeRemoveUsesWorkspace(t *testing.T) {
 	}
 	if len(runner.removeCalls) != 1 || runner.removeCalls[0] != "w21" {
 		t.Fatalf("removeCalls = %v", runner.removeCalls)
+	}
+}
+
+// TestHerdrNativeReuseRejectsBranchMismatch comprueba que reutilizar un
+// checkout con otra rama falla con un error claro, igual que git directo.
+func TestHerdrNativeReuseRejectsBranchMismatch(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature-1")
+	testutil.RunGit(t, repo, "branch", "feature-2")
+
+	base := t.TempDir()
+	dest := filepath.Join(base, "prdash-pr-1")
+	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature-1", Path: dest, Label: "prdash-pr-1"}); err != nil {
+		t.Fatalf("preparar worktree: %v", err)
+	}
+
+	h := NewHerdrNative(&fakeRunner{available: true}, base)
+	_, err := h.Create(context.Background(), Spec{Repo: repo, Branch: "feature-2", Path: dest, Label: "prdash-pr-1"})
+	if err == nil || !strings.Contains(err.Error(), "feature-1") {
+		t.Fatalf("esperaba error por rama ya presente, got %v", err)
 	}
 }
 
