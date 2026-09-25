@@ -49,7 +49,7 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 		return Worktree{}, fmt.Errorf("worktree: spec incompleto (repo, rama y destino son obligatorios)")
 	}
 	if Exists(spec.Path) {
-		return h.reuse(ctx, spec), nil
+		return h.reuse(ctx, spec)
 	}
 
 	info, err := h.client.WorktreeCreate(ctx, herdr.WorktreeSpec{
@@ -95,27 +95,38 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 }
 
 // reuse devuelve el worktree ya existente y, si sigue abierto como workspace,
-// su id de contenedor. Un worktree cerrado se devuelve sin contenedor: el
-// layout pedirá entonces un workspace propio.
-func (h *HerdrNative) reuse(ctx context.Context, spec Spec) Worktree {
-	wt := Worktree{ID: spec.Path, Label: spec.Label, Path: spec.Path, Branch: spec.Branch, Repo: spec.Repo}
-	if wt.Label == "" {
-		wt.Label = filepath.Base(spec.Path)
-	}
-	infos, err := h.client.WorktreeList(ctx, spec.Repo)
+// su id de contenedor. Verifica que la rama coincida con la pedida, igual que
+// la provisión con git directo: reutilizar un checkout de otra rama sería un
+// falso montaje. Un worktree cerrado se devuelve sin contenedor: el layout
+// pedirá entonces un workspace propio.
+func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
+	existing, ok, err := h.scan.inspect(ctx, spec.Path)
 	if err != nil {
-		return wt
+		return Worktree{}, err
 	}
-	for _, info := range infos {
-		if info.Path == spec.Path {
-			wt.WorkspaceID = info.OpenWorkspaceID
-			if info.Branch != "" {
-				wt.Branch = info.Branch
+	if !ok {
+		return Worktree{}, fmt.Errorf("worktree: %s no aloja un worktree enlazado", spec.Path)
+	}
+	if existing.Branch != spec.Branch {
+		return Worktree{}, fmt.Errorf("worktree: %s ya aloja la rama %s, no %s", spec.Path, existing.Branch, spec.Branch)
+	}
+
+	wt := existing
+	wt.Repo = spec.Repo
+	if spec.Label != "" {
+		wt.Label = spec.Label
+	}
+	// El workspace abierto solo lo conoce Herdr (worktree list); si falla, el
+	// worktree se devuelve sin contenedor y el layout pedirá uno propio.
+	if infos, err := h.client.WorktreeList(ctx, spec.Repo); err == nil {
+		for _, info := range infos {
+			if info.Path == spec.Path {
+				wt.WorkspaceID = info.OpenWorkspaceID
+				break
 			}
-			break
 		}
 	}
-	return wt
+	return wt, nil
 }
 
 // Remove quita el worktree nativo (y su workspace) si puede resolver el
