@@ -19,7 +19,7 @@ func TestLoadFromMissingFileReturnsDefaultsSilently(t *testing.T) {
 	if !cfg.Forges.GitHub.Enabled || cfg.Forges.GitHub.Host != "github.com" {
 		t.Errorf("github = %+v", cfg.Forges.GitHub)
 	}
-	if cfg.Forges.GitLab.APIBase != "/git/api/v4/" {
+	if cfg.Forges.GitLab.APIBase != "/api/v4/" {
 		t.Errorf("api_base = %q", cfg.Forges.GitLab.APIBase)
 	}
 	if cfg.Forges.Bitbucket.Enabled {
@@ -186,9 +186,10 @@ clone_base = "repo"
 }
 
 func TestDefaultsClonePrefix(t *testing.T) {
-	// El default de APIBase es "/git/api/v4/": el prefijo derivado es "git".
-	if got := Defaults().Forges.GitLab.ClonePrefix(); got != "git" {
-		t.Fatalf("gitlab default ClonePrefix = %q", got)
+	// El default de APIBase es "/api/v4/" (GitLab estándar en la raíz): no
+	// debe derivar prefijo, para no clonar mal un GitLab en raíz.
+	if got := Defaults().Forges.GitLab.ClonePrefix(); got != "" {
+		t.Fatalf("gitlab default ClonePrefix = %q, quiero vacío (raíz)", got)
 	}
 	if got := Defaults().Forges.GitHub.ClonePrefix(); got != "" {
 		t.Fatalf("github default ClonePrefix = %q", got)

@@ -82,9 +82,11 @@ config: ## Crea config.toml si no existe (requiere GITLAB_HOST=host.del.selfmana
 		echo '[forge.gitlab]'; \
 		echo 'enabled = true'; \
 		echo "host = \"$(GITLAB_HOST)\""; \
-		echo '# relative URL root del clon/web (glab resuelve la API solo);'; \
-		echo '# se deriva de api_base, y clone_base lo sobreescribe si difiere'; \
-		echo 'api_base = "/git/api/v4/"'; \
+		echo '# base REST de la instancia (glab resuelve host y base solo);'; \
+		echo '# default de raíz. Si la instancia vive en subcarpeta, usa'; \
+		echo '# api_base = "/git/api/v4/" o clone_base = "git" (relative URL'; \
+		echo '# root del clon/web; clone_base = "/" fuerza raíz).'; \
+		echo 'api_base = "/api/v4/"'; \
 		echo; \
 		echo '[forge.bitbucket]'; \
 		echo 'enabled = false'; \

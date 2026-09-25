@@ -300,7 +300,7 @@ func Defaults() Config {
 		WorktreeDir:     filepath.Join(share, "worktrees"),
 		Forges: Forges{
 			GitHub:    GitHubConfig{Enabled: true, Host: "github.com"},
-			GitLab:    GitLabConfig{Enabled: true, Host: "gitlab.example.com", APIBase: "/git/api/v4/"},
+			GitLab:    GitLabConfig{Enabled: true, Host: "gitlab.example.com", APIBase: "/api/v4/"},
 			Bitbucket: BitbucketConfig{Enabled: false},
 		},
 		Tools: Tools{

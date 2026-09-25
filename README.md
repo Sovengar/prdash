@@ -30,6 +30,31 @@ make config GITLAB_HOST=gitlab.miempresa.com   # crea ~/.config/prdash/config.to
 La config vive en `$XDG_CONFIG_HOME/prdash/config.toml`. Un fichero ausente o
 malformado degrada a defaults con un aviso; nunca aborta.
 
+### Forges y relative URL root
+
+Cada `[forge.<name>]` acepta `host` y `clone_base`. `clone_base` es el relative
+URL root donde la instancia publica el clon/web cuando **no** está en la raíz
+del host (p. ej. `clone_base = "git"` para `https://host/git/…`). Vacío = raíz.
+
+En GitLab, `api_base` (base REST) es la fuente habitual de ese prefijo: el
+relative URL root se **deriva** quitando el sufijo `api/v4` (`"/git/api/v4/"` →
+`git`; `"/api/v4/"` → raíz). `clone_base` es un override explícito y, con
+`clone_base = "/"`, fuerza raíz. El default `api_base = "/api/v4/"` asume la
+instancia GitLab en la raíz.
+
+```toml
+[forge.gitlab]
+host = "gitlab.miempresa.com"
+# Instancia en subcarpeta: https://gitlab.miempresa.com/git/grupo/proyecto
+api_base = "/git/api/v4/"   # deriva clone_base = "git"
+# clone_base = "git"        # o explícito (manda sobre api_base)
+
+[forge.github]
+host = "github.com"
+# GitHub Enterprise en subcarpeta:
+# clone_base = "ent"
+```
+
 ## Uso
 
 ```sh
