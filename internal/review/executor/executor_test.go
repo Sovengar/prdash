@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"prdash/internal/forge/model"
+	"prdash/internal/herdr"
 	"prdash/internal/reporesolver"
 	"prdash/internal/review/plan"
 	"prdash/internal/testutil"
@@ -320,18 +321,62 @@ func TestMountWithHerdrAppliesPlan(t *testing.T) {
 	if len(herdr.plan.Panes) != 3 {
 		t.Fatalf("el plan montado = %+v", herdr.plan)
 	}
+	if len(herdr.notified) == 0 {
+		t.Fatal("un layout montado debería notificar")
+	}
 }
+
+// TestMountPassesNativeContainerToLayout comprueba que el contenedor que
+// devuelve la provisión nativa (workspace + root pane) llega al puerto Herdr.
+func TestMountPassesNativeContainerToLayout(t *testing.T) {
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, 6, "seis")
+	herdr := &fakeHerdr{available: true}
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}, herdr: herdr})
+	h.ex.Worktrees = &fakeProvisioner{wt: worktree.Worktree{
+		ID: "wt", Label: "prdash-pr-6", Path: "/tmp/wt-prdash-pr-6",
+		Branch: "prdash/pr-6", Repo: repo, WorkspaceID: "w30", RootPaneID: "w30:p1",
+	}}
+
+	if _, err := h.ex.Mount(context.Background(), item(h.ref, 6)); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	if herdr.container.WorkspaceID != "w30" || herdr.container.PaneID != "w30:p1" {
+		t.Fatalf("contenedor = %+v", herdr.container)
+	}
+}
+
+// fakeProvisioner devuelve un worktree fijo (contenedor nativo simulado).
+type fakeProvisioner struct{ wt worktree.Worktree }
+
+func (f *fakeProvisioner) Create(context.Context, worktree.Spec) (worktree.Worktree, error) {
+	return f.wt, nil
+}
+func (f *fakeProvisioner) Remove(context.Context, string) error     { return nil }
+func (f *fakeProvisioner) List(context.Context) []worktree.Worktree { return nil }
 
 // fakeHerdr es un doble en memoria del puerto Herdr.
 type fakeHerdr struct {
 	available bool
 	mounted   bool
+	container herdr.Container
 	plan      plan.Plan
+	notified  []string
 }
 
-func (f *fakeHerdr) Available() bool          { return f.available }
-func (f *fakeHerdr) Mount(pl plan.Plan) error { f.mounted = true; f.plan = pl; return nil }
-func (f *fakeHerdr) Notify(string)            {}
+func (f *fakeHerdr) Available() bool { return f.available }
+
+func (f *fakeHerdr) MountLayout(_ context.Context, c herdr.Container, pl plan.Plan) ([]string, error) {
+	f.mounted = true
+	f.container = c
+	f.plan = pl
+	return nil, nil
+}
+
+func (f *fakeHerdr) Notify(_ context.Context, title string, _ herdr.NotifyOptions) error {
+	f.notified = append(f.notified, title)
+	return nil
+}
 
 func leftoverTemps(dir string) int {
 	n := 0
