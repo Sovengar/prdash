@@ -56,7 +56,9 @@ func main() {
 	}
 
 	if *printMode {
-		runPrint(adapters)
+		// El executor resuelve el review activo de cada ítem desde la memoria
+		// de rutas; no toca Herdr ni la red.
+		runPrint(adapters, buildExecutor(cfg).ActiveReview)
 		return
 	}
 
