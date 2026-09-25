@@ -100,6 +100,67 @@ func TestListExcludesForeignWorktrees(t *testing.T) {
 	}
 }
 
+// TestRemoveOrphanDeletesCheckout comprueba que un worktree huérfano (repo de
+// origen desaparecido) se puede borrar por petición explícita.
+func TestRemoveOrphanDeletesCheckout(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+
+	base := t.TempDir()
+	dest := filepath.Join(base, "prdash-pr-1")
+	g := NewGitDirect(base)
+	if _, err := g.Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
+		t.Fatalf("preparar worktree: %v", err)
+	}
+	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := g.Remove(context.Background(), dest); err != nil {
+		t.Fatalf("Remove de huérfano: %v", err)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatalf("el checkout huérfano debería haberse borrado: %v", err)
+	}
+}
+
+// TestRemoveRefusesForeignWorktree comprueba que un worktree sin ownership
+// prdash no se borra aunque su repo exista.
+func TestRemoveRefusesForeignWorktree(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+
+	base := t.TempDir()
+	foreign := filepath.Join(base, "otra-herramienta")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "feature")
+
+	g := NewGitDirect(base)
+	if err := g.Remove(context.Background(), foreign); err == nil {
+		t.Fatal("no debería borrar un worktree ajeno")
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatalf("el worktree ajeno no debería tocarse: %v", err)
+	}
+}
+
+// TestRemoveRefusesPathOutsideBase comprueba que ni un worktree con nombre
+// prdash se borra si queda fuera de la raíz gestionada.
+func TestRemoveRefusesPathOutsideBase(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+
+	outside := filepath.Join(t.TempDir(), "prdash-pr-1")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", outside, "feature")
+
+	g := NewGitDirect(t.TempDir()) // raíz gestionada distinta
+	if err := g.Remove(context.Background(), outside); err == nil {
+		t.Fatal("no debería borrar fuera de la raíz gestionada")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+	}
+}
+
 // TestAuditSkipsNonWorktreeDirs ignora directorios normales bajo la raíz.
 func TestAuditSkipsNonWorktreeDirs(t *testing.T) {
 	base := t.TempDir()

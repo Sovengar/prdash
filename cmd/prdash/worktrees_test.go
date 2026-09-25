@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,11 +10,12 @@ import (
 	"prdash/internal/worktree"
 )
 
-// worktreeFixture crea un repo real con dos worktrees bajo la misma raíz: uno
-// propio de prdash y otro ajeno.
-func worktreeFixture(t *testing.T) (base, owned, foreign string) {
+// worktreeRepoFixture crea un repo real con dos worktrees bajo la misma raíz:
+// uno propio de prdash y otro ajeno. Devuelve también el repo para poder
+// simular huérfanos.
+func worktreeRepoFixture(t *testing.T) (repo, base, owned, foreign string) {
 	t.Helper()
-	repo := filepath.Join(t.TempDir(), "repo")
+	repo = filepath.Join(t.TempDir(), "repo")
 	testutil.InitRepo(t, repo)
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
 	testutil.RunGit(t, repo, "branch", "propia")
@@ -24,6 +26,13 @@ func worktreeFixture(t *testing.T) (base, owned, foreign string) {
 	foreign = filepath.Join(base, "otra-herramienta")
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", owned, "propia")
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "ajena")
+	return repo, base, owned, foreign
+}
+
+// worktreeFixture es el caso habitual: solo la raíz y los worktrees.
+func worktreeFixture(t *testing.T) (base, owned, foreign string) {
+	t.Helper()
+	_, base, owned, foreign = worktreeRepoFixture(t)
 	return base, owned, foreign
 }
 
@@ -91,6 +100,23 @@ func TestRunWorktreesRemoveOwned(t *testing.T) {
 	}
 	if !worktree.Exists(foreign) {
 		t.Fatal("el worktree ajeno no debería tocarse")
+	}
+}
+
+// TestRunWorktreesRemoveOrphan comprueba que la CLI puede limpiar un worktree
+// huérfano (repo de origen desaparecido) que listó como tal.
+func TestRunWorktreesRemoveOrphan(t *testing.T) {
+	repo, base, owned, _ := worktreeRepoFixture(t)
+	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+	pr := worktree.NewGitDirect(base)
+
+	if code := runWorktrees(pr, []string{"remove", owned}); code != 0 {
+		t.Fatalf("borrar un huérfano propio debería funcionar, code=%d", code)
+	}
+	if worktree.Exists(owned) {
+		t.Fatal("el checkout huérfano debería haberse borrado")
 	}
 }
 
