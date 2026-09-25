@@ -58,6 +58,8 @@ prdash worktrees remove <ruta>   # borra SOLO lo pedido y solo si es de prdash
 Funciona igual con la provisión nativa de Herdr (dentro de Herdr) y con git
 directo (fuera).
 
+PR de prueba 4/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ## Plugin de Herdr
 
 El plugin es **el mismo binario más subcomandos más un manifiesto**
