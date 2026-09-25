@@ -23,9 +23,6 @@ const (
 	// toastMinWidth/toastMaxWidth acotan el ancho de la caja.
 	toastMinWidth = 24
 	toastMaxWidth = 60
-	// toastBottomMargin son las líneas que el overlay deja libres abajo (la de
-	// atajos y su margen), para que el toast nunca tape la ayuda.
-	toastBottomMargin = 2
 )
 
 // toastLevel es la gravedad de un aviso y decide icono y color.
@@ -217,25 +214,59 @@ func wrapText(text string, max int) []string {
 // códigos de color de la línea base: al revés que un simple replace, el texto de
 // debajo no se ensucia ni se desalinea.
 //
-// El ancla es el final del contenido, no el alto del terminal: prdash no rellena
-// la pantalla a `height` líneas, así que anclar por altura dejaría la caja fuera
-// de la vista. Debajo del aviso quedan la línea de atajos y su margen.
-func overlayToasts(content string, boxes []string, width, height int) string {
+// Solo pinta sobre las filas marcadas en `rows`: el interior de las cajas. Un
+// aviso nunca cae sobre un borde, así que ningún marco se rompe por tener un
+// aviso encima —que es lo que pasaba con el borde inferior del detalle—. Cada
+// aviso busca el hueco más bajo que le quepa, y los siguientes se apilan por
+// encima del anterior; si ya no queda interior libre, los que sobren no se
+// pintan, porque un aviso ilegible no informa de nada.
+func overlayToasts(content string, boxes []string, width int, rows []bool) string {
 	if len(boxes) == 0 {
 		return content
 	}
 	lines := strings.Split(content, "\n")
-	for i, box := range boxes {
-		block := strings.Split(box, "\n")
+	anchor := len(lines) - 1
+	for _, b := range boxes {
+		block := strings.Split(b, "\n")
 		bw := ansi.StringWidth(block[0])
-		bh := min(len(block), height)
-		x := max(width-bw-1, 0)
-		// Cada aviso se apila una línea por encima del anterior.
-		y := max(len(lines)-bh-toastBottomMargin-i*(bh+1), 0)
-		for j := 0; j < bh && y+j < len(lines); j++ {
-			line := lines[y+j]
-			lines[y+j] = ansi.Truncate(line, x, "") + block[j] + ansi.TruncateLeft(line, x+bw, "")
+		bh := min(len(block), anchor+1) // nunca más alto que lo que queda
+		base, ok := landRow(rows, anchor, bh)
+		if !ok {
+			break
 		}
+		x := max(width-bw-1, 0)
+		for j := range bh {
+			i := base - bh + 1 + j
+			line := lines[i]
+			lines[i] = ansi.Truncate(line, x, "") + block[j] + ansi.TruncateLeft(line, x+bw, "")
+		}
+		anchor = base - bh
 	}
 	return strings.Join(lines, "\n")
+}
+
+// landRow devuelve la fila más baja, sin pasar de anchor, en la que cabe un
+// bloque de bh filas que admiten avisos. Devuelve false si no cabe en ninguna.
+func landRow(rows []bool, anchor, bh int) (int, bool) {
+	if bh <= 0 {
+		return 0, false
+	}
+	for base := min(anchor, len(rows)-1); base >= bh-1; base-- {
+		if admitenAviso(rows, base-bh+1, bh) {
+			return base, true
+		}
+	}
+	return 0, false
+}
+
+// admitenAviso indica si las n filas que empiezan en from son todas interior de
+// alguna caja. Una fila que no existe cuenta como que no: es preferible no
+// pintar a pintar de más.
+func admitenAviso(rows []bool, from, n int) bool {
+	for i := from; i < from+n; i++ {
+		if i < 0 || i >= len(rows) || !rows[i] {
+			return false
+		}
+	}
+	return true
 }

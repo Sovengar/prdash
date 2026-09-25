@@ -7,10 +7,7 @@
 // el desplazamiento mantiene la coherencia de la tabla a cualquier offset.
 package tui
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // listLine es una línea de la lista con la fila a la que pertenece, o -1 si es
 // chrome (header de sección, aviso, línea en blanco). Guardar la fila permite
@@ -21,36 +18,9 @@ type listLine struct {
 }
 
 // Reparto vertical de la pantalla. El detalle se queda con el 40% de la altura
-// (detailShare/5) y la lista con el resto del hueco libre.
-const (
-	detailShare   = 2 // 2/5 = 40% de la altura
-	minListRows   = 3
-	minDetailRows = 6
-)
-
-// splitRows reparte la altura entre la ventana de la lista y el panel de
-// detalle, descontando el chrome fijo (cabecera, separador y barra de hints).
-// Sin altura conocida devuelve 0 y 0: entonces no se recorta nada, que es lo
-// que evita el primer render antes del primer WindowSizeMsg.
-func splitRows(height, chrome int) (list, detail int) {
-	if height <= 0 {
-		return 0, 0
-	}
-	detail = max(height*detailShare/5, minDetailRows)
-	if list = height - chrome - detail; list >= minListRows {
-		return list, detail
-	}
-	// En una pantalla muy baja la lista conserva su mínimo (sin ella no hay
-	// selección que mostrar) y el detalle cede lo que falte.
-	return minListRows, max(0, height-chrome-minListRows)
-}
-
-// chromeLines son las líneas que la lista no puede usar: cabecera, hueco,
-// separador del panel y barra de hints. Los avisos ya no ocupan sitio: van
-// superpuestos como toast, así que el alto de la lista es siempre el mismo.
-func (m *Model) chromeLines() int {
-	return 4
-}
+// (detailShare/5) y la lista con el resto del hueco libre; el reparto vive en
+// computeLayout (layout.go) porque las cajas ya se llevan 2 líneas de cromo
+// cada una.
 
 // listLines compone la lista completa como líneas sueltas.
 func (m *Model) listLines(inner int) []listLine {
@@ -122,7 +92,7 @@ func scrollFor(current, target, total, view int) int {
 // tras reconstruir el inbox. Va en Update (no en View) porque View tiene
 // receptor por valor y sus cambios se perderían.
 func (m *Model) syncScroll() {
-	view, _ := splitRows(m.height, m.chromeLines())
+	view := m.layout().bodyLines
 	if view <= 0 {
 		return
 	}
@@ -140,9 +110,4 @@ func visibleList(lines []listLine, scroll, view int) []listLine {
 	}
 	start := min(max(scroll, 0), max(0, len(lines)-view))
 	return lines[start:min(start+view, len(lines))]
-}
-
-// separator es la línea que parte la lista del panel de detalle.
-func (m *Model) separator() string {
-	return styleDim.Render(strings.Repeat("─", m.contentWidth()))
 }

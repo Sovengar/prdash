@@ -50,8 +50,10 @@ func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
 	for _, sec := range box.Sections {
 		fmt.Fprintf(w, "%s (%d)\n", sec.Kind.String(), len(sec.Items))
 		for _, it := range sec.Items {
-			line := fmt.Sprintf("  %s@%s\t%s#%d\t%s\t%s",
-				it.Forge, it.Host, it.Ref.Project, it.Number, state.Derive(it), it.Title)
+			// El diffstat va con los números sin compactar: aquí lo lee un
+			// script, no un ojo, y abrevia un recuento solo estorbaría.
+			line := fmt.Sprintf("  %s@%s\t%s#%d\t%s\t%s\t%s",
+				it.Forge, it.Host, it.Ref.Project, it.Number, state.Derive(it), printDiff(it.Diff), it.Title)
 			if reviews != nil {
 				if wt, ok := reviews(it); ok && wt.Path != "" {
 					line += "\treview:" + wt.Path
@@ -65,4 +67,14 @@ func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
 	for _, warning := range box.Warnings {
 		fmt.Fprintf(os.Stderr, "prdash: %s: %s (%s)\n", warning.Forge, warning.Msg, warning.Kind)
 	}
+}
+
+// printDiff es el diffstat en una celda, sin el recuento de ficheros: la línea
+// ya lleva el estado, el título y, si está, la ruta del review, y el número de
+// ficheros vive en el detalle.
+func printDiff(d model.DiffStat) string {
+	if !d.Known {
+		return "-"
+	}
+	return fmt.Sprintf("+%d -%d", d.Additions, d.Deletions)
 }

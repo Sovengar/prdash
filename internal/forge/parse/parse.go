@@ -91,7 +91,14 @@ type ghPRNode struct {
 	UpdatedAt      string `json:"updatedAt"`
 	HeadRefName    string `json:"headRefName"`
 	BaseRefName    string `json:"baseRefName"`
-	Author         struct {
+	// Additions va como puntero a propósito: `additions` es `Int!` en el schema,
+	// así que si el campo viene es que la query lo pidió. Ausente = la respuesta
+	// no lo trajo (respaldo REST u otra forma de salida) y el diffstat queda
+	// como desconocido en vez de como un cambio de cero líneas.
+	Additions    *int `json:"additions"`
+	Deletions    int  `json:"deletions"`
+	ChangedFiles int  `json:"changedFiles"`
+	Author       struct {
 		Login string `json:"login"`
 	} `json:"author"`
 	Repository struct {
@@ -195,8 +202,23 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	it.State = n.State
 	it.ReviewDecision = n.ReviewDecision
 	it.Checks = checksFromRollup(n)
+	it.Diff = diffFromGHNode(n)
 	it.UpdatedAt = parseTime(n.UpdatedAt)
 	return it
+}
+
+// diffFromGHNode lee el diffstat de un PR. GitHub lo da ya agregado en tres
+// escalares, así que no hay nada que sumar.
+func diffFromGHNode(n ghPRNode) model.DiffStat {
+	if n.Additions == nil {
+		return model.DiffStat{}
+	}
+	return model.DiffStat{
+		Additions: *n.Additions,
+		Deletions: n.Deletions,
+		Files:     n.ChangedFiles,
+		Known:     true,
+	}
 }
 
 // checksFromRollup agrega el statusCheckRollup del último commit en un
@@ -293,7 +315,8 @@ type ghSearchIssuesResp struct {
 
 // ParseGHAuthored interpreta la salida de la búsqueda REST de issues/PRs
 // (`GET search/issues`), usada como respaldo cuando GraphQL no está
-// disponible. No trae reviewDecision ni checks: eso queda como desconocido.
+// disponible. No trae reviewDecision, checks ni diffstat: eso queda como
+// desconocido.
 func ParseGHAuthored(raw string) ([]model.Item, error) {
 	var resp ghSearchIssuesResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -384,7 +407,15 @@ type glMR struct {
 	TargetBranch string  `json:"targetBranch"`
 	Approved     bool    `json:"approved"`
 	UpdatedAt    string  `json:"updatedAt"`
-	Author       struct {
+	// DiffStats es una entrada por fichero cambiado, no un agregado, y va como
+	// puntero a slice para poder distinguir las dos cosas que un `[]` vacío
+	// significaría: ausente (la query no lo pidió, p. ej. la API de Todos) y
+	// presente-pero-vacío (el MR no toca ningún fichero).
+	DiffStats *[]struct {
+		Additions flexInt `json:"additions"`
+		Deletions flexInt `json:"deletions"`
+	} `json:"diffStats"`
+	Author struct {
 		Username string `json:"username"`
 	} `json:"author"`
 	Project struct {
@@ -496,8 +527,31 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	it.URL = mr.WebURL
 	it.State = mr.State
 	it.ReviewDecision = glReviewDecision(mr)
+	it.Diff = diffFromGLMR(mr)
 	it.UpdatedAt = parseTime(mr.UpdatedAt)
 	return it
+}
+
+// diffFromGLMR suma el diffstat de un MR. GitLab entrega `diffStats` como una
+// lista con una entrada por fichero cambiado, no como un agregado: hay que
+// sumarla entera. Cog solo la primera o la última entrada daría el total de un
+// fichero cualquiera en lugar del MR.
+//
+// El recuento de ficheros sale de la longitud de la lista, y por eso puede
+// quedarse corto: GitLab colapsa los diffs que superan su límite de tamaño y de
+// filas, así que en un MR enorme las cifras son un mínimo, no un exacto.
+func diffFromGLMR(mr glMR) model.DiffStat {
+	if mr.DiffStats == nil {
+		return model.DiffStat{}
+	}
+	var d model.DiffStat
+	for _, s := range *mr.DiffStats {
+		d.Additions += int(s.Additions)
+		d.Deletions += int(s.Deletions)
+	}
+	d.Files = len(*mr.DiffStats)
+	d.Known = true
+	return d
 }
 
 // glReviewDecision traduce la aprobación del MR a una decisión homóloga a la de
@@ -530,7 +584,9 @@ type glBasicMR struct {
 }
 
 // ParseGLMRList interpreta una lista de merge requests del GitLab en su forma
-// REST (`glab mr list -F json` o `GET /merge_requests`).
+// REST (`glab mr list -F json` o `GET /merge_requests`). El endpoint REST de
+// merge requests no expone additions ni deletions (gitlab-org/gitlab#464260), así
+// que el diffstat queda como desconocido.
 func ParseGLMRList(raw string) ([]model.Item, error) {
 	var list []glBasicMR
 	if err := json.Unmarshal([]byte(raw), &list); err != nil {

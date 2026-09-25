@@ -268,7 +268,13 @@ func restEndpoint(resource string) string {
 
 // mrFields son los campos GraphQL de un merge request que el inbox consume. La
 // instancia CE no expone `approvalsLeft`, así que solo se pide `approved`.
-const mrFields = `iid title webUrl state sourceBranch targetBranch approved updatedAt author { username } project { fullPath name group { fullPath } }`
+//
+// `diffStats` no es un agregado: es una entrada POR FICHERO cambiado, así que el
+// parseo tiene que sumarla. Pide el conteo de ficheros como la longitud de la
+// lista porque el schema no expone un `changedFiles` equivalente.
+const mrFields = `iid title webUrl state sourceBranch targetBranch approved updatedAt ` +
+	`diffStats { additions deletions } ` +
+	`author { username } project { fullPath name group { fullPath } }`
 
 // glConn cierra una conexión GraphQL con paginación.
 const glConn = `pageInfo { hasNextPage endCursor } nodes { %s }`
@@ -295,9 +301,15 @@ func glAssignedQuery(cursor string) string {
 }
 
 // glMRQuery compone la query GraphQL de un MR concreto.
+//
+// El iid va como literal de cadena porque el schema lo declara `String!`:
+// GraphQL no coacciona un literal Int a String, así que `iid: 7` se rechaza con
+// argumentLiteralsIncompatible y la query entera falla. Que el iid llegue además
+// como string en la RESPUESTA (es un `ID!`) lo resuelve el parser con flexInt;
+// aquí lo que importa es el tipo del literal de la query.
 func glMRQuery(fullPath string, iid int) string {
 	return fmt.Sprintf(
-		`query { project(fullPath: "%s") { mergeRequest(iid: %d) { %s } } }`,
+		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { %s } } }`,
 		escapeGraphQL(fullPath), iid, mrFields,
 	)
 }

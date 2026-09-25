@@ -392,7 +392,7 @@ func (m *Model) pageBy(delta int) {
 // pageRows es el salto de pgup/pgdn: una ventana de lista, para que la tecla
 // avance justo lo que se ve. Sin altura conocida, una media docena de filas.
 func (m *Model) pageRows() int {
-	view, _ := splitRows(m.height, m.chromeLines())
+	view := m.layout().bodyLines
 	if view <= 0 {
 		return 6
 	}
@@ -440,60 +440,28 @@ func (m *Model) sectionIndexAtCursor() int {
 	return idx
 }
 
-// View compone la pantalla: detalle o inbox.
+// View compose la pantalla: el inbox partido en lista y panel de detalle, o la
+// ficha del ítem a pantalla completa. Las dos son la misma pila de cajas, solo
+// cambia el cuerpo central.
 func (m Model) View() tea.View {
-	content := m.renderInbox()
+	var v view
+	lay := m.layout()
 	if m.detailOpen {
-		content = m.renderDetail()
+		lay = m.layoutFullDetail()
+		v = m.compose(lay, m.detailSection(m.liveDetail(), true, lay.bodyLines))
+	} else {
+		it, ok := m.selected()
+		v = m.compose(lay, m.listSection(lay), m.detailSection(it, ok, lay.detailLines))
 	}
 	// Los avisos van superpuestos abajo a la derecha: la vista de fondo no se
-	// vuelve a componer, solo se recorta por donde hace falta.
-	content = overlayToasts(content, m.toast.blocks(m.contentWidth()), m.contentWidth(), m.height)
-	v := tea.NewView(content)
-	v.AltScreen = true
-	return v
-}
-
-// renderInbox pinta la pantalla partida: la lista con scroll en el hueco
-// superior y el detalle del ítem seleccionado en el 40% inferior. Las dos
-// mitades suman la altura exacta, así que la vista nunca desborda el terminal ni
-// empuja la cabecera fuera de pantalla.
-func (m *Model) renderInbox() string {
-	var b strings.Builder
-	inner := m.contentWidth()
-
-	b.WriteString(styleHeader.Render("prdash"))
-	if m.loading {
-		b.WriteString(" " + m.spinner.View() + styleCount.Render(" refreshing…"))
+	// vuelve a componer, solo se recorta por donde hace falta. Solo aterrizan en
+	// el interior de las cajas, así que no pisan ningún borde.
+	if toasts := m.toast.blocks(m.contentWidth()); len(toasts) > 0 {
+		v.text = overlayToasts(v.text, toasts, m.contentWidth(), v.rows)
 	}
-	b.WriteString("  " + m.forgesStatusLine(time.Now()))
-	b.WriteString("\n")
-	b.WriteString("\n")
-
-	view, detail := splitRows(m.height, m.chromeLines())
-	lines := m.listLines(inner)
-	for _, l := range visibleList(lines, m.scroll, view) {
-		b.WriteString(l.text + "\n")
-	}
-	// Si la lista es más corta que su ventana se rellena el hueco: el detalle
-	// queda así siempre pegado al borde inferior y no baila al añadir un ítem.
-	for i := len(lines); i < view; i++ {
-		b.WriteString("\n")
-	}
-
-	b.WriteString(m.separator() + "\n")
-	pane := m.detailPane(detail)
-	for _, l := range pane {
-		b.WriteString(l + "\n")
-	}
-	// El panel se rellena hasta su alto reservado: los hints quedan siempre en la
-	// última línea, dé lo que dé la altura del detalle (que cambia con el ítem).
-	for i := len(pane); i < detail; i++ {
-		b.WriteString("\n")
-	}
-
-	b.WriteString(styleHint.Render(m.hintLine()))
-	return b.String()
+	out := tea.NewView(v.text)
+	out.AltScreen = true
+	return out
 }
 
 // renderItem pinta una fila de ítem con el cursor delante si está seleccionada.
@@ -505,12 +473,10 @@ func (m *Model) renderItem(it model.Item, sec model.Section, lay refLayout, sele
 	return prefix + renderCells(itemCells(it, sec, m.viewerLogin(it.Forge), lay), lay, inner)
 }
 
-// contentWidth es el ancho útil para las tablas.
+// contentWidth es el ancho interior de las cajas: el de la terminal menos los dos
+// bordes. Es el ancho con el que se maquetan la lista, el detalle y los atajos.
 func (m *Model) contentWidth() int {
-	if m.width <= 0 {
-		return 120
-	}
-	return max(40, m.width-4)
+	return max(38, m.outerWidth()-2)
 }
 
 // forgesStatusLine muestra la última actualización y el estado de cada forge.

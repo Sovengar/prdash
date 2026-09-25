@@ -95,12 +95,13 @@ func TestTruncateTail(t *testing.T) {
 // dimensiona al sufijo más largo de todas las secciones (no a una constante) y
 // que respeta los límites.
 func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
-	// Sufijo corto: la columna se ajusta a lo que necesita, no al tope.
+	// Sufijo corto: la columna se ajusta a lo que necesita, no al tope. El ancho
+	// incluye el hueco de separación, así que es el sufijo más un rune.
 	lay := newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems("g/one", "g/two")...),
 	})
-	if got := lay.cols[colRefIdx].width; got != len("one#100") {
-		t.Errorf("ancho de ITEM = %d, want %d (el sufijo más largo)", got, len("one#100"))
+	if got, want := lay.cols[colRefIdx].width, len("one#100")+1; got != want {
+		t.Errorf("ancho de ITEM = %d, want %d (el sufijo más largo + hueco)", got, want)
 	}
 	if got := lay.prefixOf(model.SectionReview); got != "g" {
 		t.Errorf("prefijo de review = %q, want %q", got, "g")
@@ -279,7 +280,10 @@ func TestRefColInvariantes(t *testing.T) {
 				if cell == "" {
 					t.Fatalf("round %d: celda vacía para %q", round, full)
 				}
-				if want == truncateTail(want, w) {
+				// El presupuesto de texto es el ancho de la ranura menos el hueco
+				// de separación: el sufijo más largo tiene que caber entero.
+				cut := truncateTail(want, textWidth(w))
+				if want == cut {
 					if cell != want {
 						t.Fatalf("round %d: celda %q, want %q", round, cell, want)
 					}
@@ -289,7 +293,7 @@ func TestRefColInvariantes(t *testing.T) {
 				if !strings.HasPrefix(cell, "…") {
 					t.Fatalf("round %d: celda recortada %q, want el prefijo %q", round, cell, "…")
 				}
-				tail := want[max(0, len(want)-(w-1)):]
+				tail := want[max(0, len(want)-(textWidth(w)-1)):]
 				if !strings.HasSuffix(cell, tail) {
 					t.Fatalf("round %d: celda %q pierde la cola %q de %q", round, cell, tail, want)
 				}

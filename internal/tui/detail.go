@@ -61,6 +61,7 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 		{"State", state.Derive(it).String()},
 		{"Review", orDash(reviewLabel(it))},
 		{"Checks", checksDetail(it.Checks)},
+		{"Diff", diffDetail(it.Diff)},
 		{"Updated", relativeTime(it.UpdatedAt)},
 		{"Role", roleText(it, viewer)},
 	}
@@ -78,18 +79,45 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 
 	// No cabe en una columna: la misma información en rejilla de dos columnas.
 	// Se prefiere a recortar campos porque la fila del forge y la del autor solo
-	// existen aquí, y en un terminal de 24 líneas se perdían por arriba. El hueco
-	// tras el título es decorativo y el primero que se cae: el título ya destaca
-	// por su estilo.
-	grid := detailGrid(append(append([]detailField{}, identity...), status...), m.contentWidth())
-	two := append([]string{title, ""}, grid...)
-	two = append(two, avisos...)
-	if len(two) <= rows {
-		return two
+	// existen aquí, y en un terminal de 24 líneas se perdían por arriba.
+	//
+	// El diffstat es lo primero que se cae cuando aún no cabe. Añadirlo hizo que
+	// la rejilla pasara de 6 a 7 filas, y con avisos de acción el título empezaba a
+	// irse por arriba: un dato que se acaba de perder es peor que uno que nunca se
+	// pintó. Es el mismo criterio que la columna DIFF de la lista, que también va
+	// la última. El hueco tras el título, en cambio, es decorativo y se cae antes:
+	// el título ya destaca por su estilo.
+	//
+	// Los candidatos van de más a menos preferred y se devuelve el primero que
+	// entre; si ninguno entra, se recorta el último (que es el que menos campos
+	// sacrifica).
+	grids := [][]string{
+		detailGrid(append(append([]detailField{}, identity...), status...), m.contentWidth()),
+		detailGrid(append(append([]detailField{}, identity...), withoutField(status, "Diff")...), m.contentWidth()),
 	}
-	two = append([]string{title}, grid...)
-	two = append(two, avisos...)
-	return clipTop(two, rows)
+	layouts := [][]string{
+		append(append([]string{title, ""}, grids[0]...), avisos...),
+		append(append([]string{title, ""}, grids[1]...), avisos...),
+		append(append([]string{title}, grids[1]...), avisos...),
+	}
+	for _, l := range layouts {
+		if len(l) <= rows {
+			return l
+		}
+	}
+	return clipTop(append(append([]string{title}, grids[1]...), avisos...), rows)
+}
+
+// withoutField quita un campo por su etiqueta. Se usa para dropear el diffstat
+// cuando el detalle no tiene sitio para todo.
+func withoutField(fields []detailField, key string) []detailField {
+	out := make([]detailField, 0, len(fields))
+	for _, f := range fields {
+		if f.key != key {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // detailWarnings son los avisos de acción deshabilitada del ítem.
@@ -107,7 +135,7 @@ func (m *Model) detailWarnings(it model.Item) []string {
 // appendFields añade un bloque de campos en una columna.
 func appendFields(lines []string, fields []detailField) []string {
 	for _, f := range fields {
-		lines = append(lines, label(f.key, f.value))
+		lines = append(lines, label(f.key, styleDiffText(f.value)))
 	}
 	return lines
 }
@@ -134,7 +162,9 @@ func detailGrid(fields []detailField, inner int) []string {
 // texto plano, que es lo que necesita el padding de la columna de al lado.
 func detailCell(f detailField, width int) (string, int) {
 	value := truncate(f.value, max(1, width-labelWidth))
-	return label(f.key, value), labelWidth + utf8.RuneCountInString(value)
+	// El ancho se mide sobre el valor recortado y en plano; el color va encima,
+	// ya sin que nadie lo mida (ver styleDiffText).
+	return label(f.key, styleDiffText(value)), labelWidth + utf8.RuneCountInString(value)
 }
 
 // clipTop recorta por arriba lo que no cabe: el final del detalle (estado,
@@ -188,6 +218,24 @@ func checksDetail(c model.Checks) string {
 		base += fmt.Sprintf(" (%d)", c.Total)
 	}
 	return base
+}
+
+// diffDetail describe el diffstat con los números sin compactar y el recuento de
+// ficheros. Aquí sí cabe la cifra exacta: la columna de la lista es la que
+// abrevia, y un detalle que dijera "1.2k" cuando la cifra real es 1.234 no
+// serviría para nada.
+func diffDetail(d model.DiffStat) string {
+	if !d.Known {
+		return "unknown (forge did not report it)"
+	}
+	if d.Total() == 0 {
+		return "no changes"
+	}
+	noun := "files"
+	if d.Files == 1 {
+		noun = "file"
+	}
+	return fmt.Sprintf("+%d -%d (%d %s)", d.Additions, d.Deletions, d.Files, noun)
 }
 
 // relativeTime formatea una marca temporal como "3h", "2d".

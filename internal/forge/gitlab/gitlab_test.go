@@ -84,8 +84,13 @@ func TestQueryBuilders(t *testing.T) {
 	if q := glAuthoredQuery("CUR"); !strings.Contains(q, `after: "CUR"`) {
 		t.Errorf("la query paginada debería llevar el cursor: %s", q)
 	}
-	if q := glMRQuery("grp/proj", 7); !strings.Contains(q, `project(fullPath: "grp/proj")`) || !strings.Contains(q, "mergeRequest(iid: 7)") {
+	// El iid es un literal de cadena: el schema lo declara `String!` y GraphQL no
+	// coacciona Int -> String, así que sin comillas la query entera se rechaza.
+	if q := glMRQuery("grp/proj", 7); !strings.Contains(q, `project(fullPath: "grp/proj")`) || !strings.Contains(q, `mergeRequest(iid: "7")`) {
 		t.Errorf("glMRQuery = %s", q)
+	}
+	if q := glMRQuery("grp/proj", 7); strings.Contains(q, "mergeRequest(iid: 7)") {
+		t.Errorf("glMRQuery no debería pasar el iid como Int: %s", q)
 	}
 	if !strings.Contains(mrFields, "approved") || strings.Contains(mrFields, "approvalsLeft") {
 		t.Errorf("mrFields debería usar approved y no approvalsLeft: %s", mrFields)

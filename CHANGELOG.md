@@ -7,8 +7,72 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- Diffstat en el detalle y en la lista: cuántas líneas añade y borra un PR/MR, y
+  sobre cuántos ficheros. Salen de los datos que el inbox ya traía, así que no
+  cuestan ninguna llamada extra: en GitHub son los escalares `additions`,
+  `deletions` y `changedFiles` del PR, y en GitLab el `diffStats` del MR. El
+  detalle los enseña sin compactar (`+381 -36 (11 files)`); la columna DIFF de la
+  lista los abrevia para que el ancho no dependa del tamaño del cambio
+  (`+381 -36`, `+1.2k -6.7k`). Lo añadido va en verde y lo quitado en rojo, tanto
+  en la columna como en el detalle: es notación de diff y nada más — no dice si
+  el cambio es bueno, solo qué líneas son nuevas y cuáles desaparecieron, y por
+  eso el recuento de ficheros se queda sin colorear. Un diffstat que el forge no
+  reportó no se colorea: es una ausencia, no una cifra.
+- Avisos transitorios (toasts) superpuestos abajo a la derecha de la vista, con
+  caducidad propia (4 s) y tick de 500 ms. El texto se envuelve por palabras y
+  la caja se acota al ancho útil, así que un aviso largo nunca desborda ni
+  desalinea la vista. El reloj es inyectable: la caducidad se testea sin dormir.
+- Panel de detalle siempre visible: la lista queda arriba con scroll y el detalle
+  del ítem seleccionado ocupa el 40 % inferior, separado por una regla. La vista
+  se rellena hasta su alto reservado, así que ni la tabla ni la barra de atajos
+  se mueven al añadir o quitar un ítem.
+
+### Changed
+
+- La columna DIFF va la última y es lo primero que se omite cuando no cabe: a 124
+  de terminal con rutas de proyecto largas no hay sitio para las siete columnas,
+  y antes que recortar un título se pierde un dato que el detalle trae siempre.
+  Aparece con terminal ancha (~133). En el detalle el criterio es el mismo: si el
+  panel no cabe, el diffstat se omite en vez de empujar el título fuera.
+- Un diffstat que el forge no reportó se distingue de uno de cero líneas. La API
+  de Todos de GitLab y el respaldo REST de GitHub no lo traen, así que esos ítems
+  muestran `-` en la lista y `unknown` en el detalle en lugar de un `+0 -0` que
+  parecería un PR vacío. El número de ficheros de GitLab sale de la longitud de
+  `diffStats`, y como el forge colapsa los diffs que superan su límite, en un MR
+  enorme las cifras son un mínimo.
+- La columna ITEM ya no recorta la ruta de proyecto por la cabeza. Cada sección
+  declara en su cabecera el prefijo de ruta que comparten sus ítems y las filas
+  solo pintan el sufijo (`mobile-frontend#1198` en vez de
+  `APPCITTI/vsocial/backend/mobile-…`). El prefijo se alinea en fronteras `/` y
+  nunca se come el segmento final, así que la celda siempre conserva el nombre
+  del proyecto y su número. El ancho de la columna sale del contenido —el sufijo
+  más largo del inbox más su hueco de separación, acotado a 34 runes de
+  ranura— y lo que aun así no cabe se recorta por la cola, nunca por el frente.
+  El detalle (`enter`) y `--print` siguen mostrando la ruta completa. Decisión y
+  alternativas en [ADR 0002](docs/adr/0002-item-column-common-prefix.md).
+- Las columnas de la tabla ya no se pegan entre sí. El ancho de una columna
+  incluye su hueco de separación, así que el texto se recorta un rune antes de
+  llenarla: antes, cualquier texto que midiera el ancho exacto —ROLE con
+  `review req`, o ITEM con su ancho dinámico— quedaba pegado a la columna
+  siguiente.
+- La celda de la tabla admite ahora varios tramos con estilo propio, que es lo
+  que permite los dos colores de la columna DIFF. El ancho se sigue midiendo en
+  texto plano —el relleno va al final del último tramo— así que los códigos ANSI
+  no descuadran la tabla. El detalle colorea después de medir y recortar, por el
+  mismo motivo.
+
 ### Fixed
 
+- La query de un MR concreto ya no falla siempre en GitLab. `mergeRequest(iid: 7)`
+  pasaba el iid como literal entero, pero el schema lo declara `String!` y GraphQL
+  no coacciona Int a String, así que la respuesta era un
+  `argumentLiteralsIncompatible` y nada más. Como `ItemState` es el refresco que
+  se hace tras `approve` y `merge`, actuar sobre un MR dejaba el ítem sin
+  actualizar y con un aviso de parseo. Los tests no lo cazaban porque el runner
+  falso devuelve JSON sin validar la query; ahora hay un test que fija el tipo
+  del literal. No confundir con el `flexInt` del `iid` en la respuesta.
 - Aprobar un PR/MR propio ya no se intenta: la TUI lo corta antes de llamar a la
   CLI, con lo que se ahorran las tres llamadas por pulsación. La identidad del
   usuario sale del probe de sesión que ya se hacía (`gh auth status` /

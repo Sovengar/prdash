@@ -228,7 +228,11 @@ func qualifierFor(q forge.Query) (string, bool) {
 // ghPRFields son los campos GraphQL de un pull request que el inbox consume.
 // `statusCheckRollup.contexts.nodes` es la unión StatusCheckRollupContext
 // (CheckRun | StatusContext): cada rama pide sus campos reales.
+//
+// `additions`/`deletions`/`changedFiles` son escalares que la búsqueda ya
+// pagina, así que el diffstat no cuesta ninguna llamada extra.
 const ghPRFields = `number title url state isDraft reviewDecision updatedAt headRefName baseRefName ` +
+	`additions deletions changedFiles ` +
 	`author { login } repository { nameWithOwner name owner { login } } ` +
 	`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
 

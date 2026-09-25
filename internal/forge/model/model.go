@@ -67,6 +67,24 @@ type Checks struct {
 	Pending int
 }
 
+// DiffStat resume el tamaño del cambio de un ítem: cuántas líneas añade y
+// borra, y sobre cuántos ficheros, sin depender del forge.
+//
+// Known separa "el cambio es de 0 líneas" de "no se pudo saber": ambos casos
+// traen ceros, pero el segundo significa que la fuente no traía el dato (el
+// respaldo REST de GitHub, la API de Todos de GitLab, un forge sin soporte) y
+// no que el PR esté vacío. Sin ese bit, un ítem sin datos se pintaría como un
+// cambio de tamaño cero, que es una mentira.
+type DiffStat struct {
+	Additions int
+	Deletions int
+	Files     int
+	Known     bool
+}
+
+// Total es el número de líneas tocadas: la magnitud que ordena el trabajo.
+func (d DiffStat) Total() int { return d.Additions + d.Deletions }
+
 // RepoRef identifica un repositorio dentro de un forge y host concretos.
 type RepoRef struct {
 	Forge   string // "github" | "gitlab" | ...
@@ -106,6 +124,7 @@ type Item struct {
 	State          string // estado crudo del forge: open/merged/closed…
 	ReviewDecision string // decisión de review del forge: APPROVED/…
 	Checks         Checks
+	Diff           DiffStat
 	UpdatedAt      time.Time
 }
 

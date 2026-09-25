@@ -10,23 +10,33 @@ import (
 // lipglossStyle es un alias corto para las firmas de las celdas.
 type lipglossStyle = lipgloss.Style
 
-// Anchos de columna: siempre mayores que su header para que pad() garantice
-// separación entre columnas. ITEM no está aquí porque su ancho sale del
+// Anchos de columna: el ancho es el tamaño total de la ranura, hueco de
+// separación incluido, así que el texto usable es un rune menos (textWidth).
+// Los anchos fijos además superan al header, para que ninguna columna sea más
+// estrecha que su propio título. ITEM no está aquí porque su ancho sale del
 // contenido (ver newRefLayout): solo tiene límites.
 const (
 	colForge  = 14 // "GLab@umane"
 	colTitle  = 40
-	colRole   = 10 // "requested" / "assigned"
-	colState  = 18
+	colRole   = 11 // "review req" (10) + hueco de separación
+	colState  = 18 // "changes requested"
 	colChecks = 8
+	// colDiff Aloja el par compacto de líneas: "+1.2k -6.7k" son 11 runes, el
+	// peor caso que produce la compactación.
+	colDiff = 12
 )
 
 // Límites de la columna ITEM: se dimensiona al sufijo más largo de todo el
 // inbox, acotado para que no se coma TITLE.
 const (
-	itemWidthMin = 6  // "ITEM" (4) + 1: mantiene la separación entre columnas
+	itemWidthMin = 6  // "ITEM" (4) + hueco + 1 rune de texto
 	itemWidthCap = 34 // "subgrupo/proyecto#1234"
 )
+
+// defaultOuterWidth es el ancho de trabajo antes del primer WindowSizeMsg: las
+// cajas se dibujan siempre a un ancho exacto, así que sin este valor el primer
+// render saldría a 0 columnas.
+const defaultOuterWidth = 124
 
 var (
 	styleCursor = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
@@ -56,6 +66,22 @@ var (
 	styleChecksFailing = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	styleChecksPending = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	styleChecksPassing = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+
+	// La columna DIFF va en dos colores dentro de la misma celda: verde lo que
+	// el cambio añade, rojo lo que quita. Es notación de diff, no un juicio —
+	// borrar 900 líneas suele ser justo lo que se quería, así que el rojo no dice
+	// que el cambio sea malo, solo que esas líneas disappear. El color se reserva
+	// para el estado, que sí decide si la acción procede.
+	styleDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+	styleDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	// styleDiffUnknown es el gris de un diffstat que el forge no reportó: no es
+	// un cero, es una ausencia, y no se colorea para que no se confunda con una
+	// cifra.
+	styleDiffUnknown = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	// borderColor es el color del borde de las cajas: gris muy tenue, para que
+	// la estructura se lea sin competir con el contenido.
+	borderColor = lipgloss.Color("238")
 )
 
 // styleForState elige el estilo de la columna de estado.

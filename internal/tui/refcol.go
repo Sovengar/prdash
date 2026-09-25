@@ -33,6 +33,10 @@ type refLayout struct {
 // declara el prefijo que comparten sus ítems y solo pinta el sufijo, así que la
 // columna se dimensiona al sufijo más largo de todas ellas. Se acota a
 // [itemWidthMin, itemWidthCap] para que TITLE conserve su sitio.
+//
+// El ancho se cuenta con el hueco de separación (textWidth): el sufijo más largo
+// tiene que CABER, no caber menos un rune. Sin ese +1, el ítem más largo de la
+// lista quedaría truncado siempre.
 func newRefLayout(sections []inbox.Section) refLayout {
 	l := refLayout{prefix: make(map[model.Section]string, len(sections))}
 	longest := 0
@@ -47,7 +51,7 @@ func newRefLayout(sections []inbox.Section) refLayout {
 		}
 	}
 	l.cols = slices.Clone(tableColumns)
-	l.cols[colRefIdx].width = min(max(longest, itemWidthMin), itemWidthCap)
+	l.cols[colRefIdx].width = min(max(longest+1, itemWidthMin), itemWidthCap)
 	return l
 }
 

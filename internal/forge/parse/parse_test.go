@@ -441,6 +441,138 @@ func TestParseGLGraphQLStringIID(t *testing.T) {
 	}
 }
 
+// TestGLDiffStatsSumsPerFileEntries cubre la trampa de GitLab: `diffStats` no es
+// un agregado sino una entrada POR FICHERO cambiado, así que hay que sumarla.
+// Estos números son los reales de APPCTTI/vsocial/backend/vsocial-api-actuacions
+// !1015, y su endpoint /diffs confirma exactamente los mismos dos ficheros.
+func TestGLDiffStatsSumsPerFileEntries(t *testing.T) {
+	raw := `{"data":{"project":{"mergeRequest":{"iid":"1015","diffStats":[
+		{"additions":40,"deletions":1},{"additions":2,"deletions":0}
+	]}}}}`
+	items, _, err := ParseGLGraphQL(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	d := items[0].Diff
+	if !d.Known {
+		t.Fatalf("diffstat presente debería ser conocido: %+v", d)
+	}
+	if d.Additions != 42 || d.Deletions != 1 || d.Files != 2 {
+		t.Errorf("diffstat = %+v, want +42 -1 en 2 ficheros (sumado, no la primera entrada)", d)
+	}
+	if d.Total() != 43 {
+		t.Errorf("Total = %d, want 43", d.Total())
+	}
+}
+
+// TestGLDiffStatsEmptyVsAbsent separa las dos cosas que un slice vacío puede
+// significar. Presente-pero-vacío es un MR que no toca nada (0/0, conocido);
+// ausente es que la query no lo pidió, como en la API de Todos (desconocido).
+// Confundirlos pintaría un "cambia 0 líneas" donde no se sabe nada.
+func TestGLDiffStatsEmptyVsAbsent(t *testing.T) {
+	withEmpty := `{"data":{"project":{"mergeRequest":{"iid":"7","diffStats":[]}}}}`
+	items, _, err := ParseGLGraphQL(withEmpty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := items[0].Diff; !d.Known || d.Total() != 0 || d.Files != 0 {
+		t.Errorf("diffStats vacío = %+v, want conocido y 0/0", d)
+	}
+
+	without := `{"data":{"project":{"mergeRequest":{"iid":"7"}}}}`
+	items, _, err = ParseGLGraphQL(without)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := items[0].Diff; d.Known {
+		t.Errorf("diffStats ausente = %+v, want desconocido", d)
+	}
+}
+
+// TestGLDiffStatsToleratesStringCounts: la instancia serializa los contadores
+// como número, pero flexInt los acepta igual que el iid, sin tumbar el parseo.
+func TestGLDiffStatsToleratesStringCounts(t *testing.T) {
+	raw := `{"data":{"project":{"mergeRequest":{"iid":"7","diffStats":[{"additions":"3","deletions":"4"}]}}}}`
+	items, _, err := ParseGLGraphQL(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := items[0].Diff; !d.Known || d.Additions != 3 || d.Deletions != 4 {
+		t.Errorf("diffstat = %+v, want +3 -4", d)
+	}
+}
+
+// TestGHDiffStatFromScalarFields: GitHub ya devuelve el diffstat agregado en
+// tres escalares, así que no hay nada que sumar.
+func TestGHDiffStatFromScalarFields(t *testing.T) {
+	raw := `{"data":{"repository":{"pullRequest":{"number":15,"additions":381,"deletions":36,"changedFiles":11}}}}`
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	if d := items[0].Diff; !d.Known || d.Additions != 381 || d.Deletions != 36 || d.Files != 11 {
+		t.Errorf("diffstat = %+v, want +381 -36 en 11 ficheros", d)
+	}
+}
+
+// TestGHDiffStatAbsentIsUnknown: `additions` es `Int!`, así que si el campo no
+// viene es que la respuesta no lo trajo (respaldo REST u otra forma de salida).
+// Reported=false, no un cambio de cero líneas.
+func TestGHDiffStatAbsentIsUnknown(t *testing.T) {
+	raw := `{"data":{"repository":{"pullRequest":{"number":15,"title":"t"}}}}`
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := items[0].Diff; d.Known {
+		t.Errorf("diffstat ausente = %+v, want desconocido", d)
+	}
+}
+
+// TestGHDiffStatZeroIsKnown: un PR sin cambios da 0/0 y eso SÍ es un dato
+// conocido, no un fallo de recogida.
+func TestGHDiffStatZeroIsKnown(t *testing.T) {
+	raw := `{"data":{"repository":{"pullRequest":{"number":15,"additions":0,"deletions":0,"changedFiles":0}}}}`
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := items[0].Diff; !d.Known || d.Total() != 0 {
+		t.Errorf("diffstat 0/0 = %+v, want conocido y total 0", d)
+	}
+}
+
+// TestGLRESTAndTodosHaveNoDiffStat: ni el endpoint REST de merge requests ni la
+// API de Todos traen el diffstat (gitlab-org/gitlab#464260), así que ambos
+// parseos lo dejan desconocido en vez de报告显示 un cero.
+func TestGLRESTAndTodosHaveNoDiffStat(t *testing.T) {
+	mrs, err := ParseGLMRList(`[{"iid":5,"title":"t","references":{"full":"g/p!5"}}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := mrs[0].Diff; d.Known {
+		t.Errorf("REST mr list diffstat = %+v, want desconocido", d)
+	}
+
+	todos, _, err := ParseGLTodos(`[{"id":1,"action_name":"mentioned","target_type":"MergeRequest",
+		"target":{"iid":9,"title":"t","references":{"full":"g/p!9"}}}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(todos) != 1 {
+		t.Fatalf("todos = %d, want 1", len(todos))
+	}
+	if d := todos[0].Diff; d.Known {
+		t.Errorf("todos diffstat = %+v, want desconocido", d)
+	}
+}
+
 // TestFlexInt tolera número, string, nulo y valores no numéricos.
 func TestFlexInt(t *testing.T) {
 	cases := map[string]int{
