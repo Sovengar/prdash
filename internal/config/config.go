@@ -27,6 +27,11 @@ const DirName = "prdash"
 type Keybindings map[string]string
 
 // Commands mapea nombre de comando → argv base (separado por espacios).
+//
+// Además de los comandos de forge (`gh`/`glab`), acepta las claves de pane del
+// orquestador de review: `tuicr`, `hunk` y `agent`. En ese caso el valor es el
+// argv COMPLETO y verbatim del pane (no se le añade nada); sin clave se usa el
+// default del pane. Ver Config.PaneOverride.
 type Commands map[string]string
 
 // GitHubConfig es la config del forge GitHub.
@@ -351,6 +356,17 @@ func (c Config) CmdArgs(action string) []string {
 		raw = DefaultCommands()[action]
 	}
 	return strings.Fields(raw)
+}
+
+// PaneOverride devuelve el argv completo y verbatim de `[commands]` para el
+// pane de una herramienta (`tuicr`/`hunk`/`agent`), si el usuario lo configuró.
+// Un valor ausente o en blanco no es override: el pane usa su default.
+func (c Config) PaneOverride(name string) ([]string, bool) {
+	raw, ok := c.Commands[name]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return nil, false
+	}
+	return strings.Fields(raw), true
 }
 
 // ToolArgs devuelve el argv configurable de una herramienta del orquestador.

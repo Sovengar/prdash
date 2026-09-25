@@ -87,16 +87,16 @@ func TestHostsOfMapsConfiguredHosts(t *testing.T) {
 	}
 }
 
-// TestToolAvailabilityIdempotent comprueba que un argv vacío se reporta como no
-// disponible (pane omitido) y un binario real como disponible.
+// TestToolAvailabilityIdempotent comprueba que un binario vacío se reporta como
+// no disponible (pane omitido) y un binario real como disponible.
 func TestToolAvailabilityIdempotent(t *testing.T) {
-	if binaryAvailable(nil) {
-		t.Fatal("argv vacío no está disponible")
+	if binaryAvailable("") {
+		t.Fatal("un binario vacío no está disponible")
 	}
-	if binaryAvailable([]string{"prdash-bin-inexistente-xyz"}) {
+	if binaryAvailable("prdash-bin-inexistente-xyz") {
 		t.Fatal("un binario inexistente no está disponible")
 	}
-	if !binaryAvailable([]string{"go"}) {
+	if !binaryAvailable("go") {
 		t.Fatal("go debería estar disponible en el entorno de test")
 	}
 }

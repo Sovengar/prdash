@@ -97,7 +97,11 @@ func newHarness(t *testing.T, opts harnessOpts) *harness {
 		Resolver:  resolver,
 		Worktrees: pr,
 		Herdr:     opts.herdr,
-		Tools:     plan.Tools{Tuicr: []string{"tuicr"}, Hunk: []string{"hunk"}, Agent: []string{"opencode"}},
+		Tools: plan.Tools{
+			Tuicr: plan.Tool{Argv: []string{"tuicr"}},
+			Hunk:  plan.Tool{Argv: []string{"hunk"}},
+			Agent: plan.Tool{Argv: []string{"opencode"}},
+		},
 	}
 	return &harness{origin: opts.origin, ref: ref, cloneDir: cloneDir, wtDir: wtDir, resolver: resolver, pr: pr, ex: ex}
 }

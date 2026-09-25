@@ -252,6 +252,52 @@ func TestToolArgs(t *testing.T) {
 	}
 }
 
+func TestPaneOverride(t *testing.T) {
+	cfg := Defaults()
+	if _, ok := cfg.PaneOverride("hunk"); ok {
+		t.Fatal("hunk no debería traer override por defecto")
+	}
+	cfg.Commands["hunk"] = "hunk diff develop...HEAD --watch"
+	got, ok := cfg.PaneOverride("hunk")
+	if !ok {
+		t.Fatal("hunk debería tener override")
+	}
+	want := []string{"hunk", "diff", "develop...HEAD", "--watch"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("override = %v, quiero %v", got, want)
+	}
+	cfg.Commands["agent"] = "   "
+	if _, ok := cfg.PaneOverride("agent"); ok {
+		t.Fatal("un valor en blanco no es override")
+	}
+}
+
+// Un `[commands]` del fichero XDG llega verbatim a las tres claves de pane.
+func TestLoadFromReadsPaneCommands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[commands]\ntuicr = \"tuicr pr\"\nhunk = \"hunk diff main...HEAD\"\nagent = \"claude --model opus\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warn := LoadFrom(path)
+	if warn != "" {
+		t.Fatalf("warning = %q", warn)
+	}
+	for key, want := range map[string]string{
+		"tuicr": "tuicr pr",
+		"hunk":  "hunk diff main...HEAD",
+		"agent": "claude --model opus",
+	} {
+		got, ok := cfg.PaneOverride(key)
+		if !ok {
+			t.Fatalf("%s debería tener override", key)
+		}
+		if strings.Join(got, " ") != want {
+			t.Fatalf("%s = %q, quiero %q", key, strings.Join(got, " "), want)
+		}
+	}
+}
+
 func TestHintBarLines(t *testing.T) {
 	lines := Defaults().HintBarLines()
 	if len(lines) != 2 {

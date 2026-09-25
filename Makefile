@@ -90,5 +90,14 @@ config: ## Crea config.toml si no existe (requiere GITLAB_HOST=host.del.selfmana
 		echo; \
 		echo '[forge.bitbucket]'; \
 		echo 'enabled = false'; \
+		echo; \
+		echo '# Comandos de los panes del review. Si defines una clave, su valor es'; \
+		echo '# el argv COMPLETO y verbatim del pane: no se le añade la URL ni el'; \
+		echo '# target. Sin clave se usa el default (tuicr, hunk, opencode).'; \
+		echo '# La base del diff debe ser ref LOCAL (el clon es bare: main, no origin/main).'; \
+		echo '[commands]'; \
+		echo '# hunk = "hunk diff main...HEAD --watch"'; \
+		echo '# tuicr = "tuicr pr"'; \
+		echo '# agent = "opencode"'; \
 	} > "$(CONFDIR)/config.toml"; \
 	echo "creado: $(CONFDIR)/config.toml"

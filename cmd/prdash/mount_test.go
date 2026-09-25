@@ -1,10 +1,49 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"prdash/internal/config"
+	"prdash/internal/review/plan"
 )
+
+func TestPaneToolUsesVerbatimOverride(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Commands["hunk"] = "hunk diff develop...HEAD --watch"
+
+	tool := paneTool(cfg, "hunk")
+	if !tool.Override {
+		t.Fatalf("hunk debería resolverse como override: %+v", tool)
+	}
+	if got := strings.Join(tool.Argv, " "); got != "hunk diff develop...HEAD --watch" {
+		t.Fatalf("argv = %q", got)
+	}
+}
+
+func TestPaneToolFallsBackToToolsBase(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Tools.Hunk = "myhunk"
+
+	tool := paneTool(cfg, "hunk")
+	if tool.Override {
+		t.Fatalf("sin `[commands]` no debería marcarse override: %+v", tool)
+	}
+	if got := strings.Join(tool.Argv, " "); got != "myhunk" {
+		t.Fatalf("argv = %q", got)
+	}
+}
+
+func TestToolAvailabilityReportsMissingBinary(t *testing.T) {
+	tools := plan.Tools{
+		Tuicr: plan.Tool{Argv: []string{"tuicr"}},
+		Hunk:  plan.Tool{Argv: []string{"definitely-not-a-real-binary-xyz"}},
+		Agent: plan.Tool{Argv: []string{"opencode"}},
+	}
+	if toolAvailability(tools)[string(plan.KindHunk)] {
+		t.Fatal("un binario ausente debería reportarse como no disponible")
+	}
+}
 
 func TestClonePrefixesOf(t *testing.T) {
 	cfg := config.Config{
