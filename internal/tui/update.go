@@ -110,11 +110,12 @@ func (m *Model) releaseReader() {
 // Política de ciclo: el `Item` releído es el estado más reciente que existe del
 // forge (se lee DESPUÉS de la acción), así que se aplica siempre, aunque el
 // ciclo de refresco haya avanzado. Descartarlo revertiría el ítem a un estado
-// anterior; el ciclo solo se registra para diagnóstico.
+// anterior. El ciclo se registra por ítem para que una página capturada antes
+// de la acción no lo pise (ver reconcileFirstPage).
 func (m *Model) applyAction(out forge.Outcome, cycle int) {
-	_ = cycle
 	m.actionBusy = false
 	if out.HasItem {
+		m.actionCycle[out.Item.ID()] = cycle
 		m.applyItemUpdate(out.Item)
 	}
 	switch {

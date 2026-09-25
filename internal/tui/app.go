@@ -162,6 +162,10 @@ type Model struct {
 
 	actionBusy bool
 	denied     map[model.ID]string
+	// actionCycle recuerda, por ítem, el ciclo en que se aplicó una acción.
+	// Sirve para que una página de refresco capturada antes de la acción no
+	// revierta su estado releído (ver reconcileFirstPage).
+	actionCycle map[model.ID]int
 
 	notice string
 	level  noticeLevel
@@ -195,18 +199,19 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 	}
 
 	m := Model{
-		cfg:      cfg,
-		adapters: adapters,
-		byForge:  byForge,
-		streams:  map[streamKey]*stream{},
-		statuses: statuses,
-		denied:   map[model.ID]string{},
-		events:   make(chan event, 256),
-		ctx:      ctx,
-		cancel:   cancel,
-		loading:  true,
-		cycle:    1, // el primer ciclo lo lanza Init
-		readers:  1, // Init arma el primer lector del canal
+		cfg:         cfg,
+		adapters:    adapters,
+		byForge:     byForge,
+		streams:     map[streamKey]*stream{},
+		statuses:    statuses,
+		denied:      map[model.ID]string{},
+		actionCycle: map[model.ID]int{},
+		events:      make(chan event, 256),
+		ctx:         ctx,
+		cancel:      cancel,
+		loading:     true,
+		cycle:       1, // el primer ciclo lo lanza Init
+		readers:     1, // Init arma el primer lector del canal
 	}
 	// Init arma el primer tick si el auto-refresco está habilitado.
 	m.tickPending = cfg.RefreshInterval > 0
@@ -419,7 +424,7 @@ func (m *Model) applyPage(msg pageMsg) {
 	}
 
 	if msg.first {
-		s.items = msg.items
+		s.items = m.reconcileFirstPage(s.items, msg.items, msg.cycle)
 		s.headCursor = msg.next
 	} else {
 		s.items = append(s.items, msg.items...)
@@ -471,6 +476,37 @@ func mergeItem(old, fresh model.Item) model.Item {
 		fresh.ReviewKind = old.ReviewKind
 	}
 	return fresh
+}
+
+// reconcileFirstPage reemplaza la lista con la primera página de un refresco,
+// pero conserva el estado releído de los ítems sobre los que se aplicó una
+// acción en ese ciclo o en uno posterior: la página pudo capturarse antes de la
+// acción y no debe revertirla. El resto de la página sí manda.
+func (m *Model) reconcileFirstPage(old, fresh []model.Item, cycle int) []model.Item {
+	if len(m.actionCycle) == 0 {
+		return fresh
+	}
+	out := make([]model.Item, 0, len(fresh))
+	for _, it := range fresh {
+		if ac, ok := m.actionCycle[it.ID()]; ok && ac >= cycle {
+			if prev, found := findItem(old, it.ID()); found {
+				out = append(out, prev)
+				continue
+			}
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+// findItem busca un ítem por identidad.
+func findItem(items []model.Item, id model.ID) (model.Item, bool) {
+	for _, it := range items {
+		if it.ID() == id {
+			return it, true
+		}
+	}
+	return model.Item{}, false
 }
 
 // rebuild recompone el inbox a partir de los streams y reajusta el cursor.
