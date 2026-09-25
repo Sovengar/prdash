@@ -259,14 +259,20 @@ func sendEvent(ctx context.Context, ch chan<- event, ev event) {
 }
 
 // beginRefresh marca el arranque de un ciclo: incrementa el contador (para
-// descartar eventos viejos), deja los forges en carga y limpia sus warnings.
-// Devuelve el modelo actualizado y el Cmd que lanza las consultas.
+// descartar eventos viejos), deja los forges en carga, limpia sus warnings y
+// reinicia la paginación de cada lista. El `more` anterior es residuo del ciclo
+// que acaba de terminar (si no, una página perdida dejaría el indicador pegado
+// y el auto-refresco pausado para siempre); las páginas nuevas lo volverán a
+// marcar. Devuelve el modelo actualizado y el Cmd que lanza las consultas.
 func (m *Model) beginRefresh() (Model, tea.Cmd) {
 	m.loading = true
 	m.cycle++
 	for _, st := range m.statuses {
 		st.loading = true
 		st.warnings = nil
+	}
+	for _, s := range m.streams {
+		s.more = false
 	}
 	return *m, m.launchRefresh(m.cycle)
 }
@@ -293,7 +299,10 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 			wg.Add(1)
 			go func(a forge.Adapter) {
 				defer wg.Done()
-				streamForge(ctx, events, a, cycle, prev)
+				// La consulta se acota por timeout; la EMISIÓN va con el ctx
+				// de la app para que un timeout no descarte páginas ni el fin
+				// de un forge (eventos críticos) y cuelgue el ciclo.
+				streamForge(ctx, appCtx, events, a, cycle, prev)
 			}(a)
 		}
 		wg.Wait()
@@ -305,15 +314,19 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 // streamForge consulta un forge y emite sus páginas, aplicando el corte del
 // refresco incremental por cursor: si la cabecera de una lista no cambió, se
 // emite un mensaje "unchanged" y no se sigue paginando.
-func streamForge(ctx context.Context, events chan<- event, a forge.Adapter, cycle int, prev map[streamKey]streamHead) {
-	sendEvent(ctx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(ctx)})
-	forge.Stream(ctx, a, func(p forge.PageResult) bool {
+//
+// queryCtx acota la consulta (timeout, cancelación); emitCtx acota la entrega
+// de eventos. Los eventos son críticos: con emitCtx (el de la app) no se
+// descartan al vencer el timeout de la consulta.
+func streamForge(queryCtx, emitCtx context.Context, events chan<- event, a forge.Adapter, cycle int, prev map[streamKey]streamHead) {
+	sendEvent(emitCtx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(queryCtx)})
+	forge.Stream(queryCtx, a, func(p forge.PageResult) bool {
 		key := streamKey{forge: a.Forge(), section: p.Query.Section, kind: p.Query.ReviewKind}
 		if p.First && unchangedHead(prev[key], forge.Page{Next: p.Next, More: p.More}) {
-			sendEvent(ctx, events, pageMsg{cycle: cycle, key: key, unchanged: true})
+			sendEvent(emitCtx, events, pageMsg{cycle: cycle, key: key, unchanged: true})
 			return false
 		}
-		sendEvent(ctx, events, pageMsg{
+		sendEvent(emitCtx, events, pageMsg{
 			cycle:    cycle,
 			key:      key,
 			items:    p.Items,
@@ -324,7 +337,7 @@ func streamForge(ctx context.Context, events chan<- event, a forge.Adapter, cycl
 		})
 		return true
 	})
-	sendEvent(ctx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
+	sendEvent(emitCtx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
 }
 
 // tickCmd programa el siguiente refresco automático. Devuelve nil si el
@@ -356,20 +369,16 @@ func (m *Model) tickInterval() time.Duration {
 	return base + m.backoff
 }
 
-// paused indica si el auto-refresco debe esperar: hay una acción en curso, un
-// refresco activo o paginación pendiente.
+// paused indica si el auto-refresco debe esperar: hay una acción en curso o un
+// refresco activo.
+//
+// La paginación no se consulta aquí a propósito: mientras se pagina de verdad
+// el ciclo sigue en vuelo (`loading`), así que ya está pausado. Un `more` que
+// sobrevive al fin del ciclo es residuo (p. ej. la página que lo cerraba se
+// perdió o el forge cortó por rate limit): mirarlo congelaría el tick para
+// siempre y el inbox no volvería a refrescar.
 func (m *Model) paused() bool {
-	return m.loading || m.actionBusy || m.paginating()
-}
-
-// paginating indica si alguna lista tiene páginas pendientes.
-func (m *Model) paginating() bool {
-	for _, s := range m.streams {
-		if s.more {
-			return true
-		}
-	}
-	return false
+	return m.loading || m.actionBusy
 }
 
 // sectionLoadingMore indica si una sección tiene páginas pendientes.
