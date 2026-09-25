@@ -5,10 +5,11 @@ BINARY  := prdash
 PKG     := ./cmd/prdash
 BINDIR  ?= $(HOME)/.local/bin
 CONFDIR ?= $(HOME)/.config/prdash
+PLUGIN  := $(CURDIR)/plugin/herdr
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path
+.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path plugin-link plugin-unlink
 
 help: ## Muestra las tareas disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -32,16 +33,25 @@ run: ## Abre la TUI
 print: ## Ejecuta el modo --print (sin TUI, para comprobar el pipeline)
 	go run $(PKG) --print
 
-test: ## Runner completo: build + vet + test
+test: ## Runner completo: build + vet + gofmt + test con -race
 	go build ./...
 	go vet ./...
-	go test ./...
+	@fmt_out=$$(gofmt -l .); if [ -n "$$fmt_out" ]; then \
+		echo "gofmt pendiente en:"; echo "$$fmt_out"; exit 1; \
+	fi
+	go test -race ./...
 
 fmt: ## Formatea el código
 	gofmt -w .
 
 vet: ## Analiza el código
 	go vet ./...
+
+plugin-link: build ## Enlaza el plugin de desarrollo en Herdr (herdr plugin link)
+	herdr plugin link "$(PLUGIN)"
+
+plugin-unlink: ## Desenlaza el plugin de desarrollo de Herdr
+	herdr plugin unlink prdash
 
 tidy: ## Sincroniza go.mod/go.sum
 	go mod tidy
