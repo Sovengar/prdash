@@ -3,7 +3,7 @@
 - **Estado**: Accepted
 - **Fecha**: 2026-09-24
 - **Decisor**: usuario (buble)
-- **Alcance**: prdash MVP, fase F2 (ver `docs/planning/0001-mvp/`)
+- **Alcance**: prdash MVP, fase F2 (ver `docs/planning/archive/0001-mvp/`)
 - **Patrón de nombres**: `docs/adr/NNNN-slug.md`
 
 ## Contexto
