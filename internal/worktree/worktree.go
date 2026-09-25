@@ -7,10 +7,8 @@ package worktree
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"prdash/internal/gitcmd"
@@ -112,33 +110,14 @@ func (g *GitDirect) Remove(ctx context.Context, id string) error {
 	return nil
 }
 
-// List escanea la raíz y devuelve los worktrees enlazados, ordenados por ruta.
+// List escanea la raíz y devuelve los worktrees con ownership prdash,
+// ordenados por ruta.
 func (g *GitDirect) List(ctx context.Context) []Worktree {
-	if g.Base == "" {
-		return nil
+	entries := g.Audit(ctx)
+	out := make([]Worktree, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Worktree)
 	}
-	var out []Worktree
-	_ = filepath.WalkDir(g.Base, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || !d.IsDir() {
-			return nil
-		}
-		if d.Name() == ".git" {
-			return fs.SkipDir
-		}
-		if !isLinkedWorktree(path) {
-			return nil
-		}
-		branch, _ := g.git.Run(ctx, path, "rev-parse", "--abbrev-ref", "HEAD")
-		out = append(out, Worktree{
-			ID:     path,
-			Label:  filepath.Base(path),
-			Path:   path,
-			Branch: strings.TrimSpace(branch),
-			Repo:   mainRepoOf(path),
-		})
-		return fs.SkipDir
-	})
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out
 }
 
