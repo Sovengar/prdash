@@ -21,6 +21,7 @@ import (
 	"prdash/internal/inbox"
 	"prdash/internal/review/executor"
 	"prdash/internal/selection"
+	"prdash/internal/state"
 )
 
 // event es el mensaje unificado del canal de trabajo en segundo plano.
@@ -67,6 +68,9 @@ type notifyMsg struct {
 	text  string
 	level noticeLevel
 }
+
+// toastTickMsg dispara la poda de los avisos caducados.
+type toastTickMsg struct{}
 
 // tickMsg dispara el refresco automático.
 type tickMsg struct{}
@@ -158,6 +162,10 @@ type Model struct {
 	inbox    inbox.Inbox
 
 	cursor int
+	// scroll es la primera línea visible de la lista. No lo reajusta la vista
+	// (View no puede mutar el modelo): lo mantienen syncScroll, al mover el
+	// cursor, y rebuild, cuando llegan datos nuevos.
+	scroll int
 
 	detailOpen bool
 	detailID   model.ID
@@ -179,13 +187,18 @@ type Model struct {
 
 	actionBusy bool
 	denied     map[model.ID]string
+	// selfDenied son los ítems cuya acción de approve no aplica por ser del
+	// propio usuario. A diferencia de `denied` (que el forge impone y un
+	// refresco exitoso borra), esto es una regla local y determinista: se
+	// deriva del ítem y del login del viewer en cada render, no se guarda.
+	selfDenied map[model.ID]string
 	// actionCycle recuerda, por ítem, el ciclo en que se aplicó una acción.
 	// Sirve para que una página de refresco capturada antes de la acción no
 	// revierta su estado releído (ver reconcileFirstPage).
 	actionCycle map[model.ID]int
 
-	notice string
-	level  noticeLevel
+	// toast es la pila de avisos transitorios que se superpone a la vista.
+	toast *toastManager
 
 	cycle int
 
@@ -234,8 +247,10 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		streams:     map[streamKey]*stream{},
 		statuses:    statuses,
 		denied:      map[model.ID]string{},
+		selfDenied:  map[model.ID]string{},
 		actionCycle: map[model.ID]int{},
 		events:      make(chan event, 256),
+		toast:       newToastManager(),
 		ctx:         ctx,
 		cancel:      cancel,
 		loading:     true,
@@ -291,7 +306,17 @@ func (m Model) Init() tea.Cmd {
 		waitForEvent(m.events),
 		m.spinner.Tick,
 		m.tickCmd(),
+		tickToast(),
 	)
+}
+
+// tickToast agenda el siguiente tick de caducidad de los avisos. No consume el
+// canal de eventos (viene de tea.Every), así que no altera el invariante de un
+// único lector.
+func tickToast() tea.Cmd {
+	return tea.Every(toastTickInterval, func(time.Time) tea.Msg {
+		return toastTickMsg{}
+	})
 }
 
 // waitForEvent lee UN evento del canal: el patrón de Bubbletea es devolver un
@@ -474,6 +499,16 @@ func (m *Model) applyPage(msg pageMsg) {
 		return
 	}
 
+	// La sección y el tipo de review los conoce la TUI por la clave del stream:
+	// se sellan aquí para que las reglas que dependen de ellos (el veto de
+	// aprobar lo propio) no dependan de que cada adapter los estampe.
+	for i := range msg.items {
+		msg.items[i].Section = msg.key.section
+		if msg.key.section == model.SectionReview {
+			msg.items[i].ReviewKind = msg.key.kind
+		}
+	}
+
 	// Un ítem visto en un refresco exitoso deja de estar denegado: puede que
 	// los permisos ya estén (o el usuario reintente con estado renovado).
 	for i := range msg.items {
@@ -569,7 +604,11 @@ func findItem(items []model.Item, id model.ID) (model.Item, bool) {
 // rebuild recompone el inbox a partir de los streams y reajusta el cursor.
 func (m *Model) rebuild() {
 	m.inbox = inbox.Build(m.forgeResults())
+	m.refreshSelfDenied()
 	m.clampCursor()
+	// Un refresco puede cambiar cuántas líneas ocupa cada sección: el
+	// desplazamiento se reacomoda para no dejar el cursor fuera de la ventana.
+	m.syncScroll()
 	m.syncSelection()
 }
 
@@ -610,6 +649,30 @@ func (m *Model) streamItems(forgeName string, section model.Section, kind model.
 		return nil
 	}
 	return s.items
+}
+
+// viewerLogin devuelve el login con el que el usuario está autenticado en un
+// forge, o "" si el adapter no lo conoce. Viene del probe de sesión, que ya se
+// hace en cada refresco.
+func (m *Model) viewerLogin(forgeName string) string {
+	if st := m.statuses[forgeName]; st != nil {
+		return st.auth.Login
+	}
+	return ""
+}
+
+// refreshSelfDenied recalcula qué ítems no admiten approve por ser del propio
+// usuario. Se deriva del ítem y del login del viewer, así que un refresco que
+// traiga el ítem de nuevo lo vuelve a marcar: no depende de que nadie se acuerde
+// de limpiarlo. El veto de merge no existe (el autor sí puede mergear).
+func (m *Model) refreshSelfDenied() {
+	denied := make(map[model.ID]string)
+	for _, it := range m.rows() {
+		if ok, reason := state.CanApprove(it, m.viewerLogin(it.Forge)); !ok {
+			denied[it.ID()] = reason
+		}
+	}
+	m.selfDenied = denied
 }
 
 // clampCursor mantiene el cursor dentro de las filas navegables.
@@ -678,7 +741,7 @@ func problemText(forgeName string, w model.Warning) string {
 	if w.Kind == "degraded" {
 		return fmt.Sprintf("%s: %s", forgeName, w.Msg)
 	}
-	return fmt.Sprintf("%s: no se pudo consultar (%s)", forgeName, problemLabel(w.Kind))
+	return fmt.Sprintf("%s: could not be queried (%s)", forgeName, problemLabel(w.Kind))
 }
 
 // hasDegraded indica si algún warning marca datos parciales.
@@ -695,17 +758,17 @@ func hasDegraded(warns []model.Warning) bool {
 func problemLabel(kind string) string {
 	switch kind {
 	case "auth":
-		return "sin autenticar"
+		return "not authenticated"
 	case "timeout":
 		return "timeout"
 	case "ratelimit":
-		return "límite de peticiones"
+		return "rate limited"
 	case "parse":
 		return "respuesta ilegible"
 	case "unsupported":
 		return "no soportado"
 	case "network":
-		return "sin conexión"
+		return "no connection"
 	default:
 		return kind
 	}
@@ -714,18 +777,18 @@ func problemLabel(kind string) string {
 // lastRefreshLabel resume el momento de la última actualización de una fuente.
 func lastRefreshLabel(since time.Time, now time.Time) string {
 	if since.IsZero() {
-		return "sin datos"
+		return "no data"
 	}
 	d := now.Sub(since)
 	switch {
 	case d < time.Second:
-		return "ahora"
+		return "now"
 	case d < time.Minute:
-		return fmt.Sprintf("hace %ds", int(d.Seconds()))
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
 	case d < time.Hour:
-		return fmt.Sprintf("hace %dm", int(d.Minutes()))
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
 	default:
-		return fmt.Sprintf("hace %dh", int(d.Hours()))
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
 	}
 }
 
@@ -829,8 +892,27 @@ func appendWarnings(dst, src []model.Warning) []model.Warning {
 	return dst
 }
 
-// setNotice fija el aviso de la cabecera.
+// toastForLevel traduce el nivel de aviso interno al del toast. levelNone no
+// produce nada: un aviso sin nivel no llega a pintarse.
+func toastForLevel(level noticeLevel) (toastLevel, bool) {
+	switch level {
+	case levelOK:
+		return toastSuccess, true
+	case levelError:
+		return toastError, true
+	case levelWarn:
+		return toastWarning, true
+	case levelInfo:
+		return toastInfo, true
+	default:
+		return toastInfo, false
+	}
+}
+
+// setNotice lanza el aviso como toast: se dibuja encima de la vista y caduca
+// solo, en vez de ocupar la cabecera hasta que lo sustituya otro evento.
 func (m *Model) setNotice(text string, level noticeLevel) {
-	m.notice = text
-	m.level = level
+	if lvl, ok := toastForLevel(level); ok {
+		m.toast.show(text, lvl)
+	}
 }

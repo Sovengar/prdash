@@ -70,24 +70,24 @@ func NewGitDirect(base string) *GitDirect {
 // creación de la rama: los recibe ya resueltos.
 func (g *GitDirect) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	if spec.Repo == "" || spec.Branch == "" || spec.Path == "" {
-		return Worktree{}, fmt.Errorf("worktree: spec incompleto (repo, rama y destino son obligatorios)")
+		return Worktree{}, fmt.Errorf("worktree: incomplete spec (repo, branch and destination are required)")
 	}
 
 	if wt, ok, err := g.inspect(ctx, spec.Path); err != nil {
 		return Worktree{}, err
 	} else if ok {
 		if wt.Branch != spec.Branch {
-			return Worktree{}, fmt.Errorf("worktree: %s ya aloja la rama %s, no %s", spec.Path, wt.Branch, spec.Branch)
+			return Worktree{}, fmt.Errorf("worktree: %s already holds branch %s, not %s", spec.Path, wt.Branch, spec.Branch)
 		}
 		return wt, nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(spec.Path), 0o755); err != nil {
-		return Worktree{}, fmt.Errorf("preparar el destino del worktree %s: %w", spec.Path, err)
+		return Worktree{}, fmt.Errorf("prepare the worktree destination %s: %w", spec.Path, err)
 	}
 	if _, err := g.git.Run(ctx, spec.Repo, "worktree", "add", "--quiet", spec.Path, spec.Branch); err != nil {
 		g.cleanPartial(spec.Path)
-		return Worktree{}, fmt.Errorf("crear el worktree en %s: %w", spec.Path, err)
+		return Worktree{}, fmt.Errorf("create the worktree at %s: %w", spec.Path, err)
 	}
 
 	label := spec.Label
@@ -111,7 +111,7 @@ func (g *GitDirect) Remove(ctx context.Context, id string) error {
 	}
 	repo := mainRepoOf(id)
 	if repo == "" {
-		return fmt.Errorf("worktree: no se pudo localizar el repo de %s", id)
+		return fmt.Errorf("worktree: could not locate the repo for %s", id)
 	}
 	if _, err := g.git.Run(ctx, repo, "worktree", "remove", "--force", id); err == nil {
 		return nil
@@ -122,7 +122,7 @@ func (g *GitDirect) Remove(ctx context.Context, id string) error {
 		_, _ = g.git.Run(ctx, repo, "worktree", "prune")
 	}
 	if err := os.RemoveAll(id); err != nil {
-		return fmt.Errorf("borrar el checkout del worktree %s: %w", id, err)
+		return fmt.Errorf("remove the worktree checkout %s: %w", id, err)
 	}
 	return nil
 }
@@ -131,12 +131,12 @@ func (g *GitDirect) Remove(ctx context.Context, id string) error {
 // gestionada. Es la barrera que garantiza que la limpieza nunca toca ajenos.
 func (g *GitDirect) removablePath(id string) error {
 	if !Owned(filepath.Base(id), id) {
-		return fmt.Errorf("worktree: %s no es un worktree de prdash; no se toca", id)
+		return fmt.Errorf("worktree: %s is not a prdash worktree; leaving it alone", id)
 	}
 	if g.Base != "" {
 		rel, err := filepath.Rel(g.Base, id)
 		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("worktree: %s queda fuera de la raíz gestionada", id)
+			return fmt.Errorf("worktree: %s is outside the managed root", id)
 		}
 	}
 	return nil
@@ -164,7 +164,7 @@ func (g *GitDirect) inspect(ctx context.Context, path string) (Worktree, bool, e
 		return Worktree{}, false, nil
 	}
 	if info.IsDir() {
-		return Worktree{}, false, fmt.Errorf("worktree: %s ya existe y no es un worktree enlazado", path)
+		return Worktree{}, false, fmt.Errorf("worktree: %s already exists and is not a linked worktree", path)
 	}
 	branch, _ := g.git.Run(ctx, path, "rev-parse", "--abbrev-ref", "HEAD")
 	return Worktree{

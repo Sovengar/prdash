@@ -39,9 +39,10 @@ type FakeAdapter struct {
 	// ActionWarnings responde a Approve/Merge por "approve:proyecto#número".
 	ActionWarnings map[string][]model.Warning
 
-	mu        sync.Mutex
-	calls     map[FakeKey]int
-	listCalls int
+	mu          sync.Mutex
+	calls       map[FakeKey]int
+	listCalls   int
+	actionCalls map[string]int
 }
 
 // Cumple el contrato en compilación.
@@ -98,12 +99,32 @@ func (f *FakeAdapter) ItemState(_ context.Context, ref model.RepoRef, number int
 
 // Approve devuelve los warnings configurados para la acción.
 func (f *FakeAdapter) Approve(_ context.Context, ref model.RepoRef, number int) []model.Warning {
-	return f.ActionWarnings["approve:"+ref.Project+"#"+strconv.Itoa(number)]
+	return f.record("approve", ref, number)
 }
 
 // Merge devuelve los warnings configurados para la acción.
 func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int) []model.Warning {
-	return f.ActionWarnings["merge:"+ref.Project+"#"+strconv.Itoa(number)]
+	return f.record("merge", ref, number)
+}
+
+// record cuenta la acción y devuelve sus warnings: los tests pueden afirmar que
+// una acción NO llegó a lanzarse.
+func (f *FakeAdapter) record(kind string, ref model.RepoRef, number int) []model.Warning {
+	key := kind + ":" + ref.Project + "#" + strconv.Itoa(number)
+	f.mu.Lock()
+	if f.actionCalls == nil {
+		f.actionCalls = map[string]int{}
+	}
+	f.actionCalls[key]++
+	f.mu.Unlock()
+	return f.ActionWarnings[key]
+}
+
+// ActionCallCount devuelve cuántas veces se llamó a Approve/Merge sobre un ítem.
+func (f *FakeAdapter) ActionCallCount(kind string, ref model.RepoRef, number int) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.actionCalls[kind+":"+ref.Project+"#"+strconv.Itoa(number)]
 }
 
 // ItemKey compone la clave de ItemState/acciones para un ítem.

@@ -129,12 +129,12 @@ func (r *Resolver) EnsureBare(ctx context.Context, ref model.RepoRef) (string, e
 		return dest, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return "", fmt.Errorf("preparar el clon bare %s: %w", dest, err)
+		return "", fmt.Errorf("prepare the bare clone %s: %w", dest, err)
 	}
 	if _, err := os.Stat(dest); err == nil {
 		// Restos de un intento previo: se limpian antes de reintentar.
 		if err := os.RemoveAll(dest); err != nil {
-			return "", fmt.Errorf("limpiar el clon bare incompleto %s: %w", dest, err)
+			return "", fmt.Errorf("clean up the incomplete bare clone %s: %w", dest, err)
 		}
 	}
 
@@ -146,7 +146,7 @@ func (r *Resolver) EnsureBare(ctx context.Context, ref model.RepoRef) (string, e
 	}
 	if err := os.Rename(tmp, dest); err != nil {
 		os.RemoveAll(tmp)
-		return "", fmt.Errorf("publicar el clon bare %s: %w", dest, err)
+		return "", fmt.Errorf("publish the bare clone %s: %w", dest, err)
 	}
 	return dest, nil
 }
@@ -167,19 +167,19 @@ func (r *Resolver) RemoveBare(ref model.RepoRef) error {
 func (r *Resolver) FetchReviewRef(ctx context.Context, repo string, it model.Item) (string, error) {
 	src, ok := ReviewRef(it)
 	if !ok {
-		return "", fmt.Errorf("forge %q sin ref de review conocido", it.Forge)
+		return "", fmt.Errorf("forge %q has no known review ref", it.Forge)
 	}
 	branch := ReviewBranch(it.Number)
 	track := fmt.Sprintf("refs/prdash/%s/%d", it.Forge, it.Number)
 
 	if _, err := r.git.Run(ctx, repo, "fetch", "--no-tags", "origin", "+"+src+":"+track); err != nil {
-		return "", fmt.Errorf("traer %s de %s: %w", src, it.Ref.Project, err)
+		return "", fmt.Errorf("fetch %s from %s: %w", src, it.Ref.Project, err)
 	}
 	if r.branchExists(ctx, repo, branch) {
 		return branch, nil
 	}
 	if _, err := r.git.Run(ctx, repo, "branch", branch, track); err != nil {
-		return "", fmt.Errorf("crear la rama local %s: %w", branch, err)
+		return "", fmt.Errorf("create the local branch %s: %w", branch, err)
 	}
 	return branch, nil
 }

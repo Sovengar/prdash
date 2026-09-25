@@ -146,7 +146,7 @@ type ghGraphQLResp struct {
 func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 	var resp ghGraphQLResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "JSON inválido", Err: err}
+		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "invalid JSON", Err: err}
 	}
 	if len(resp.Errors) > 0 {
 		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: resp.Errors[0].Message}
@@ -166,7 +166,7 @@ func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 	case resp.Data.Repository != nil && resp.Data.Repository.PullRequest != nil:
 		nodes = []ghPRNode{*resp.Data.Repository.PullRequest}
 	default:
-		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "respuesta sin datos de pull requests"}
+		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "response without pull request data"}
 	}
 
 	items := make([]model.Item, 0, len(nodes))
@@ -297,7 +297,7 @@ type ghSearchIssuesResp struct {
 func ParseGHAuthored(raw string) ([]model.Item, error) {
 	var resp ghSearchIssuesResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		return nil, &Error{Tool: "gh-search", Msg: "JSON inválido", Err: err}
+		return nil, &Error{Tool: "gh-search", Msg: "invalid JSON", Err: err}
 	}
 
 	items := make([]model.Item, 0, len(resp.Items))
@@ -338,7 +338,7 @@ type ghCheck struct {
 func ParseGHChecks(raw string) (model.Checks, error) {
 	var checks []ghCheck
 	if err := json.Unmarshal([]byte(raw), &checks); err != nil {
-		return model.Checks{}, &Error{Tool: "gh-checks", Msg: "JSON inválido", Err: err}
+		return model.Checks{}, &Error{Tool: "gh-checks", Msg: "invalid JSON", Err: err}
 	}
 
 	var c model.Checks
@@ -428,7 +428,7 @@ type glConn struct {
 func ParseGLGraphQL(raw string) ([]model.Item, PageInfo, error) {
 	var resp glGraphQLResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		return nil, PageInfo{}, &Error{Tool: "gl-graphql", Msg: "JSON inválido", Err: err}
+		return nil, PageInfo{}, &Error{Tool: "gl-graphql", Msg: "invalid JSON", Err: err}
 	}
 	if len(resp.Errors) > 0 {
 		return nil, PageInfo{}, &Error{Tool: "gl-graphql", Msg: resp.Errors[0].Message}
@@ -534,7 +534,7 @@ type glBasicMR struct {
 func ParseGLMRList(raw string) ([]model.Item, error) {
 	var list []glBasicMR
 	if err := json.Unmarshal([]byte(raw), &list); err != nil {
-		return nil, &Error{Tool: "gl-mr-list", Msg: "JSON inválido", Err: err}
+		return nil, &Error{Tool: "gl-mr-list", Msg: "invalid JSON", Err: err}
 	}
 
 	items := make([]model.Item, 0, len(list))
@@ -591,7 +591,7 @@ type glTodo struct {
 func ParseGLTodos(raw string) ([]model.Item, int, error) {
 	var todos []glTodo
 	if err := json.Unmarshal([]byte(raw), &todos); err != nil {
-		return nil, 0, &Error{Tool: "gl-todos", Msg: "JSON inválido", Err: err}
+		return nil, 0, &Error{Tool: "gl-todos", Msg: "invalid JSON", Err: err}
 	}
 
 	items := []model.Item{}

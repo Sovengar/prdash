@@ -138,6 +138,39 @@ exit 1
 	}
 }
 
+// TestAuthExposesLogin: la salida de `glab auth status` que ya se pedía para
+// comprobar la sesión trae el usuario; se reutiliza para reconocer los ítems
+// propios sin ninguna llamada extra.
+func TestAuthExposesLogin(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "glab", `#!/bin/sh
+cat <<'OUT'
+umane.emeal.nttdata.com
+  ✓ Logged in to umane.emeal.nttdata.com as jogarrui (/home/u/.config/glab-cli/config.yml)
+  ✓ Git operations for umane.emeal.nttdata.com configured to use https protocol.
+  - Active account: true
+OUT
+`)
+	a := New("umane.emeal.nttdata.com", script)
+	auth := a.Auth(context.Background())
+	if !auth.OK {
+		t.Fatalf("Auth = %+v", auth)
+	}
+	if auth.Login != "jogarrui" {
+		t.Errorf("Login = %q, want %q", auth.Login, "jogarrui")
+	}
+}
+
+// TestAuthLoginEmptyWhenUnknown: si la salida no trae login, se deja vacío y
+// quien decide es la regla de sección, no una suposición.
+func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "glab", "#!/bin/sh\necho 'glab: logged in'\n")
+	if login := New("h.example", script).Auth(context.Background()).Login; login != "" {
+		t.Errorf("Login = %q, want vacío", login)
+	}
+}
+
 // writeScript crea un binario falso ejecutable y devuelve su ruta.
 func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()

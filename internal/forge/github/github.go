@@ -6,6 +6,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -49,17 +50,34 @@ func (a *Adapter) Host() string { return a.host }
 
 // Auth comprueba la sesión de `gh` contra el host.
 func (a *Adapter) Auth(ctx context.Context) model.AuthState {
-	if _, err := a.runner.Run(ctx, "auth", "status", "--hostname", a.host); err != nil {
+	out, err := a.runner.Run(ctx, "auth", "status", "--hostname", a.host)
+	if err != nil {
 		return model.AuthState{Forge: ForgeName, OK: false, Reason: err.Error()}
 	}
-	return model.AuthState{Forge: ForgeName, OK: true}
+	return model.AuthState{Forge: ForgeName, OK: true, Login: loginFromAuthStatus(out)}
 }
+
+// loginFromAuthStatus extrae el login de la sesión de la salida de
+// `gh auth status`, que ya se pedía para comprobar la sesión y se descartaba.
+// Así el viewer se conoce sin ninguna llamada extra.
+func loginFromAuthStatus(out string) string {
+	m := loginRe.FindStringSubmatch(out)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+// loginRe captura el login de "Logged in to <host> account <login> (<path>)".
+// El grupo exige un espacio tras "account" para no confundirlo con la línea
+// "Active account: true", que también contiene la palabra.
+var loginRe = regexp.MustCompile(`account ([^(\s]+)`)
 
 // List devuelve una página de la lista pedida.
 func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
 	qualifier, ok := qualifierFor(q)
 	if !ok {
-		return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("lista no soportada: %s", q.Section))}
+		return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("unsupported list: %s", q.Section))}
 	}
 
 	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+searchQuery(qualifier, q.Cursor))
@@ -86,7 +104,7 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	owner, name := splitProject(ref.Project)
 	if owner == "" || name == "" {
-		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("referencia de repo inválida: %q", ref.Project))}
+		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("invalid repo reference: %q", ref.Project))}
 	}
 
 	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+prQuery(owner, name, number))
@@ -138,7 +156,7 @@ func (a *Adapter) checks(ctx context.Context, project string, number int) (model
 	if err != nil {
 		return model.Checks{}, []model.Warning{a.warn("", tool.Kind(err), err)}
 	}
-	return model.Checks{}, []model.Warning{a.warn("", "parse", fmt.Errorf("salida de checks ilegible"))}
+	return model.Checks{}, []model.Warning{a.warn("", "parse", fmt.Errorf("unreadable checks output"))}
 }
 
 // restAuthored consulta el respaldo REST (una sola página) de los PRs propios.
@@ -186,7 +204,7 @@ func (a *Adapter) degraded(section model.Section, err error) model.Warning {
 		Forge:   ForgeName,
 		Section: section,
 		Kind:    "degraded",
-		Msg:     "GraphQL no disponible; datos parciales vía REST (sin ramas ni checks): " + tool.FirstLine(err.Error()),
+		Msg:     "GraphQL unavailable; partial data via REST (no branches or checks): " + tool.FirstLine(err.Error()),
 	}
 }
 

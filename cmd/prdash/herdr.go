@@ -31,7 +31,7 @@ const mountTimeout = 5 * time.Minute
 // runHerdr despacha los subcomandos del plugin y devuelve el código de salida.
 func runHerdr(cfg config.Config, adapters []forge.Adapter, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "prdash herdr: falta subcomando (inbox|mount|link)")
+		fmt.Fprintln(os.Stderr, "prdash herdr: missing subcommand (inbox|mount|link)")
 		return 2
 	}
 	switch args[0] {
@@ -42,7 +42,7 @@ func runHerdr(cfg config.Config, adapters []forge.Adapter, args []string) int {
 	case "link":
 		return runHerdrLink(cfg)
 	default:
-		fmt.Fprintf(os.Stderr, "prdash herdr: subcomando desconocido %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "prdash herdr: unknown subcommand %q\n", args[0])
 		return 2
 	}
 }
@@ -71,7 +71,7 @@ func runHerdrMount(cfg config.Config, args []string) int {
 func runHerdrLink(cfg config.Config) int {
 	target, ok := reviewTarget(nil, os.Getenv)
 	if !ok {
-		fmt.Fprintln(os.Stderr, "prdash herdr link: el contexto no trae una URL de PR/MR clicada")
+		fmt.Fprintln(os.Stderr, "prdash herdr link: the context carries no clicked PR/MR URL")
 		return 1
 	}
 	return mountReview(cfg, target)
@@ -105,18 +105,18 @@ func mountFromTarget(cfg config.Config, args []string, getenv func(string) strin
 func selectedReview(statePath func() (string, error), now time.Time) (model.Item, error) {
 	path, err := statePath()
 	if err != nil {
-		return model.Item{}, fmt.Errorf("no se pudo resolver el estado de selección: %w", err)
+		return model.Item{}, fmt.Errorf("could not resolve the selection state: %w", err)
 	}
 	sel, ok := selection.Load(path)
 	if !ok {
-		return model.Item{}, fmt.Errorf("no hay un ítem seleccionado en la TUI; abre el inbox de prdash y selecciona un PR/MR")
+		return model.Item{}, fmt.Errorf("no item selected in the TUI; open the prdash inbox and select a PR/MR")
 	}
 	if !sel.Fresh(now, selection.MaxAge) {
-		return model.Item{}, fmt.Errorf("la selección de la TUI está obsoleta; vuelve a seleccionar el PR/MR")
+		return model.Item{}, fmt.Errorf("the TUI selection is stale; select the PR/MR again")
 	}
 	it, ok := sel.Item()
 	if !ok {
-		return model.Item{}, fmt.Errorf("la selección de la TUI está incompleta o es ilegible")
+		return model.Item{}, fmt.Errorf("the TUI selection is incomplete or unreadable")
 	}
 	return it, nil
 }
@@ -135,7 +135,7 @@ func mountReview(cfg config.Config, target string) int {
 func resolveTargetItem(cfg config.Config, target string) (model.Item, bool) {
 	it, ok := reviewItem(target, hostsOf(cfg))
 	if !ok {
-		fmt.Fprintf(os.Stderr, "prdash herdr: %q no es una URL de PR/MR reconocida\n", target)
+		fmt.Fprintf(os.Stderr, "prdash herdr: %q is not a recognized PR/MR URL\n", target)
 		return model.Item{}, false
 	}
 	return it, true
@@ -147,14 +147,14 @@ func mountItem(cfg config.Config, it model.Item) int {
 	defer cancel()
 	res, err := buildExecutor(cfg).Mount(ctx, it)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "prdash herdr: no se pudo montar review:", err)
+		fmt.Fprintln(os.Stderr, "prdash herdr: could not mount review:", err)
 		return 1
 	}
 
 	if res.Herdr {
-		fmt.Printf("review montado: %d panes en %s\n", len(res.Plan.Panes), res.Worktree.Path)
+		fmt.Printf("review mounted: %d panes in %s\n", len(res.Plan.Panes), res.Worktree.Path)
 	} else {
-		fmt.Printf("worktree montado en %s; el layout de review requiere Herdr\n", res.Worktree.Path)
+		fmt.Printf("worktree mounted at %s; the review layout requires Herdr\n", res.Worktree.Path)
 	}
 	for _, w := range res.Warnings {
 		fmt.Fprintln(os.Stderr, "prdash:", w)

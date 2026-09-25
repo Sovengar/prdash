@@ -155,6 +155,13 @@ func Kind(err error) string {
 		}
 	}
 
+	// El rechazo de auto-aprobación se mira antes que el resto: es la única
+	// razón por la que un forge veta aprobar, y no es un fallo de red ni un
+	// conflicto de estado.
+	if isSelfReviewText(msg) {
+		return "selfreview"
+	}
+
 	switch {
 	case strings.Contains(msg, "deadline exceeded"), strings.Contains(msg, "timed out"):
 		return "timeout"
@@ -175,6 +182,13 @@ func Kind(err error) string {
 	default:
 		return "network"
 	}
+}
+
+// isSelfReviewText reconoce el rechazo de aprobar un PR/MR propio. Cubre las
+// redacciones de GitHub ("Can not approve your own pull request") y GitLab
+// ("cannot approve your own merge request").
+func isSelfReviewText(lower string) bool {
+	return strings.Contains(lower, "approve your own")
 }
 
 // isRateLimitText reconoce los textos de límite de peticiones que GitHub y

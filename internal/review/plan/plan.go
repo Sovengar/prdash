@@ -69,11 +69,11 @@ func Build(pr model.Item, wt Worktree, tools Tools, env Env) Plan {
 
 	add := func(kind Kind, label string, base []string, extra ...string) {
 		if !env.available(string(kind)) {
-			p.Warnings = append(p.Warnings, label+" no está instalado: pane omitido")
+			p.Warnings = append(p.Warnings, label+" is not installed: pane omitted")
 			return
 		}
 		if len(base) == 0 {
-			p.Warnings = append(p.Warnings, label+" sin comando configurado: pane omitido")
+			p.Warnings = append(p.Warnings, label+" has no configured command: pane omitted")
 			return
 		}
 		argv := make([]string, 0, len(base)+len(extra))

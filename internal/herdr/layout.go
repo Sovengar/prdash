@@ -38,22 +38,22 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 			NoFocus: true,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("crear el workspace del review: %w", err)
+			return nil, fmt.Errorf("create the review workspace: %w", err)
 		}
 		anchor = ws.RootPaneID
 	}
 	if anchor == "" {
-		return nil, fmt.Errorf("herdr no devolvió un pane base para el layout")
+		return nil, fmt.Errorf("herdr did not return a base pane for the layout")
 	}
 
 	var warnings []string
 	// Primer pane: reutiliza el pane base del contenedor.
 	first := pl.Panes[0]
 	if err := c.PaneRun(ctx, anchor, []string{paneCommand(first)}); err != nil {
-		warnings = append(warnings, "no se pudo lanzar "+first.Label+": "+err.Error())
+		warnings = append(warnings, "could not run "+first.Label+": "+err.Error())
 	}
 	if err := c.PaneRename(ctx, anchor, first.Label); err != nil {
-		warnings = append(warnings, "no se pudo etiquetar "+first.Label+": "+err.Error())
+		warnings = append(warnings, "could not label "+first.Label+": "+err.Error())
 	}
 
 	// Panes siguientes: se dividen encadenados (primero a la derecha; el resto
@@ -73,14 +73,14 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 			NoFocus:   true,
 		})
 		if err != nil {
-			warnings = append(warnings, "no se pudo abrir el pane "+p.Label+": "+err.Error())
+			warnings = append(warnings, "could not open pane "+p.Label+": "+err.Error())
 			continue
 		}
 		if err := c.PaneRun(ctx, info.PaneID, []string{paneCommand(p)}); err != nil {
-			warnings = append(warnings, "no se pudo lanzar "+p.Label+": "+err.Error())
+			warnings = append(warnings, "could not run "+p.Label+": "+err.Error())
 		}
 		if err := c.PaneRename(ctx, info.PaneID, p.Label); err != nil {
-			warnings = append(warnings, "no se pudo etiquetar "+p.Label+": "+err.Error())
+			warnings = append(warnings, "could not label "+p.Label+": "+err.Error())
 		}
 		parent = info.PaneID
 	}

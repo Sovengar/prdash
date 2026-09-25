@@ -11,6 +11,7 @@ package gitlab
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -60,11 +61,26 @@ func (a *Adapter) Host() string { return a.host }
 // Auth comprueba la sesión de `glab` para este host (no de todas las
 // instancias configuradas).
 func (a *Adapter) Auth(ctx context.Context) model.AuthState {
-	if _, err := a.runner.Run(ctx, a.authArgs()...); err != nil {
+	out, err := a.runner.Run(ctx, a.authArgs()...)
+	if err != nil {
 		return model.AuthState{Forge: ForgeName, OK: false, Reason: err.Error()}
 	}
-	return model.AuthState{Forge: ForgeName, OK: true}
+	return model.AuthState{Forge: ForgeName, OK: true, Login: loginFromAuthStatus(out)}
 }
+
+// loginFromAuthStatus extrae el login de la sesión de la salida de
+// `glab auth status`, que ya se pedía para comprobar la sesión y se
+// descartaba.
+func loginFromAuthStatus(out string) string {
+	m := loginRe.FindStringSubmatch(out)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+// loginRe captura el login de "Logged in to <host> as <login> (<path>)".
+var loginRe = regexp.MustCompile(`\bas ([^(\s]+)`)
 
 // authArgs compone `glab auth status` acotado al host.
 func (a *Adapter) authArgs() []string {
@@ -104,14 +120,14 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 	case q.Section == model.SectionMentions:
 		return a.todosList(ctx, q)
 	default:
-		return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("lista no soportada: %s", q.Section))}
+		return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("unsupported list: %s", q.Section))}
 	}
 }
 
 // ItemState relee el estado de aprobación de un MR concreto.
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	if ref.Project == "" {
-		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("referencia de repo vacía"))}
+		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
 	}
 
 	raw, err := a.runner.Run(ctx, a.graphqlArgs(glMRQuery(ref.Project, number))...)
@@ -239,7 +255,7 @@ func (a *Adapter) degraded(section model.Section, err error) model.Warning {
 		Forge:   ForgeName,
 		Section: section,
 		Kind:    "degraded",
-		Msg:     "GraphQL no disponible; datos parciales vía REST: " + tool.FirstLine(err.Error()),
+		Msg:     "GraphQL unavailable; partial data via REST: " + tool.FirstLine(err.Error()),
 	}
 }
 

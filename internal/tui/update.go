@@ -85,6 +85,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setNotice(msg.text, msg.level)
 		return m, nil
 
+	case toastTickMsg:
+		// Poda los avisos caducados y rearma el tick. No toca el canal de
+		// eventos: es un reloj, no un lector.
+		m.toast.update()
+		return m, tickToast()
+
 	case mountMsg:
 		m.mountBusy = false
 		m.applyMount(msg.result, msg.err)
@@ -127,9 +133,9 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 	switch {
 	case out.Perm:
 		m.denied[out.ID] = out.Msg
-		m.setNotice(string(out.Kind)+" deshabilitado: "+out.Msg, levelWarn)
+		m.setNotice(string(out.Kind)+" disabled: "+out.Msg, levelWarn)
 	case out.Conflict:
-		m.setNotice("conflicto en el forge: "+out.Msg, levelError)
+		m.setNotice("forge conflict: "+out.Msg, levelError)
 	case out.OK:
 		m.setNotice(string(out.Kind)+" ok", levelOK)
 	default:
@@ -150,24 +156,25 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.cancel()
 		return m, tea.Quit
 	case "up", "k":
-		m.cursor = max(0, m.cursor-1)
-		m.syncSelection()
+		m.moveCursor(m.cursor - 1)
 		return m, nil
 	case "down", "j":
-		m.cursor = min(m.cursor+1, max(0, len(m.rows())-1))
-		m.syncSelection()
+		m.moveCursor(m.cursor + 1)
 		return m, nil
 	case "home":
-		m.cursor = 0
-		m.syncSelection()
+		m.goTop()
 		return m, nil
 	case "end":
-		m.cursor = max(0, len(m.rows())-1)
-		m.syncSelection()
+		m.moveCursor(len(m.rows()))
+		return m, nil
+	case "pgup":
+		m.pageBy(-m.pageRows())
+		return m, nil
+	case "pgdown":
+		m.pageBy(m.pageRows())
 		return m, nil
 	case "tab":
 		m.gotoNextSection()
-		m.syncSelection()
 		return m, nil
 	}
 
@@ -186,7 +193,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "open-browser":
 		it, ok := m.selected()
 		if !ok || it.URL == "" {
-			m.setNotice("no hay URL que abrir", levelWarn)
+			m.setNotice("no URL to open", levelWarn)
 			return m, nil
 		}
 		return m, m.openBrowserCmd(it.URL)
@@ -227,7 +234,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 // eventos del canal, así que la bomba sigue con su único lector.
 func (m Model) startRefresh() (tea.Model, tea.Cmd) {
 	if m.loading {
-		m.setNotice("refresco en curso", levelInfo)
+		m.setNotice("refresh in progress", levelInfo)
 		return m, nil
 	}
 	updated, cmd := m.beginRefresh()
@@ -251,24 +258,31 @@ func (m *Model) openDetail() {
 func (m *Model) startAction(kind forge.ActionKind) tea.Cmd {
 	it, ok := m.selected()
 	if !ok {
-		m.setNotice("selecciona un ítem", levelWarn)
+		m.setNotice("select an item first", levelWarn)
 		return nil
 	}
 	a := m.byForge[it.Forge]
 	if a == nil {
-		m.setNotice("forge desconocido: "+it.Forge, levelError)
+		m.setNotice("unknown forge: "+it.Forge, levelError)
 		return nil
 	}
 	if st := m.statuses[it.Forge]; st != nil && !st.auth.OK {
-		m.setNotice("acción deshabilitada: "+it.Forge+" sin autenticar", levelWarn)
+		m.setNotice("action disabled: "+it.Forge+" is not authenticated", levelWarn)
 		return nil
 	}
 	if reason := m.denied[it.ID()]; reason != "" {
-		m.setNotice(string(kind)+" deshabilitado: "+reason, levelWarn)
+		m.setNotice(string(kind)+" disabled: "+reason, levelWarn)
+		return nil
+	}
+	// Aprobar lo propio no lo admite ningún forge: se corta aquí, antes de
+	// gastar la llamada a la CLI y su relectura, y no espera al rechazo. El
+	// motivo ya dice qué ha pasado, así que no lleva prefijo.
+	if reason := m.selfDenied[it.ID()]; reason != "" && kind == forge.ActionApprove {
+		m.setNotice(reason, levelWarn)
 		return nil
 	}
 	if m.actionBusy {
-		m.setNotice("ya hay una acción en curso", levelWarn)
+		m.setNotice("an action is already running", levelWarn)
 		return nil
 	}
 	if ok, reason := state.Actionable(it); !ok {
@@ -297,19 +311,19 @@ func (m *Model) startAction(kind forge.ActionKind) tea.Cmd {
 func (m Model) startMount() (tea.Model, tea.Cmd) {
 	it, ok := m.selected()
 	if !ok {
-		m.setNotice("selecciona un ítem", levelWarn)
+		m.setNotice("select an item first", levelWarn)
 		return m, nil
 	}
 	if m.mounter == nil {
-		m.setNotice("montar review requiere Herdr", levelWarn)
+		m.setNotice("mounting a review requires Herdr", levelWarn)
 		return m, nil
 	}
 	if m.mountBusy {
-		m.setNotice("ya hay un montaje de review en curso", levelWarn)
+		m.setNotice("a review mount is already running", levelWarn)
 		return m, nil
 	}
 	m.mountBusy = true
-	m.setNotice("montando review…", levelInfo)
+	m.setNotice("mounting review…", levelInfo)
 
 	appCtx := m.ctx
 	events := m.events
@@ -333,12 +347,56 @@ func (m *Model) applyMount(res executor.Result, err error) {
 // montado con el layout pendiente de Herdr.
 func mountNotice(res executor.Result, err error) (string, noticeLevel) {
 	if err != nil {
-		return "no se pudo montar review: " + err.Error(), levelError
+		return "could not mount review: " + err.Error(), levelError
 	}
 	if res.Herdr {
-		return fmt.Sprintf("review montado: %d panes en %s", len(res.Plan.Panes), res.Worktree.Path), levelOK
+		return fmt.Sprintf("review mounted: %d panes in %s", len(res.Plan.Panes), res.Worktree.Path), levelOK
 	}
-	return "el layout de review requiere Herdr; el worktree quedó montado en " + res.Worktree.Path, levelWarn
+	return "the review layout requires Herdr; the worktree was mounted at " + res.Worktree.Path, levelWarn
+}
+
+// moveCursor mueve el cursor a una fila (fuera de rango se acota), persiste la
+// selección y desplaza la ventana para que la fila siga visible. Todo el
+// movimiento pasa por aquí: si el cursor se moviera sin syncScroll, la fila
+// podría quedarse fuera de la ventana con la selección en otra parte de la
+// pantalla.
+func (m *Model) moveCursor(row int) {
+	m.cursor = row
+	m.clampCursor()
+	m.syncScroll()
+	m.syncSelection()
+}
+
+// goTop lleva el cursor a la primera fila y la ventana al principio de la
+// lista. No basta con mover el cursor: el auto-scroll pondría la fila bajo el
+// borde superior, dejando el título de la sección y el header de columnas fuera
+// de la pantalla.
+func (m *Model) goTop() {
+	m.cursor = 0
+	m.scroll = 0
+	m.syncSelection()
+}
+
+// pageBy mueve cursor y ventana a la vez, una ventana cada uno, para que pgup y
+// pgdown lean como un salto de página: el ítem seleccionado conserva su
+// posición en la pantalla y la lista se desplaza entera. Mover solo el cursor
+// dejaría la lista casi quieta y el panel de detalle saltando de ítem en ítem.
+func (m *Model) pageBy(delta int) {
+	m.cursor += delta
+	m.scroll += delta
+	m.clampCursor()
+	m.syncScroll()
+	m.syncSelection()
+}
+
+// pageRows es el salto de pgup/pgdn: una ventana de lista, para que la tecla
+// avance justo lo que se ve. Sin altura conocida, una media docena de filas.
+func (m *Model) pageRows() int {
+	view, _ := splitRows(m.height, m.chromeLines())
+	if view <= 0 {
+		return 6
+	}
+	return view
 }
 
 // gotoNextSection mueve el cursor al primer ítem de la siguiente sección con
@@ -352,7 +410,7 @@ func (m *Model) gotoNextSection() {
 	for step := 1; step <= len(sections); step++ {
 		idx := (cur + step) % len(sections)
 		if len(sections[idx].Items) > 0 {
-			m.cursor = m.sectionOffsets()[idx]
+			m.moveCursor(m.sectionOffsets()[idx])
 			return
 		}
 	}
@@ -388,12 +446,18 @@ func (m Model) View() tea.View {
 	if m.detailOpen {
 		content = m.renderDetail()
 	}
+	// Los avisos van superpuestos abajo a la derecha: la vista de fondo no se
+	// vuelve a componer, solo se recorta por donde hace falta.
+	content = overlayToasts(content, m.toast.blocks(m.contentWidth()), m.contentWidth(), m.height)
 	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
 
-// renderInbox pinta la cabecera, las tres secciones y los hints.
+// renderInbox pinta la pantalla partida: la lista con scroll en el hueco
+// superior y el detalle del ítem seleccionado en el 40% inferior. Las dos
+// mitades suman la altura exacta, así que la vista nunca desborda el terminal ni
+// empuja la cabecera fuera de pantalla.
 func (m *Model) renderInbox() string {
 	var b strings.Builder
 	inner := m.contentWidth()
@@ -404,36 +468,27 @@ func (m *Model) renderInbox() string {
 	}
 	b.WriteString("  " + m.forgesStatusLine(time.Now()))
 	b.WriteString("\n")
-	if m.notice != "" {
-		b.WriteString(styleNotice(m.level).Render("  "+m.notice) + "\n")
-	}
 	b.WriteString("\n")
 
-	row := 0
-	for _, sec := range m.inbox.Sections {
-		problems := m.sectionProblems(sec.Kind)
-		header := fmt.Sprintf("%s (%d)", sec.Kind.String(), len(sec.Items))
-		if m.sectionLoadingMore(sec.Kind) {
-			header += " · cargando más…"
-		}
-		b.WriteString(styleHeader.Render(header))
+	view, detail := splitRows(m.height, m.chromeLines())
+	lines := m.listLines(inner)
+	for _, l := range visibleList(lines, m.scroll, view) {
+		b.WriteString(l.text + "\n")
+	}
+	// Si la lista es más corta que su ventana se rellena el hueco: el detalle
+	// queda así siempre pegado al borde inferior y no baila al añadir un ítem.
+	for i := len(lines); i < view; i++ {
 		b.WriteString("\n")
+	}
 
-		for _, p := range problems {
-			b.WriteString("  " + styleWarn.Render("⚠ "+p) + "\n")
-		}
-
-		switch {
-		case len(sec.Items) > 0:
-			b.WriteString("  " + headerLine(inner-2) + "\n")
-			for _, it := range sec.Items {
-				b.WriteString(m.renderItem(it, row == m.cursor, inner-2))
-				b.WriteString("\n")
-				row++
-			}
-		case len(problems) == 0:
-			b.WriteString("  " + styleEmpty.Render("(vacío)") + "\n")
-		}
+	b.WriteString(m.separator() + "\n")
+	pane := m.detailPane(detail)
+	for _, l := range pane {
+		b.WriteString(l + "\n")
+	}
+	// El panel se rellena hasta su alto reservado: los hints quedan siempre en la
+	// última línea, dé lo que dé la altura del detalle (que cambia con el ítem).
+	for i := len(pane); i < detail; i++ {
 		b.WriteString("\n")
 	}
 
@@ -442,12 +497,12 @@ func (m *Model) renderInbox() string {
 }
 
 // renderItem pinta una fila de ítem con el cursor delante si está seleccionada.
-func (m *Model) renderItem(it model.Item, selected bool, inner int) string {
+func (m *Model) renderItem(it model.Item, sec model.Section, lay refLayout, selected bool, inner int) string {
 	prefix := "  "
 	if selected {
 		prefix = styleCursor.Render("▸ ")
 	}
-	return prefix + renderCells(itemCells(it), inner)
+	return prefix + renderCells(itemCells(it, sec, m.viewerLogin(it.Forge), lay), lay, inner)
 }
 
 // contentWidth es el ancho útil para las tablas.
@@ -480,7 +535,7 @@ func (m *Model) forgesStatusLine(now time.Time) string {
 
 // hintLine compone la barra de hints con las acciones disponibles.
 func (m *Model) hintLine() string {
-	parts := []string{"j/k move"}
+	parts := []string{"j/k move", "pgup/dn page"}
 	if k := m.cfg.KeyFor("section-next"); k != "" {
 		parts = append(parts, k+" section")
 	}
@@ -500,18 +555,4 @@ func (m *Model) hintLine() string {
 		parts = append(parts, k+" quit")
 	}
 	return strings.Join(parts, " · ")
-}
-
-// styleNotice elige el estilo del aviso de cabecera.
-func styleNotice(level noticeLevel) lipglossStyle {
-	switch level {
-	case levelOK:
-		return styleOK
-	case levelWarn:
-		return styleWarn
-	case levelError:
-		return styleError
-	default:
-		return styleInfo
-	}
 }

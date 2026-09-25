@@ -39,9 +39,19 @@ prdash --print    # inbox en texto plano (incluye la ruta del worktree de los
 prdash worktrees  # lista los worktrees de review propiedad de prdash
 ```
 
-Teclas por defecto: `j`/`k` mover, `tab` sección, `enter` detalle, `r` refrescar,
+Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
+`tab` sección, `enter` detalle a pantalla completa, `r` refrescar,
 `m` montar review (requiere Herdr), `a` approve, `M` merge, `o` abrir en el
 navegador, `q` salir. Son configurables en `[keybindings]`.
+
+La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem
+seleccionado en el 40% inferior, que se mueve con el cursor. `enter` lo abre a
+pantalla completa por si necesitas más espacio.
+
+`approve` no aplica a los PR/MR propios: ningún forge admite aprobar lo que
+escribes tú (GitHub lo rechaza en la API y no hay opción para activarlo). prdash
+lo detecta antes de llamar a la CLI, marca esos ítems con `ROLE: own` y explica
+el motivo; `merge` sí funciona sobre ellos.
 
 ### Gestión de worktrees (`prdash worktrees`)
 

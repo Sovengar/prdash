@@ -57,8 +57,8 @@ func TestMountReviewWithoutMounterInformsHerdrRequired(t *testing.T) {
 	m, _ := mountModel(t)
 
 	m = press(t, m, "m")
-	if !strings.Contains(m.notice, "requiere Herdr") {
-		t.Fatalf("aviso = %q, quiero que mencione Herdr", m.notice)
+	if !strings.Contains(lastToast(m), "requires Herdr") {
+		t.Fatalf("toast = %q, wants it to mention Herdr", lastToast(m))
 	}
 	if m.mountBusy {
 		t.Fatal("sin montador no debería quedar un montaje en curso")
@@ -81,8 +81,8 @@ func TestMountReviewOutsideHerdrReportsLayoutUnavailable(t *testing.T) {
 	}
 
 	m = send(t, m, waitMount(t, m))
-	if !strings.Contains(m.notice, "requiere Herdr") {
-		t.Fatalf("aviso = %q, quiere el aviso de layout no disponible", m.notice)
+	if !strings.Contains(lastToast(m), "requires Herdr") {
+		t.Fatalf("toast = %q, wants the layout-unavailable toast", lastToast(m))
 	}
 	if m.mountBusy {
 		t.Fatal("el montaje terminado no debería seguir marcado en curso")
@@ -101,10 +101,10 @@ func TestMountReviewErrorSurfacesNotice(t *testing.T) {
 	m = press(t, m, "m")
 	m = send(t, m, waitMount(t, m))
 
-	if !strings.Contains(m.notice, "no se pudo montar review") {
-		t.Fatalf("aviso = %q, quiero el error del montaje", m.notice)
+	if !strings.Contains(lastToast(m), "could not mount review") {
+		t.Fatalf("toast = %q, wants the mount error", lastToast(m))
 	}
-	if !strings.Contains(m.notice, "sin permisos") {
-		t.Fatalf("aviso = %q, quiero la causa", m.notice)
+	if !strings.Contains(lastToast(m), "sin permisos") {
+		t.Fatalf("toast = %q, wants the cause", lastToast(m))
 	}
 }

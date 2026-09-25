@@ -7,6 +7,18 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Aprobar un PR/MR propio ya no se intenta: la TUI lo corta antes de llamar a la
+  CLI, con lo que se ahorran las tres llamadas por pulsación. La identidad del
+  usuario sale del probe de sesión que ya se hacía (`gh auth status` /
+  `glab auth status`), sin llamadas nuevas; si no se puede leer, se decide por
+  sección. `merge` no cambia: sigue valiendo sobre PR/MR propios.
+- El rechazo de auto-aprobación ya no se confunde con un conflicto ni con un
+  fallo de red: `conflicto en el forge: gh pr review … (exit 1)` era en realidad
+  `GraphQL: Review Can not approve your own pull request`. Se clasifica como
+  denegación permanente y muestra el motivo, no el stderr de la CLI.
+
 ## [0.1.0] - 2026-09-25
 
 Primera versión: inbox cross-forge (F1) y orquestador de review (F2). Coincide

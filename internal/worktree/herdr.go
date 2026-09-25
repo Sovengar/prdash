@@ -46,7 +46,7 @@ func Select(client HerdrRunner, base string) Provisioner {
 // su workspace si sigue abierto.
 func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	if spec.Repo == "" || spec.Branch == "" || spec.Path == "" {
-		return Worktree{}, fmt.Errorf("worktree: spec incompleto (repo, rama y destino son obligatorios)")
+		return Worktree{}, fmt.Errorf("worktree: incomplete spec (repo, branch and destination are required)")
 	}
 	if Exists(spec.Path) {
 		return h.reuse(ctx, spec)
@@ -60,7 +60,7 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 		NoFocus: true,
 	})
 	if err != nil {
-		return Worktree{}, fmt.Errorf("crear el worktree nativo en %s: %w", spec.Path, err)
+		return Worktree{}, fmt.Errorf("create the native worktree at %s: %w", spec.Path, err)
 	}
 
 	wt := Worktree{
@@ -105,10 +105,10 @@ func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 		return Worktree{}, err
 	}
 	if !ok {
-		return Worktree{}, fmt.Errorf("worktree: %s no aloja un worktree enlazado", spec.Path)
+		return Worktree{}, fmt.Errorf("worktree: %s does not hold a linked worktree", spec.Path)
 	}
 	if existing.Branch != spec.Branch {
-		return Worktree{}, fmt.Errorf("worktree: %s ya aloja la rama %s, no %s", spec.Path, existing.Branch, spec.Branch)
+		return Worktree{}, fmt.Errorf("worktree: %s already holds branch %s, not %s", spec.Path, existing.Branch, spec.Branch)
 	}
 
 	wt := existing
@@ -137,7 +137,7 @@ func (h *HerdrNative) Remove(ctx context.Context, id string) error {
 			for _, info := range infos {
 				if info.Path == id && info.OpenWorkspaceID != "" {
 					if err := h.client.WorktreeRemove(ctx, info.OpenWorkspaceID, true); err != nil {
-						return fmt.Errorf("quitar el worktree nativo %s: %w", id, err)
+						return fmt.Errorf("remove the native worktree %s: %w", id, err)
 					}
 					return nil
 				}

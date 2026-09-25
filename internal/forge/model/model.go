@@ -24,11 +24,11 @@ const (
 func (s Section) String() string {
 	switch s {
 	case SectionAuthored:
-		return "Creados por mí"
+		return "Created by me"
 	case SectionReview:
-		return "Review / asignados"
+		return "Review / assigned"
 	case SectionMentions:
-		return "Menciones"
+		return "Mentions"
 	default:
 		return string(s)
 	}
@@ -130,6 +130,10 @@ type AuthState struct {
 	Forge  string
 	OK     bool
 	Reason string
+	// Login es el usuario con el que está autenticado el forge. Va vacío si el
+	// adapter no sabe deducirlo. Permite reconocer los ítems propios sin
+	// depender de en qué sección aparecieron.
+	Login string
 }
 
 // Warning describe un fallo parcial de un forge. El inbox nunca falla duro:

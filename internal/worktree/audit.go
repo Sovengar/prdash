@@ -61,7 +61,7 @@ func (g *GitDirect) Audit(ctx context.Context) []Entry {
 		}}
 		if !sourceReachable(path) {
 			e.Orphan = true
-			e.Reason = "el repo de origen del worktree ya no es accesible"
+			e.Reason = "the worktree source repo is no longer reachable"
 		}
 		out = append(out, e)
 		return fs.SkipDir

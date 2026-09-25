@@ -11,14 +11,21 @@ import (
 type lipglossStyle = lipgloss.Style
 
 // Anchos de columna: siempre mayores que su header para que pad() garantice
-// separación entre columnas.
+// separación entre columnas. ITEM no está aquí porque su ancho sale del
+// contenido (ver newRefLayout): solo tiene límites.
 const (
-	colForge  = 26 // "gitlab@gitlab.example.com"
-	colRef    = 30 // "grupo/sub/proyecto#1234"
+	colForge  = 14 // "GLab@umane"
 	colTitle  = 40
 	colRole   = 10 // "requested" / "assigned"
 	colState  = 18
 	colChecks = 8
+)
+
+// Límites de la columna ITEM: se dimensiona al sufijo más largo de todo el
+// inbox, acotado para que no se coma TITLE.
+const (
+	itemWidthMin = 6  // "ITEM" (4) + 1: mantiene la separación entre columnas
+	itemWidthCap = 34 // "subgrupo/proyecto#1234"
 )
 
 var (

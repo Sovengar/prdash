@@ -263,13 +263,13 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 func checkBeforeAction(cur model.Item, warns []model.Warning) *Outcome {
 	switch {
 	case hasKind(warns, "notfound"):
-		return &Outcome{Conflict: true, Msg: "el ítem ya no existe en el forge"}
+		return &Outcome{Conflict: true, Msg: "the item no longer exists in the forge"}
 	case hasKind(warns, "permission"), hasKind(warns, "auth"):
 		return &Outcome{Perm: true, Msg: firstMsg(warns)}
 	case len(warns) > 0 || cur.Number == 0:
 		msg := firstMsg(warns)
 		if msg == "" {
-			msg = "no se pudo releer el ítem"
+			msg = "could not re-read the item"
 		}
 		out := &Outcome{Conflict: true, Msg: msg}
 		if cur.Number != 0 {
@@ -293,6 +293,11 @@ func classifyAction(warns []model.Warning) (ok, conflict, perm bool, msg string)
 	switch {
 	case hasKind(warns, "permission"), hasKind(warns, "auth"), hasKind(warns, "unsupported"):
 		return false, false, true, msg
+	case hasKind(warns, "selfreview"):
+		// Es una denegación permanente de ese ítem, no un conflicto: se
+		// clasifica como permiso para que la TUI la deje registrada y no
+		//Repita la llamada. El motivo es el canónico, no el stderr de la CLI.
+		return false, false, true, state.SelfReviewReason
 	case hasKind(warns, "notfound"), hasKind(warns, "conflict"),
 		hasKind(warns, "ratelimit"), hasKind(warns, "network"), hasKind(warns, "timeout"):
 		return false, true, false, msg

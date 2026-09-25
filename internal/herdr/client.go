@@ -79,7 +79,7 @@ func (c *Client) env(key string) string {
 // (`herdr worktree create: …`, no un `herdr []` vacío).
 func (c *Client) guard(args ...string) error {
 	if !c.Available() {
-		return &Error{Args: args, Msg: "herdr no disponible (se requiere HERDR_ENV=1 y versión >= " + MinVersion.String() + ")"}
+		return &Error{Args: args, Msg: "herdr unavailable (requires HERDR_ENV=1 and version >= " + MinVersion.String() + ")"}
 	}
 	return nil
 }
@@ -290,7 +290,7 @@ func (c *Client) PaneSplit(ctx context.Context, spec SplitSpec) (PaneInfo, error
 // línea de shell (con comillas) para que un argumento con espacios no se rompa.
 func (c *Client) PaneRun(ctx context.Context, paneID string, argv []string) error {
 	if len(argv) == 0 {
-		return fmt.Errorf("pane run: argv vacío")
+		return fmt.Errorf("pane run: empty argv")
 	}
 	if err := c.guard("pane", "run"); err != nil {
 		return err

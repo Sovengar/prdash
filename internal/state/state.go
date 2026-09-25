@@ -3,7 +3,11 @@
 // la TUI y el modo de impresión para que el orden sea el mismo.
 package state
 
-import "prdash/internal/forge/model"
+import (
+	"strings"
+
+	"prdash/internal/forge/model"
+)
 
 // State es el estado derivado de un ítem del inbox.
 type State int
@@ -110,12 +114,38 @@ func Derive(it model.Item) State {
 func Actionable(it model.Item) (bool, string) {
 	switch Derive(it) {
 	case StateMerged:
-		return false, "el ítem ya está mergeado"
+		return false, "item is already merged"
 	case StateClosed:
-		return false, "el ítem ya está cerrado"
+		return false, "item is already closed"
 	default:
 		return true, ""
 	}
+}
+
+// SelfReviewReason explica por qué no se puede aprobar un ítem propio. Es el
+// motivo que enseñan la TUI y la clasificación del rechazo del forge, para que
+// el usuario lea lo mismo en los dos caminos.
+const SelfReviewReason = "you cannot approve your own PR/MR"
+
+// CanApprove indica si un ítem admite la acción de approve y, si no, el
+// motivo. Ningún forge admite aprobar lo propio: GitHub lo rechaza en la API
+// sin opción de activarlo, y quien lo permite por configuración (GitLab) sigue
+// siendo el repositorio, no el cliente, quien decide.
+//
+// La identidad se decide con el login del viewer cuando ambos se conocen: es
+// un hecho. Si falta alguno, se cae a la sección, que para un forge significa
+// "el usuario lo escribió" (`author:@me` en GitHub, `currentUser` en GitLab).
+func CanApprove(it model.Item, viewer string) (bool, string) {
+	if viewer != "" && it.Author != "" {
+		if strings.EqualFold(viewer, it.Author) {
+			return false, SelfReviewReason
+		}
+		return true, ""
+	}
+	if it.Section == model.SectionAuthored {
+		return false, SelfReviewReason
+	}
+	return true, ""
 }
 
 // normalize compara estados sin depender de mayúsculas ni separadores.

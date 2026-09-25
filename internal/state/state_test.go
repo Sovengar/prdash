@@ -98,3 +98,37 @@ func TestStateString(t *testing.T) {
 		}
 	}
 }
+
+// TestCanApprove cubre el veto de aprobar lo propio: con login conocido decide
+// por identidad, y si falta alguno cae a la sección sin bloquear de más.
+func TestCanApprove(t *testing.T) {
+	own := func(section model.Section, author string) model.Item {
+		it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 4)
+		it.Section = section
+		it.Author = author
+		return it
+	}
+	cases := []struct {
+		name    string
+		it      model.Item
+		viewer  string
+		wantOK  bool
+		wantMsg string
+	}{
+		{"login coincide", own(model.SectionReview, "Sovengar"), "Sovengar", false, SelfReviewReason},
+		{"login con otra caja", own(model.SectionReview, "sovengar"), "Sovengar", false, SelfReviewReason},
+		{"otro autor", own(model.SectionReview, "otra"), "Sovengar", true, ""},
+		{"seccion propia sin login", own(model.SectionAuthored, "quien sea"), "", false, SelfReviewReason},
+		{"seccion de review sin login", own(model.SectionReview, "quien sea"), "", true, ""},
+		{"login conocido sin autor", own(model.SectionAuthored, ""), "Sovengar", false, SelfReviewReason},
+		{"menciones sin login", own(model.SectionMentions, "otro"), "", true, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, reason := CanApprove(tc.it, tc.viewer)
+			if ok != tc.wantOK || reason != tc.wantMsg {
+				t.Errorf("CanApprove = (%v, %q), want (%v, %q)", ok, reason, tc.wantOK, tc.wantMsg)
+			}
+		})
+	}
+}

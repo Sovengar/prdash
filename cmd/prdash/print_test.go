@@ -50,7 +50,7 @@ func TestRunPrint(t *testing.T) {
 
 	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
 
-	for _, want := range []string{"Creados por mí", "github@github.com", "acme/widget#7", "Add widget"} {
+	for _, want := range []string{"Created by me", "github@github.com", "acme/widget#7", "Add widget"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("la salida no contiene %q:\n%s", want, out)
 		}
@@ -124,7 +124,7 @@ func TestRunPrintWithoutReviewsKeepsF1(t *testing.T) {
 	if strings.Contains(out, "review:") {
 		t.Errorf("sin reviews activos no debería aparecer la marca de F2:\n%s", out)
 	}
-	if !strings.Contains(out, "Creados por mí") || !strings.Contains(out, "Add widget") {
+	if !strings.Contains(out, "Created by me") || !strings.Contains(out, "Add widget") {
 		t.Errorf("la salida de F1 no debería cambiar:\n%s", out)
 	}
 }

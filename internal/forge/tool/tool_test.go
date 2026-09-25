@@ -126,3 +126,23 @@ func TestKindRateLimit403(t *testing.T) {
 		}
 	}
 }
+
+// TestKindSelfReview cubre el rechazo de aprobar lo propio: es una denegación
+// permanente, no un conflicto ni un fallo de red. Sin ella el aviso salía como
+// "conflicto en el forge" tras tres llamadas a la CLI.
+func TestKindSelfReview(t *testing.T) {
+	cases := map[string]string{
+		"failed to create review: GraphQL: Review Can not approve your own pull request (addPullRequestReview)": "selfreview",
+		"cannot approve your own merge request":    "selfreview",
+		"You can't approve your own merge request": "selfreview",
+	}
+	for msg, want := range cases {
+		if got := Kind(errors.New(msg)); got != want {
+			t.Errorf("Kind(%q) = %q, want %q", msg, got, want)
+		}
+	}
+	// El rechazo propio no debe caer en la red ni en conflicto.
+	if k := Kind(errors.New("gh: Can not approve your own pull request (exit 1)")); k == "network" || k == "conflict" {
+		t.Errorf("el rechazo propio se clasificó como %q", k)
+	}
+}

@@ -34,7 +34,7 @@ func runWorktrees(pr worktree.Provisioner, args []string) int {
 	case "remove":
 		return removeWorktrees(pr, args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "prdash worktrees: subcomando desconocido %q (list|remove)\n", sub)
+		fmt.Fprintf(os.Stderr, "prdash worktrees: unknown subcommand %q (list|remove)\n", sub)
 		return 2
 	}
 }
@@ -46,7 +46,7 @@ func listWorktrees(pr worktree.Provisioner) int {
 
 	entries := pr.Audit(ctx)
 	if len(entries) == 0 {
-		fmt.Println("no hay worktrees de review de prdash")
+		fmt.Println("no prdash review worktrees")
 		return 0
 	}
 
@@ -55,7 +55,7 @@ func listWorktrees(pr worktree.Provisioner) int {
 	for _, e := range entries {
 		state := "ok"
 		if e.Orphan {
-			state = "huérfano"
+			state = "orphaned"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Label, e.Branch, state, e.Path)
 	}
@@ -63,7 +63,7 @@ func listWorktrees(pr worktree.Provisioner) int {
 
 	for _, e := range entries {
 		if e.Orphan {
-			fmt.Fprintf(os.Stderr, "prdash: %s es huérfano: %s\n", e.Path, e.Reason)
+			fmt.Fprintf(os.Stderr, "prdash: %s is orphaned: %s\n", e.Path, e.Reason)
 		}
 	}
 	return 0
@@ -73,7 +73,7 @@ func listWorktrees(pr worktree.Provisioner) int {
 // sea un worktree propio, o que no exista, se rechaza sin tocarla.
 func removeWorktrees(pr worktree.Provisioner, paths []string) int {
 	if len(paths) == 0 {
-		fmt.Fprintln(os.Stderr, "prdash worktrees remove: falta al menos una ruta a borrar")
+		fmt.Fprintln(os.Stderr, "prdash worktrees remove: missing at least one path to remove")
 		return 2
 	}
 
@@ -84,7 +84,7 @@ func removeWorktrees(pr worktree.Provisioner, paths []string) int {
 	for _, raw := range paths {
 		path, err := filepath.Abs(raw)
 		if err != nil || !worktree.Owned("", path) || !worktree.Exists(path) {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s no es un worktree de prdash; no se toca\n", raw)
+			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s is not a prdash worktree; leaving it alone\n", raw)
 			code = 1
 			continue
 		}
@@ -93,7 +93,7 @@ func removeWorktrees(pr worktree.Provisioner, paths []string) int {
 			code = 1
 			continue
 		}
-		fmt.Printf("worktree borrado: %s\n", path)
+		fmt.Printf("worktree removed: %s\n", path)
 	}
 	return code
 }

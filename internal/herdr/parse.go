@@ -53,7 +53,7 @@ func parseWorktreeCreated(raw []byte) (WorktreeInfo, error) {
 		return WorktreeInfo{}, err
 	}
 	if r.Worktree.Path == "" {
-		return WorktreeInfo{}, fmt.Errorf("herdr: worktree create sin .result.worktree.path")
+		return WorktreeInfo{}, fmt.Errorf("herdr: worktree create without .result.worktree.path")
 	}
 	return WorktreeInfo{
 		WorkspaceID:      r.Workspace.WorkspaceID,
@@ -132,7 +132,7 @@ func parseWorkspaceCreated(raw []byte) (WorkspaceInfo, error) {
 		return WorkspaceInfo{}, err
 	}
 	if r.Workspace.WorkspaceID == "" {
-		return WorkspaceInfo{}, fmt.Errorf("herdr: workspace create sin .result.workspace.workspace_id")
+		return WorkspaceInfo{}, fmt.Errorf("herdr: workspace create without .result.workspace.workspace_id")
 	}
 	return WorkspaceInfo{WorkspaceID: r.Workspace.WorkspaceID, TabID: r.Tab.TabID, RootPaneID: r.RootPane.PaneID}, nil
 }
@@ -174,7 +174,7 @@ func parsePaneSplit(raw []byte) (PaneInfo, error) {
 		return PaneInfo{}, err
 	}
 	if r.Pane.PaneID == "" {
-		return PaneInfo{}, fmt.Errorf("herdr: pane split sin .result.pane.pane_id")
+		return PaneInfo{}, fmt.Errorf("herdr: pane split without .result.pane.pane_id")
 	}
 	return PaneInfo{PaneID: r.Pane.PaneID, WorkspaceID: r.Pane.WorkspaceID, TabID: r.Pane.TabID, Cwd: r.Pane.Cwd, Label: r.Pane.Label}, nil
 }

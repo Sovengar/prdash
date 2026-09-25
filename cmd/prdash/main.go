@@ -42,7 +42,7 @@ func main() {
 		os.Exit(runWorktrees(worktree.Select(herdr.New(), cfg.WorktreeDir), os.Args[2:]))
 	}
 
-	printMode := flag.Bool("print", false, "imprime el inbox y sale")
+	printMode := flag.Bool("print", false, "print the inbox and exit")
 	flag.Parse()
 
 	cfg, warn := config.Load()
@@ -52,7 +52,7 @@ func main() {
 
 	adapters := buildAdapters(cfg)
 	if len(adapters) == 0 {
-		fmt.Fprintln(os.Stderr, "prdash: no hay forges habilitados en la config")
+		fmt.Fprintln(os.Stderr, "prdash: no forges enabled in the config")
 	}
 
 	if *printMode {

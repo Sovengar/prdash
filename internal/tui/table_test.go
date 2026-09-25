@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"prdash/internal/forge/model"
 )
@@ -23,9 +24,50 @@ func TestRenderCellsPadsBeforeStyle(t *testing.T) {
 		{"ab", styleForge, 5},
 		{"x", styleRef, 3},
 	}
-	out := stripANSI(renderCells(cells, 100))
+	out := stripANSI(renderCells(cells, newRefLayout(nil), 100))
 	if !strings.HasPrefix(out, "ab   x  ") {
 		t.Errorf("renderCells = %q", out)
+	}
+}
+
+// TestForgeBadgeCoversStandardAndSelfHosted fija la etiqueta de la columna
+// FORGE: abreviatura sola en el host estándar, abreviatura + primera etiqueta
+// del host en uno self-hosted, sin perder nunca la identidad en el detalle.
+func TestForgeBadgeCoversStandardAndSelfHosted(t *testing.T) {
+	badge := func(forge, host string) string {
+		it := model.NewItem(model.RepoRef{Forge: forge, Host: host, Project: "o/r"}, 1)
+		return forgeBadge(it)
+	}
+	for _, tc := range []struct {
+		forge, host, want string
+	}{
+		{"github", "github.com", "GH"},
+		{"gitlab", "gitlab.com", "GLab"},
+		{"bitbucket", "bitbucket.org", "BB"},
+		{"gitlab", "umane.emeal.nttdata.com", "GLab@umane"},
+		{"github", "github.corp.example.com", "GH@github"},
+		{"gitlab", "gitserver", "GLab@gitserver"},
+		{"github", "", "GH"},
+		{"gerrit", "gerrit.example.com", "gerrit@gerrit"},
+	} {
+		if got := badge(tc.forge, tc.host); got != tc.want {
+			t.Errorf("forgeBadge(%q, %q) = %q, want %q", tc.forge, tc.host, got, tc.want)
+		}
+	}
+
+	// El detalle sigue mostrando la ruta completa.
+	it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "umane.emeal.nttdata.com", Project: "g/p"}, 7)
+	if got := forgeLabel(it); got != "gitlab@umane.emeal.nttdata.com" {
+		t.Errorf("forgeLabel = %q", got)
+	}
+}
+
+// TestForgeBadgeFitsColumn evita que un host self-hosted largo desalinee la
+// tabla: la celda se recorta al ancho de columna.
+func TestForgeBadgeFitsColumn(t *testing.T) {
+	it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "empresaurbanisimaziyota.example.com", Project: "g/p"}, 1)
+	if got := truncate(forgeBadge(it), colForge); utf8.RuneCountInString(got) != colForge {
+		t.Errorf("celda forge = %q (%d runes), want %d", got, utf8.RuneCountInString(got), colForge)
 	}
 }
 

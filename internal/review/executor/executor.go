@@ -119,7 +119,7 @@ func (e *Executor) Mount(ctx context.Context, it model.Item) (Result, error) {
 		Branch:   branch,
 		Label:    wt.Label,
 	}); err != nil {
-		res.Warnings = append(res.Warnings, "no se pudo registrar el review activo: "+err.Error())
+		res.Warnings = append(res.Warnings, "could not register the active review: "+err.Error())
 	}
 	return res, nil
 }
@@ -177,14 +177,14 @@ func (e *Executor) buildPlan(it model.Item, wt worktree.Worktree) plan.Plan {
 // se avisa y el worktree queda montado igualmente.
 func (e *Executor) mountLayout(ctx context.Context, wt worktree.Worktree, pl plan.Plan, res *Result) bool {
 	if e.Herdr == nil || !e.Herdr.Available() {
-		res.Warnings = append(res.Warnings, "el layout de review requiere Herdr; el worktree quedó montado")
+		res.Warnings = append(res.Warnings, "the review layout requires Herdr; the worktree was mounted")
 		return false
 	}
 	container := herdr.Container{WorkspaceID: wt.WorkspaceID, PaneID: wt.RootPaneID}
 	warns, err := e.Herdr.MountLayout(ctx, container, pl)
 	res.Warnings = append(res.Warnings, warns...)
 	if err != nil {
-		res.Warnings = append(res.Warnings, fmt.Sprintf("no se pudo abrir el layout: %v", err))
+		res.Warnings = append(res.Warnings, fmt.Sprintf("could not open the layout: %v", err))
 		return false
 	}
 	_ = e.Herdr.Notify(ctx, "prdash: review listo", herdr.NotifyOptions{Sound: "done"})

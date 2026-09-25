@@ -7,6 +7,7 @@ import (
 
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
+	"prdash/internal/state"
 	"prdash/internal/testutil"
 )
 
@@ -225,6 +226,31 @@ func TestRunActionUnsupportedDisabled(t *testing.T) {
 	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5)
 	if !out.Perm {
 		t.Fatalf("outcome = %+v", out)
+	}
+}
+
+// TestRunActionSelfReviewDenied cubre el rechazo de aprobar lo propio cuando
+// llega del forge (red de seguridad para cuando el veto local no se ve, p. ej.
+// en ítems re-leídos sin sección). Debe llegar como denegación permanente con
+// el motivo canónico, no como conflicto ni con el stderr crudo de la CLI.
+func TestRunActionSelfReviewDenied(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 6)
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 6): item},
+		ActionWarnings: map[string][]model.Warning{"approve:acme/widget#6": {{
+			Forge: "github", Kind: "selfreview",
+			Msg: "gh pr review 6 --approve: failed to create review: GraphQL: Review Can not approve your own pull request (exit 1)",
+		}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 6)
+	if !out.Perm || out.OK || out.Conflict {
+		t.Fatalf("outcome = %+v", out)
+	}
+	if out.Msg != state.SelfReviewReason {
+		t.Errorf("Msg = %q, want %q (no el stderr de la CLI)", out.Msg, state.SelfReviewReason)
 	}
 }
 

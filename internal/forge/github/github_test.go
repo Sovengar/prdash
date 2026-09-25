@@ -12,6 +12,39 @@ import (
 	"prdash/internal/testutil"
 )
 
+// TestAuthExposesLogin: `gh auth status` ya se lanzaba para comprobar la sesión
+// y su salida se descartaba; esa línea trae la cuenta, así que el viewer se
+// conoce sin llamadas extra.
+func TestAuthExposesLogin(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "gh", `#!/bin/sh
+cat <<'OUT'
+github.com
+  ✓ Logged in to github.com account Sovengar (/home/u/.config/gh/hosts.yml)
+  - Active account: true
+  - Token: gho_****
+OUT
+`)
+	a := New("github.com", script)
+	auth := a.Auth(context.Background())
+	if !auth.OK {
+		t.Fatalf("Auth = %+v", auth)
+	}
+	if auth.Login != "Sovengar" {
+		t.Errorf("Login = %q, want %q", auth.Login, "Sovengar")
+	}
+}
+
+// TestAuthLoginEmptyWhenUnknown: sin login en la salida, AuthState.Login queda
+// vacío para que la decisión la tome la sección y no una suposición.
+func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "gh", "#!/bin/sh\necho 'github.com'\n")
+	if login := New("github.com", script).Auth(context.Background()).Login; login != "" {
+		t.Errorf("Login = %q, want vacío", login)
+	}
+}
+
 func TestSearchQueryPagination(t *testing.T) {
 	first := searchQuery("author:@me", "")
 	if !strings.Contains(first, "is:pr is:open author:@me") {

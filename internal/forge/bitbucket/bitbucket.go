@@ -37,7 +37,7 @@ func (a *Adapter) Host() string { return a.host }
 
 // Auth informa que el forge no está operativo en esta versión.
 func (a *Adapter) Auth(context.Context) model.AuthState {
-	return model.AuthState{Forge: ForgeName, OK: false, Reason: "no soportado en esta versión"}
+	return model.AuthState{Forge: ForgeName, OK: false, Reason: "not supported in this version"}
 }
 
 // List responde "no soportado" sin consultar nada.
@@ -65,6 +65,6 @@ func (a *Adapter) unsupported(section model.Section) []model.Warning {
 		Forge:   ForgeName,
 		Section: section,
 		Kind:    "unsupported",
-		Msg:     "Bitbucket no está soportado en esta versión",
+		Msg:     "Bitbucket is not supported in this version",
 	}}
 }
