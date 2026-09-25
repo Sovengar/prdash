@@ -2,6 +2,7 @@ package reporesolver
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,17 @@ import (
 
 func ghRef() model.RepoRef {
 	return model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}
+}
+
+func glRef(host, project string) model.RepoRef {
+	parts := strings.Split(project, "/")
+	return model.RepoRef{
+		Forge:   "gitlab",
+		Host:    host,
+		Project: project,
+		Owner:   parts[len(parts)-2],
+		Name:    parts[len(parts)-1],
+	}
 }
 
 func TestParseRemoteURL(t *testing.T) {
@@ -34,7 +46,7 @@ func TestParseRemoteURL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := ParseRemoteURL(tc.raw, hosts)
+			got, ok := ParseRemoteURL(tc.raw, hosts, nil)
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, quiero %v", ok, tc.wantOK)
 			}
@@ -45,9 +57,63 @@ func TestParseRemoteURL(t *testing.T) {
 	}
 }
 
+func TestParseRemoteURLStripsClonePrefix(t *testing.T) {
+	hosts := map[string]string{"gitlab.example.com": "gitlab"}
+	prefixes := map[string]string{"gitlab.example.com": "git"}
+	want := glRef("gitlab.example.com", "grupo/sub/proy")
+
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{"sin prefijo", "https://gitlab.example.com/grupo/sub/proy.git"},
+		{"con prefijo", "https://gitlab.example.com/git/grupo/sub/proy.git"},
+		{"con prefijo y barra final", "https://gitlab.example.com/git/grupo/sub/proy/"},
+		{"scp con prefijo", "git@gitlab.example.com:git/grupo/sub/proy.git"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ParseRemoteURL(tc.raw, hosts, prefixes)
+			if !ok {
+				t.Fatalf("no parseó %q", tc.raw)
+			}
+			if got != want {
+				t.Fatalf("ref = %+v, quiero %+v", got, want)
+			}
+		})
+	}
+}
+
 func TestCloneURL(t *testing.T) {
-	if got := CloneURL(ghRef()); got != "https://github.com/acme/widget.git" {
-		t.Fatalf("CloneURL = %q", got)
+	ghEnt := model.RepoRef{Forge: "github", Host: "github.enterprise.com", Project: "acme/widget", Owner: "acme", Name: "widget"}
+	cases := []struct {
+		name   string
+		ref    model.RepoRef
+		prefix string
+		want   string
+	}{
+		{"github raíz", ghRef(), "", "https://github.com/acme/widget.git"},
+		{"gitlab raíz", glRef("gitlab.example.com", "grupo/proy"), "", "https://gitlab.example.com/grupo/proy.git"},
+		{"gitlab subcarpeta", glRef("gitlab.example.com", "grupo/proy"), "/git/", "https://gitlab.example.com/git/grupo/proy.git"},
+		{"github enterprise subcarpeta", ghEnt, "git", "https://github.enterprise.com/git/acme/widget.git"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CloneURL(tc.ref, tc.prefix); got != tc.want {
+				t.Fatalf("CloneURL = %q, quiero %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCloneURLParseRemoteRoundTrip(t *testing.T) {
+	ref := glRef("gitlab.example.com", "grupo/sub/proy")
+	hosts := map[string]string{"gitlab.example.com": "gitlab"}
+	prefixes := map[string]string{"gitlab.example.com": "git"}
+	raw := CloneURL(ref, prefixes[ref.Host])
+	got, ok := ParseRemoteURL(raw, hosts, prefixes)
+	if !ok || got != ref {
+		t.Fatalf("round trip = %+v, %v; quiero %+v", got, ok, ref)
 	}
 }
 
@@ -97,6 +163,25 @@ func TestResolveLocalIndexesRoots(t *testing.T) {
 	r.roots = []string{filepath.Dir(repo)}
 
 	got, ok := r.ResolveLocal(ref)
+	if !ok || got != repo {
+		t.Fatalf("ResolveLocal = %q, %v; quiero %q", got, ok, repo)
+	}
+}
+
+func TestResolveLocalIndexesRemoteWithClonePrefix(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "proy")
+	testutil.InitRepo(t, repo)
+	testutil.CommitFile(t, repo, "base.txt", "base", "base")
+	testutil.SetRemote(t, repo, "origin", "https://gitlab.example.com/git/grupo/proy.git")
+
+	r := New(Options{
+		Roots:    []string{filepath.Dir(repo)},
+		MemoPath: filepath.Join(t.TempDir(), "memo.json"),
+		Hosts:    map[string]string{"gitlab.example.com": "gitlab"},
+		Prefixes: map[string]string{"gitlab.example.com": "git"},
+	})
+
+	got, ok := r.ResolveLocal(glRef("gitlab.example.com", "grupo/proy"))
 	if !ok || got != repo {
 		t.Fatalf("ResolveLocal = %q, %v; quiero %q", got, ok, repo)
 	}
@@ -154,6 +239,42 @@ func TestEnsureBareClonesAndIsIdempotent(t *testing.T) {
 	again, err := r.EnsureBare(context.Background(), ref)
 	if err != nil || again != dest {
 		t.Fatalf("EnsureBare idempotente = %q, %v", again, err)
+	}
+}
+
+// TestEnsureBareClonesWithPrefixedCloneURL comprueba de punta a punta que el
+// clon bare usa la URL por defecto con el prefijo de subcarpeta del host: el
+// `insteadOf` de git redirige la URL https prefijada al origin local (sin red).
+func TestEnsureBareClonesWithPrefixedCloneURL(t *testing.T) {
+	base := t.TempDir()
+	origin := filepath.Join(base, "grupo", "proy.git")
+	testutil.InitBare(t, origin)
+
+	gitConfig := filepath.Join(t.TempDir(), "gitconfig")
+	rewrite := fmt.Sprintf("[url \"file://%s/\"]\n\tinsteadOf = https://gitlab.example.com/git/\n", base)
+	if err := os.WriteFile(gitConfig, []byte(rewrite), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfig)
+
+	cloneDir := filepath.Join(t.TempDir(), "repos")
+	r := New(Options{
+		CloneDir: cloneDir,
+		Hosts:    map[string]string{"gitlab.example.com": "gitlab"},
+		Prefixes: map[string]string{"gitlab.example.com": "git"},
+	})
+	ref := glRef("gitlab.example.com", "grupo/proy")
+
+	dest, err := r.EnsureBare(context.Background(), ref)
+	if err != nil {
+		t.Fatalf("EnsureBare: %v", err)
+	}
+	want := filepath.Join(cloneDir, "gitlab", "gitlab.example.com", "grupo", "proy")
+	if dest != want {
+		t.Fatalf("dest = %q, quiero %q", dest, want)
+	}
+	if out := testutil.RunGit(t, dest, "rev-parse", "--is-bare-repository"); out != "true" {
+		t.Fatalf("el clon no es bare: %q", out)
 	}
 }
 

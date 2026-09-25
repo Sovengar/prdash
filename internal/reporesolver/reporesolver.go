@@ -36,11 +36,18 @@ type Options struct {
 	MemoPath string
 	// Hosts mapea host → nombre de forge para normalizar remotos.
 	Hosts map[string]string
+	// Prefixes mapea host → relative URL root de la instancia (p. ej. "git"
+	// para un GitLab self-managed en subcarpeta). Se aplica simétricamente al
+	// construir la URL de clonado (CloneURL) y al normalizar remotos
+	// (ParseRemoteURL). Vacío = instancia en la raíz del host.
+	Prefixes map[string]string
 	// CloneURL construye la URL de clonado de un repo. Inyectable para usar
-	// remotos locales en tests; por defecto arma la URL canónica del forge.
+	// remotos locales en tests; por defecto arma la URL canónica del forge
+	// incluyendo el prefijo de subcarpeta del host.
 	CloneURL func(model.RepoRef) string
 	// ParseRemote normaliza una URL remota a RepoRef. Inyectable para tests;
-	// por defecto parsea las URLs de git de los forges conocidos.
+	// por defecto parsea las URLs de git de los forges conocidos quitando el
+	// prefijo de subcarpeta del host.
 	ParseRemote func(string) (model.RepoRef, bool)
 	// Git permite sustituir el ejecutor de git; vacío usa el binario del PATH.
 	Git *gitcmd.Runner
@@ -75,13 +82,17 @@ func New(opts Options) *Resolver {
 	}
 	r.cloneURL = opts.CloneURL
 	if r.cloneURL == nil {
-		r.cloneURL = CloneURL
+		prefixes := opts.Prefixes
+		r.cloneURL = func(ref model.RepoRef) string {
+			return CloneURL(ref, prefixes[ref.Host])
+		}
 	}
 	r.parseRemote = opts.ParseRemote
 	if r.parseRemote == nil {
 		hosts := opts.Hosts
+		prefixes := opts.Prefixes
 		r.parseRemote = func(raw string) (model.RepoRef, bool) {
-			return ParseRemoteURL(raw, hosts)
+			return ParseRemoteURL(raw, hosts, prefixes)
 		}
 	}
 	memoPath := opts.MemoPath
@@ -283,16 +294,26 @@ func ReviewRef(it model.Item) (string, bool) {
 	}
 }
 
-// CloneURL arma la URL de clonado canónica de un repo (HTTPS).
-func CloneURL(ref model.RepoRef) string {
+// CloneURL arma la URL de clonado canónica de un repo (HTTPS), incluyendo el
+// relative URL root de la instancia. prefix es el prefijo de subcarpeta del
+// host (p. ej. "/git/" o "git" para un GitLab self-managed); vacío = raíz.
+func CloneURL(ref model.RepoRef, prefix string) string {
 	project := strings.TrimSuffix(ref.Project, ".git")
-	return fmt.Sprintf("https://%s/%s.git", ref.Host, project)
+	host := strings.Trim(ref.Host, "/")
+	base := strings.Trim(prefix, "/")
+	if base == "" {
+		return fmt.Sprintf("https://%s/%s.git", host, project)
+	}
+	return fmt.Sprintf("https://%s/%s/%s.git", host, base, project)
 }
 
 // ParseRemoteURL normaliza una URL remota de git a una referencia de repo.
 // Reconoce la forma SCP (git@host:owner/repo) y las URLs con esquema. El forge
 // se deduce del host con el mapa hosts; un host desconocido no se normaliza.
-func ParseRemoteURL(raw string, hosts map[string]string) (model.RepoRef, bool) {
+// prefixes mapea host → relative URL root de la instancia; el prefijo se quita
+// del path para que un remoto en subcarpeta (https://host/git/grupo/proy.git)
+// normalice al mismo Project que uno en la raíz.
+func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]string) (model.RepoRef, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return model.RepoRef{}, false
@@ -319,6 +340,9 @@ func ParseRemoteURL(raw string, hosts map[string]string) (model.RepoRef, bool) {
 	}
 
 	path = strings.Trim(strings.TrimSuffix(strings.TrimSpace(path), ".git"), "/")
+	if prefix := strings.Trim(prefixes[host], "/"); prefix != "" {
+		path = strings.TrimPrefix(path, prefix+"/")
+	}
 	parts := strings.Split(path, "/")
 	if host == "" || len(parts) < 2 {
 		return model.RepoRef{}, false

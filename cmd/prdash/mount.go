@@ -42,6 +42,7 @@ func buildExecutor(cfg config.Config) *executor.Executor {
 			CloneDir:    cfg.CloneDir,
 			WorktreeDir: cfg.WorktreeDir,
 			Hosts:       hostsOf(cfg),
+			Prefixes:    clonePrefixesOf(cfg),
 		}),
 		Worktrees: worktree.Select(client, cfg.WorktreeDir),
 		Herdr:     client,
@@ -60,6 +61,24 @@ func hostsOf(cfg config.Config) map[string]string {
 		hosts[h] = "gitlab"
 	}
 	return hosts
+}
+
+// clonePrefixesOf mapea host → relative URL root de clonado/web, para que el
+// resolutor construya y normalice URLs de instancias servidas en subcarpeta
+// (p. ej. GitLab self-managed con api_base "/git/api/v4/" → "git").
+func clonePrefixesOf(cfg config.Config) map[string]string {
+	prefixes := map[string]string{}
+	if h := cfg.Forges.GitHub.Host; h != "" {
+		if p := cfg.Forges.GitHub.ClonePrefix(); p != "" {
+			prefixes[h] = p
+		}
+	}
+	if h := cfg.Forges.GitLab.Host; h != "" {
+		if p := cfg.Forges.GitLab.ClonePrefix(); p != "" {
+			prefixes[h] = p
+		}
+	}
+	return prefixes
 }
 
 // toolAvailability comprueba qué binarios del plan están instalados, de modo

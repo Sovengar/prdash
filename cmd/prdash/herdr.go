@@ -133,7 +133,7 @@ func mountReview(cfg config.Config, target string) int {
 // resolveTargetItem traduce una URL de PR/MR al ítem del montaje; avisa si la
 // URL no es reconocible.
 func resolveTargetItem(cfg config.Config, target string) (model.Item, bool) {
-	it, ok := reviewItem(target, hostsOf(cfg))
+	it, ok := reviewItem(target, hostsOf(cfg), clonePrefixesOf(cfg))
 	if !ok {
 		fmt.Fprintf(os.Stderr, "prdash herdr: %q is not a recognized PR/MR URL\n", target)
 		return model.Item{}, false
@@ -196,10 +196,11 @@ func clickedURLFromContext(raw string) string {
 }
 
 // reviewItem traduce una URL de PR/MR al ítem mínimo que el montaje necesita
-// (forge, host, proyecto, número y URL). El fetch y la rama los resuelve el
-// resolutor a partir del ref de review.
-func reviewItem(target string, hosts map[string]string) (model.Item, bool) {
-	ref, number, ok := parse.ParseReviewURL(target, hosts)
+// (forge, host, proyecto, número y URL). hosts y prefixes son los mismos que usa
+// el resolutor, de modo que la identidad de la URL coincide con la vía API. El
+// fetch y la rama los resuelve el resolutor a partir del ref de review.
+func reviewItem(target string, hosts, prefixes map[string]string) (model.Item, bool) {
+	ref, number, ok := parse.ParseReviewURL(target, hosts, prefixes)
 	if !ok {
 		return model.Item{}, false
 	}

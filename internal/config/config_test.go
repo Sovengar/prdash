@@ -19,7 +19,7 @@ func TestLoadFromMissingFileReturnsDefaultsSilently(t *testing.T) {
 	if !cfg.Forges.GitHub.Enabled || cfg.Forges.GitHub.Host != "github.com" {
 		t.Errorf("github = %+v", cfg.Forges.GitHub)
 	}
-	if cfg.Forges.GitLab.APIBase != "/git/api/v4/" {
+	if cfg.Forges.GitLab.APIBase != "/api/v4/" {
 		t.Errorf("api_base = %q", cfg.Forges.GitLab.APIBase)
 	}
 	if cfg.Forges.Bitbucket.Enabled {
@@ -125,6 +125,76 @@ func TestLoadFromPartialKeepsOtherDefaults(t *testing.T) {
 	}
 }
 
+func TestGitLabClonePrefixDerivesFromAPIBase(t *testing.T) {
+	cases := []struct {
+		name      string
+		apiBase   string
+		cloneBase string
+		want      string
+	}{
+		{"subcarpeta", "/git/api/v4/", "", "git"},
+		{"raíz", "/api/v4/", "", ""},
+		{"sin barra inicial", "git/api/v4/", "", "git"},
+		{"vacío", "", "", ""},
+		{"sin forma REST", "/custom/", "", ""},
+		{"override gana", "/git/api/v4/", "/custom/", "custom"},
+		{"override limpia a raíz", "/git/api/v4/", "/", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := GitLabConfig{APIBase: tc.apiBase, CloneBase: tc.cloneBase}
+			if got := g.ClonePrefix(); got != tc.want {
+				t.Fatalf("ClonePrefix = %q, quiero %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGitHubClonePrefix(t *testing.T) {
+	if got := (GitHubConfig{}).ClonePrefix(); got != "" {
+		t.Fatalf("github raíz = %q", got)
+	}
+	if got := (GitHubConfig{CloneBase: "/ent/"}).ClonePrefix(); got != "ent" {
+		t.Fatalf("github enterprise = %q", got)
+	}
+}
+
+func TestLoadFromCloneBaseOverrides(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `
+[forge.github]
+host = "github.enterprise.com"
+clone_base = "/ent/"
+
+[forge.gitlab]
+host = "gitlab.acme.io"
+clone_base = "repo"
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warn := LoadFrom(path)
+	if warn != "" {
+		t.Fatalf("warning = %q", warn)
+	}
+	if got := cfg.Forges.GitHub.ClonePrefix(); got != "ent" {
+		t.Errorf("github clone_base = %q", got)
+	}
+	if got := cfg.Forges.GitLab.ClonePrefix(); got != "repo" {
+		t.Errorf("gitlab clone_base = %q", got)
+	}
+}
+
+func TestDefaultsClonePrefix(t *testing.T) {
+	// El default de APIBase es "/api/v4/" (GitLab estándar en la raíz): no
+	// debe derivar prefijo, para no clonar mal un GitLab en raíz.
+	if got := Defaults().Forges.GitLab.ClonePrefix(); got != "" {
+		t.Fatalf("gitlab default ClonePrefix = %q, quiero vacío (raíz)", got)
+	}
+	if got := Defaults().Forges.GitHub.ClonePrefix(); got != "" {
+		t.Fatalf("github default ClonePrefix = %q", got)
+	}
+}
 func TestLoadFromInvalidDurationKeepsDefault(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`refresh_interval = "nope"`), 0o644); err != nil {

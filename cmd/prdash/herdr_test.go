@@ -8,6 +8,7 @@ import (
 
 	"prdash/internal/config"
 	"prdash/internal/forge/model"
+	"prdash/internal/reporesolver"
 	"prdash/internal/selection"
 )
 
@@ -58,7 +59,7 @@ func TestReviewTargetNone(t *testing.T) {
 // TestReviewItemFromURL traduce la URL al ítem mínimo del montaje.
 func TestReviewItemFromURL(t *testing.T) {
 	hosts := map[string]string{"github.com": "github", "gitlab.example.com": "gitlab"}
-	it, ok := reviewItem("https://github.com/acme/widget/pull/42", hosts)
+	it, ok := reviewItem("https://github.com/acme/widget/pull/42", hosts, nil)
 	if !ok {
 		t.Fatal("la URL de PR debería resolverse")
 	}
@@ -68,7 +69,7 @@ func TestReviewItemFromURL(t *testing.T) {
 	if it.URL != "https://github.com/acme/widget/pull/42" {
 		t.Fatalf("URL del ítem = %q", it.URL)
 	}
-	if _, ok := reviewItem("https://github.com/acme/widget/issues/1", hosts); ok {
+	if _, ok := reviewItem("https://github.com/acme/widget/issues/1", hosts, nil); ok {
 		t.Fatal("una URL de issue no es un review")
 	}
 }
@@ -101,15 +102,58 @@ func TestToolAvailabilityIdempotent(t *testing.T) {
 }
 
 // TestReviewItemKeepsIdentity comprueba que la identidad del ítem es la del
-// forge, host, proyecto y número de la URL.
+// forge, host, proyecto y número de la URL, normalizando el relative URL root
+// de la instancia (prefix-aware) para no duplicarlo luego al clonar.
 func TestReviewItemKeepsIdentity(t *testing.T) {
-	it, ok := reviewItem("https://gitlab.example.com/git/sub/proj/-/merge_requests/5", map[string]string{"gitlab.example.com": "gitlab"})
+	hosts := map[string]string{"gitlab.example.com": "gitlab"}
+	prefixes := map[string]string{"gitlab.example.com": "git"}
+	it, ok := reviewItem("https://gitlab.example.com/git/sub/proj/-/merge_requests/5", hosts, prefixes)
 	if !ok {
 		t.Fatal("la URL de MR debería resolverse")
 	}
-	want := model.With("gitlab", "gitlab.example.com", "git/sub/proj", 5)
+	want := model.With("gitlab", "gitlab.example.com", "sub/proj", 5)
 	if it.ID() != want {
 		t.Fatalf("ID = %+v, quiero %+v", it.ID(), want)
+	}
+}
+
+// TestReviewURLToCloneURLChain cubre el HIGH de punta a punta: la cadena
+// link handler → resolver no debe duplicar el prefijo. Un host con subcarpeta
+// produce la URL de clon con un único "/git/"; un host raíz/GitHub no cambia.
+func TestReviewURLToCloneURLChain(t *testing.T) {
+	gitlabCfg := config.Config{Forges: config.Forges{
+		GitLab: config.GitLabConfig{Host: "gitlab.example.com", APIBase: "/git/api/v4/"},
+	}}
+	hosts := hostsOf(gitlabCfg)
+	prefixes := clonePrefixesOf(gitlabCfg)
+
+	cases := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{
+			"gitlab subcarpeta",
+			"https://gitlab.example.com/git/sub/proj/-/merge_requests/5",
+			"https://gitlab.example.com/git/sub/proj.git",
+		},
+		{
+			"github raíz",
+			"https://github.com/acme/widget/pull/9",
+			"https://github.com/acme/widget.git",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			it, ok := reviewItem(tc.url, hosts, prefixes)
+			if !ok {
+				t.Fatalf("no resolvió %q", tc.url)
+			}
+			got := reporesolver.CloneURL(it.Ref, prefixes[it.Host])
+			if got != tc.want {
+				t.Fatalf("CloneURL = %q, quiero %q", got, tc.want)
+			}
+		})
 	}
 }
 
