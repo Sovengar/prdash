@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"prdash/internal/review/plan"
 )
 
 // fakeCLI graba las invocaciones y responde según una función, de modo que los
@@ -201,4 +203,47 @@ func equalSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestMutationsRefusedWithoutHerdrEnv cubre "nada mutante si no Available()":
+// fuera de Herdr ninguna operación mutante toca la CLI.
+func TestMutationsRefusedWithoutHerdrEnv(t *testing.T) {
+	f := &fakeCLI{env: map[string]string{}, respond: versionOK}
+	c := f.client()
+	ctx := context.Background()
+
+	if _, err := c.WorktreeCreate(ctx, WorktreeSpec{Cwd: "/repo", Branch: "x"}); err == nil {
+		t.Fatal("no debería crear worktree fuera de Herdr")
+	}
+	if _, err := c.WorkspaceCreate(ctx, WorkspaceSpec{Cwd: "/repo"}); err == nil {
+		t.Fatal("no debería crear workspace fuera de Herdr")
+	}
+	if err := c.PaneRun(ctx, "w1:p1", []string{"ls"}); err == nil {
+		t.Fatal("no debería correr comandos fuera de Herdr")
+	}
+	if err := c.Notify(ctx, "hola", NotifyOptions{}); err == nil {
+		t.Fatal("no debería notificar fuera de Herdr")
+	}
+	if _, err := c.MountLayout(ctx, Container{PaneID: "w1:p1"}, plan.Plan{Panes: []plan.Pane{{Label: "X", Argv: []string{"x"}}}}); err == nil {
+		t.Fatal("no debería montar layout fuera de Herdr")
+	}
+	if len(f.calls) != 0 {
+		t.Fatalf("no debería invocar la CLI: %v", f.calls)
+	}
+}
+
+// TestMutationsRefusedBelowMinVersion veta la mutación con una versión por
+// debajo del mínimo soportado.
+func TestMutationsRefusedBelowMinVersion(t *testing.T) {
+	f := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}, respond: func([]string) ([]byte, []byte, error) {
+		return []byte("herdr 0.8.2\n"), nil, nil
+	}}
+	if _, err := f.client().WorktreeCreate(context.Background(), WorktreeSpec{Cwd: "/repo", Branch: "x"}); err == nil {
+		t.Fatal("una versión antigua no debería mutar")
+	}
+	for _, call := range f.calls {
+		if call[0] == "worktree" {
+			t.Fatalf("no debería invocar worktree create: %v", f.calls)
+		}
+	}
 }

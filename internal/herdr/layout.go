@@ -21,6 +21,9 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 	if len(pl.Panes) == 0 {
 		return nil, nil
 	}
+	if err := c.guard(); err != nil {
+		return nil, err
+	}
 
 	anchor := container.PaneID
 	if anchor == "" && container.WorkspaceID != "" {
