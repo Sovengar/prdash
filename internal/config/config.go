@@ -311,6 +311,33 @@ func (c Config) CmdArgs(action string) []string {
 	return strings.Fields(raw)
 }
 
+// ToolArgs devuelve el argv configurable de una herramienta del orquestador.
+// Prioriza `commands.<name>` (argv completo, permite flags), luego el binario de
+// `tools.<name>` y por último el default del propio nombre. Devuelve nil (pane
+// omitido con aviso) si no hay nada configurado.
+func (c Config) ToolArgs(name string) []string {
+	if raw, ok := c.Commands[name]; ok && strings.TrimSpace(raw) != "" {
+		return strings.Fields(raw)
+	}
+	switch name {
+	case "tuicr":
+		return fieldsOr(c.Tools.Tuicr, "tuicr")
+	case "hunk":
+		return fieldsOr(c.Tools.Hunk, "hunk")
+	case "agent":
+		return fieldsOr(c.Tools.Agent, "opencode")
+	}
+	return nil
+}
+
+// fieldsOr parte raw en argv; si está vacío usa el fallback.
+func fieldsOr(raw, fallback string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return strings.Fields(fallback)
+	}
+	return strings.Fields(raw)
+}
+
 // hintLabels es la etiqueta corta de cada acción en la barra de hints.
 var hintLabels = map[string]string{
 	"refresh":      "r refresh",
