@@ -184,6 +184,22 @@ func TestPaneWaitOutputPassesTimeoutMillis(t *testing.T) {
 	}
 }
 
+// TestGuardErrorNamesSubcommand comprueba que el error por Herdr no
+// disponible nombra el subcomando vetado en vez de salir con args vacíos.
+func TestGuardErrorNamesSubcommand(t *testing.T) {
+	f := &fakeCLI{env: map[string]string{}, respond: versionOK}
+	_, err := f.client().WorktreeCreate(context.Background(), WorktreeSpec{Cwd: "/repo", Branch: "x"})
+	if err == nil {
+		t.Fatal("esperaba error fuera de Herdr")
+	}
+	if !strings.Contains(err.Error(), "worktree create") {
+		t.Fatalf("error = %q, debería nombrar el subcomando", err.Error())
+	}
+	if strings.Contains(err.Error(), "herdr []") {
+		t.Fatalf("error = %q, no debería salir con args vacíos", err.Error())
+	}
+}
+
 func contains(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {

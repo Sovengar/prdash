@@ -21,7 +21,7 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 	if len(pl.Panes) == 0 {
 		return nil, nil
 	}
-	if err := c.guard(); err != nil {
+	if err := c.guard("pane", "split"); err != nil {
 		return nil, err
 	}
 
