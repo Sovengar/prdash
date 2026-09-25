@@ -19,6 +19,8 @@ Historial de versiones: [`CHANGELOG.md`](CHANGELOG.md).
   de review. Fuera de Herdr, el inbox (F1) sigue operativo y el montaje de
   review reporta que requiere Herdr.
 
+PR de prueba 1/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ## Build e instalación
 
 ```sh
