@@ -12,6 +12,7 @@ import (
 
 	"prdash/internal/cache"
 	"prdash/internal/forge/model"
+	"prdash/internal/herdr"
 	"prdash/internal/review/plan"
 	"prdash/internal/worktree"
 )
@@ -31,15 +32,16 @@ type Resolver interface {
 	ActiveReview(id model.ID) (cache.ReviewRecord, bool)
 }
 
-// HerdrPort es el puerto de montaje del layout dentro de Herdr. Su
-// implementación real llega en una etapa posterior; aquí solo se consume.
+// HerdrPort es el puerto de montaje del layout dentro de Herdr. La
+// implementación real es *herdr.Client.
 type HerdrPort interface {
 	// Available informa si Herdr está presente y operativo.
 	Available() bool
-	// Mount abre el layout de panes del plan.
-	Mount(pl plan.Plan) error
+	// MountLayout abre el layout de panes del plan sobre el contenedor y
+	// devuelve los avisos no fatales.
+	MountLayout(ctx context.Context, container herdr.Container, pl plan.Plan) ([]string, error)
 	// Notify muestra una notificación en Herdr.
-	Notify(title string)
+	Notify(ctx context.Context, title string, opts herdr.NotifyOptions) error
 }
 
 // Executor monta el review de un ítem.
@@ -109,7 +111,7 @@ func (e *Executor) Mount(ctx context.Context, it model.Item) (Result, error) {
 
 	res.Plan = e.buildPlan(it, wt)
 	res.Warnings = append(res.Warnings, res.Plan.Warnings...)
-	res.Herdr = e.mountLayout(res.Plan, &res)
+	res.Herdr = e.mountLayout(ctx, wt, res.Plan, &res)
 
 	if err := e.Resolver.RecordReview(it, cache.ReviewRecord{
 		Repo:     repoPath,
@@ -173,15 +175,19 @@ func (e *Executor) buildPlan(it model.Item, wt worktree.Worktree) plan.Plan {
 
 // mountLayout aplica el plan por el puerto de Herdr. Sin Herdr no es un error:
 // se avisa y el worktree queda montado igualmente.
-func (e *Executor) mountLayout(pl plan.Plan, res *Result) bool {
+func (e *Executor) mountLayout(ctx context.Context, wt worktree.Worktree, pl plan.Plan, res *Result) bool {
 	if e.Herdr == nil || !e.Herdr.Available() {
 		res.Warnings = append(res.Warnings, "el layout de review requiere Herdr; el worktree quedó montado")
 		return false
 	}
-	if err := e.Herdr.Mount(pl); err != nil {
+	container := herdr.Container{WorkspaceID: wt.WorkspaceID, PaneID: wt.RootPaneID}
+	warns, err := e.Herdr.MountLayout(ctx, container, pl)
+	res.Warnings = append(res.Warnings, warns...)
+	if err != nil {
 		res.Warnings = append(res.Warnings, fmt.Sprintf("no se pudo abrir el layout: %v", err))
 		return false
 	}
+	_ = e.Herdr.Notify(ctx, "prdash: review listo", herdr.NotifyOptions{Sound: "done"})
 	return true
 }
 
