@@ -43,6 +43,8 @@ Teclas por defecto: `j`/`k` mover, `tab` sección, `enter` detalle, `r` refresca
 `m` montar review (requiere Herdr), `a` approve, `M` merge, `o` abrir en el
 navegador, `q` salir. Son configurables en `[keybindings]`.
 
+PR de prueba 3/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ### Gestión de worktrees (`prdash worktrees`)
 
 Los worktrees de review se identifican por su nombre/label `prdash-…`: prdash
