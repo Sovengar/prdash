@@ -80,6 +80,8 @@ lo deja en `~/.local/bin/prdash`). Para desenlazar: `make plugin-unlink`
 (`herdr plugin unlink prdash`). No se edita `plugins.json` a mano: es derivado
 de los manifiestos.
 
+PR de prueba 5/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ### Subcomandos que consume el plugin
 
 | Subcomando | Uso |
