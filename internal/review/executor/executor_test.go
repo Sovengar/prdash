@@ -354,6 +354,7 @@ func (f *fakeProvisioner) Create(context.Context, worktree.Spec) (worktree.Workt
 }
 func (f *fakeProvisioner) Remove(context.Context, string) error     { return nil }
 func (f *fakeProvisioner) List(context.Context) []worktree.Worktree { return nil }
+func (f *fakeProvisioner) Audit(context.Context) []worktree.Entry   { return nil }
 
 // fakeHerdr es un doble en memoria del puerto Herdr.
 type fakeHerdr struct {
