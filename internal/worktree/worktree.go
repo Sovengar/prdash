@@ -35,6 +35,10 @@ type Worktree struct {
 	Path   string
 	Branch string
 	Repo   string
+	// WorkspaceID y RootPaneID identifican el contenedor nativo de Herdr que
+	// aloja el worktree. Quedan vacíos en la provisión con git directo.
+	WorkspaceID string
+	RootPaneID  string
 }
 
 // Provisioner es el puerto de provisión de worktrees.
