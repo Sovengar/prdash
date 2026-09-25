@@ -17,7 +17,9 @@ import (
 	"prdash/internal/forge/bitbucket"
 	"prdash/internal/forge/github"
 	"prdash/internal/forge/gitlab"
+	"prdash/internal/herdr"
 	"prdash/internal/tui"
+	"prdash/internal/worktree"
 )
 
 func main() {
@@ -28,6 +30,16 @@ func main() {
 			fmt.Fprintln(os.Stderr, "prdash:", warn)
 		}
 		os.Exit(runHerdr(cfg, buildAdapters(cfg), os.Args[2:]))
+	}
+
+	// La limpieza de worktrees tampoco: es un subcomando explícito y no
+	// interactivo.
+	if len(os.Args) > 1 && os.Args[1] == "worktrees" {
+		cfg, warn := config.Load()
+		if warn != "" {
+			fmt.Fprintln(os.Stderr, "prdash:", warn)
+		}
+		os.Exit(runWorktrees(worktree.Select(herdr.New(), cfg.WorktreeDir), os.Args[2:]))
 	}
 
 	printMode := flag.Bool("print", false, "imprime el inbox y sale")
