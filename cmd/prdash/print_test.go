@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/testutil"
+	"prdash/internal/worktree"
 )
 
 // TestBuildAdaptersWiring comprueba que el wiring de adapters respeta la config.
@@ -46,7 +48,7 @@ func TestRunPrint(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}) })
+	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
 
 	for _, want := range []string{"Creados por mí", "github@github.com", "acme/widget#7", "Add widget"} {
 		if !strings.Contains(out, want) {
@@ -70,10 +72,60 @@ func TestRunPrintKeepsOrder(t *testing.T) {
 		}
 	}
 	out := captureStdout(t, func() {
-		runPrint([]forge.Adapter{mk("github"), mk("gitlab")})
+		runPrint([]forge.Adapter{mk("github"), mk("gitlab")}, nil)
 	})
 	if strings.Index(out, "T-github") > strings.Index(out, "T-gitlab") {
 		t.Errorf("el orden de impresión debe seguir el de los adapters:\n%s", out)
+	}
+}
+
+// TestRunPrintShowsActiveReview comprueba que --print añade de forma
+// determinista la ruta del worktree del review activo de cada ítem.
+func TestRunPrintShowsActiveReview(t *testing.T) {
+	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
+	it.Title = "Add widget"
+	fake := &testutil.FakeAdapter{
+		ForgeName: "github",
+		HostName:  "github.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			{Section: model.SectionAuthored}: {{Items: []model.Item{it}}},
+		},
+	}
+	wtPath := filepath.Join(t.TempDir(), "worktrees", "prdash-pr-7")
+	lookup := func(i model.Item) (worktree.Worktree, bool) {
+		if i.ID() == it.ID() {
+			return worktree.Worktree{Path: wtPath, Branch: "prdash/pr-7", Label: "prdash-pr-7"}, true
+		}
+		return worktree.Worktree{}, false
+	}
+
+	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, lookup) })
+
+	if !strings.Contains(out, "review:"+wtPath) {
+		t.Errorf("la salida no integra la ruta del review activo:\n%s", out)
+	}
+}
+
+// TestRunPrintWithoutReviewsKeepsF1 comprueba que sin resolvedor de reviews la
+// salida de --print no cambia respecto a F1.
+func TestRunPrintWithoutReviewsKeepsF1(t *testing.T) {
+	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
+	it.Title = "Add widget"
+	fake := &testutil.FakeAdapter{
+		ForgeName: "github",
+		HostName:  "github.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			{Section: model.SectionAuthored}: {{Items: []model.Item{it}}},
+		},
+	}
+
+	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
+
+	if strings.Contains(out, "review:") {
+		t.Errorf("sin reviews activos no debería aparecer la marca de F2:\n%s", out)
+	}
+	if !strings.Contains(out, "Creados por mí") || !strings.Contains(out, "Add widget") {
+		t.Errorf("la salida de F1 no debería cambiar:\n%s", out)
 	}
 }
 
