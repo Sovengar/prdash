@@ -181,3 +181,48 @@ func TestRefCellTextNoRepiteLaRutaEnLaLinea(t *testing.T) {
 		t.Errorf("la celda dice %q: el grupo aparece %d veces, want 1", celda, got)
 	}
 }
+
+// TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho fija una degradación real de
+// `full` que conviene no descubrir en producción: con el ITEM al tope (34), la
+// columna ya no cabe junto a FORGE (14) por debajo de 48 de ancho interior, y
+// fitColumns la elimina por la derecha. En `common` y `leaf` el sufijo es corto y
+// la columna sobrevive hasta 38.
+//
+// No es un fallo de este modo: el tope de 34 lo fijó el ADR 0002 para el sufijo
+// y la fórmula sigue siendo la misma. Pero significa que `full` es el modo que
+// peor aguanta un terminal estrecho, y el usuario se pierde justo la referencia
+// que fue a elegir. El test lo fija para que el umbral no se mueva en silencio.
+func TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho(t *testing.T) {
+	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")
+	segs := []inbox.Section{section(model.SectionReview, items...)}
+
+	const umbral = 48 // colForge(14) + itemWidthCap(34)
+	for _, tc := range []struct {
+		mode       prefixMode
+		inner      int
+		quiereITEM bool
+	}{
+		{prefixCommon, 38, true},
+		{prefixLeaf, 38, true},
+		{prefixFull, 47, false},
+		{prefixFull, umbral, true},
+	} {
+		lay := newRefLayout(segs, tc.mode)
+		hay := strings.Contains(titlesDe(lay, tc.inner), "ITEM")
+		if hay != tc.quiereITEM {
+			t.Errorf("%v a %d columnas interiores: ITEM presente = %v, want %v (columnas: %s)",
+				tc.mode, tc.inner, hay, tc.quiereITEM, titlesDe(lay, tc.inner))
+		}
+	}
+}
+
+// titlesDe son las columnas que caben en el ancho dado, con la coma de ADR 0005
+// de fondo: la referencia completa manda en ITEM, así que el modo `full` es el
+// que come la tabla por la derecha.
+func titlesDe(l refLayout, inner int) string {
+	var out []string
+	for _, c := range l.cols[:fitColumns(l, inner)] {
+		out = append(out, c.title)
+	}
+	return strings.Join(out, ",")
+}

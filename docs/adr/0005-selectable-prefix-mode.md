@@ -58,7 +58,7 @@ tabla, y el diseño solo hueco.
    | Modo | Línea de prefijo | Celda ITEM |
    |---|---|---|
    | `common` (por defecto) | sí, con el prefijo común de la activa | solo el sufijo |
-   | `full` | no | la referencia completa `proyecto/subgrupo#n` |
+   | `full` | no | la referencia completa `proyecto/subgrupo#n`, **recortada por la cola si no cabe** |
    | `leaf` | no | la hoja del proyecto más `#n` |
 
 2. **`common` es el comportamiento heredado** y no se toca: es el de los ADR
@@ -156,16 +156,45 @@ tabla, y el diseño solo hueco.
   `--print` conservan la ruta completa. **No se promete desambiguación.**
   - Corrijo aquí la justificación que se manejaba al revés: `leaf` es
     el modo que **menos** desambigua de los dos que no usan prefijo.
-- **`newRefLayout` exige el modo como parámetro explícito** (10 call sites). Es
-  un coste deliberado: con un default, `newRefLayout(secs)` significaría "common"
-  en unos sitios y "lo que hubiera" en otros, y el error no lo vería el
-  compilador.
+- **`newRefLayout` exige el modo como parámetro explícito** (16 call sites: 1 de
+  producción y 15 de test). Es un coste deliberado: con un default,
+  `newRefLayout(secs)` significaría "common" en unos sitios y "lo que hubiera" en
+  otros, y el error no lo vería el compilador.
 - **`p` pasa a ser configurable por `[keybindings]`** aunque el modo no se
   persista. Es la consecuencia de registrar la acción, y es el mecanismo
-  genérico que ya existía; no es plumb nuevo.
+  genérico que ya existía; no es plumb nuevo. **Con un coste que conviene decir:
+  `ActionForKey` resuelve por orden alfabético de acciones, así que un usuario que
+  tuviera otra acción en `p` la pierde** —`prefix-mode` va antes que `quit`,
+  `refresh`, `section-next` y `simulate`— sin aviso. No se añade detección de
+  teclas duplicadas porque es una limitación genérica del mapa, anterior a esta
+  feature, y arreglarla excede su alcance. Quien tenga algo en `p`, lo mueva.
+- **`full` es el modo que peor aguanta un terminal estrecho.** Con el ITEM al
+  tope (34) la columna ya no cabe junto a FORGE (14) por debajo de **48 columnas
+  interiores**, así que `fitColumns` la elimina por la derecha y la tabla se queda
+  solo con FORGE —justo se pierde la referencia que fue a elegir—. En `common` y
+  `leaf` el sufijo es corto y sobrevive hasta 38. El tope de 34 lo fijó el ADR
+  0002 para el *sufijo* y la fórmula se conserva; el mecanismo (perder columnas
+  por la derecha antes que información dentro de ellas) también. Se asume, y
+  `TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho` fija el umbral para que no se
+  mueva en silencio. **Arreglarlo de raíz exigiría acotar ITEM en función del
+  ancho disponible, no con una constante: es una decisión de diseño aparte, no un
+  efecto colateral de esta.**
+- **La referencia completa casi nunca cabe entera.** El texto usable de ITEM es
+  `itemWidthCap - 1 = 33` runes, así que una ruta de subgrupo de 40 sale siempre
+  recortada por la cola (`…/vsocial/backend/api-gateway#100`). `full` no es "la
+  ruta entera" sino "la referencia en la celda, con el mismo recorte que siempre".
+  La doc lo dice así a propósito después de escribirlo mal al revés.
 - **Ciclar el modo cambia el ancho y la altura de la lista.** Resincronizar el
   scroll en cada ciclo es obligatorio (sin él, una lista desplazada deja el
   cursor fuera de la ventana). Está hecho y verificado.
+- **El nombre del modo se pierde por debajo de 42 columnas de ancho interior.**
+  La barra se envuelve y se acota a `maxHintLines`; con 38 solo salen tres líneas y
+  el nombre se va con el recorte (`p prefix:` a secas). Afecta solo a `common`,
+  cuyo nombre es el más largo. Es la degradación de la barra que el repo ya acepta
+  (por eso `quit` abre la lista); `prefix-mode` va detrás de `refresh` para
+  perderse lo último posible, y los tres modos se leen enteros desde 42 columnas
+  interiores, es decir desde un terminal de 44
+  (`TestElHintNombraElModoAAnchosUsables`).
 - **Un ciclo más que memorizar**, mitigado por el hint, que nombra el modo.
 
 **Verificación**

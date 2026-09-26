@@ -11,6 +11,11 @@ import (
 // barra de atajos: `p` no sale a secas, sino con el modo en el que está la
 // columna ITEM, para no tener que contar pulsaciones. Sin esto, el usuario
 // tendría que recordar cuántas lleva.
+//
+// La comprobación es de coincidencia EXACTA ("p prefix: common"), no de que
+// aparezca "p prefix": con una comprobación laxa, una barra que se trunca en
+// "p prefix:" —que es justo lo que pasa en un terminal muy estrecho— pasaría el
+// test sin nombrar el modo.
 func TestElHintNombraElModoActual(t *testing.T) {
 	m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway")
 
@@ -30,9 +35,33 @@ func TestElHintNombraElModoActual(t *testing.T) {
 		if !strings.Contains(bar, want.hint) {
 			t.Errorf("la barra = %q, want que contenga %q", bar, want.hint)
 		}
-		// Y no puede quedarse solo con la tecla a secas.
-		if strings.Contains(bar, "p prefix ") {
-			t.Errorf("la barra muestra la etiqueta a secas, sin el modo: %q", bar)
+		// Y no puede quedarse solo con la etiqueta a secas, con ni con el
+		// separador: "p prefix" sin modo no dice nada.
+		if strings.Contains(bar, "p prefix") && !strings.Contains(bar, want.hint) {
+			t.Errorf("la barra muestra la etiqueta sin el modo: %q", bar)
+		}
+	}
+}
+
+// TestElHintNombraElModoAAnchosUsables comprueba la misma promesa a los anchos
+// donde la barra se envuelve a varias líneas, que es donde el recorte a
+// maxHintLines puede comerse la cola. Los tres modos tienen que leerse enteros
+// en cuanto caben las acciones, no solo en el terminal de 160 columnas con el
+// que se prueban casi todos los tests.
+func TestElHintNombraElModoAAnchosUsables(t *testing.T) {
+	for _, width := range []int{44, 56, 64, 80, 100, 160} {
+		m := newTestModel(t, ghAdapter())
+		m.width = width
+		m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested,
+			mkItems("APPCITTI/vsocial/backend/api-gateway"), false))
+
+		for _, want := range []string{"p prefix: common", "p prefix: full", "p prefix: leaf"} {
+			bar := stripANSI(strings.Join(m.hintLines(), " "))
+			if !strings.Contains(bar, want) {
+				t.Errorf("ancho %d: la barra = %q, want que contenga %q", width, bar, want)
+				break
+			}
+			m = press(t, m, "p")
 		}
 	}
 }

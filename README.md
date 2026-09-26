@@ -86,20 +86,25 @@ contar pulsaciones:
 | Modo | La línea de prefijo | La celda ITEM |
 |---|---|---|
 | `common` (al abrir) | con el prefijo común de la sección activa | solo el sufijo: `api-gateway#100` |
-| `full` | no se pinta | la ruta entera: `APPCITTI/vsocial/backend/api-gateway#100` |
-| `leaf` | no se pinta | solo la hoja: `api-gateway#100` |
+| `full` | no se pinta | la ruta entera, recortada por la cola si no cabe: `…kend/vsocial-api-actuacions#1016` |
+| `leaf` | no se pinta | solo la hoja: `vsocial-api-actuacions#1016` |
 
-En `full` y `leaf` la lista recupera la línea que ocupaba el prefijo, y la
-columna ITEM se ajusta a lo que ahora muestra. Si la sección no tiene prefijo
-común (un solo ítem, o nada en común), `common` se ve igual que `full`: no inventa
-un prefijo ni repite la ruta.
+En `full` y `leaf` la lista recupera la línea que ocupaba el prefijo, y la columna
+ITEM se ajusta a lo que ahora muestra. Ojo con `full`: la referencia de un
+subgrupo largo no cabe en el tope de la columna, así que **se recorta por la cola**
+y se ve `…kend/api-gateway#1016`, no la ruta entera. Y como ITEM llega al tope,
+es el modo que peor aguanta un terminal estrecho: por debajo de ~50 columnas la
+columna desaparece y la tabla se queda solo con FORGE. Si la sección no tiene
+prefijo común (un solo ítem, o nada en común), `common` se ve igual que `full`: no
+inventa un prefijo ni repite la ruta.
 
-Dos avisos honestos: el modo **no se persiste** (al reabrir vuelve a `common`),
-aunque la tecla `p` sí es configurable por `[keybindings]`. Y `leaf` **no
-desambigua**: dos repos de grupos distintos con la misma hoja se ven iguales
-(`acme/one#7` y `other/one#8` → `one#7` y `one#8`). Para leer la ruta completa está
-la ficha del ítem y `--print`. La decisión y sus alternativas están en
-[ADR 0005](docs/adr/0005-selectable-prefix-mode.md).
+Tres avisos honestos: el modo **no se persiste** (al reabrir vuelve a `common`),
+aunque la tecla `p` sí es configurable por `[keybindings]` —y si tenías otra acción
+asignada a `p`, ahora la pierdes: la barra y el ciclo son de `prefix-mode`. Y
+`leaf` **no desambigua**: dos repos de grupos distintos con la misma hoja se ven
+iguales (`acme/one#7` y `other/one#8` → `one#7` y `one#8`). Para leer la ruta
+completa está la ficha del ítem y `--print`. La decisión y sus alternativas están
+en [ADR 0005](docs/adr/0005-selectable-prefix-mode.md).
 
 ### Simulación (`v`)
 

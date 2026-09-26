@@ -438,9 +438,11 @@ var hintOrder = []hint{
 	{action: "open-browser", label: "open"},
 	{action: "refresh", label: "refresh"},
 	// `prefix-mode` va aquí y no al final porque el recorte a maxHintLines corta
-	// por la cola: al final se perdería primero, justo en el terminal estrecho
-	// donde más hace falta saber en qué modo está la columna ITEM. Su etiqueta
-	// la completa la TUI con el modo actual (ver HintState).
+	// por la cola: al final se perdería antes que nada. No es una garantía de que
+	// siempre se lea —en un terminal de 40 columnas la barra se corta a tres
+	// líneas y el nombre del modo se va con ella, porque el nombre más largo es
+	// "common"—, pero en cualquier ancho en el que quepan las acciones, cabe
+	// también el modo. Su etiqueta la completa la TUI (ver HintState).
 	{action: "prefix-mode", label: "prefix"},
 	{key: "j/k", label: "move"},
 	{key: "pgup/dn", label: "page"},

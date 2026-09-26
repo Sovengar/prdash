@@ -17,17 +17,20 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
   - `common` (el de antes): línea de prefijo con el grupo común, celda con el
     sufijo. Es el default, así que quien no pulse la tecla no ve nada nuevo.
-  - `full`: sin línea de prefijo y la referencia entera en la celda, para quien
-    lee la tabla fila a fila y quiere la referencia en la fila.
+  - `full`: sin línea de prefijo y la referencia en la celda, para quien lee la
+    tabla fila a fila y quiere la referencia en la fila. **Recortada por la cola**
+    cuando no cabe —en un subgrupo largo se ve `…kend/api-gateway#1016`— porque
+    la columna tiene el mismo tope de siempre.
   - `leaf`: sin línea de prefijo y solo la hoja del proyecto más el número, la
     máxima densidad.
 
   El modo es **global** (no por sección) y **no se persiste**: al reabrir vuelve
   a `common`. La tecla `p` sí queda configurable por `[keybindings]`, por el
-  mecanismo genérico que ya existía para el resto de acciones. La columna ITEM se
-  vuelve a medir en cada modo con el mismo acotado, y en `full`/`leaf` la lista
-  recupera la línea que ocupaba el prefijo. Si la sección no tiene prefijo común,
-  `common` se ve exactamente como `full` (ADR 0005).
+  mecanismo genérico que ya existía para el resto de acciones — con el coste de
+  que, si tenías otra acción en `p`, ahora la ejecuta el ciclo de prefijo—. La
+  columna ITEM se vuelve a medir en cada modo con el mismo acotado, y en
+  `full`/`leaf` la lista recupera la línea que ocupaba el prefijo. Si la sección
+  no tiene prefijo común, `common` se ve exactamente como `full` (ADR 0005).
 
   Dos límites, porque son reales: `leaf` **no desambigua** dos repos de grupos
   distintos con la misma hoja (`acme/one#7` y `other/one#8` salen como `one#7` y
