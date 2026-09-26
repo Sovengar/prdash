@@ -6,6 +6,7 @@ package testutil
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -43,8 +44,16 @@ type FakeAdapter struct {
 	Conversations   map[string]forge.CommentPage
 	CommentWarnings map[string][]model.Warning
 
-	// ActionWarnings responde a Approve/Merge por "approve:proyecto#número".
+	// ActionWarnings responde a Approve/Merge/Retarget por
+	// "<acción>:proyecto#número".
 	ActionWarnings map[string][]model.Warning
+
+	// BranchLists / BranchWarnings responden a Branches por proyecto. Sin
+	// configurar, Branches devuelve una lista vacía YA resuelta, por el mismo
+	// motivo que Comments: un test que no habla de ramas no debería tener que
+	// inventarlas para que el buscador no se quede colgado.
+	BranchLists    map[string][]string
+	BranchWarnings map[string][]model.Warning
 
 	mu          sync.Mutex
 	calls       map[FakeKey]int
@@ -55,6 +64,13 @@ type FakeAdapter struct {
 	commentCalls int
 	// MergeModes cuenta quantas veces se pidió cada estrategia de merge.
 	MergeModes map[forge.MergeMode]int
+	// Retargets registra, en orden, la base que se pidió en cada cambio de rama
+	// destino. Es una lista y no un contador porque la pregunta de un test es
+	// "¿a qué base lo movió?", y eso solo lo responde el orden.
+	Retargets []string
+	// branchCalls cuenta cuántas veces se pidieron las ramas de un repositorio,
+	// para que un test pueda afirmar que el buscador cachea.
+	branchCalls map[string]int
 	// MergeDeletes registra, en orden, si cada merge pidió borrar la rama. Es una
 	// lista y no un contador porque la pregunta de un test es "este merge, ¿con
 	// borrado o sin él?", y con la lista se contesta sin depender del orden en
@@ -185,6 +201,50 @@ func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, re
 	return f.record("merge", ref, number)
 }
 
+// Retarget cambia la rama destino del ítem.
+//
+// Se niega a hacerlo sin rama, igual que se niega a mergear sin pin, y lo hace
+// ANTES de registrar nada: un retarget que no sale no pidió ninguna base. Un fake
+// que aceptara lo que producción rechaza haría que los tests de la TUI cubrieran
+// un camino que no existe.
+func (f *FakeAdapter) Retarget(_ context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
+	if strings.TrimSpace(branch) == "" {
+		return []model.Warning{{Forge: f.ForgeName, Kind: "unsupported", Msg: forge.ErrMissingBaseBranch.Error()}}
+	}
+	f.mu.Lock()
+	f.Retargets = append(f.Retargets, branch)
+	f.mu.Unlock()
+	return f.record("retarget", ref, number)
+}
+
+// RetargetCount cuenta los cambios de base que salieron.
+func (f *FakeAdapter) RetargetCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.Retargets)
+}
+
+// Branches devuelve la lista configurada para el proyecto, o una vacía.
+func (f *FakeAdapter) Branches(_ context.Context, ref model.RepoRef) ([]string, []model.Warning) {
+	f.mu.Lock()
+	if f.branchCalls == nil {
+		f.branchCalls = map[string]int{}
+	}
+	f.branchCalls[ref.Project]++
+	f.mu.Unlock()
+	if names, ok := f.BranchLists[ref.Project]; ok {
+		return names, f.BranchWarnings[ref.Project]
+	}
+	return nil, f.BranchWarnings[ref.Project]
+}
+
+// BranchCallCount devuelve cuántas veces se pidieron las ramas de un proyecto.
+func (f *FakeAdapter) BranchCallCount(project string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.branchCalls[project]
+}
+
 // MergeDeleteCount cuenta los merges que pidieron borrar la rama.
 func (f *FakeAdapter) MergeDeleteCount(delete bool) int {
 	f.mu.Lock()
@@ -284,6 +344,18 @@ func RunConformance(t *testing.T, a forge.Adapter, opts ConformanceOptions) {
 	}
 	if warns := a.Merge(ctx, ref, 1, forge.MergeRequest{Mode: forge.Squash, HeadSHA: "deadbeef"}); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Merge debería reportar unsupported", a.Forge())
+	}
+	if warns := a.Retarget(ctx, ref, 1, "release/2.0"); opts.Unsupported && !hasKind(warns, "unsupported") {
+		t.Errorf("%s: Retarget debería reportar unsupported", a.Forge())
+	}
+	// El buscador se abre aunque el listado venga vacío: por eso lo que se
+	// comprueba es el aviso, no que la lista tenga algo. Un adapter que devolviera
+	// la lista vacía sin decir nada haría que el buscador pareciera un repo sin
+	// ramas.
+	if names, warns := a.Branches(ctx, ref); opts.Unsupported && !hasKind(warns, "unsupported") {
+		t.Errorf("%s: Branches debería reportar unsupported", a.Forge())
+	} else if len(names) != 0 {
+		t.Errorf("%s: Branches no debería devolver ramas (%v)", a.Forge(), names)
 	}
 }
 

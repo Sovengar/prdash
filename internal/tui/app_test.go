@@ -91,6 +91,16 @@ func press(t *testing.T, m Model, key string) Model {
 		km = tea.KeyPressMsg{Code: tea.KeyPgUp}
 	case "pgdown":
 		km = tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "enter":
+		km = tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		km = tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "backspace":
+		km = tea.KeyPressMsg{Code: tea.KeyBackspace}
+	case "ctrl+u":
+		// Text vacío a propósito: es lo que hace el decoder con una combinación
+		// con modificador, y el popup filtra lo que se escribe por ahí.
+		km = tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
 	default:
 		if len(key) == 1 && unicode.IsUpper(rune(key[0])) {
 			km = tea.KeyPressMsg{Code: unicode.ToLower(rune(key[0])), Mod: tea.ModShift, Text: key}

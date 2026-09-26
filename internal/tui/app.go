@@ -272,6 +272,22 @@ type Model struct {
 	sim    simPanel
 	simSeq int
 
+	// retarget es el overlay de cambio de rama destino. Comparte con el de
+	// simulación la regla de captura —abierto, se lleva el teclado entero— y los
+	// dos son excluyentes: ninguno se abre desde dentro del otro.
+	retarget retargetPanel
+	// branchSeq invalida un listado de ramas que llega tarde: el popup se cerró o
+	// se reabrió para otro ítem mientras se pedía.
+	branchSeq int
+	// branchCache son los listados ya pedidos, por repositorio y con su momento.
+	// Sin él, abrir el popup dos veces seguidas sobre el mismo repo paginaba las
+	// ramas dos veces para cambiar de opinión una vez.
+	branchCache map[repoKey]branchCache
+	// reviewLookup dice si un ítem tiene ya un review montado, para poder avisar
+	// de que su worktree se quedó con la base anterior. nil = no hay con quién
+	// preguntarlo, y el aviso se pierde.
+	reviewLookup ReviewLookup
+
 	// mergeArmed es la primera pulsación de merge: espera la segunda, que es la
 	// que elige el modo y ejecuta. mergeArmedID fija el ítem que se armó, porque
 	// un refresco puede recolocar el cursor entre medias y el merge debe salir
@@ -339,6 +355,7 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		// asignado, y el resto queda a un `tab`.
 		activeSection: model.SectionReview,
 		pos:           map[model.Section]sectionPos{},
+		branchCache:   map[repoKey]branchCache{},
 		// El borrado de la rama se pide por defecto; se apaga con `tab` en la
 		// Confirmación de merge.
 		deleteBranch: true,
@@ -859,6 +876,8 @@ func problemLabel(kind string) string {
 		return "respuesta ilegible"
 	case "unsupported":
 		return "no soportado"
+	case "validation":
+		return "rechazado"
 	case "network":
 		return "no connection"
 	default:

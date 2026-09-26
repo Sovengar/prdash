@@ -109,6 +109,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applySim(msg)
 		return m.withPump(nil)
 
+	case branchesMsg:
+		m.applyBranches(msg)
+		return m.withPump(nil)
+
 	case commentsTickMsg:
 		// El tick se rearma siempre, se haya consultado algo o no: es lo que
 		// mantiene viva la cadena y lo que hace que el próximo cambio de selección
@@ -180,6 +184,14 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 			m.setNotice(notice, levelWarn)
 			return
 		}
+		// Y lo mismo con el review montado: cambiar la base no lo toca, así que
+		// sigue ahí con la que tenía el ítem. Se avisa y no se arregla porque el
+		// worktree es del usuario.
+		if stale := m.staleReviewNotice(out.Item); stale != "" && out.Kind == forge.ActionRetarget {
+			notice += " · " + stale
+			m.setNotice(notice, levelWarn)
+			return
+		}
 		m.setNotice(notice, levelOK)
 	default:
 		m.setNotice("error: "+out.Msg, levelError)
@@ -206,6 +218,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// sobre un ítem que el usuario ya no está mirando.
 	if m.sim.state != simClosed {
 		return m.handleSimKey(msg, key)
+	}
+
+	// El de cambio de base hace lo mismo y por el mismo motivo. Va después del de
+	// simulación y no antes porque los dos son excluyentes —ninguno se abre desde
+	// dentro del otro—, así que el orden solo decide qué gana si algún día se
+	// solapan, y el orden de lectura gana.
+	if m.retarget.state != retargetClosed {
+		return m.handleRetargetKey(msg, key)
 	}
 
 	switch key {
@@ -249,6 +269,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.startMount()
 	case "simulate":
 		return m.openSimulator()
+	case "retarget":
+		return m.openRetarget()
 	case "open-browser":
 		it, ok := m.selected()
 		if !ok || it.URL == "" {
@@ -391,64 +413,86 @@ func (m Model) startRefresh() (tea.Model, tea.Cmd) {
 
 // canAction comprueba los guards de disponibilidad de una acción sobre el ítem
 // seleccionado y, si alguno falla, deja el aviso puesto. Lo comparten el armado
-// de merge y la ejecución: armar una acción que después no se puede ejecutar
-// dejaría al usuario con una confirmación que solo puede terminar en decepción.
+// de merge, la apertura del buscador de base y la ejecución: armar una acción que
+// después no se puede ejecutar dejaría al usuario con una confirmación que solo
+// puede terminar en decepción.
 func (m *Model) canAction(kind forge.ActionKind) (model.Item, forge.Adapter, bool) {
 	it, ok := m.selected()
 	if !ok {
 		m.setNotice("select an item first", levelWarn)
 		return model.Item{}, nil, false
 	}
+	a, ok := m.canActionOn(kind, it)
+	return it, a, ok
+}
+
+// canActionOn es el mismo guard sobre un ítem concreto, para las acciones que
+// viajan con el ítem que el usuario confirmó y no con lo que hay bajo el cursor.
+//
+// Existe porque el popup de cambio de base se abre sobre un ítem y se contesta
+// después: un refresco puede haber movido la selección entre medias, y aplicar
+// sobre el ítem equivocado cambiaría la base de un PR que nadie estaba mirando.
+// Los guards son los mismos, incluido `state.Actionable`: la base solo se cambia
+// en un ítem abierto, igual que solo se mergea.
+func (m *Model) canActionOn(kind forge.ActionKind, it model.Item) (forge.Adapter, bool) {
 	a := m.byForge[it.Forge]
 	if a == nil {
 		m.setNotice("unknown forge: "+it.Forge, levelError)
-		return model.Item{}, nil, false
+		return nil, false
 	}
 	if st := m.statuses[it.Forge]; st != nil && !st.auth.OK {
 		// El motivo del adapter, no una etiqueta genérica: "not implemented" e
 		// "not authenticated" piden acciones opuestas y confundirlas manda a la
 		// persona a la autenticación a buscar un token que ya funciona.
 		m.setNotice("action disabled: "+it.Forge+": "+authReason(st.auth), levelWarn)
-		return model.Item{}, nil, false
+		return nil, false
 	}
 	if reason := m.denied[it.ID()]; reason != "" {
 		m.setNotice(string(kind)+" disabled: "+reason, levelWarn)
-		return model.Item{}, nil, false
+		return nil, false
 	}
 	// Aprobar lo propio no lo admite ningún forge: se corta aquí, antes de
 	// gastar la llamada a la CLI y su relectura, y no espera al rechazo. El
 	// motivo ya dice qué ha pasado, así que no lleva prefijo.
 	if reason := m.selfDenied[it.ID()]; reason != "" && kind == forge.ActionApprove {
 		m.setNotice(reason, levelWarn)
-		return model.Item{}, nil, false
+		return nil, false
 	}
 	if m.actionBusy {
 		m.setNotice("an action is already running", levelWarn)
-		return model.Item{}, nil, false
+		return nil, false
 	}
 	if ok, reason := state.Actionable(it); !ok {
 		m.setNotice(reason, levelWarn)
-		return model.Item{}, nil, false
+		return nil, false
 	}
-	return it, a, true
+	return a, true
 }
 
 // actionDoneNotice confirma la acción. Merge dice con qué estrategia se
-// integró y si la rama quedó borrada: es el dato que decide si el resultado es
-// el que el usuario quería, y sin él un "merge ok" no dice nada de qué se hizo.
+// integró y si la rama quedó borrada, y el retarget dice de qué base a cuál movió
+// el ítem: es el dato que decide si el resultado es el que el usuario quería, y
+// sin él un "merge ok" o un "retarget ok" no dicen nada de qué se hizo.
 //
 // La rama se nombra solo cuando se pidió y el forge no se quejó, que es el
 // único caso en el que se puede afirmar que se borró: cuando el borrado falla lo
 // dice RunAction en DeleteMsg, y un PR de fork no lo borra nunca.
 func actionDoneNotice(out forge.Outcome) string {
-	if out.Kind == forge.ActionMerge {
+	switch out.Kind {
+	case forge.ActionMerge:
 		notice := string(out.Kind) + " (" + out.Mode.Label() + ") ok"
 		if out.DeleteBranch {
 			notice += " · branch deleted"
 		}
 		return notice
+	case forge.ActionRetarget:
+		if out.FromBase == "" {
+			return string(out.Kind) + " (→ " + out.Base + ") ok"
+		}
+		return string(out.Kind) + " (" + out.FromBase + " → " + out.Base + ") ok"
+	default:
+		return string(out.Kind) + " ok"
 	}
-	return string(out.Kind) + " ok"
 }
 
 // startAction lanza una acción rápida sobre el ítem seleccionado tras los
@@ -459,18 +503,28 @@ func (m *Model) startAction(kind forge.ActionKind, req forge.MergeRequest) tea.C
 	if !ok {
 		return nil
 	}
+	return m.launchAction(kind, it, a, actionProgressNotice(kind, req.Mode),
+		func(ctx context.Context) forge.Outcome {
+			return forge.RunAction(ctx, a, kind, it.Ref, it.Number, req)
+		})
+}
 
+// launchAction es el esqueleto común de las acciones: marca que hay una en curso,
+// avisa de cuál, y la ejecuta en segundo plano con su timeout.
+//
+// Lo que cambia entre acciones —el guard, el texto del aviso y qué se ejecuta— son
+// los tres argumentos, y por eso está partido así y no repetido tres veces. El
+// `actionBusy` va aquí y no en quien llama porque es lo que impide que dos
+// acciones se pisen, y dos funciones que lo pusieran lo olvidarían una vez.
+func (m *Model) launchAction(kind forge.ActionKind, it model.Item, a forge.Adapter, notice string, exec func(context.Context) forge.Outcome) tea.Cmd {
 	m.actionBusy = true
-	m.setNotice(actionProgressNotice(kind, req.Mode), levelInfo)
+	m.setNotice(notice, levelInfo)
 
-	appCtx := m.ctx
-	events := m.events
-	ref, number := it.Ref, it.Number
-	cycle := m.cycle
+	appCtx, events, cycle := m.ctx, m.events, m.cycle
 	go func() {
 		ctx, cancel := context.WithTimeout(appCtx, actionTimeout)
 		defer cancel()
-		sendEvent(appCtx, events, actionMsg{cycle: cycle, outcome: forge.RunAction(ctx, a, kind, ref, number, req)})
+		sendEvent(appCtx, events, actionMsg{cycle: cycle, outcome: exec(ctx)})
 	}()
 	return nil
 }
@@ -592,6 +646,12 @@ func (m Model) View() tea.View {
 	// El popup va después de los toasts para quedar por encima de ellos: es la
 	// capa que el usuario acaba de abrir, y un aviso no puede taparla.
 	if box, ok := m.simOverlay(); ok {
+		v.text = overlayCentered(v.text, box, m.contentWidth())
+	}
+	// El de cambio de base va el último por el mismo motivo que el de simulación
+	// está después de los toasts, y por el mismo orden entre los dos: si alguna
+	// vez se solaparan, gana el que se abrió después.
+	if box, ok := m.retargetOverlay(); ok {
 		v.text = overlayCentered(v.text, box, m.contentWidth())
 	}
 	out := tea.NewView(v.text)

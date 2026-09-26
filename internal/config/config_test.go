@@ -329,7 +329,7 @@ func TestHints(t *testing.T) {
 	want := []string{
 		"q quit", "tab section", "r mount review",
 		"a approve", "m merge ×2", "v simulate", "o open", "R refresh",
-		"p prefix", "j/k move", "pgup/dn page",
+		"p prefix", "e edit base", "j/k move", "pgup/dn page",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("Hints() = %v, quiero %v", got, want)
@@ -397,10 +397,30 @@ func TestHintsSiguenElRebind(t *testing.T) {
 
 func TestDefaultKeybindingsCoverActions(t *testing.T) {
 	kb := DefaultKeybindings()
-	for _, action := range []string{"quit", "refresh", "mount-review", "approve", "merge", "section-next", "open-browser", "prefix-mode"} {
+	for _, action := range []string{"quit", "refresh", "mount-review", "approve", "merge", "section-next", "open-browser", "prefix-mode", "retarget"} {
 		if kb[action] == "" {
 			t.Errorf("falta keybinding %q", action)
 		}
+	}
+}
+
+// TestDefaultKeybindingsNoSeRepiten vigila que dos acciones no compartan tecla. Es
+// un fallo silencioso: `ActionForKey` resuelve por orden alfabético de acción, así
+// que la colisión no rompe nada visible, solo deja una de las dos acciones
+// imposible de alcanzar y sin que nada diga cuál.
+//
+// No lo había y lo pediu `retarget`: elegir `e` fue mirar la lista entera, y nada
+// impedía que mañana otra acción elija la misma.
+func TestDefaultKeybindingsNoSeRepiten(t *testing.T) {
+	owner := map[string]string{}
+	for action, key := range DefaultKeybindings() {
+		if key == "" {
+			continue
+		}
+		if otra, ok := owner[key]; ok {
+			t.Errorf("las acciones %q y %q comparten la tecla %q", otra, action, key)
+		}
+		owner[key] = action
 	}
 }
 

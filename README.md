@@ -70,10 +70,10 @@ Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
 `tab` cambia de sección (Assigned → Mentioned → Mine), `p` modo de prefijo (ver
 [Prefijo de ruta](#prefijo-de-ruta-tres-modos-con-p)), `r` montar review (el
 worktree siempre; el layout de 2 tabs requiere Herdr), `R` refrescar, `a`
-approve, `m` merge, `v` simular, `o` abrir en el navegador, `q` salir. Son
-configurables en `[keybindings]`. Con el merge armado, `m`/`r`/`s` eligen
-estrategia, `tab` conmuta si la rama se borra y cualquier otra tecla cancela
-(ver [Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
+approve, `m` merge, `e` cambiar la rama destino, `v` simular, `o` abrir en el
+navegador, `q` salir. Son configurables en `[keybindings]`. Con el merge armado,
+`m`/`r`/`s` eligen estrategia, `tab` conmuta si la rama se borra y cualquier otra
+tecla cancela (ver [Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
 
 El Inbox pinta **una sola sección a la vez**: al abrir muestra **Assigned**, y el
 borde superior lleva la leyenda de conteos `Mine (n) · Assigned (n) · Mentioned
@@ -294,6 +294,71 @@ borrar en el repo destino, y `gh` lo da por hecho y sale con éxito. Sin decirlo
 Lo que **no** toca la llamada es el repositorio local: con `--repo` (GitHub) y
 `-R` (GitLab), la CLI solo borra la rama remota. Los clones bare y los worktrees
 que gestiona prdash quedan intactos.
+
+### Cambiar la rama destino con `e`
+
+`e` abre un popup con **las ramas del repositorio**, que se piden al forge al
+abrir, y deja escribirlas para filtrarlas. Se elige una con `↑`/`↓` (con el filtro
+vacío, `j`/`k` también) y `enter`; la segunda `enter` es la confirmación.
+
+```
+╭ retarget acme/widget#7───────────────────────────────────────╮
+│from main  ·  5 branches                                      │
+│▸ main                                               · current│
+│  develop                                                     │
+│  feat/una-rama-deliberadamente-larguisima-que-no-cabe        │
+│  fix/hunk-pane-argv                                          │
+│  release/2.0                                                 │
+│                                                              │
+│filter (type to search)                                       │
+│↑↓ move · enter choose · esc close                            │
+╰──────────────────────────────────────────────────────────────╯
+```
+
+Tres decisiones, y por qué:
+
+- **Las ramas salen del forge, no de un campo de texto.** Cambiar la base a una
+  rama que se le parece pero no es (`main` por `main-2`, o `release/2.0` por
+  `release/2.0-rc1`) lo acepta el forge sin quejarse y no se ve hasta que el PR
+  apunta a la rama equivocada. Una errata que ni el compilador ni el forge señalan
+  es justo la que un buscador hace imposible. También por eso el listado se pide
+  al forge y no al clon local: el clon solo tiene las refs bajadas.
+- **Hay confirmación.** Mover la base rehace el diff, la mergeabilidad y el CI, y
+  lo que se hubiera aprobado antes pasa a compararse contra otra cosa. La
+  confirmación dice las dos ramas —`main → release/2.0`— para que un dedo no
+  reoriente el PR por una fila de más. `esc` vuelve a la lista en vez de cerrar:
+  señalar la fila equivocada es el error más probable y no debería costar las tres
+  pulsaciones.
+- **`j`/`k` navigan solo con el filtro vacío.** En cuanto hay texto escrito son dos
+  letras más del filtro, porque escribir un nombre de rama con `j` tiene que ser
+  posible. `ctrl+u` borra el filtro y les devuelve su segundo oficio.
+
+Detalles que conviene saber:
+
+- El listado se cachea **5 minutos por repositorio**, así que abrir y cerrar el
+  popup no cuesta una llamada cada vez. Pasado el TTL se vuelve a preguntar, para
+  que una rama recién creada aparezca.
+- Elegir la rama que el ítem **ya tiene** no hace nada: se avisa y no se llama al
+  forge, que contestaría "sin cambios".
+- Los avisos nombran las dos ramas: `retarget (main → release/2.0) ok`. Sin ellas
+  un "retarget ok" no dice nada de lo que pasó con el PR.
+- **El review ya montado no se toca.** Si había un worktree, el aviso lo dice —
+  `· the mounted review still has the old base…`— porque sigue con la base
+  anterior. No se rebasea ni se rehace: el worktree es del usuario y puede tener
+  cambios sin commitear.
+- Solo se aplica a ítems **abiertos**: un PR mergeado o cerrado no es algo cuya
+  base se pueda cambiar, y no se gasta la llamada.
+- El forge es el que manda sobre los permisos: si no eres mantenedor del
+  repositorio, su respuesta se enseña tal cual y la acción queda deshabilitada
+  para ese ítem.
+
+Detalle de implementación que no se ve en la UI: **no se usa `gh pr edit --base`**
+(aunque es lo que documenta `gh`), porque hoy falla antes de tocar nada con
+`GraphQL: Projects (classic) is being deprecated…` —la query con la que `gh` mira
+si el PR está en un proyecto—. Se usa `gh api -X PATCH …/pulls/N -f base=`. En
+GitLab se usa `glab api -X PUT …/merge_requests/N -f target_branch=` y no
+`glab mr update --target-branch`, porque ese es un comando de edición y su razón
+de ser es abrir el editor.
 
 ### Lo que el merge comprueba antes de salir
 
