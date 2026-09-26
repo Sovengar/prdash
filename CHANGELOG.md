@@ -91,6 +91,50 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **`v` simula el merge del PR y lo enseña en un popup sobre el inbox.** Renderiza
+  con [git-sim](https://github.com/initialcommit/git-sim) cómo quedaría el
+  historial al integrar el PR y pinta la imagen resultante **encima** de la vista,
+  de modo que el fondo se sigue leyendo salvo donde tapa la caja. `enter`
+  renderiza, `esc` cierra, `o` abre la imagen en el visor.
+
+  No es un gate y conviene decirlo: git-sim **dibuja**, no ejecuta, y su veredicto
+  solo existe dentro de la imagen, así que no sirve para decidir si un merge
+  choca. Es un visualizador, y lo que aporta es entender *por qué* el historial
+  queda como queda.
+
+  Decisiones que no son obvias:
+
+  - **Todo el render ocurre en un clon temporal** de los refs del review
+    (`--shared`, con la rama base activa), no en el worktree del review. La razón
+    es dura: git-sim necesita un `HEAD` enganchado a una rama de verdad, y la única
+    forma de tener la base activa sin cambiar de rama el worktree que tiene
+    abierta la review es otro directorio. El clon se borra al terminar, así que no
+    deja refs, worktrees, ramas ni cambios sin commitear en el repo del usuario
+    (`TestSimulateLeavesNoTraceInTheLocalRepo`).
+  - **`git_sim_auto_open=false` en el entorno, no un flag.** git-sim termina
+    entregando la imagen al visor del escritorio y, sin display, esa llamada no
+    vuelve nunca: son 2 s con la variable puesta y un cuelgue sin ella. El flag no
+    tiene forma negativa en el CLI, pero su `Settings` lee las variables
+    `git_sim_*`, así que es ahí donde se apaga.
+  - **Nada de `--quiet`.** Imprescindible y contraintuitivo: git-sim imprime la
+    ruta de la imagen *solo* cuando no está en silencio, así que pedir las dos
+    cosas —que es lo razonable— deja la salida vacía y la simulación falla sin
+    explicación. Hay un test que lo fija (`TestArgsNeverAskForQuietAndThePath`).
+  - **La imagen se decodifica en Go** (`image/jpeg`) y se pinta con half-blocks
+    `▀` en truecolor, dos píxeles por celda, en vez de depender de `chafa` o del
+    `img2txt` del sistema: cero dependencias nuevas y el doble de resolución
+    vertical, que es lo que hace legible un grafo de commits.
+  - **Solo se ofrece `merge`.** git-sim 0.3.5 no sabe dibujar un `rebase`: con la
+    rama del PR ya basada en la base —el caso normal de una PR— responde
+    "Branch 'main' is already based on active branch 'feat'" con el mensaje
+    invertido, y con las ramas divergidas revienta con un `IndexError` de Python.
+    Verificado en las tres formas. Ofrecerlo sería una opción que solo puede
+    fallar; cuando upstream lo arregle, `simKinds` es lo único que hay que tocar.
+  - **Con el merge armado, `v` no abre nada**: desarma y se consume, igual que
+    cualquier otra tecla. Abrir un modal desde una pulsación a destiempo es la
+    misma trampa que el merge armado ya evita.
+  - Requiere `git-sim` en el PATH y el review montado (`r`); sin cualquiera de
+    los dos, la acción avisa y no hace nada.
 - **Los últimos 5 comentarios del PR/MR se ven en el detalle.** En una caja propia
   con su "Comments" en el borde, debajo de la ficha y con su autor. Se piden al
   forge al llegar el cursor al ítem y se cachean, así que navegar no vuelve a

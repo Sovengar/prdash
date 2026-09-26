@@ -241,6 +241,13 @@ type Model struct {
 	mounter   Mounter
 	mountBusy bool
 
+	// simulator renderiza simulaciones de merge/rebase; nil = sin git-sim.
+	simulator Simulator
+	// sim es el estado del overlay de simulación y simSeq el número de la
+	// petición en vuelo, que es lo que invalida un render tardío.
+	sim    simPanel
+	simSeq int
+
 	// mergeArmed es la primera pulsación de merge: espera la segunda, que es la
 	// que elige el modo y ejecuta. mergeArmedID fija el ítem que se armó, porque
 	// un refresco puede recolocar el cursor entre medias y el merge debe salir

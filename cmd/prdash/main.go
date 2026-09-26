@@ -54,7 +54,9 @@ func main() {
 	}
 
 	model := tui.New(cfg, adapters)
-	model.SetMounter(buildExecutor(cfg))
+	ex := buildExecutor(cfg)
+	model.SetMounter(ex)
+	model.SetSimulator(buildSimulator(cfg, ex))
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "prdash:", err)
 		os.Exit(1)

@@ -9,12 +9,39 @@ import (
 	"strings"
 
 	"prdash/internal/config"
+	"prdash/internal/forge/model"
 	"prdash/internal/herdr"
 	"prdash/internal/reporesolver"
 	"prdash/internal/review/executor"
 	"prdash/internal/review/plan"
+	"prdash/internal/sim"
 	"prdash/internal/worktree"
 )
+
+// simLocator expone el review activo de un ítem como el puerto que quiere la
+// simulación. El orquestador sabe de repos y de rutas; sim solo necesita que le
+// digan dónde está el clon y el worktree, y no tiene por qué conocer el
+// orquestador para eso.
+type simLocator struct{ ex *executor.Executor }
+
+// Locate devuelve el clon y el worktree del review ya montado del ítem. Sin
+// review montado no hay refs locales, y la simulación lo dice en vez de adivinar.
+func (l simLocator) Locate(it model.Item) (sim.Place, bool) {
+	wt, ok := l.ex.ActiveReview(it)
+	if !ok || wt.Repo == "" {
+		return sim.Place{}, false
+	}
+	return sim.Place{Repo: wt.Repo, Branch: wt.Branch}, true
+}
+
+// buildSimulator arma el servicio de simulación sobre el ejecutor.
+func buildSimulator(cfg config.Config, ex *executor.Executor) *sim.Service {
+	svc := sim.New(simLocator{ex: ex})
+	if dir, err := sim.DefaultCacheDir(); err == nil {
+		svc.CacheDir = dir
+	}
+	return svc
+}
 
 // buildExecutor arma el orquestador de review sobre la config. La selección del
 // provisioner la decide worktree.Select: el llamador no sabe cuál corre.
