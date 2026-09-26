@@ -227,10 +227,23 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pidiendo la segunda tecla. Los guards se comprueban aquí y no al confirmar
 // para no armar un merge que ya se sabe inválido (ítem cerrado, forge sin
 // autenticar, acción en curso).
+//
+// Un bloqueo duro (borrador, ya mergeado) impide armar: es una propiedad del
+// forge y ninguna tecla lo levanta. Un bloqueo blando (CI rojo, cambios pedidos)
+// arma igual, pero la confirmación lo dice. No hace falta una tecla extra para
+// forzarlo: elegir el modo ya es la confirmación, porque para eso hay que
+// nombrar una estrategia, y el operador que la nombradespite haber leído que el
+// CI está rojo ha decidido.
 func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	it, _, ok := m.canAction(forge.ActionMerge)
 	if !ok {
 		return m, nil
+	}
+	if block := state.MergeBlock(it); block.Hard {
+		m.setNotice("merge blocked: "+block.Reason, levelWarn)
+		return m, nil
+	} else {
+		m.mergeBlockReason = block.Reason
 	}
 	m.mergeArmed = true
 	m.mergeArmedID = it.ID()
@@ -244,6 +257,12 @@ func (m Model) armMerge() (tea.Model, tea.Cmd) {
 // `esc` cancela. `q` y `ctrl+c` salen, como en el resto de la vista: cancelar
 // con `esc` y salir con `q` son dos intenciones distintas y colapsarlas en una
 // haría que `q` dejara de cerrar la TUI.
+//
+// Una tecla que no es un modo CONSUME la pulsación y cancela. Antes se delegaba
+// en handleKey, y eso convertía un merge mal armado en approve: `m` y luego `a`
+// aprobaba el PR. La intención original del default —que un `m` a destiempo no
+// dejara la vista esperando— se cumple mejor así, porque la vista deja de
+// esperar igual, pero sin el efecto secundario de disparar OTRA acción.
 func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	var mode forge.MergeMode
 	switch key {
@@ -263,7 +282,7 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 		return m, tea.Quit
 	default:
 		m.disarmMerge()
-		return m.handleKey(msg)
+		return m, nil
 	}
 
 	// El cursor puede haberse movido por un refresco entre el armado y la
@@ -275,6 +294,17 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 		m.setNotice("the selected item changed: press merge again", levelWarn)
 		return m, nil
 	}
+	// El repositorio puede no admitir la estrategia elegida. Se comprueba contra
+	// la copia que hay en pantalla y no contra la relectura de RunAction a
+	// propósito: entre el armado y la confirmación un refresco puede haber
+	// cambiado las reglas, y rechazar aquí un modo que el repositorio ya no
+	// admite es más honesto que emitir un merge que el forge va a rechazar con un
+	// mensaje menos claro.
+	if !forge.AllowsMode(it.Merge, mode) {
+		m.disarmMerge()
+		m.setNotice("the repository does not allow "+mode.Label()+" merges", levelWarn)
+		return m, nil
+	}
 	m.disarmMerge()
 	return m, m.startAction(forge.ActionMerge, mode)
 }
@@ -283,6 +313,7 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 func (m *Model) disarmMerge() {
 	m.mergeArmed = false
 	m.mergeArmedID = model.ID{}
+	m.mergeBlockReason = ""
 }
 
 // startRefresh arranca un ciclo de refresco si no hay uno en vuelo (no se
@@ -313,7 +344,10 @@ func (m *Model) canAction(kind forge.ActionKind) (model.Item, forge.Adapter, boo
 		return model.Item{}, nil, false
 	}
 	if st := m.statuses[it.Forge]; st != nil && !st.auth.OK {
-		m.setNotice("action disabled: "+it.Forge+" is not authenticated", levelWarn)
+		// El motivo del adapter, no una etiqueta genérica: "not implemented" e
+		// "not authenticated" piden acciones opuestas y confundirlas manda a la
+		// persona a la autenticación a buscar un token que ya funciona.
+		m.setNotice("action disabled: "+it.Forge+": "+authReason(st.auth), levelWarn)
 		return model.Item{}, nil, false
 	}
 	if reason := m.denied[it.ID()]; reason != "" {

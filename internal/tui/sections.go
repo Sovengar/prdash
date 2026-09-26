@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/tui/bordered"
 )
@@ -206,14 +207,52 @@ func wrapHint(text string, width int, paint func(string) string) []string {
 
 // mergeConfirmText compone la Confirmación de merge. La segunda tecla ES el
 // modo, así que no hay estrategia por defecto que se pueda ejecutar sin
-// nombrarla: las tres opciones se leen enteras en la caja. Va en inglés como
-// todos los avisos de la TUI.
+// nombrarla: las opciones se leen enteras en la caja.
+//
+// Solo se listan los modos que el repositorio admite. GitHub publica sus tres
+// flags en la misma consulta del ítem, así que la lista es exacta; un repositorio
+// con el squash desactivado no ofrece squash y no gasta una llamada en un rechazo
+// que ya se sabía. Cuando las reglas no se conocen (GitLab no las expone por
+// GraphQL) se ofrecen las tres, porque no saber no es lo mismo que no permitir.
+//
+// Cuando el gate ha detectado un bloqueo blando, la caja lo dice y las opciones
+// siguen ahí: el aviso no es un veto sino el dato que hace que la segunda
+// pulsación sea informada. Va en inglés como todos los avisos de la TUI.
 func (m Model) mergeConfirmText() string {
 	it, _ := m.selected()
-	return fmt.Sprintf(
-		"merge %s? Are you sure you want to merge this PR/MR · press the mode: m merge commit · r rebase · s squash · esc cancel",
-		refLabel(it),
-	)
+	parts := make([]string, 0, 4)
+	for _, mode := range forge.AllowedModes(it.Merge) {
+		parts = append(parts, modeKey(mode)+" "+mode.Label())
+	}
+	if len(parts) == 0 {
+		// Un repositorio sin ninguna estrategia habilitada no tiene merge que
+		// hacer, y ofrecer las teclas sería mentir sobre lo que va a pasar.
+		parts = append(parts, "the repository allows no merge strategy")
+	}
+	text := fmt.Sprintf("merge %s? press the mode: %s · esc cancel",
+		refLabel(it), strings.Join(parts, " · "))
+	if reason := m.mergeBlockReason; reason != "" {
+		text = "merge " + refLabel(it) + " with " + reason +
+			" · press the mode anyway: " + strings.Join(parts, " · ") + " · esc cancel"
+	}
+	return text
+}
+
+// modeKey es la tecla con la que se nombra un modo en la Confirmación. No sale de
+// la config a propósito: son tres y viven en el mismo espacio de teclado que el
+// resto de la vista, así que hacerlas configurables daría cuatro interpretaciones
+// de la misma tecla según el estado.
+func modeKey(mode forge.MergeMode) string {
+	switch mode {
+	case forge.MergeCommit:
+		return "m"
+	case forge.Rebase:
+		return "r"
+	case forge.Squash:
+		return "s"
+	default:
+		return "?"
+	}
 }
 
 // outerWidth es el ancho exterior de las cajas: el de la terminal. Antes del

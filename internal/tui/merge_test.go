@@ -65,7 +65,7 @@ func waitOutcome(t *testing.T, m Model) forge.Outcome {
 }
 
 // toasts aplana los avisos vivos a un string, para afirmar sobre el texto sin
-// depender de cuántas可视 hay apilados.
+// depender de cuántas vistas hay apiladas.
 func toasts(m Model) string { return strings.Join(toastTexts(m), " | ") }
 
 // TestMergeArmsOnFirstPress: la primera pulsación no ejecuta nada. Es el test que
@@ -100,7 +100,7 @@ func TestMergeArmedShowsConfirmInKeybinds(t *testing.T) {
 	m := press(t, f.m, "m")
 
 	view := stripANSI(m.View().Content)
-	for _, want := range []string{"Are you sure", "m merge commit", "r rebase", "s squash", "esc cancel"} {
+	for _, want := range []string{"press the mode", "m merge commit", "r rebase", "s squash", "esc cancel"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("la confirmación no menciona %q\n%s", want, view)
 		}
@@ -159,10 +159,16 @@ func TestMergeSecondKeyOnlyPicksItsOwnMode(t *testing.T) {
 	}
 }
 
-// TestMergeArmedCancelsOnOtherKey: unarmed y re-despacha. Así un `m` a destiempo
-// no deja la vista esperando una segunda pulsación, y moverse por la lista
-// cancela el merge implícitamente.
-func TestMergeArmedCancelsOnOtherKey(t *testing.T) {
+// TestMergeArmedConsumesOtherKey: unarmed y ADEMÁS se come la tecla.
+//
+// Antes se delegaba en handleKey, y eso convertía un merge mal armado en una
+// acción distinta: `m` y luego `a` aprobaba el PR y `m` y luego `m` mergeaba con
+// merge commit sin haber pasado por la confirmación. El motivo original del
+// default —que un `m` a destiempo no dejara la vista esperando— se cumple igual
+// sin re-despachar: la vista deja de esperar, y la tecla que no era un modo no
+// hace nada. Consumirla es la única forma de que el gesto de confirmar no pueda
+// terminar en una acción que el usuario no pidió.
+func TestMergeArmedConsumesOtherKey(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	start := f.m.cursor
 	m := press(t, f.m, "m")
@@ -171,11 +177,28 @@ func TestMergeArmedCancelsOnOtherKey(t *testing.T) {
 	if m.mergeArmed {
 		t.Error("una tecla de navegación debería desarmar el merge")
 	}
-	if m.cursor == start {
-		t.Error("la navegación debería ejecutarse tras desarmar")
+	if m.cursor != start {
+		t.Errorf("cursor = %d, want %d: la tecla filtrada no debe re-despacharse", m.cursor, start)
 	}
 	if m.actionBusy {
 		t.Error("desarmar no debería dejar una acción en curso")
+	}
+}
+
+// TestMergeArmedApproveKeyDoesNotApprove blinda el agujero concreto: la tecla de
+// approve es la más cercana a `m` en el teclado y con el fallback anterior
+// aprobaba el PR. Aquí afirma que no hay ninguna acción registrada.
+func TestMergeArmedApproveKeyDoesNotApprove(t *testing.T) {
+	f := newMergeFixture(t, mergeItems()...)
+	m := press(t, f.m, "m")
+
+	m = press(t, m, "a")
+	if m.actionBusy {
+		t.Error("`a` con el merge armado no debería lanzar ninguna acción")
+	}
+	if n := f.adp.MergeModeCount(forge.Squash) + f.adp.MergeModeCount(forge.Rebase) +
+		f.adp.MergeModeCount(forge.MergeCommit); n != 0 {
+		t.Errorf("`a` con el merge armado lanzó %d merge(s), want 0", n)
 	}
 }
 

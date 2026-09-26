@@ -36,8 +36,13 @@ func (a *Adapter) Forge() string { return ForgeName }
 func (a *Adapter) Host() string { return a.host }
 
 // Auth informa que el forge no está operativo en esta versión.
+//
+// El motivo dice "not implemented", no "not authenticated": la diferencia decide
+// qué hace el operador. "No autenticado" se arregla retomando el token, y "no
+// implementado" no se arregla de ninguna forma, así que el motivo equivocado
+// manda a la persona a la autenticación a buscar un token que ya funciona.
 func (a *Adapter) Auth(context.Context) model.AuthState {
-	return model.AuthState{Forge: ForgeName, OK: false, Reason: "not supported in this version"}
+	return model.AuthState{Forge: ForgeName, OK: false, Reason: "not implemented in this version"}
 }
 
 // List responde "no soportado" sin consultar nada.
@@ -61,7 +66,7 @@ func (a *Adapter) Approve(context.Context, model.RepoRef, int) []model.Warning {
 }
 
 // Merge responde "no soportado".
-func (a *Adapter) Merge(context.Context, model.RepoRef, int, forge.MergeMode) []model.Warning {
+func (a *Adapter) Merge(context.Context, model.RepoRef, int, forge.MergeMode, string) []model.Warning {
 	return a.unsupported("")
 }
 

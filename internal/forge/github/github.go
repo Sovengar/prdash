@@ -166,12 +166,22 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 // tres modos tienen flag propio en gh, así que siempre se pasa uno: sin
 // estrategia, gh abre un prompt interactivo que en un subproceso no
 // interactivo se queda colgado.
-func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode) []model.Warning {
+//
+// El merge va SIEMPRE pineado a headSHA con `--match-head-commit`. Sin ese flag
+// gh integra el HEAD que haya en ese momento, y entre el refresco del inbox y
+// la pulsación la rama puede haber avanzado: se integratearían commits que nadie
+// revisó, que es el peor resultado posible de una acción irreversible. Por eso
+// un headSHA vacío no degrada a un merge sin pin sino que se niega.
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode, headSHA string) []model.Warning {
 	flag, ok := ghMergeFlag(mode)
 	if !ok {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(mode))}
 	}
-	return a.action(ctx, "pr", "merge", strconv.Itoa(number), "--repo", ref.Project, flag)
+	if strings.TrimSpace(headSHA) == "" {
+		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
+	}
+	return a.action(ctx, "pr", "merge", strconv.Itoa(number), "--repo", ref.Project,
+		flag, "--match-head-commit", headSHA)
 }
 
 // ghMergeFlag traduce el modo al flag de `gh pr merge`.
@@ -282,9 +292,15 @@ func qualifierFor(q forge.Query) (string, bool) {
 //
 // `additions`/`deletions`/`changedFiles` son escalares que la búsqueda ya
 // pagina, así que el diffstat no cuesta ninguna llamada extra.
+// `headRefOid` y los tres `merge*Allowed` vienen en la misma consulta del ítem
+// y no cuestan una llamada extra: el primero es lo que permite pinear el merge
+// a un commit concreto y los segundos filtran los modos por lo que el
+// repositorio admite. Un repositorio con squash desactivado no debe ofrecer
+// squash, y sin esto lo haría.
 const ghPRFields = `number title url state isDraft reviewDecision updatedAt headRefName baseRefName ` +
-	`additions deletions changedFiles ` +
-	`author { login } repository { nameWithOwner name owner { login } } ` +
+	`headRefOid additions deletions changedFiles ` +
+	`author { login } repository { nameWithOwner name owner { login } ` +
+	`mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } ` +
 	`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
 
 // searchQuery compone la query GraphQL de búsqueda, con paginación por cursor y

@@ -30,6 +30,9 @@ func readArgs(t *testing.T, path string) []string {
 
 var mergeRef = model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grp/proj"}
 
+// headSHA es el commit leído del ítem: el pin al que todo merge debe salir.
+const headSHA = "9f1c0de"
+
 // TestMergePassesTheStrategyFlag: rebase y squash llevan su flag, y merge commit
 // no lleva ninguno porque en glab es la ausencia de estrategia.
 func TestMergePassesTheStrategyFlag(t *testing.T) {
@@ -45,7 +48,7 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 			dir := t.TempDir()
 			bin, argsFile := recorder(t, dir, "glab")
 
-			warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, tc.mode)
+			warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, tc.mode, headSHA)
 			if len(warns) != 0 {
 				t.Fatalf("Merge = %+v, want sin warnings", warns)
 			}
@@ -76,7 +79,7 @@ func TestMergeDisablesAutoMerge(t *testing.T) {
 		dir := t.TempDir()
 		bin, argsFile := recorder(t, dir, "glab")
 
-		New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, mode)
+		New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, mode, headSHA)
 
 		joined := strings.Join(readArgs(t, argsFile), " ")
 		if !strings.Contains(joined, "--auto-merge=false") {
@@ -92,7 +95,7 @@ func TestMergeRefusesUnknownMode(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "glab")
 
-	warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeMode("cherry-pick"))
+	warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeMode("cherry-pick"), headSHA)
 	if len(warns) == 0 {
 		t.Fatal("un modo desconocido debería reportar warning")
 	}

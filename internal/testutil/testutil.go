@@ -136,7 +136,15 @@ func (f *FakeAdapter) Approve(_ context.Context, ref model.RepoRef, number int) 
 }
 
 // Merge devuelve los warnings configurados para la acción.
-func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, mode forge.MergeMode) []model.Warning {
+func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, mode forge.MergeMode, headSHA string) []model.Warning {
+	// El fake se niega a mergear sin pin, igual que los dos adapters reales, y lo
+	// hace ANTES de registrar nada: un merge que no sale no pidió ninguna
+	// estrategia. Un fake que aceptara lo que producción rechaza haría que
+	// todos los tests de merge de la TUI cubrieran un camino que no existe, y el
+	// fallo real se manifestaría en el adapter, donde ningún test llega.
+	if headSHA == "" {
+		return []model.Warning{{Forge: f.ForgeName, Kind: "unsupported", Msg: forge.ErrMissingHeadSHA.Error()}}
+	}
 	// El modo se registra aparte para que un test pueda afirmar con qué
 	// estrategia se pidió el merge, no solo que se pidió.
 	f.mu.Lock()
@@ -232,7 +240,7 @@ func RunConformance(t *testing.T, a forge.Adapter, opts ConformanceOptions) {
 	if warns := a.Approve(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Approve debería reportar unsupported", a.Forge())
 	}
-	if warns := a.Merge(ctx, ref, 1, forge.Squash); opts.Unsupported && !hasKind(warns, "unsupported") {
+	if warns := a.Merge(ctx, ref, 1, forge.Squash, "deadbeef"); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Merge debería reportar unsupported", a.Forge())
 	}
 }

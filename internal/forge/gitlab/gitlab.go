@@ -182,13 +182,23 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 // con un pipeline en marcha la orden no mergeaba, solo dejaba el MR en cola de
 // auto-merge y salía con exit 0. El TUI informaba "merge ok" de un MR que
 // seguía abierto. Con `--yes` la confirmación tampoco se le pregunta a nadie.
-func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode) []model.Warning {
+//
+// `--sha` es lo que pinea el merge al commit leído del ítem. `--auto-merge` y
+// `--sha` son el mismo género de trampa que el anterior pero al revés: sin el
+// pin, `glab` (y GitLab) integran el HEAD del momento, que puede haber avanzado
+// desde el refresco del inbox, y el merge se lleva commits que nadie revisó. Un
+// headSHA vacío se traduce en negarse, no en mergear sin pin.
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode, headSHA string) []model.Warning {
 	extra := []string{"--yes", "--auto-merge=false"}
 	if flag, ok := glabMergeFlag(mode); ok {
 		extra = append(extra, flag)
 	} else {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(mode))}
 	}
+	if strings.TrimSpace(headSHA) == "" {
+		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
+	}
+	extra = append(extra, "--sha", headSHA)
 	return a.action(ctx, a.mrArgs("merge", number, ref.Project, extra...)...)
 }
 
@@ -324,8 +334,16 @@ func restEndpoint(resource string) string {
 // `diffStats` no es un agregado: es una entrada POR FICHERO cambiado, así que el
 // parseo tiene que sumarla. Pide el conteo de ficheros como la longitud de la
 // lista porque el schema no expone un `changedFiles` equivalente.
+//
+// `diffHeadSha` y `squash` también salen en la misma consulta y no cuestan
+// llamada: el primero es lo que permite pinear el merge con `--sha` y el
+// segundo avisa de que el MR se aplana pase lo que pase. Lo que NO se pide son
+// las estrategias admitidas por el repositorio: `Project.mergeMethod` no existe
+// en el schema GraphQL de GitLab (comprobado contra la instancia), y leerlo por
+// REST costaría una llamada por repositorio. Por eso las reglas de merge
+// llegan sin conocer en GitLab, y sin conocer no restringen.
 const mrFields = `iid title webUrl state sourceBranch targetBranch approved updatedAt ` +
-	`diffStats { additions deletions } ` +
+	`diffHeadSha squash diffStats { additions deletions } ` +
 	`author { username } project { fullPath name group { fullPath } }`
 
 // glConn cierra una conexión GraphQL con paginación.

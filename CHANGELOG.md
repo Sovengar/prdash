@@ -7,6 +7,88 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Un merge ya no se dispara por una tecla que no era el modo.** La segunda
+  pulsación del merge, al no ser un modo, se re-despachaba como si nada. Eso
+  convertía `m` seguido de `a` en un **approve** del PR —la tecla de al lado en
+  el teclado, y sin ninguna confirmación—, y `m` seguido de `m` en un merge
+  commit al instante. Ahora la tecla **cancela y se consume**. La intención
+  original del comportamiento viejo —que un `m` a destiempo no dejara la vista
+  esperando una segunda pulsación— se cumple igual: la vista deja de esperar,
+  pero sin disparar OTRA acción. El test que blindaba el comportamiento viejo
+  (`TestMergeArmedCancelsOnOtherKey`) afirmaba la navegación, así que se cambió
+  por `TestMergeArmedConsumesOtherKey` y se añadió
+  `TestMergeArmedApproveKeyDoesNotApprove` para el agujero concreto.
+- **El merge va pineado al commit que se leyó del ítem.** Con `--match-head-commit`
+  en GitHub y `--sha` en GitLab. Antes la orden integraba el HEAD del momento, y
+  entre el refresco del inbox (60 s) y la pulsación la rama puede haber avanzado:
+  se integraban commits que nadie había revisado, que es el peor resultado
+  posible de una acción irreversible. El SHA sale de la **relectura** que
+  `RunAction` hace inmediatamente antes de mergear, no de la copia en memoria de
+  la TUI, para que la ventana sea la menor posible. Cuando el forge no reporta el
+  commit —`diffHeadSha` puede venir a null en GitLab— el merge **se niega**
+  (`ErrMissingHeadSHA`) en vez de salir sin pin: un merge sin pin es
+  exactamente el fallo que el pin arregla.
+- **El CI rojo y los cambios pedidos se anuncian antes de la confirmación.**
+  `state.Derive` ya distinguía `StateError` (checks fallidos),
+  `StateChangesRequested` y `StateDraft`, y la ficha los enseña, pero
+  `Actionable` solo denegaba `merged` y `closed`: `merge` salía igual en los tres
+  casos. Ahora `state.MergeBlock` decide en dos niveles:
+  - **Bloqueo duro** (borrador, ya mergeado, ya cerrado): no arma, y avisa. Son
+    propiedades del forge —GitHub rechaza el merge de un PR en borrador antes de
+    mirar nada más— así que ofrecerlo solo gastaba una llamada para recibir un
+    error.
+  - **Bloqueo blando** (CI en rojo, CI corriendo, cambios pedidos): arma, y la
+    confirmación lo dice: `merge acme/widget#7 with CI is failing (2 of 5) ·
+    press the mode anyway…`. Prohibirlos del todo convertiría la herramienta en
+    un muro —un check inestable dejaría el PR sin salida—, y no hacer nada los
+    haría invisibles.
+  Elegir el modo **es** la confirmación, así que no hace falta una tercera tecla.
+  En un ítem sano no sale ningún aviso: un gate que avisa siempre entrena a
+  ignorar el aviso.
+- **El motivo de autenticación llega a la pantalla.** `AuthState.Reason` lo
+  escribía el adapter y no se pintaba en ningún sitio: solo la etiqueta genérica
+  `not authenticated`. Con `bitbucket` (adapter inerte) eso mandaba a la persona
+  a la autenticación a buscar un token que ya funcionaba. Ahora el aviso y la
+  ficha llevan el motivo del adapter, y el de bitbucket dice `not implemented in
+  this version` en vez de `not supported in this version`, porque "no soportado"
+  y "no implementado" piden lo mismo y solo uno de los dos es exacto.
+- **La relectura de `ReviewDecision` se normaliza en el gate.** Se comparaba en
+  crudo contra `changes_requested`, y el forge manda `CHANGES_REQUESTED`: el gate
+  no veía los cambios pedidos en ningún caso. Se compara con el mismo
+  `normalize` que ya usa `Derive`.
+- **`MergeBlock` mira el estado crudo, no el derivado.** `Derive` ordena por
+  atención al operador, así que un ítem en borrador que además está aprobado
+  devuelve `StateApproved` y el borrador se perdía. La pregunta del gate es otra
+  —¿puede este forge integrar esto?— y no depende de la decisión de review.
+
+### Changed
+
+- **La confirmación de merge solo ofrece los modos que el repositorio admite.**
+  GitHub publica `mergeCommitAllowed` / `rebaseMergeAllowed` / `squashMergeAllowed`
+  dentro de la consulta del ítem, así que la lista es exacta y **no cuesta una
+  llamada**: un repositorio con el squash desactivado no muestra `s` y no gasta
+  un rechazo en descubrirlo. El modo se revalida al confirmar, así que el filtro
+  no es solo de menú.
+  - En **GitLab no se puede** y no se finge: `Project.mergeMethod` **no existe**
+    en el schema GraphQL de la instancia (comprobado con introspección), y
+    leerlo por REST costaría una llamada por repositorio. Las reglas llegan con
+    `Known=false` y eso no restringe nada, porque no saber no es lo mismo que no
+    permitir: un filtro inventado dejaría fuera el único modo que el repositorio
+    quizá sí admite, y el usuario se quedaría sin salida legítima.
+  - El orden de la lista pasa a ser `r` rebase, `m` merge commit, `s` squash.
+    Rebase primero porque es la única estrategia que no reescribe la historia
+    publicada; no es un default —no hay default— pero inclina el menú.
+  - `Adapter.Merge` recibe el head SHA como parámetro nuevo. Que el pin sea
+    explícito en la firma es lo que evita que un adapter nuevo lo olvide.
+- **`FakeAdapter` se niega a mergear sin pin**, igual que los dos adapters reales,
+  y antes de registrar nada. Un fake que acepta lo que producción rechaza hace
+  que todos los tests de merge de la TUI cubran un camino que no existe, y el
+  fallo real aparece en el adapter, donde ningún test llega. `mkItem` ahora
+  pone un `HeadSHA` y unas `MergeRules` por defecto, que es lo que devuelve un
+  forge real.
+
 ### Added
 
 - **Los últimos 5 comentarios del PR/MR se ven en el detalle.** En una caja propia

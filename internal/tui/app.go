@@ -247,6 +247,11 @@ type Model struct {
 	// sobre lo que el usuario confirmó, no sobre lo que ahora esté debajo.
 	mergeArmed   bool
 	mergeArmedID model.ID
+	// mergeBlockReason es el motivo por el que state.MergeBlock frena este merge
+	// sin impedirlo (CI en rojo, cambios pedidos, CI todavía corriendo). No es un
+	// veto: es la línea que la confirmación enseña para que la segunda pulsación
+	// sea informada. Vacío = el merge no tiene nada que advertir.
+	mergeBlockReason string
 
 	events  chan event
 	ctx     context.Context

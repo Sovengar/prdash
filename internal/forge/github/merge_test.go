@@ -31,6 +31,9 @@ func readArgs(t *testing.T, path string) []string {
 
 var mergeRef = model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}
 
+// headSHA es el commit leído del ítem: el pin al que todo merge debe salir.
+const headSHA = "9f1c0de"
+
 // TestMergePassesTheStrategyFlag: cada modo llega a `gh pr merge` con su flag.
 // El modo no es opcional porque sin flag gh abre un prompt interactivo, que en
 // un subproceso no interactivo se queda colgado.
@@ -47,7 +50,7 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 			dir := t.TempDir()
 			bin, argsFile := recorder(t, dir, "gh")
 
-			warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, tc.mode)
+			warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, tc.mode, headSHA)
 			if len(warns) != 0 {
 				t.Fatalf("Merge = %+v, want sin warnings", warns)
 			}
@@ -68,7 +71,7 @@ func TestMergeRefusesUnknownMode(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")
 
-	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeMode("cherry-pick"))
+	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeMode("cherry-pick"), headSHA)
 	if len(warns) == 0 {
 		t.Fatal("un modo desconocido debería reportar warning")
 	}

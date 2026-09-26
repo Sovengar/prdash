@@ -67,7 +67,9 @@ prdash worktrees  # lista los worktrees de review propiedad de prdash
 Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
 `tab` sección, `r` montar review (el worktree siempre; el layout de 2 tabs
 requiere Herdr), `R` refrescar, `a` approve, `m` merge, `o` abrir en el
-navegador, `q` salir. Son configurables en `[keybindings]`.
+navegador, `q` salir. Son configurables en `[keybindings]`. Con el merge armado,
+`m`/`r`/`s` eligen estrategia y cualquier otra tecla cancela (ver
+[Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
 
 La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem
 seleccionado en el 40% inferior, que se mueve con el cursor. No hay una vista a
@@ -151,19 +153,69 @@ tecla **es** la elección del modo, y no hay modo por defecto:
 
 | Segunda tecla | Modo |
 |---|---|
-| `m` | merge commit |
 | `r` | rebase |
+| `m` | merge commit |
 | `s` | squash |
 | `esc` | cancelar |
 
 El motivo es que un merge reescribe historia y no se deshace con un comando, así
 que no debe existir ningún camino que lo dispare con una estrategia que no hayas
-nombrado. Cualquier otra tecla desarma y hace lo que haría normalmente, para que
-un `m` a destiempo no deje la vista esperando. `q` y `ctrl+c` siguen saliendo.
+nombrado. Cualquier otra tecla **cancela y se consume**: antes se re-despachaba
+como si nada, y eso convertía un merge mal armado en approve (`m` y luego `a`
+aprobaba el PR) o en un merge commit inmediato (`m` y luego `m`). Cancelar sin
+re-despachar cumple lo mismo —la vista deja de esperar igual— pero sin el efecto
+secundario. `q` y `ctrl+c` siguen saliendo.
 
-Los avisos nombran el modo tanto al empezar (`merge (rebase) en curso…`) como
-al terminar (`merge (squash) ok`), porque sin eso un "merge ok" no dice qué se
+**Solo se ofrecen los modos que el repositorio admite.** GitHub publica
+`mergeCommitAllowed` / `rebaseMergeAllowed` / `squashMergeAllowed` en la misma
+consulta del ítem, así que la lista es exacta y no cuesta una llamada: un repo
+con el squash desactivado no muestra `s`. Cuando las reglas no se conocen —GitLab
+no las expone por GraphQL, `Project.mergeMethod` no existe en su schema— se
+ofrecen las tres, porque no saber no es lo mismo que no permitir, y un filtro
+inventado dejaría al usuario sin salida legítima.
+
+Los avisos nombran el modo tanto al empezar (`merge (rebase) en curso…`) como al
+terminar (`merge (squash) ok`), porque sin eso un "merge ok" no dice qué se
 hizo.
+
+### Lo que el merge comprueba antes de salir
+
+Un merge no es un comando: es la acción de la que este outflow no tiene vuelta
+atrás. Por eso hay tres cosas que se miran y que antes no se miraban.
+
+**El CI y los cambios pedidos se anuncian antes de la confirmación, no se
+prohíben.** El modelo de estado ya distinguía un ítem con checks en rojo de uno con
+cambios pedidos de uno sano —la ficha los enseña— pero el gate no los miraba, así
+que `merge` salía igual en los tres casos. Ahora:
+
+| Estado | Qué pasa |
+|---|---|
+| Borrador, ya mergeado, ya cerrado | **No arma.** Es una propiedad del forge: GitHub rechaza el merge de un PR en borrador, y ofrecerlo solo gasta una llamada para recibir un error. |
+| CI en rojo | Arma, y la confirmación dice `merge acme/widget#7 with CI is failing (2 of 5) · press the mode anyway…` |
+| CI todavía corriendo | Arma, y avisa: mergear mientras el CI corre es la carrera que el pin del head no cierra, porque el CI puede pasar *después* del merge. |
+| Cambios pedidos | Arma, y avisa. |
+
+Prohibirlos del todo convertiría la herramienta en un muro —un check inestable
+dejaría el PR sin poder mergear nunca—, y no hacer nada los haría invisibles. Un
+gate que avisa siempre entrena a ignorar el aviso, así que en un ítem sano no sale
+ninguno.
+
+Elegir el modo **es** la confirmación: para eso hay que nombrar una estrategia, y
+quien la nombra después de leer que el CI está rojo ha decidido. No hace falta una
+tercera tecla.
+
+**El merge va pineado al commit que se leyó.** `--match-head-commit` en GitHub,
+`--sha` en GitLab. Sin eso la forja integra el HEAD del momento, y entre el
+refresco del inbox (60 s) y la pulsación la rama puede haber avanzado: se
+integrarían commits que nadie revisó. Es el peor resultado posible de una acción
+irreversible, y por eso cuando el forge no reporta el commit —un `diffHeadSha`
+null en GitLab, o una respuesta que no lo trae— el merge **se niega** en vez de
+salir sin pin.
+
+**El aviso de auth lleva el motivo del adapter.** `bitbucket` responde
+`not implemented in this version`, y antes eso se pintaba como
+`not authenticated`: dos cosas que piden acciones opuestas, porque un token
+inválido se arregla y una feature sin implementar no.
 
 `approve` no aplica a los PR/MR propios: ningún forge admite aprobar lo que
 escribes tú (GitHub lo rechaza en la API y no hay opción para activarlo). prdash

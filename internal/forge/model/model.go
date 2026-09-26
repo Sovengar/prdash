@@ -85,6 +85,28 @@ type DiffStat struct {
 // Total es el número de líneas tocadas: la magnitud que ordena el trabajo.
 func (d DiffStat) Total() int { return d.Additions + d.Deletions }
 
+// MergeRules son las estrategias de integración que el repositorio admite.
+//
+// No todos los forges las publican en la consulta del ítem, así que Known
+// separa "el repositorio no permite squash" de "no lo sabemos": sin ese bit, un
+// repositorio con las tresstrategias desactivadas se indistinguible de uno que
+// las tiene todas y la TUI acabaría ofreciendo un modo que el forge va a
+// rechazar. Un MergeRules desconocido no restringe nada, y quien lo consume tiene
+// que tratarlo como tal en vez de suponer que todo está permitido.
+type MergeRules struct {
+	Known       bool
+	MergeCommit bool
+	Rebase      bool
+	Squash      bool
+}
+
+// MergeRulesAll es el conjunto de reglas de un repositorio que admite las tres
+// estrategias. Es un default permisivo, no un dato del repositorio, y por eso
+// Known=false es lo que lo distingue de unas reglas realmente leídas del forge.
+func MergeRulesAll() MergeRules {
+	return MergeRules{Known: true, MergeCommit: true, Rebase: true, Squash: true}
+}
+
 // RepoRef identifica un repositorio dentro de un forge y host concretos.
 type RepoRef struct {
 	Forge   string // "github" | "gitlab" | ...
@@ -125,7 +147,18 @@ type Item struct {
 	ReviewDecision string // decisión de review del forge: APPROVED/…
 	Checks         Checks
 	Diff           DiffStat
-	UpdatedAt      time.Time
+	// HeadSHA es el commit al que apunta la rama origen del ítem, tal y como lo
+	// tenía el forge en la última lectura. Es lo que permite pinear el merge a un
+	// commit concreto (`--match-head-commit` / `--sha`): sin él, un merge puede
+	// integrar commits que nadie miró, porque la rama se movió entre el refresco
+	// del inbox y la pulsación. Vacío significa "el forge no lo reportó", que no
+	// es lo mismo que "no hay": por eso un merge que lo necesita se niega en vez
+	// de integrar a ciegas.
+	HeadSHA string
+	// Merge son las estrategias que el repositorio admite. Un repositorio que no
+	// publica el dato llega con Known=false, y eso no restringe nada.
+	Merge     MergeRules
+	UpdatedAt time.Time
 }
 
 // NewItem construye un ítem normalizando los campos que derivan de la

@@ -4,6 +4,7 @@
 package state
 
 import (
+	"fmt"
 	"strings"
 
 	"prdash/internal/forge/model"
@@ -111,6 +112,11 @@ func Derive(it model.Item) State {
 
 // Actionable indica si un ítem admite una acción de approve/merge y, si no,
 // el motivo. Un ítem cerrado o mergeado ya no es accionable.
+//
+// Solo cubre lo que ninguna acción puede ignorar: el ítem ya no existe como
+// cosa que integrar. Lo que depende de laacción (que el CI esté rojo, que haya
+// cambios pedidos) lo decide MergeBlock, porque ahí la respuesta no es sí o no
+// sino sí, pero solo si lo dices otra vez.
 func Actionable(it model.Item) (bool, string) {
 	switch Derive(it) {
 	case StateMerged:
@@ -120,6 +126,79 @@ func Actionable(it model.Item) (bool, string) {
 	default:
 		return true, ""
 	}
+}
+
+// Block es el veredicto de un gate sobre una acción: por qué no debería
+// ejecutarse sin más, y si levantarlo está en manos del usuario.
+//
+// La distinción entre duro y blando es la que hace que el gate sirva de algo.
+// Un bloqueo duro es una propiedad del forge: un PR en borrador no se mergea
+// porque GitHub no lo permite, y ninguna confirmación lo cambia. Un bloqueo blando
+// es una política: el CI puede estar rojo por un check inestable, y puede haber
+// cambios pedidos que quien mantiene el repositorio decide ignorar. Esos no se
+// prohíben —eso convertiría la herramienta en un muro— pero tampoco pasan
+// inadvertidos: se anuncian y se piden dos veces.
+type Block struct {
+	// Reason explica el bloqueo, ya traducido para el usuario.
+	Reason string
+	// Hard marca un bloqueo que ninguna confirmación puede levantar.
+	Hard bool
+}
+
+// MergeBlock decide si un merge debería salir sin más sobre un ítem.
+//
+// Se apoya en datos que el inbox YA trae y que hasta ahora no se usaban para
+// nada: el estado derivado distingue un ítem en borrador de uno con cambios
+// pedidos de uno con checks en rojo, y la ficha los enseña. La consecuencia de no
+// mirar es que `merge` salía igual en los tres casos, y la de mirar es que el
+// merge se frena en el único sitio donde el daño es irreversible.
+//
+// La precedencia reproduce la de Derive, que ya decide el orden de atención: un
+// ítem con CI rojo y cambios pedidos se bloquea por el CI, que es lo que el
+// operador quiere saber primero. Los checks pendientes cuentan como bloqueo
+// blando y no como IGNorado: mergear mientras el CI corre es exactamente la
+// carrera que el pin del head SHA no cierra, porque el CI puede pasar después del
+// merge.
+func MergeBlock(it model.Item) Block {
+	// Borrador, mergeado y cerrado se miran en el estado CRUDO y no en Derive, y
+	// no es un detalle: Derive ordena por atención al operador, así que un ítem
+	// en borrador que además está aprobado devuelve StateApproved y el borrador
+	// se pierde. Aquí la pregunta es otra —¿puede este forge integrar esto?—, y la
+	// respuesta no depende de la decisión de review.
+	switch normalize(it.State) {
+	case "merged":
+		return Block{Reason: "item is already merged", Hard: true}
+	case "closed":
+		return Block{Reason: "item is already closed", Hard: true}
+	case "draft":
+		// GitHub rechaza el merge de un PR en borrador antes de mirar nada más,
+		// así que ofrecerlo sería gastar una llamada para recibir un error que no
+		// depende de la estrategia.
+		return Block{Reason: "item is a draft", Hard: true}
+	}
+	switch {
+	case it.Checks.State == model.ChecksFailing:
+		return Block{Reason: checksFailingReason(it.Checks)}
+	case it.Checks.State == model.ChecksPending:
+		return Block{Reason: fmt.Sprintf("CI is still running (%d pending)", it.Checks.Pending)}
+	// La decisión se normaliza porque el mismo dato llega en convenciones
+	// distintas según el forge: GitHub manda el enum `CHANGES_REQUESTED` en
+	// GraphQL y `CHANGES_REQUESTED` en REST, y compararlo en crudo hacía que el
+	// gate no viera los cambios pedidos en ninguno de los dos casos.
+	case normalize(it.ReviewDecision) == "changes_requested":
+		return Block{Reason: "changes were requested on this item"}
+	}
+	return Block{}
+}
+
+// checksFailingReason nombra los checks que fallan. Con el recuento delante, el
+// aviso deja de ser un "no puedes" abstracto y dice cuántos hay: es lo que
+// distingue un CI roto de un check inestable.
+func checksFailingReason(c model.Checks) string {
+	if c.Total > 0 {
+		return fmt.Sprintf("CI is failing (%d of %d checks)", c.Failing, c.Total)
+	}
+	return "CI is failing"
 }
 
 // SelfReviewReason explica por qué no se puede aprobar un ítem propio. Es el

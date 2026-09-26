@@ -78,6 +78,23 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 
 // ---- GitHub: búsqueda GraphQL ----
 
+// ghPRNodeRepository es el repositorio que anida cada nodo de pull request. Las
+// tres estrategias de merge llegan en la MISMA consulta del ítem, así que
+// filtrar los modos por lo que el repositorio admite no cuesta una llamada
+// extra. Los punteros a bool distinguen "el repositorio lo tiene desactivado" de
+// "la respuesta no trajo el campo" (por ejemplo el respaldo REST), que es la
+// diferencia entre ofrecer tres modos y no ofrecer ninguno.
+type ghPRNodeRepository struct {
+	NameWithOwner string `json:"nameWithOwner"`
+	Name          string `json:"name"`
+	Owner         struct {
+		Login string `json:"login"`
+	} `json:"owner"`
+	MergeCommitAllowed *bool `json:"mergeCommitAllowed"`
+	RebaseMergeAllowed *bool `json:"rebaseMergeAllowed"`
+	SquashMergeAllowed *bool `json:"squashMergeAllowed"`
+}
+
 // ghPRNode es el nodo de pull request que devuelven las queries GraphQL de
 // búsqueda y de pullRequest individual. Comparten forma a propósito, de modo
 // que una sola función de parseo sirve para ambos.
@@ -91,6 +108,10 @@ type ghPRNode struct {
 	UpdatedAt      string `json:"updatedAt"`
 	HeadRefName    string `json:"headRefName"`
 	BaseRefName    string `json:"baseRefName"`
+	// HeadRefOid es el commit de la rama origen. Es lo que permite pinear el
+	// merge a un commit concreto: sin él, la rama puede haberse movido desde la
+	// última lectura y el merge integraría commits que nadie revisó.
+	HeadRefOid string `json:"headRefOid"`
 	// Additions va como puntero a propósito: `additions` es `Int!` en el schema,
 	// así que si el campo viene es que la query lo pidió. Ausente = la respuesta
 	// no lo trajo (respaldo REST u otra forma de salida) y el diffstat queda
@@ -101,14 +122,8 @@ type ghPRNode struct {
 	Author       struct {
 		Login string `json:"login"`
 	} `json:"author"`
-	Repository struct {
-		NameWithOwner string `json:"nameWithOwner"`
-		Name          string `json:"name"`
-		Owner         struct {
-			Login string `json:"login"`
-		} `json:"owner"`
-	} `json:"repository"`
-	Commits struct {
+	Repository ghPRNodeRepository `json:"repository"`
+	Commits    struct {
 		Nodes []struct {
 			Commit struct {
 				StatusCheckRollup *struct {
@@ -203,8 +218,28 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	it.ReviewDecision = n.ReviewDecision
 	it.Checks = checksFromRollup(n)
 	it.Diff = diffFromGHNode(n)
+	it.HeadSHA = n.HeadRefOid
+	it.Merge = mergeRulesFromGHRepo(n.Repository)
 	it.UpdatedAt = parseTime(n.UpdatedAt)
 	return it
+}
+
+// mergeRulesFromGHRepo lee las estrategias que el repositorio admite.
+//
+// Known exige los TRES flags: con uno solo, la respuesta vino de una forma que
+// no los trae todos y asumir que los ausentes valen false dejaría fuera el único
+// modo que el repositorio quizá sí permite. Ante la duda se devuelven reglas
+// desconocidas, que no restringen.
+func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
+	if r.MergeCommitAllowed == nil || r.RebaseMergeAllowed == nil || r.SquashMergeAllowed == nil {
+		return model.MergeRules{}
+	}
+	return model.MergeRules{
+		Known:       true,
+		MergeCommit: *r.MergeCommitAllowed,
+		Rebase:      *r.RebaseMergeAllowed,
+		Squash:      *r.SquashMergeAllowed,
+	}
 }
 
 // diffFromGHNode lee el diffstat de un PR. GitHub lo da ya agregado en tres
@@ -407,6 +442,14 @@ type glMR struct {
 	TargetBranch string  `json:"targetBranch"`
 	Approved     bool    `json:"approved"`
 	UpdatedAt    string  `json:"updatedAt"`
+	// DiffHeadSha es el commit de la rama origen: lo que permite pinear el merge
+	// con `--sha`. Es puntero porque GitLab lo declara nullable y lo devuelve a
+	// null cuando el diff no está calculado; ausente y null significan lo mismo
+	// aquí, que es "no se puede pinear".
+	DiffHeadSha *string `json:"diffHeadSha"`
+	// Squash dice si el MR se aplana al integrarlo. Es la señal de que un modo
+	// rebase acabaría en un squash igualmente, y la TUI la enseña.
+	Squash *bool `json:"squash"`
 	// DiffStats es una entrada por fichero cambiado, no un agregado, y va como
 	// puntero a slice para poder distinguir las dos cosas que un `[]` vacío
 	// significaría: ausente (la query no lo pidió, p. ej. la API de Todos) y
@@ -528,8 +571,25 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	it.State = mr.State
 	it.ReviewDecision = glReviewDecision(mr)
 	it.Diff = diffFromGLMR(mr)
+	if mr.DiffHeadSha != nil {
+		it.HeadSHA = *mr.DiffHeadSha
+	}
+	// GitLab NO expone las estrategias de integración en la API GraphQL
+	// (`Project.mergeMethod` no existe en el schema de la instancia), y leerlas
+	// por REST costaría una llamada por repositorio. Las reglas quedan sin
+	// conocer, que no restringe: se ofrecen los tres modos y el forge rechaza lo
+	// que no admita.
+	it.Merge = model.MergeRules{}
 	it.UpdatedAt = parseTime(mr.UpdatedAt)
 	return it
+}
+
+// glMRSquash informa si el MR se aplana al integrarlo, o si no se pudo saber.
+func glMRSquash(mr glMR) (squashed bool, known bool) {
+	if mr.Squash == nil {
+		return false, false
+	}
+	return *mr.Squash, true
 }
 
 // diffFromGLMR suma el diffstat de un MR. GitLab entrega `diffStats` como una

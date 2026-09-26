@@ -161,11 +161,33 @@ func withoutField(fields []detailField, key string) []detailField {
 // repitiendo lo que el campo Role ya dice. Además es lo único que se puede pedir
 // de otro modo: la razón se entrega al pulsar la tecla, en el aviso, que es
 // cuando se puede actuar sobre ella. En la ficha solo ocuparía filas.
+//
+// El forge sin autenticar SÍ se pinta, y con su motivo, que es justo lo que antes
+// se perdía: el adapter sabe distinguir "el token no vale" de "este forge no está
+// implementado", y la etiqueta genérica de "not authenticated" mandaba a la
+// persona a la autenticación a buscar un token que ya funcionaba. El motivo del
+// adapter es el dato accionable y no ocupaba ninguna fila.
 func (m *Model) detailWarnings(it model.Item) []string {
 	if reason := m.denied[it.ID()]; reason != "" {
 		return []string{"", styleWarn.Render("  action disabled: " + reason)}
 	}
+	if st := m.statuses[it.Forge]; st != nil && !st.auth.OK {
+		return []string{"", styleWarn.Render("  " + it.Forge + ": " + authReason(st.auth))}
+	}
 	return nil
+}
+
+// authReason compone el motivo de un forge no autenticado, con un texto por
+// defecto cuando el adapter no dio ninguno.
+//
+// El motivo es lo que decide qué hace el operador: "not authenticated" se
+// arregla retomando el token y "not implemented" no se arregla de ninguna forma.
+// Confundirlos cuesta una sesión entera de depuración.
+func authReason(auth model.AuthState) string {
+	if auth.Reason != "" {
+		return auth.Reason
+	}
+	return "not authenticated"
 }
 
 // fullWidthField compone un campo que ocupa la fila entera en vez de media.

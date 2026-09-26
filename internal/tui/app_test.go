@@ -39,6 +39,11 @@ func mkItem(forgeName, host, project, title string, number int, decision string)
 	it.URL = "https://" + host + "/" + project + "/" + strconv.Itoa(number)
 	it.ReviewDecision = decision
 	it.State = "OPEN"
+	// Un forge real siempre reporta el commit de la rama origen, y sin él el
+	// adapter se niega a mergear. Un fixture sin HeadSHA haría que todos los
+	// tests de merge estuvieran probando un camino que producción no tiene.
+	it.HeadSHA = "head-" + project + "-" + strconv.Itoa(number)
+	it.Merge = model.MergeRulesAll()
 	it.UpdatedAt = time.Now()
 	return it
 }
@@ -462,7 +467,10 @@ func TestPermissionRecordsDenial(t *testing.T) {
 	}
 }
 
-// TestActionDisabledWhenForgeDown: sin auth, la acción queda deshabilitada.
+// TestActionDisabledWhenForgeDown: sin auth, la acción queda deshabilitada y el
+// aviso lleva el MOTIVO del adapter, no una etiqueta genérica. "401" e "not
+// implemented" piden acciones opuestas, y confundirlas manda a la persona a la
+// autenticación a buscar un token que ya funciona.
 func TestActionDisabledWhenForgeDown(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{
 		ForgeName: "gitlab", HostName: "gitlab.example.com",
@@ -475,8 +483,12 @@ func TestActionDisabledWhenForgeDown(t *testing.T) {
 	if m.actionBusy {
 		t.Fatal("no debería arrancar la acción con la forge caída")
 	}
-	if !strings.Contains(lastToast(m), "not authenticated") {
-		t.Fatalf("toast = %q", lastToast(m))
+	toast := lastToast(m)
+	if !strings.Contains(toast, "401") {
+		t.Errorf("toast = %q, want el motivo del adapter", toast)
+	}
+	if strings.Contains(toast, "not authenticated") {
+		t.Errorf("toast = %q: la etiqueta genérica tapa el motivo real", toast)
 	}
 }
 

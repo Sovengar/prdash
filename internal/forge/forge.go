@@ -9,7 +9,9 @@ package forge
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -101,7 +103,14 @@ type Adapter interface {
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
 	// Merge mergea un ítem con la estrategia indicada. El modo no es opcional:
 	// un merge sin estrategia nombrada es un prompt interactivo colgado.
-	Merge(ctx context.Context, ref model.RepoRef, number int, mode MergeMode) []model.Warning
+	//
+	// headSHA es el commit al que la rama origen apuntaba en la lectura del
+	// ítem, y el adapter DEBE pinear el merge a él. No es una cortesía: entre el
+	// refresco del inbox y la pulsación la rama puede haber avanzado, y sin el
+	// pin el merge integra commits que nadie revisó. Un headSHA vacío significa
+	// "el forge no lo reportó" y se traduce en un warning, nunca en un merge
+	// sin pin.
+	Merge(ctx context.Context, ref model.RepoRef, number int, mode MergeMode, headSHA string) []model.Warning
 }
 
 // PageResult es una página emitida por Stream.
@@ -275,6 +284,46 @@ func ErrUnknownMergeMode(mode MergeMode) error {
 	return fmt.Errorf("unknown merge mode %q: expected merge, rebase or squash", string(mode))
 }
 
+// ErrMissingHeadSHA es el motivo que devuelve un adapter cuando no puede pinear
+// el merge al commit que se leyó del ítem.
+//
+// El pin no es decorativo: sin él, la rama origen puede haber avanzado entre la
+// lectura y la pulsación y el merge integra commits que nadie miró. Un forge que
+// no reporta el head SHA no es un forge al que se pueda mergear con seguridad
+// desde aquí, así que la acción se niega en vez de dejarse sin pin.
+var ErrMissingHeadSHA = errors.New(
+	"the forge did not report the head commit, so the merge cannot be pinned to what was reviewed")
+
+// AllowedModes devuelve los modos que el repositorio admite, en el orden en que
+// se ofrecen al usuario: rebase, merge commit, squash.
+//
+// Un repositorio que no publica sus reglas devuelve los tres, porque no saber
+// no es lo mismo que no permitir y un filtro inventado dejaría fuera el único
+// modo que el repositorio sí acepta. El coste de equivocarse es asimétrico: un
+// modo de más lo rechaza el forge con un mensaje claro, y un modo de menos deja
+// al usuario sin una salida legítima.
+func AllowedModes(rules model.MergeRules) []MergeMode {
+	if !rules.Known {
+		return []MergeMode{Rebase, MergeCommit, Squash}
+	}
+	var out []MergeMode
+	if rules.Rebase {
+		out = append(out, Rebase)
+	}
+	if rules.MergeCommit {
+		out = append(out, MergeCommit)
+	}
+	if rules.Squash {
+		out = append(out, Squash)
+	}
+	return out
+}
+
+// AllowsMode informa si un modo concreto está permitido por las reglas dadas.
+func AllowsMode(rules model.MergeRules, mode MergeMode) bool {
+	return slices.Contains(AllowedModes(rules), mode)
+}
+
 // Outcome es el resultado de ejecutar una acción rápida.
 type Outcome struct {
 	Kind     ActionKind
@@ -310,7 +359,13 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	case ActionApprove:
 		actionWarns = a.Approve(ctx, ref, number)
 	case ActionMerge:
-		actionWarns = a.Merge(ctx, ref, number, mode)
+		// El head SHA se toma de la RELECTURA que acaba de hacer esta misma
+		// llamada, no de la copia que la TUI tenía en memoria: es la lectura
+		// inmediatamente anterior al merge, y por tanto la que menos ventana
+		// deja entre el commit observado y el merge. RunAction no vuelve a
+		// comprobar el pin porque lo delega en el adapter, que es quien conoce
+		// el flag de cada CLI; aquí solo se le pasa el commit.
+		actionWarns = a.Merge(ctx, ref, number, mode, cur.HeadSHA)
 	}
 	out.OK, out.Conflict, out.Perm, out.Msg = classifyAction(actionWarns)
 
