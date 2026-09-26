@@ -232,8 +232,10 @@ func TestResultShowsTheImage(t *testing.T) {
 	if !strings.Contains(text, "o open image") {
 		t.Errorf("la vista no ofrece abrir la imagen:\n%s", text)
 	}
-	// El fondo sobrevive: la caja del inbox sigue debajo del popup.
-	if !strings.Contains(text, "Inbox") {
+	// El fondo sobrevive: la caja del inbox sigue debajo del popup. Su título ya
+	// no es "Inbox" sino la leyenda de conteos; el conteo de la sección activa es
+	// el marcador estable de que la caja de la lista sigue detrás.
+	if !strings.Contains(text, "Assigned (1)") {
 		t.Error("el popup tapó la vista de fondo entera")
 	}
 }

@@ -65,11 +65,16 @@ prdash worktrees  # lista los worktrees de review propiedad de prdash
 ```
 
 Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
-`tab` sección, `r` montar review (el worktree siempre; el layout de 2 tabs
-requiere Herdr), `R` refrescar, `a` approve, `m` merge, `v` simular, `o` abrir en
-el navegador, `q` salir. Son configurables en `[keybindings]`. Con el merge armado,
-`m`/`r`/`s` eligen estrategia y cualquier otra tecla cancela (ver
+`tab` cambia de sección (Assigned → Mentioned → Mine), `r` montar review (el
+worktree siempre; el layout de 2 tabs requiere Herdr), `R` refrescar, `a`
+approve, `m` merge, `v` simular, `o` abrir en el navegador, `q` salir. Son
+configurables en `[keybindings]`. Con el merge armado, `m`/`r`/`s` eligen
+estrategia y cualquier otra tecla cancela (ver
 [Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
+
+El Inbox pinta **una sola sección a la vez**: al abrir muestra **Assigned**, y el
+borde superior lleva la leyenda de conteos `Mine (n) · Assigned (n) · Mentioned
+(n)`, con la activa resaltada. Cada sección recuerda su cursor y su scroll.
 
 ### Simulación (`v`)
 

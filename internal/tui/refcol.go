@@ -4,9 +4,9 @@
 // "APPCITTI/vsocial/backend/api-gateway") no caben en una columna de ancho fijo
 // y recortarlas por la cabeza se comía justo lo que distingue un ítem de otro:
 // el nombre del repo y el "#número". Aquí la ruta se parte en dos: el prefijo
-// que comparten los ítems de la sección vive en su cabecera, y la celda solo
-// pinta el sufijo. La columna se dimensiona al sufijo más largo de todo el
-// inbox, y lo que aun así no quepa se recorta por la cola, nunca por el frente.
+// que comparten los ítems de la sección vive en una línea fija, y la celda solo
+// pinta el sufijo. La columna se dimensiona al sufijo más largo de la sección
+// pintada, y lo que aun así no quepa se recorta por la cola, nunca por el frente.
 package tui
 
 import (
@@ -18,21 +18,23 @@ import (
 	"prdash/internal/inbox"
 )
 
-// refLayout son los anchos de columna de un render más el prefijo de ruta que
-// cada sección declara en su cabecera.
+// refLayout son los anchos de columna de un render más el prefijo de ruta que la
+// sección pintada declara en su línea de prefijo.
 //
-// Se calcula una vez por render y se pasa a la cabecera y a las filas: si cada
-// uno midiera por su cuenta, una fila podría recortarse con un ancho y la
-// siguiente con otro, y la tabla bailaría al escribir encima.
+// Se calcula una vez por render y se pasa al header de columnas y a las filas:
+// si cada uno midiera por su cuenta, una fila podría recortarse con un ancho y
+// la siguiente con otro, y la tabla bailaría al escribir encima.
 type refLayout struct {
 	cols   []tableColumn
 	prefix map[model.Section]string
 }
 
-// newRefLayout reparte el ancho de la columna ITEM entre las secciones: cada una
-// declara el prefijo que comparten sus ítems y solo pinta el sufijo, así que la
-// columna se dimensiona al sufijo más largo de todas ellas. Se acota a
-// [itemWidthMin, itemWidthCap] para que TITLE conserve su sitio.
+// newRefLayout reparte el ancho de la columna ITEM entre las secciones que se
+// pintan: cada una declara el prefijo que comparten sus ítems y solo pinta el
+// sufijo, así que la columna se dimensiona al sufijo más largo. El llamador le
+// pasa solo la sección activa —que es la única visible— para no gastar ancho en
+// sufijos de secciones que no se ven. Se acota a [itemWidthMin, itemWidthCap]
+// para que TITLE conserve su sitio.
 //
 // El ancho se cuenta con el hueco de separación (textWidth): el sufijo más largo
 // tiene que CABER, no caber menos un rune. Sin ese +1, el ítem más largo de la
@@ -55,8 +57,8 @@ func newRefLayout(sections []inbox.Section) refLayout {
 	return l
 }
 
-// prefixOf devuelve el prefijo de ruta que la cabecera de la sección declara. Sin
-// prefijo, la celda pinta la ruta completa.
+// prefixOf devuelve el prefijo de ruta que la línea de prefijo de la sección
+// declara. Sin prefijo, la celda pinta la ruta completa.
 func (l refLayout) prefixOf(sec model.Section) string {
 	return l.prefix[sec]
 }
@@ -96,8 +98,8 @@ func sectionPrefix(items []model.Item) string {
 }
 
 // refSuffix es la etiqueta de la celda: la referencia del ítem sin el prefijo que
-// la cabecera de la sección ya declara. Con prefijo vacío, o si por lo que sea
-// no encaja, devuelve la referencia completa.
+// la línea de prefijo de la sección ya declara. Con prefijo vacío, o si por lo
+// que sea no encaja, devuelve la referencia completa.
 func refSuffix(it model.Item, prefix string) string {
 	label := refLabel(it)
 	if prefix == "" {
@@ -112,7 +114,7 @@ func refSuffix(it model.Item, prefix string) string {
 
 // truncateTail recorta por la izquierda añadiendo "…" delante, de modo que en
 // una ruta larga sobreviva la cola (hoja del proyecto y "#número"), que es lo
-// que identifica el ítem. El frente de la ruta ya está en la cabecera.
+// que identifica el ítem. El frente de la ruta ya está en la línea de prefijo.
 func truncateTail(s string, w int) string {
 	if w <= 0 {
 		return ""

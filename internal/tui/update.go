@@ -220,7 +220,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch m.cfg.ActionForKey(key) {
 	case "section-next":
-		m.gotoNextSection()
+		m.cycleSection()
 		return m, nil
 	case "refresh":
 		return m.startRefresh()
@@ -499,10 +499,10 @@ func (m *Model) moveCursor(row int) {
 	m.syncScroll()
 }
 
-// goTop lleva el cursor a la primera fila y la ventana al principio de la
-// lista. No basta con mover el cursor: el auto-scroll pondría la fila bajo el
-// borde superior, dejando el título de la sección y el header de columnas fuera
-// de la pantalla.
+// goTop lleva el cursor a la primera fila de la sección activa y la ventana al
+// principio de su lista. No basta con mover el cursor: el auto-scroll pondría la
+// fila bajo el borde superior, dejando la línea del prefijo y el header de
+// columnas fuera de la pantalla.
 func (m *Model) goTop() {
 	m.cursor = 0
 	m.scroll = 0
@@ -527,47 +527,6 @@ func (m *Model) pageRows() int {
 		return 6
 	}
 	return view
-}
-
-// gotoNextSection mueve el cursor al primer ítem de la siguiente sección con
-// contenido.
-func (m *Model) gotoNextSection() {
-	sections := m.inbox.Sections
-	if len(sections) == 0 {
-		return
-	}
-	cur := m.sectionIndexAtCursor()
-	for step := 1; step <= len(sections); step++ {
-		idx := (cur + step) % len(sections)
-		if len(sections[idx].Items) > 0 {
-			m.moveCursor(m.sectionOffsets()[idx])
-			return
-		}
-	}
-}
-
-// sectionOffsets devuelve el índice de la primera fila de cada sección.
-func (m *Model) sectionOffsets() []int {
-	offsets := make([]int, len(m.inbox.Sections))
-	acc := 0
-	for i, s := range m.inbox.Sections {
-		offsets[i] = acc
-		acc += len(s.Items)
-	}
-	return offsets
-}
-
-// sectionIndexAtCursor devuelve la sección en la que está el cursor.
-func (m *Model) sectionIndexAtCursor() int {
-	idx := 0
-	for i, off := range m.sectionOffsets() {
-		if m.cursor >= off {
-			idx = i
-		} else {
-			break
-		}
-	}
-	return idx
 }
 
 // View compose la pantalla: el inbox partido en lista y panel de detalle. El

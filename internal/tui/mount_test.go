@@ -35,7 +35,7 @@ func mountModel(t *testing.T) (Model, model.Item) {
 	m := newTestModel(t, ghAdapter())
 	it := mkItem("github", "github.com", "acme/widget", "Revisar widget", 1, "")
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
-	return m, it
+	return showSection(m, model.SectionAuthored), it
 }
 
 // waitMount lee el resultado del montaje del canal de eventos (o falla si no

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -26,7 +27,7 @@ func manyItems(n int) []model.Item {
 func longModel(t *testing.T, n int) Model {
 	t.Helper()
 	m := newTestModel(t, ghAdapter())
-	return send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", manyItems(n), false))
+	return send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, manyItems(n), false))
 }
 
 // visibleLines cuenta las líneas de la vista ya sin códigos ANSI.
@@ -35,12 +36,11 @@ func visibleLines(view string) []string {
 }
 
 // TestViewBoxesEverySection es el motivo del refactor: cada región de pantalla
-// es una caja con borde redondeado y título embebido en su línea superior. Sin
-// esto la vista se lee como un bloque plano y no se distingue dónde acaba la
-// lista y empieza el detalle.
+// es una caja con borde redondeado y título embebido en su línea superior. La
+// caja del inbox lleva la leyenda de conteos en vez del título "Inbox".
 func TestViewBoxesEverySection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "Add widget", 1, ""),
 	}, false))
 
@@ -49,12 +49,15 @@ func TestViewBoxesEverySection(t *testing.T) {
 		t.Fatalf("la vista tiene %d líneas, want %d (la altura del terminal)", len(lines), m.height)
 	}
 
-	// Los cuatro títulos van embebidos en la línea superior de su caja, y cada
-	// caja cierra con su borde inferior.
-	for _, want := range []string{"PRDash", "Inbox", "Keybinds"} {
+	// Los títulos van embebidos en la línea superior de su caja, y cada caja
+	// cierra con su borde inferior. La del inbox es la leyenda de conteos.
+	for _, want := range []string{"PRDash", "Assigned (1)", "Keybinds"} {
 		if !hasBoxTitle(lines, want) {
 			t.Errorf("falta la caja %q:\n%s", want, strings.Join(lines, "\n"))
 		}
+	}
+	if hasBoxTitle(lines, "Inbox") {
+		t.Errorf("el título Inbox ya no debería existir: lo sustituye la leyenda:\n%s", strings.Join(lines, "\n"))
 	}
 	// La caja del detalle se titula con la referencia del ítem: es lo que dice de
 	// un vistazo sobre qué ficha se trata.
@@ -197,15 +200,17 @@ func TestPageKeysMoveOneWindow(t *testing.T) {
 }
 
 // TestDetailPaneShowsSelectedItem es el panel inferior: describe el ítem bajo el
-// cursor y cambia al moverlo, con la ruta completa del forge.
+// cursor y cambia al moverlo, con la ruta completa del forge. Los dos ítems van
+// a la sección activa (Assigned) con el mismo UpdatedAt, para que el orden entre
+// ellos sea determinista por número.
 func TestDetailPaneShowsSelectedItem(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
-		mkItem("github", "github.com", "acme/widget", "PR de github", 1, ""),
-	}, false))
-	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionReview, model.ReviewRequested, []model.Item{
-		mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR de gitlab", 2, "REVIEW_REQUIRED"),
-	}, false))
+	first := mkItem("github", "github.com", "acme/widget", "PR de github", 1, "")
+	second := mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR de gitlab", 2, "")
+	first.UpdatedAt = time.Unix(1000, 0)
+	second.UpdatedAt = time.Unix(1000, 0)
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{first}, false))
+	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionReview, model.ReviewRequested, []model.Item{second}, false))
 
 	view := stripANSI(m.View().Content)
 	for _, want := range []string{"PR de github", "github@github.com", "Item", "Author", "State"} {
@@ -247,7 +252,7 @@ func TestDetailPaneEmptyWithoutSelection(t *testing.T) {
 func TestDetailPaneFitsShortScreenInTwoColumns(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 120, 24
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "Add widget", 1, ""),
 	}, false))
 

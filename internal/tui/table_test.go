@@ -78,7 +78,7 @@ func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 		mkItem("github", "github.com", "APPCITTI/vsocial/backend/mobile-frontend", "movil", 1198, ""),
 	}, false))
 
-	lay := newRefLayout(m.inbox.Sections)
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}})
 	inner := m.contentWidth() - 2
 	var row string
 	for _, l := range m.listLines(m.contentWidth()) {
@@ -147,59 +147,82 @@ func TestForgeBadgeFitsColumn(t *testing.T) {
 	}
 }
 
-// TestNavigationMovesCursor cubre la navegación entre filas y secciones.
+// TestNavigationMovesCursor cubre la navegación dentro de la sección activa: el
+// cursor se mueve entre sus filas —ordenadas de más reciente a más antigua, así
+// que la última enviada va primero— y se acota en los extremos.
 func TestNavigationMovesCursor(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "A", 1, ""),
 		mkItem("github", "github.com", "acme/widget", "B", 2, ""),
-	}, false))
-	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "C", 3, ""),
 	}, false))
 
 	if m.cursor != 0 {
 		t.Fatalf("cursor inicial = %d", m.cursor)
 	}
+	if it, ok := m.selected(); !ok || it.Number != 3 {
+		t.Fatalf("seleccionado inicial = %+v, want el #3 (más reciente)", it)
+	}
 	m = press(t, m, "down")
 	if m.cursor != 1 {
 		t.Fatalf("cursor tras down = %d", m.cursor)
 	}
-	m = press(t, m, "tab")
-	if m.cursor != 2 {
-		t.Fatalf("cursor tras tab = %d, want 2 (primer ítem de review)", m.cursor)
+	if it, ok := m.selected(); !ok || it.Number != 2 {
+		t.Fatalf("seleccionado tras down = %+v, want el #2", it)
 	}
-	if it, ok := m.selected(); !ok || it.Title != "C" {
-		t.Fatalf("seleccionado = %+v", it)
+	m = press(t, m, "down")
+	if m.cursor != 2 {
+		t.Fatalf("cursor tras segundo down = %d", m.cursor)
+	}
+	// Bajar más allá de la última fila se acota: la sección activa no salta a
+	// otra sección.
+	m = press(t, m, "down")
+	if it, ok := m.selected(); !ok || it.Number != 1 {
+		t.Fatalf("seleccionado en el tope inferior = %+v, want el #1", it)
+	}
+	if m.cursor != 2 || m.activeSection != model.SectionReview {
+		t.Fatalf("el cursor debería quedarse en la última fila de la activa: cursor=%d sección=%q", m.cursor, m.activeSection)
+	}
+}
+
+// TestSectionNextCyclesActiveSection fija el ciclo de `tab`: la sección activa
+// avanza Assigned → Mentioned → Mine → Assigned, siempre, aunque la destino esté
+// vacía.
+func TestSectionNextCyclesActiveSection(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
+		mkItem("github", "github.com", "acme/widget", "A", 1, ""),
+	}, false))
+
+	want := []model.Section{model.SectionMentions, model.SectionAuthored, model.SectionReview, model.SectionMentions}
+	for i, w := range want {
+		m = press(t, m, "tab")
+		if m.activeSection != w {
+			t.Fatalf("tab %d: activeSection = %q, want %q", i+1, m.activeSection, w)
+		}
 	}
 }
 
 // TestSectionNextHonorsRebind comprueba que la tecla de section-next sale de
 // [keybindings] y no de un "tab" cableado. Con el atajo hardcodeado, un
-// rebind en la config se anunciaba en la barra de hints y no hacia nada: la
-// tecla nueva era un fantasma.
+// rebind en la config se anunciaba en la barra de hints y no hacía nada.
 func TestSectionNextHonorsRebind(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.cfg.Keybindings["section-next"] = "n"
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
-		mkItem("github", "github.com", "acme/widget", "A", 1, ""),
-	}, false))
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "C", 3, ""),
 	}, false))
 
 	m = press(t, m, "n")
-	if m.cursor != 1 {
-		t.Fatalf("cursor tras n = %d, want 1 (primer ítem de review)", m.cursor)
+	if m.activeSection != model.SectionMentions {
+		t.Fatalf("n debería ciclar la sección activa: activeSection = %q", m.activeSection)
 	}
-	if it, ok := m.selected(); !ok || it.Title != "C" {
-		t.Fatalf("seleccionado = %+v", it)
-	}
-	// tab ya no es la tecla de la acción: debe ser una tecla muerta y no
-	// advancing de sección, para que la barra no prometa lo que no hay.
+	// tab ya no es la tecla de la acción: debe ser una tecla muerta y no ciclar,
+	// para que la barra no prometa lo que no hay.
 	m = press(t, m, "tab")
-	if m.cursor != 1 {
-		t.Fatalf("tab movió la sección aun estando rebindeada: cursor = %d, want 1", m.cursor)
+	if m.activeSection != model.SectionMentions {
+		t.Fatalf("tab movió la sección aun estando rebindeada: activeSection = %q", m.activeSection)
 	}
 }
 
@@ -269,7 +292,7 @@ func TestDiffColumnAppearsOnlyOnWideTerminals(t *testing.T) {
 		m := newTestModel(t, ghAdapter())
 		m.width, m.height = width, 40
 		m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{item}, false))
-		lay := newRefLayout(m.inbox.Sections)
+		lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}})
 		header = stripANSI(headerLine(lay, m.contentWidth()-2))
 		for _, l := range m.listLines(m.contentWidth()) {
 			if line := stripANSI(l.text); strings.Contains(line, "vsocial-api-actuacions#1015") {

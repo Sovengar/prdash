@@ -21,6 +21,7 @@ func TestAuthReasonReachesTheScreen(t *testing.T) {
 		auth: model.AuthState{Forge: "bitbucket", OK: false, Reason: "not implemented in this version"}})
 	m = send(t, m, page(1, "bitbucket", "bitbucket.org", model.SectionAuthored, "",
 		[]model.Item{mkItem("bitbucket", "bitbucket.org", "team/repo", "MR", 4, "")}, false))
+	m = showSection(m, model.SectionAuthored)
 
 	m = press(t, m, "a")
 	toast := lastToast(m)

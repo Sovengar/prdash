@@ -108,9 +108,11 @@ func (m Model) headerSection() box {
 	return m.sectionLines("PRDash", []string{strings.Join(parts, "  ")}, true)
 }
 
-// listSection pinta la lista (headers de sección, avisos y filas) en la caja del
-// inbox, recortada a la ventana visible. Rellena hasta el alto reservado para
-// que la caja no encoja: si no, el detalle bailaría al añadir un ítem.
+// listSection pinta la lista de la sección activa (prefijo, avisos, header de
+// columnas y filas) en la caja del inbox, recortada a la ventana visible. El
+// título del borde es la leyenda de conteos, que sustituye al nombre "Inbox".
+// Rellena hasta el alto reservado para que la caja no encoja: si no, el detalle
+// bailaría al añadir un ítem.
 func (m Model) listSection(lay layout) box {
 	all := m.listLines(m.contentWidth())
 
@@ -127,7 +129,27 @@ func (m Model) listSection(lay layout) box {
 	} else {
 		body = textOf(all)
 	}
-	return m.sectionLines("Inbox", body, true)
+	return m.sectionLines(m.legend(), body, true)
+}
+
+// legend compone la leyenda de conteos del borde superior del inbox: la etiqueta
+// corta de cada sección con su número de ítems, en el orden de autoridad del
+// inbox (Mine · Assigned · Mentioned). La sección activa va resaltada y las
+// demás atenuadas. Cada tramo va con su estilo completo, sin caracteres
+// desnudos, porque el borde reenvuelve cada segmento con su color y un reset de
+// un tramo interior no restaura el del borde. El borde trunca la leyenda
+// ANSI-aware en anchos estrechos, así que la caja nunca se descuadra.
+func (m Model) legend() string {
+	parts := make([]string, 0, len(m.inbox.Sections))
+	for _, sec := range m.inbox.Sections {
+		label := fmt.Sprintf("%s (%d)", sec.Kind.Legend(), len(sec.Items))
+		if sec.Kind == m.activeSection {
+			parts = append(parts, styleLegendActive.Render(label))
+			continue
+		}
+		parts = append(parts, styleDim.Render(label))
+	}
+	return strings.Join(parts, styleDim.Render(" · "))
 }
 
 // textOf extrae el texto ya maquetado de las líneas de la lista. La caja solo
