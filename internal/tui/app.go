@@ -80,6 +80,20 @@ type mountMsg struct {
 	err    error
 }
 
+// commentsTickMsg dispara la comprobación de si el ítem bajo el cursor tiene ya
+// su conversación. Es un reloj, no un lector del canal, así que no altera el
+// invariante del único lector.
+type commentsTickMsg struct{}
+
+// commentsMsg entrega la conversación de un ítem. id es el que se pidió, no el
+// que esté bajo el cursor: la respuesta se guarda igual, porque volverá a hacer
+// falta en cuanto se vuelva a ese ítem, pero solo se pinta si sigue seleccionado.
+type commentsMsg struct {
+	id   model.ID
+	page forge.CommentPage
+	err  string
+}
+
 // Mounter monta el review de un ítem (worktree + layout). Un Model sin montador
 // informa que la acción requiere Herdr.
 type Mounter interface {
@@ -94,6 +108,20 @@ const mountTimeout = 5 * time.Minute
 
 // actionTimeout es el límite de una acción approve/merge (incluye releer).
 const actionTimeout = 60 * time.Second
+
+// commentsTimeout acota la consulta de la conversación de un ítem. Es una
+// lectura de un solo PR, así que si tarda más que esto el problema es el forge y
+// no merece la pena seguir esperando: la ficha dice que no se pudo leer y el
+// resto del panel sigue siendo cierto.
+const commentsTimeout = 20 * time.Second
+
+// commentsPoll es cada cuánto se mira si el ítem bajo el cursor necesita
+// comentarios. Es un reloj y no un evento: mirar es barato (una comparación de
+// mapa) y así no hay que rearmarlo en cada sitio por el que la selección puede
+// cambiar —teclas, páginas que llegan, acciones— y que se quede sin preguntar en
+// uno de ellos. El coste de un tick es invisible al lado del spinner, que ya
+// corre bastante más rápido.
+const commentsPoll = 200 * time.Millisecond
 
 // maxBackoff es el tope del backoff por rate limit.
 const maxBackoff = 10 * time.Minute
@@ -195,6 +223,18 @@ type Model struct {
 	// toast es la pila de avisos transitorios que se superpone a la vista.
 	toast *toastManager
 
+	// comments es la conversación ya consultada de cada ítem que se ha
+	// seleccionado, con su estado de carga. La ficha la lee en cada render, así
+	// que guardar el estado y no solo la lista es lo que permite distinguir
+	// "este PR no tiene comentarios" de "todavía no lo he preguntado", que son
+	// dos líneas distintas y una de ellas no puede quedarse colgada.
+	//
+	// Se cachea por ítem y no se borra al refrescar: el inbox se recarga cada
+	// minuto y la conversación no cambia a ese ritmo, así que repreguntarla en
+	// cada ciclo solo haría parpadear la ficha. La única invalidación es una
+	// acción sobre el ítem, que sí puede añadir comentarios.
+	comments map[model.ID]*commentState
+
 	cycle int
 
 	// mounter monta el review de un ítem; nil = sin Herdr/sin executor.
@@ -243,6 +283,7 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		denied:      map[model.ID]string{},
 		selfDenied:  map[model.ID]string{},
 		actionCycle: map[model.ID]int{},
+		comments:    map[model.ID]*commentState{},
 		events:      make(chan event, 256),
 		toast:       newToastManager(),
 		ctx:         ctx,
@@ -277,6 +318,7 @@ func (m Model) Init() tea.Cmd {
 		m.spinner.Tick,
 		m.tickCmd(),
 		tickToast(),
+		m.commentsCmd(),
 	)
 }
 

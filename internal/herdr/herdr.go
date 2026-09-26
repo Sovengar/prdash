@@ -18,9 +18,9 @@ import (
 )
 
 // MinVersion es la versión mínima de Herdr cuyas capacidades usa prdash: CLI de
-// worktree (create/list/remove por socket), layout de panes con --no-focus,
-// panes/acciones de plugin y link handlers. El detalle de capacidades y sus
-// mínimos está en docs/research/herdr-0.9.1-contract.md.
+// worktree (create/list/remove por socket), de workspace, de tab y de pane, con
+// `--no-focus` en las creaciones. El detalle de capacidades y sus mínimos está
+// en docs/research/herdr-0.9.1-contract.md.
 var MinVersion = Version{Major: 0, Minor: 9, Patch: 0}
 
 // Version es una versión semver simplificada del binario de Herdr.

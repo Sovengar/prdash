@@ -96,6 +96,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyMount(msg.result, msg.err)
 		return m.withPump(nil)
 
+	case commentsTickMsg:
+		// El tick se rearma siempre, se haya consultado algo o no: es lo que
+		// mantiene viva la cadena y lo que hace que el próximo cambio de selección
+		// se note sin tener que recordarlo en el sitio del cambio.
+		return m, m.requestComments()
+
+	case commentsMsg:
+		m.applyComments(msg)
+		return m.withPump(nil)
+
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -128,6 +138,12 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 	m.actionBusy = false
 	if out.HasItem {
 		m.actionCycle[out.Item.ID()] = cycle
+		// Una acción puede escribir en la conversación (un approve deja una nota
+		// de review), así que lo que había cargado ya no es lo que dice el forge.
+		// Es la única invalidación del cache: el refresco del inbox no lo borra
+		// porque una conversación no cambia al ritmo de un ciclo de un minuto, y
+		// repreguntarla en cada uno haría parpadear la ficha.
+		delete(m.comments, out.Item.ID())
 		m.applyItemUpdate(out.Item)
 	}
 	switch {

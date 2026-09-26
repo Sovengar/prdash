@@ -71,8 +71,52 @@ navegador, `q` salir. Son configurables en `[keybindings]`.
 
 La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem
 seleccionado en el 40% inferior, que se mueve con el cursor. No hay una vista a
-pantalla completa: el panel es lo único que hay, y cuando no cabe entero pasa a
-rejilla de dos columnas antes que recortar campos.
+pantalla completa: el panel es lo único que hay. La ficha son tres bloques: los
+campos cortos en rejilla de dos columnas, el URL en una fila a ancho completo, y
+los comentarios debajo.
+
+Los campos van **siempre** en rejilla, no solo cuando no caben en una: en una
+sola columna ocupaban 16 de las ~18 líneas que concede el 40% de un terminal
+normal, y no cabía ni un comentario. El URL sale de la rejilla porque en media
+columna se leen 40 caracteres de una URL de 80, y una URL que no se puede copiar
+entera no sirve para nada. No cuesta alto: 12 campos en dos columnas son 6 filas,
+las mismas 7 que ocupaban los 13.
+
+### Los primeros comentarios, en la misma ficha
+
+Debajo de la ficha se enseñan hasta 5 comentarios de la conversación, del más
+antiguo al más reciente, con su autor. Se piden al forge **al llegar el cursor al
+ítem** y se cachean: moverte arriba y abajo no vuelve a preguntar, y el refresco
+del inbox no los tira (una conversación no cambia al ritmo de un ciclo de un
+minuto). La única invalidación es una acción sobre el ítem, que sí puede escribir
+en la conversación.
+
+Son parte de la ficha, no una vista aparte: no hay tecla que pulsar. Si el forge no
+llega a responder, el panel lo dice (`loading…`, `not read: …`, `none`) en vez de
+dejar un hueco, porque un hueco no se distingue de "este PR no tiene
+conversación".
+
+Lo que se enseña, y por qué:
+
+- **Los primeros, no los últimos.** El principio de la conversación es donde está
+  el contexto de qué se pidió y por qué; las últimas respuestas se pelean por el
+  sitio. Si hay más de los que caben, la etiqueta lo dice (`5 of 23`) porque es lo
+  que indica que conviene abrir el PR.
+- **Notas de sistema fuera.** En GitLab, "assigned to @x" o "added 3 commits" no
+  son conversación: son el historial de acciones del MR, y mezclado con lo que
+  escribió la gente se comería las cinco filas con ruido que ya está en otra parte
+  de la ficha.
+- **El cuerpo entero, por párrafos.** Las filas se reparten según lo que cada
+  comentario necesita: si caben enteros, cada uno toma lo suyo; si no, todos
+  reciben una fila —para que los cinco estén— y el sobrante va a quien menos
+  tiene. Los párrafos no se pegan entre sí, porque "fix the timeout fix the
+  backoff" no dice nada, y lo que no cabe se marca con `…`.
+- **Sin boilerplate.** Los bots de GitHub abren con un comentario HTML invisible
+  (`<!-- ssf: origin=… -->`) que en un panel de ancho fijo se comería la fila.
+
+Cuando el panel es demasiado pequeño los comentarios son lo primero que se cae,
+antes que un campo de la ficha: son lo único que se puede volver a pedir en un
+instante, y un campo que se va no vuelve.
 
 ### Merge pide dos teclas y una de ellas es el modo
 

@@ -7,6 +7,44 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **Los primeros 5 comentarios del PR/MR se ven en el detalle.** Debajo de la
+  ficha, con su autor, del más antiguo al más reciente. Se piden al forge al llegar
+  el cursor al ítem y se cachean, así que navegar no vuelve a preguntar y el
+  refresco del inbox no los tira; solo una acción sobre el ítem los invalida, que
+  es lo único que puede escribir en la conversación. No hay tecla nueva: son parte
+  de la ficha, no una vista aparte, y si el forge no responde el panel lo dice
+  (`loading…` / `not read: …` / `none`) en vez de dejar un hueco que no se
+  distingue de "este PR no tiene comentarios".
+  - Para que cupieran, los campos de la ficha pasan a **rejilla de dos columnas
+    siempre**, no solo en terminales bajos. En una columna ocupaban 16 de las ~18
+    líneas que da el 40% de un terminal normal y no cabía ni un comentario; en
+    rejilla ocupan 6. El comentario del README que describía la rejilla como
+    fallback de emergencia era ya falso.
+  - El **URL sale de la rejilla a una fila a ancho completo**. En media columna se
+    leían 40 caracteres de una URL de 80 y quedaba un resto inútil, y una URL que
+    no se puede copiar entera no sirve para nada, que es para lo que está. No
+    cuesta alto: los 13 campos ocupaban 7 filas y los 12 que quedan más el URL a
+    ancho completo siguen siendo 7.
+  - `Review` y `Role` se ordenan **al final** de los campos de estado, para que caigan
+    en la última fila de la rejilla, que es lo único que sobrevive al recorte. Sacar
+    el URL los desplazó una posición y `Review` empujó fuera de la ventana: una
+    ficha recortada sin ellos deja de responder a la pregunta para la que está.
+  - El cuerpo se lee **entero y por párrafos**, no solo la primera línea, y las filas
+    se reparten **según lo que cada comentario necesita**: si caben enteros, cada
+    uno toma lo suyo; si no, todos reciben una fila —para que los cinco estén, que
+    es lo pedido— y el sobrante va a quien menos tiene, una fila cada vez. El
+    reparto a ciegas que hubo antes daba la misma cuota a todos y cortaba un
+    comentario de seis párrafos a su primera frase mientras sobraba una fila.
+  - Los párrafos no se pegan entre sí, lo que no cabe se marca con `…` (una fila
+    que para en mitad de una frase se lee como si el comentario se acabara ahí) y se
+    saltan los comentarios HTML de markdown con los que abren los bots de GitHub,
+    que en un panel de ancho fijo se comerían la fila.
+  - Cuando el panel es pequeño los comentarios son lo **primero que se cae**,
+    antes que un campo de la ficha: son lo único que se puede volver a pedir en un
+    instante, y un campo que se va no vuelve.
+
 ### Fixed
 
 - Reutilizar un worktree cuyo workspace de Herdr estaba cerrado ya no produce un
@@ -65,7 +103,7 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 ### Removed
 
 - **Fuera el plugin de Herdr.** No era necesario para nada de lo que prdash
-  promises: el worktree y los panes los abre el propio binario llamando a la CLI
+  promete: el worktree y los panes los abre el propio binario llamando a la CLI
   de Herdr por subproceso (`herdr worktree create`, `herdr pane split`, `herdr
   pane run`). El plugin era solo el punto de entrada que Herdr usaba para llamar
   a prdash. Se van el manifiesto, los subcomandos `prdash herdr <inbox|mount|link>`

@@ -36,6 +36,13 @@ type FakeAdapter struct {
 	ItemStates    map[string]model.Item
 	StateWarnings map[string][]model.Warning
 
+	// Conversations / CommentWarnings responden a Comments por "proyecto#número".
+	// Sin configurar, Comments devuelve una conversación vacía YA resuelta: así un
+	// test que no se ocupa de los comentarios no se encuentra con un "cargando…"
+	// que no termina nunca.
+	Conversations   map[string]forge.CommentPage
+	CommentWarnings map[string][]model.Warning
+
 	// ActionWarnings responde a Approve/Merge por "approve:proyecto#número".
 	ActionWarnings map[string][]model.Warning
 
@@ -43,6 +50,9 @@ type FakeAdapter struct {
 	calls       map[FakeKey]int
 	listCalls   int
 	actionCalls map[string]int
+	// commentCalls cuenta cuántas veces se pidieron comentarios, para que un test
+	// pueda afirmar que la ficha cachea y no repregunta en cada render.
+	commentCalls int
 	// MergeModes cuenta quantas veces se pidió cada estrategia de merge.
 	MergeModes map[forge.MergeMode]int
 }
@@ -97,6 +107,27 @@ func (f *FakeAdapter) ListCallCount() int {
 func (f *FakeAdapter) ItemState(_ context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	key := ref.Project + "#" + strconv.Itoa(number)
 	return f.ItemStates[key], f.StateWarnings[key]
+}
+
+// Comments devuelve la conversación configurada para "proyecto#número". Sin
+// configurar devuelve una página vacía resuelta, que es el caso bueno: un test
+// que no habla de comentarios no debería tener que configurarlos.
+func (f *FakeAdapter) Comments(_ context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
+	key := ref.Project + "#" + strconv.Itoa(number)
+	f.mu.Lock()
+	f.commentCalls++
+	f.mu.Unlock()
+	if page, ok := f.Conversations[key]; ok {
+		return page, f.CommentWarnings[key]
+	}
+	return forge.CommentPage{}, f.CommentWarnings[key]
+}
+
+// CommentCallCount devuelve cuántas veces se pidieron comentarios.
+func (f *FakeAdapter) CommentCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.commentCalls
 }
 
 // Approve devuelve los warnings configurados para la acción.
@@ -194,6 +225,9 @@ func RunConformance(t *testing.T, a forge.Adapter, opts ConformanceOptions) {
 	ref := model.RepoRef{Forge: a.Forge(), Host: a.Host(), Project: "o/r", Owner: "o", Name: "r"}
 	if _, warns := a.ItemState(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: ItemState debería reportar unsupported", a.Forge())
+	}
+	if _, warns := a.Comments(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
+		t.Errorf("%s: Comments debería reportar unsupported", a.Forge())
 	}
 	if warns := a.Approve(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Approve debería reportar unsupported", a.Forge())

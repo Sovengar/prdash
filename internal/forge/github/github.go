@@ -22,6 +22,12 @@ const ForgeName = "github"
 // pageSize es el número de resultados por página que se pide a GraphQL.
 const pageSize = 50
 
+// commentFetch es cuántos nodos de comentarios se piden por consulta. Se pide
+// más de los que la ficha muestra (forge.CommentLimit) para que un PR con
+// boilerplate de bots no se quede corto: lo que se devuelve ya viene filtrado y
+// recortado al tope, así que el margen no cuesta nada al usuario.
+const commentFetch = 3 * forge.CommentLimit
+
 // Adapter implementa forge.Adapter sobre la CLI `gh`.
 type Adapter struct {
 	host   string
@@ -125,6 +131,33 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 		it.Checks = checks
 	}
 	return it, nil
+}
+
+// Comments devuelve los primeros comentarios de la conversación del PR, del más
+// antiguo al más reciente. La conversación se pide aparte de la búsqueda porque
+// los comentarios son un detalle del ítem seleccionado y no un dato del inbox:
+// pedirlos con cada lista multiplicaría las consultas por el número de PRs que
+// nadie está mirando.
+func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
+	owner, name := splitProject(ref.Project)
+	if owner == "" || name == "" {
+		return forge.CommentPage{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("invalid repo reference: %q", ref.Project))}
+	}
+
+	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+commentsQuery(owner, name, number, commentFetch))
+	if err != nil {
+		return forge.CommentPage{}, []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	comments, total, perr := parse.ParseGHComments(raw)
+	if perr != nil {
+		return forge.CommentPage{}, []model.Warning{a.warn("", "parse", perr)}
+	}
+	// Se recorta al tope de la ficha y se conserva el total que dice el forge: el
+	// recorte es de lo que se pinta, no de lo que existe.
+	if len(comments) > forge.CommentLimit {
+		comments = comments[:forge.CommentLimit]
+	}
+	return forge.CommentPage{Comments: comments, Total: total}, nil
 }
 
 // Approve aprueba un PR con `gh pr review --approve`.
@@ -278,6 +311,20 @@ func prQuery(owner, name string, number int) string {
 	return fmt.Sprintf(
 		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { %s } } }`,
 		escapeGraphQL(owner), escapeGraphQL(name), number, ghPRFields,
+	)
+}
+
+// commentsQuery compone la query de la conversación de un PR concreto.
+//
+// Se pide `first` y no `last` a propósito: la ficha enseña el principio de la
+// conversación, que es donde está el contexto de qué se pidió y por qué, y no las
+// últimas respuestas peleándose por el sitio. `totalCount` viene en la misma
+// conexión para no gastar una segunda consulta en saber que hay más.
+func commentsQuery(owner, name string, number, first int) string {
+	return fmt.Sprintf(
+		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { `+
+			`comments(first: %d) { totalCount nodes { author { login } body createdAt } } } } }`,
+		escapeGraphQL(owner), escapeGraphQL(name), number, first,
 	)
 }
 

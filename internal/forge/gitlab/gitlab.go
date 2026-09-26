@@ -27,6 +27,11 @@ const ForgeName = "gitlab"
 // pageSize es el número de resultados por página.
 const pageSize = 50
 
+// commentFetch es cuántos nodos de notas se piden por consulta, por el mismo
+// motivo que en GitHub: se pide margen para que un MR con historial de acciones
+// (todas las notas de sistema) no se quede sin comentarios que enseñar.
+const commentFetch = 3 * forge.CommentLimit
+
 // Adapter implementa forge.Adapter sobre la CLI `glab`.
 type Adapter struct {
 	host   string
@@ -144,6 +149,28 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 	it := items[0]
 	a.identity(&it)
 	return it, nil
+}
+
+// Comments devuelve las notas de la conversación de un MR, del más antiguo al
+// más reciente. Las de sistema ("assigned to @x", "added 3 commits") se descartan
+// al parsear: no son conversación.
+func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
+	if ref.Project == "" {
+		return forge.CommentPage{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
+	}
+
+	raw, err := a.runner.Run(ctx, a.graphqlArgs(glNotesQuery(ref.Project, number, commentFetch))...)
+	if err != nil {
+		return forge.CommentPage{}, []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	comments, total, perr := parse.ParseGLComments(raw)
+	if perr != nil {
+		return forge.CommentPage{}, []model.Warning{a.warn("", "parse", perr)}
+	}
+	if len(comments) > forge.CommentLimit {
+		comments = comments[:forge.CommentLimit]
+	}
+	return forge.CommentPage{Comments: comments, Total: total}, nil
 }
 
 // Approve aprueba un MR con `glab mr approve`.
@@ -325,6 +352,21 @@ func glAssignedQuery(cursor string) string {
 	return fmt.Sprintf(
 		`query { currentUser { assignedMergeRequests(state: opened, first: %d%s) { %s } } }`,
 		pageSize, afterArg(cursor), fmt.Sprintf(glConn, mrFields),
+	)
+}
+
+// glNotesQuery compone la query de las notas de un MR concreto.
+//
+// El iid va como literal de cadena por lo mismo que en glMRQuery: el schema lo
+// declara `String!` y GraphQL no coacciona un Int. Se pide `system` porque es lo
+// que distingue una nota escrita de una que dejó el MR al abrirse, y `first` (no
+// `last`) porque la ficha enseña el principio de la conversación, donde está el
+// contexto de qué se pidió.
+func glNotesQuery(fullPath string, iid, first int) string {
+	return fmt.Sprintf(
+		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { `+
+			`notes(first: %d) { nodes { author { username } body createdAt system } } } } }`,
+		escapeGraphQL(fullPath), iid, first,
 	)
 }
 

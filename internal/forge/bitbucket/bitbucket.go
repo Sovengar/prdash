@@ -50,6 +50,11 @@ func (a *Adapter) ItemState(context.Context, model.RepoRef, int) (model.Item, []
 	return model.Item{}, a.unsupported("")
 }
 
+// Comments responde "no soportado".
+func (a *Adapter) Comments(context.Context, model.RepoRef, int) (forge.CommentPage, []model.Warning) {
+	return forge.CommentPage{}, a.unsupported("")
+}
+
 // Approve responde "no soportado".
 func (a *Adapter) Approve(context.Context, model.RepoRef, int) []model.Warning {
 	return a.unsupported("")

@@ -144,6 +144,19 @@ func (it Item) ID() ID {
 	return With(it.Forge, it.Host, it.Ref.Project, it.Number)
 }
 
+// Comment es una intervención escrita por una persona en la conversación de un
+// ítem. No lleva estado de forge ni reactions: la ficha solo necesita saber
+// quién escribió qué y cuándo, que es lo que decide si hay que abrir el PR para
+// entenderlo.
+//
+// Body va en crudo, con su markdown. Quitarlo es trabajo de la vista, no del
+// parseo: el mismo cuerpo se lee de otra forma según las filas que quedaron.
+type Comment struct {
+	Author    string
+	Body      string
+	CreatedAt time.Time
+}
+
 // AuthState describe si un forge está autenticado y operativo.
 type AuthState struct {
 	Forge  string

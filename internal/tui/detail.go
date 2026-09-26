@@ -31,6 +31,19 @@ const detailGap = 4
 // detailLines compone el detalle de un ítem como líneas sueltas para el panel
 // inferior. `rows` es el alto disponible. Sin ítem que describir (inbox vacío)
 // lo dice en vez de inventar datos.
+//
+// La ficha son tres bloques: los campos cortos en rejilla de dos columnas, el URL
+// en una fila a todo el ancho, y los comentarios debajo. Siempre en rejilla, no
+// solo cuando no caben en una: en una sola columna la ficha ocupaba 16 de las ~18
+// líneas que concede el 40% de un terminal normal y no cabía ni un comentario.
+//
+// Sacar el URL de la rejilla no cuesta alto, que es lo que hacía sospechar: los 13
+// campos ocupan 7 filas en dos columnas, y los 12 que quedan más el URL a ancho
+// completo siguen siendo 7. Lo que cambia es que la URL se lee entera, y una URL
+// truncada no se puede copiar, que es para lo que está.
+//
+// La escalera de degradación va de más a menos preferred y se devuelve el primer
+// candidato que entre. Si ninguno, se recorta por arriba (ver clipTop).
 func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	if !ok {
 		return []string{styleDim.Render("no selection: move the cursor onto an item")}
@@ -45,57 +58,83 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 		{"Source", orDash(it.SourceBranch)},
 		{"Target", orDash(it.TargetBranch)},
 		{"Number", fmt.Sprintf("#%d", it.Number)},
-		{"URL", orDash(it.URL)},
 	}
+	// El orden de los campos de estado no es neutro: la rejilla los empareja por
+	// posición, así que el último par es la última fila, que es lo único que sobrevive
+	// al recorte en un panel diminuto. Review y Role van al final a propósito, porque
+	// son los dos que dicen si la acción procede; si el recorte se los come, la ficha
+	// deja de responder a la pregunta para la que está.
 	status := []detailField{
 		{"State", state.Derive(it).String()},
-		{"Review", orDash(reviewLabel(it))},
 		{"Checks", checksDetail(it.Checks)},
 		{"Diff", diffDetail(it.Diff)},
 		{"Updated", relativeTime(it.UpdatedAt)},
+		{"Review", orDash(reviewLabel(it))},
 		{"Role", roleText(it, viewer)},
 	}
+	inner := m.contentWidth()
+	grid := detailGrid(withField(identity, status), inner)
+	noDiff := detailGrid(withField(identity, withoutField(status, "Diff")), inner)
+	url := []string{fullWidthField(detailField{"URL", orDash(it.URL)}, inner)}
 	avisos := m.detailWarnings(it)
 
-	// Una columna: los dos bloques apilados, como siempre se ha visto.
-	one := []string{title, ""}
-	one = appendFields(one, identity)
-	one = append(one, "")
-	one = appendFields(one, status)
-	one = append(one, avisos...)
-	if rows <= 0 || len(one) <= rows {
-		return one
-	}
+	// El presupuesto de los comentarios es lo que sobra tras la cabecera de la
+	// ficha, y se calcula antes de componerlos porque de él depende cuántas filas
+	// puede gastar cada uno. Sin esto, un bloque de cinco comentarios de cuatro
+	// filas no entraría en un panel de 18 y la escalera lo tiraría entero.
+	avail := rows - len(grid) - len(url) - 2 - len(avisos) // 2 = título + hueco
+	comments := m.commentLines(it, avail, inner)
 
-	// No cabe en una columna: la misma información en rejilla de dos columnas.
-	// Se prefiere a recortar campos porque la fila del forge y la del autor solo
-	// existen aquí, y en un terminal de 24 líneas se perdían por arriba.
+	// El orden de lo que se cae sale de dos criterios, y no es el orden en que se
+	// enumeran: primero lo que se puede volver a pedir, y después lo más reciente.
 	//
-	// El diffstat es lo primero que se cae cuando aún no cabe. Añadirlo hizo que
-	// la rejilla pasara de 6 a 7 filas, y con avisos de acción el título empezaba a
-	// irse por arriba: un dato que se acaba de perder es peor que uno que nunca se
-	// pintó. Es el mismo criterio que la columna DIFF de la lista, que también va
-	// la última. El hueco tras el título, en cambio, es decorativo y se cae antes:
-	// el título ya destaca por su estilo.
+	// Los comentarios son lo primero porque son lo único repedible con una tecla (o
+	// con el siguiente tick) y lo único que no estaba en la ficha antes de existir
+	// esta sección; luego el hueco tras el título, que es decorativo y lo compensa
+	// el estilo del propio título; luego la fila del URL, que es una fila entera
+	// sacrificada por un dato que se puede volver a leer con `o`; y por último el
+	// diffstat, con el criterio que ya tenía la rejilla: un dato que se acaba de
+	// perder es peor que uno que nunca se pintó. Es el mismo criterio que la columna
+	// DIFF de la lista, que también va la última.
 	//
-	// Los candidatos van de más a menos preferred y se devuelve el primero que
-	// entre; si ninguno entra, se recorta el último (que es el que menos campos
-	// sacrifica).
-	grids := [][]string{
-		detailGrid(append(append([]detailField{}, identity...), status...), m.contentWidth()),
-		detailGrid(append(append([]detailField{}, identity...), withoutField(status, "Diff")...), m.contentWidth()),
-	}
+	// El salto del cuarto al quinto candidato se lleva tres cosas a la vez
+	// (comentarios, hueco y fila del URL) porque entre ellas no hay ningún tamaño
+	// intermedio: quitar solo el URL deja la misma altura, y quitar solo el Diff
+	// también, porque la rejilla pasa de 12 a 11 campos y ambas caben en 6 filas.
+	withGap := []string{title, ""}
+	noGap := []string{title}
 	layouts := [][]string{
-		append(append([]string{title, ""}, grids[0]...), avisos...),
-		append(append([]string{title, ""}, grids[1]...), avisos...),
-		append(append([]string{title}, grids[1]...), avisos...),
+		stackDetail(withGap, grid, url, comments, avisos),
+		stackDetail(withGap, grid, url, avisos),
+		stackDetail(noGap, grid, url, comments, avisos),
+		stackDetail(noGap, grid, url, avisos),
+		stackDetail(noGap, grid, noDiff, avisos),
 	}
 	for _, l := range layouts {
 		if len(l) <= rows {
 			return l
 		}
 	}
-	return clipTop(append(append([]string{title}, grids[1]...), avisos...), rows)
+	return clipTop(stackDetail(noGap, noDiff, avisos), rows)
+}
+
+// withField concatena bloques de campos en uno nuevo, sin tocar los de entrada.
+func withField(blocks ...[]detailField) []detailField {
+	var out []detailField
+	for _, b := range blocks {
+		out = append(out, b...)
+	}
+	return out
+}
+
+// stackDetail concatena los trozos del detalle. El hueco decorativo va como
+// línea vacía explícita y no como trozo: se quita del medio, no de un extremo.
+func stackDetail(parts ...[]string) []string {
+	var out []string
+	for _, p := range parts {
+		out = append(out, p...)
+	}
+	return out
 }
 
 // withoutField quita un campo por su etiqueta. Se usa para dropear el diffstat
@@ -122,12 +161,16 @@ func (m *Model) detailWarnings(it model.Item) []string {
 	return out
 }
 
-// appendFields añade un bloque de campos en una columna.
-func appendFields(lines []string, fields []detailField) []string {
-	for _, f := range fields {
-		lines = append(lines, label(f.key, styleDiffText(f.value)))
-	}
-	return lines
+// fullWidthField compone un campo que ocupa la fila entera en vez de media.
+//
+// Existe para el URL, y por un motivo concreto: una URL de GitLab self-managed
+// con subcarpeta se pasa fácil de 80 caracteres, así que en media columna se leen
+// 40 y queda un resto inútil. Y una URL que no se puede copiar entera no sirve
+// para nada, que es justo para lo que está en la ficha. El ancho entero lo hace
+// legible sin gastar una fila más, porque los 12 campos cortos siguen cabiendo en
+// las mismas 6.
+func fullWidthField(f detailField, inner int) string {
+	return label(f.key, styleDiffText(truncate(f.value, max(1, inner-labelWidth))))
 }
 
 // detailGrid reparte los campos en dos columnas de ancho fijo, por filas

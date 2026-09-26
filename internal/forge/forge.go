@@ -10,7 +10,6 @@ package forge
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 
@@ -41,6 +40,30 @@ var Streams = []Query{
 	{Section: model.SectionMentions},
 }
 
+// CommentLimit es cuántos comentarios de la conversación se leen de un ítem. Son
+// los que la ficha llega a pintar (ver tui.commentLines); más que eso sería
+// pagar una consulta por filas que no se ven nunca.
+const CommentLimit = 5
+
+// CommentPage son los comentarios leídos de un ítem y cuántos hay en la
+// conversación.
+//
+// El total va aparte porque no siempre coincide con lo leído: la ficha solo
+// muestra CommentLimit, así que el total es lo que le permite decir "5 de 23". Sin
+// él, cinco comentarios leídos se leerían como cinco comentarios escritos, que es
+// justo el dato que decide si hace falta abrir el PR en el navegador.
+//
+// Total puede ser una cota inferior, nunca un número al alza. GitHub lo da
+// exacto con `totalCount`, pero en GitLab no existe tal cosa y solo se sabe
+// cuántos se leyeron: si vinieron menos de los que se pidieron, la conversación
+// se agotó y el número es exacto, y si la conexión se llenó puede haber más
+// detrás. La ficha lo trata como una pista de que hay más conversación, nunca
+// como un recuento: quedarse corto no hace que nadie decida mal.
+type CommentPage struct {
+	Comments []model.Comment
+	Total    int
+}
+
 // Adapter es el contrato de un forge. Las implementaciones hablan con su CLI
 // (`gh`, `glab`, …) por subproceso.
 type Adapter interface {
@@ -54,6 +77,12 @@ type Adapter interface {
 	List(ctx context.Context, q Query) (Page, []model.Warning)
 	// ItemState relee el estado de un ítem concreto.
 	ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning)
+	// Comments devuelve los primeros comentarios de la conversación de un ítem,
+	// del más antiguo al más reciente. El tope es CommentLimit, no un parámetro:
+	// lo consume la ficha, que tiene un alto fijo, y una consulta se paga por lo
+	// que devuelve. Como todos los métodos, nunca falla duro: si el forge no
+	// llega a responder devuelve warnings.
+	Comments(ctx context.Context, ref model.RepoRef, number int) (CommentPage, []model.Warning)
 	// Approve aprueba un ítem.
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
 	// Merge mergea un ítem con la estrategia indicada. El modo no es opcional:
@@ -69,44 +98,6 @@ type PageResult struct {
 	More     bool
 	Warnings []model.Warning
 	First    bool // primera página de la lista
-}
-
-// Registry mantiene los adapters habilitados por nombre de forge. Es API
-// reservada para el registro del plugin (F2/etapa del manifiesto); hoy el
-// wiring se hace con una lista ordenada en el entrypoint.
-type Registry struct {
-	adapters map[string]Adapter
-}
-
-// NewRegistry construye un registro vacío.
-func NewRegistry() *Registry {
-	return &Registry{adapters: map[string]Adapter{}}
-}
-
-// Register añade un adapter al registro, reemplazando el anterior del mismo
-// forge si lo hubiera.
-func (r *Registry) Register(a Adapter) {
-	if a == nil {
-		return
-	}
-	r.adapters[a.Forge()] = a
-}
-
-// Get devuelve el adapter de un forge.
-func (r *Registry) Get(forge string) (Adapter, bool) {
-	a, ok := r.adapters[forge]
-	return a, ok
-}
-
-// All devuelve los adapters ordenados por nombre de forge, para un arranque
-// determinista.
-func (r *Registry) All() []Adapter {
-	out := make([]Adapter, 0, len(r.adapters))
-	for _, a := range r.adapters {
-		out = append(out, a)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Forge() < out[j].Forge() })
-	return out
 }
 
 // Stream consulta un forge de forma progresiva: lanza en paralelo la primera

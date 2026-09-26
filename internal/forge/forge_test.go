@@ -15,34 +15,6 @@ func mkItem(forgeName, host, project string, number int) model.Item {
 	return model.NewItem(model.RepoRef{Forge: forgeName, Host: host, Project: project, Owner: "acme", Name: "widget"}, number)
 }
 
-func TestRegistryRegisterAndGet(t *testing.T) {
-	reg := forge.NewRegistry()
-	gh := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
-	gl := &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"}
-	reg.Register(gh)
-	reg.Register(gl)
-
-	if got, ok := reg.Get("github"); !ok || got != gh {
-		t.Fatalf("Get(github) = %v, %v", got, ok)
-	}
-	if _, ok := reg.Get("bitbucket"); ok {
-		t.Fatal("bitbucket no debería estar registrado")
-	}
-
-	all := reg.All()
-	if len(all) != 2 || all[0].Forge() != "github" || all[1].Forge() != "gitlab" {
-		t.Fatalf("All() = %v", all)
-	}
-}
-
-func TestRegistryRegisterNilIgnored(t *testing.T) {
-	reg := forge.NewRegistry()
-	reg.Register(nil)
-	if len(reg.All()) != 0 {
-		t.Fatal("registrar nil no debería añadir nada")
-	}
-}
-
 // TestCollectPagesThroughAllStreams cubre la paginación sin tope: agota las
 // páginas de una lista y consulta las cuatro listas.
 func TestCollectPagesThroughAllStreams(t *testing.T) {

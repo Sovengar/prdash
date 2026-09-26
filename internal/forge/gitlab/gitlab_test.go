@@ -185,3 +185,91 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	}
 	return path
 }
+
+// TestNotesQueryShape: las notas se piden aparte del inbox, con `first` (el
+// principio de la conversación es donde está el contexto) y con `system`, que es
+// lo único que distingue una nota escrita de una que dejó el MR al abrirse. El
+// iid va como literal de string porque el schema lo declara `String!`.
+func TestNotesQueryShape(t *testing.T) {
+	q := glNotesQuery("grupo/sub/proy", 42, commentFetch)
+	for _, want := range []string{
+		`project(fullPath: "grupo/sub/proy")`,
+		`mergeRequest(iid: "42")`,
+		"notes(first: 15)",
+		"author { username }",
+		"system",
+		"body",
+		"createdAt",
+	} {
+		if !strings.Contains(q, want) {
+			t.Errorf("glNotesQuery no contiene %q:\n%s", want, q)
+		}
+	}
+	if strings.Contains(q, `iid: 42`) {
+		t.Errorf("el iid no puede ir como Int (String! lo rechaza):\n%s", q)
+	}
+	if commentFetch <= forge.CommentLimit {
+		t.Errorf("commentFetch = %d, want > %d", commentFetch, forge.CommentLimit)
+	}
+}
+
+// TestCommentsDropsSystemNotesAndCaps: las notas de sistema se descartan y el
+// resto se recorta al tope de la ficha. El total es el de las leídas: GitLab no
+// expone recuento, así que nunca hay "5 de N" y la línea del total no engaña.
+func TestCommentsDropsSystemNotesAndCaps(t *testing.T) {
+	dir := t.TempDir()
+	script := writeScript(t, dir, "glab", `#!/bin/sh
+cat <<'OUT'
+{"data":{"project":{"mergeRequest":{"notes":{"nodes":[
+{"author":{"username":null},"body":"added 56 commits","createdAt":"2026-09-20T10:00:00Z","system":true},
+{"author":{"username":"alice"},"body":"first human","createdAt":"2026-09-20T10:01:00Z","system":false},
+{"author":{"username":"bob"},"body":"second human","createdAt":"2026-09-20T10:02:00Z","system":false},
+{"author":{"username":"carol"},"body":"third human","createdAt":"2026-09-20T10:03:00Z","system":false},
+{"author":{"username":"dave"},"body":"fourth human","createdAt":"2026-09-20T10:04:00Z","system":false},
+{"author":{"username":"erin"},"body":"fifth human","createdAt":"2026-09-20T10:05:00Z","system":false},
+{"author":{"username":"frank"},"body":"sixth human","createdAt":"2026-09-20T10:06:00Z","system":false},
+{"author":{"username":"gina"},"body":"seventh human","createdAt":"2026-09-20T10:07:00Z","system":false}
+]}}}}}
+OUT
+`)
+	page, warns := New("gitlab.example.com", script).Comments(context.Background(),
+		model.RepoRef{Project: "grupo/sub/proy"}, 42)
+	if len(warns) != 0 {
+		t.Fatalf("warnings = %v", warns)
+	}
+	if len(page.Comments) != forge.CommentLimit {
+		t.Fatalf("comments = %d, want %d", len(page.Comments), forge.CommentLimit)
+	}
+	if page.Comments[0].Body != "first human" {
+		t.Errorf("la nota de sistema no debería ocupar la primera fila: %q", page.Comments[0].Body)
+	}
+	// GitLab no expone recuento: el total es lo leído (7), no lo pintado (5). Es
+	// una cota inferior, que es justo lo que hace falta para insinuar que hay más
+	// conversación. Ver CommentPage.Total.
+	if page.Total != 7 {
+		t.Errorf("total = %d, want 7 (las notas leídas, no las pintadas)", page.Total)
+	}
+}
+
+// TestCommentsEmptyRepo: sin proyecto no hay query que componer, así que avisa en
+// vez de golpear la API con un literal vacío.
+func TestCommentsEmptyRepo(t *testing.T) {
+	script := writeScript(t, t.TempDir(), "glab", "#!/bin/sh\nexit 1\n")
+	_, warns := New("gitlab.example.com", script).Comments(context.Background(), model.RepoRef{}, 42)
+	if len(warns) == 0 || warns[0].Kind != "notfound" {
+		t.Errorf("warnings = %v, want notfound", warns)
+	}
+}
+
+// TestCommentsFailureIsWarning: un fallo del forge avisa y no lanza.
+func TestCommentsFailureIsWarning(t *testing.T) {
+	script := writeScript(t, t.TempDir(), "glab", "#!/bin/sh\necho boom >&2\nexit 1\n")
+	page, warns := New("gitlab.example.com", script).Comments(context.Background(),
+		model.RepoRef{Project: "grupo/proy"}, 42)
+	if len(page.Comments) != 0 {
+		t.Errorf("un fallo no debe devolver comentarios: %+v", page.Comments)
+	}
+	if len(warns) == 0 {
+		t.Fatal("un fallo debería avisar")
+	}
+}
