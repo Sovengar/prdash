@@ -1,17 +1,20 @@
 // Ventana vertical de la lista: qué líneas se pintan y cómo se desplaza para
 // mantener visible el ítem seleccionado.
 //
-// La lista se compone ENTERA como líneas sueltas (headers de sección, avisos y
-// filas) y luego se recorta a la ventana visible. Mover solo las filas dejaría
-// los headers huérfanos de sus ítems; componiendo primero y recortando después,
-// el desplazamiento mantiene la coherencia de la tabla a cualquier offset.
+// La lista de la sección activa se compone ENTERA como líneas sueltas (prefijo
+// de ruta común, avisos, header de columnas y filas) y luego se recorta a la
+// ventana visible. Mover solo las filas dejaría el header huérfano de sus ítems;
+// componiendo primero y recortando después, el desplazamiento mantiene la
+// coherencia de la tabla a cualquier offset.
 package tui
 
-import "fmt"
+import (
+	"prdash/internal/inbox"
+)
 
 // listLine es una línea de la lista con la fila a la que pertenece, o -1 si es
-// chrome (header de sección, aviso, línea en blanco). Guardar la fila permite
-// localizar la línea del cursor sin volver a componer nada.
+// chrome (prefijo, aviso, header de columnas, línea en blanco). Guardar la fila
+// permite localizar la línea del cursor sin volver a componer nada.
 type listLine struct {
 	text string
 	row  int
@@ -22,42 +25,46 @@ type listLine struct {
 // computeLayout (layout.go) porque las cajas ya se llevan 2 líneas de cromo
 // cada una.
 
-// listLines compone la lista completa como líneas sueltas.
+// listLines compone la lista de la sección activa como líneas sueltas: la línea
+// del prefijo de ruta común si la hay, los avisos, el header de columnas y las
+// filas —o el estado vacío— y el indicador de paginación. Sin cabecera interna
+// de sección: el título y el conteo viven en la leyenda del borde.
 func (m *Model) listLines(inner int) []listLine {
-	lines := make([]listLine, 0, len(m.rows())+2*len(m.inbox.Sections)+4)
-	// Un solo layout para cabecera y filas: si cada línea midiera ITEM por su
-	// cuenta, la tabla bailaría al escribir encima.
-	lay := newRefLayout(m.inbox.Sections)
-	row := 0
-	for _, sec := range m.inbox.Sections {
-		problems := m.sectionProblems(sec.Kind)
-		header := fmt.Sprintf("%s (%d)", sec.Kind.String(), len(sec.Items))
-		if m.sectionLoadingMore(sec.Kind) {
-			header += " · loading more…"
-		}
-		// El prefijo de ruta común va en la cabecera, no en cada fila: es lo que
-		// deja hueco a la columna ITEM para el sufijo sin truncar.
-		line := styleHeader.Render(header)
-		if prefix := lay.prefixOf(sec.Kind); prefix != "" {
-			line += styleDim.Render("  · " + prefix + "/")
-		}
-		lines = append(lines, listLine{text: line, row: -1})
+	items := m.rows()
+	problems := m.sectionProblems(m.activeSection)
+	lines := make([]listLine, 0, len(items)+len(problems)+4)
 
-		for _, p := range problems {
-			lines = append(lines, listLine{text: "  " + styleWarn.Render("⚠ "+p), row: -1})
-		}
+	// Un solo layout para la activa: si cada línea midiera ITEM por su cuenta,
+	// la tabla bailaría al escribir encima. Solo se dimensiona la sección que se
+	// pinta, así no se gasta ancho en sufijos de secciones que no se ven.
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: items}})
 
-		switch {
-		case len(sec.Items) > 0:
-			lines = append(lines, listLine{text: "  " + headerLine(lay, inner-2), row: -1})
-			for _, it := range sec.Items {
-				lines = append(lines, listLine{text: m.renderItem(it, sec.Kind, lay, row == m.cursor, inner-2), row: row})
-				row++
-			}
-		case len(problems) == 0:
-			lines = append(lines, listLine{text: "  " + styleEmpty.Render("(empty)"), row: -1})
+	// El prefijo de ruta común va en una línea fija al inicio del cuerpo, no en
+	// cada fila: es lo que deja hueco a la columna ITEM para el sufijo sin
+	// truncar. Sin prefijo común (un solo ítem, o sin nada en común) la línea no
+	// se pinta y cada celda ITEM lleva la ruta completa recortada por la cola.
+	if prefix := lay.prefixOf(m.activeSection); prefix != "" {
+		lines = append(lines, listLine{text: "  " + styleDim.Render("· "+prefix+"/"), row: -1})
+	}
+
+	for _, p := range problems {
+		lines = append(lines, listLine{text: "  " + styleWarn.Render("⚠ "+p), row: -1})
+	}
+
+	switch {
+	case len(items) > 0:
+		lines = append(lines, listLine{text: "  " + headerLine(lay, inner-2), row: -1})
+		for i, it := range items {
+			lines = append(lines, listLine{text: m.renderItem(it, m.activeSection, lay, i == m.cursor, inner-2), row: i})
 		}
-		lines = append(lines, listLine{text: "", row: -1})
+	case len(problems) == 0:
+		lines = append(lines, listLine{text: "  " + styleEmpty.Render("(empty)"), row: -1})
+	}
+
+	// Los avisos son de la activa: si la sección que pagina no se ve, su
+	// indicador tampoco. Al volver a ella reaparece.
+	if m.sectionLoadingMore(m.activeSection) {
+		lines = append(lines, listLine{text: "  " + styleDim.Render("loading more…"), row: -1})
 	}
 	return lines
 }

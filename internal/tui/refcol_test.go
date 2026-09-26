@@ -154,31 +154,35 @@ func TestItemCellsConservanElNumeroAlRecortar(t *testing.T) {
 	}
 }
 
-// TestListLinesMuestranElPrefijoEnLaCabecera es la prueba de integración: la
-// cabecera de la sección declara el grupo común y las filas solo pintan el
-// sufijo, sin truncar por ninguna de las dos.
-func TestListLinesMuestranElPrefijoEnLaCabecera(t *testing.T) {
+// TestListLinesMuestranElPrefijoEnUnaLineaFija es la prueba de integración: con
+// una sola sección visible, su prefijo de ruta común va en una línea fija al
+// inicio del cuerpo y las filas solo pintan el sufijo, sin truncar por ninguna
+// de las dos.
+func TestListLinesMuestranElPrefijoEnUnaLineaFija(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, mkItems(
 		"APPCITTI/vsocial/backend/api-gateway",
 		"APPCITTI/vsocial/backend/web-app",
 	), false))
 
-	var header, row string
-	// La etiqueta sale de model.Section.String(): fijarla en el test lo rompe
-	// cada vez que se traduce la interfaz.
-	title := model.SectionReview.String()
+	var prefixLine, row string
+	var all []string
 	for _, l := range m.listLines(m.contentWidth()) {
 		line := stripANSI(l.text)
+		all = append(all, line)
 		switch {
-		case strings.HasPrefix(line, title):
-			header = line
+		case strings.Contains(line, "APPCITTI/vsocial/backend/"):
+			prefixLine = line
 		case strings.Contains(line, "api-gateway#100"):
 			row = line
 		}
 	}
-	if !strings.Contains(header, "APPCITTI/vsocial/backend/") {
-		t.Errorf("cabecera = %q, want el prefijo común %q", header, "APPCITTI/vsocial/backend/")
+	if prefixLine == "" {
+		t.Errorf("falta la línea del prefijo común:\n%s", strings.Join(all, "\n"))
+	}
+	// El prefijo se pinta una sola vez (en su línea), no repetido en cada fila.
+	if got := strings.Count(strings.Join(all, "\n"), "APPCITTI/vsocial/backend/"); got != 1 {
+		t.Errorf("el prefijo aparece %d veces, want 1 (solo su línea):\n%s", got, strings.Join(all, "\n"))
 	}
 	if strings.Contains(row, "APPCITTI") {
 		t.Errorf("fila = %q, want solo el sufijo", row)
@@ -186,11 +190,17 @@ func TestListLinesMuestranElPrefijoEnLaCabecera(t *testing.T) {
 	if !strings.Contains(row, "api-gateway#100") {
 		t.Errorf("fila = %q, want %q sin truncar", row, "api-gateway#100")
 	}
+	// No queda una cabecera interna de sección con el título y el conteo: la
+	// leyenda vive en el borde, no en la lista.
+	if joined := strings.Join(all, "\n"); strings.Contains(joined, "Assigned (2)") {
+		t.Errorf("la lista no debería llevar cabecera de sección:\n%s", joined)
+	}
 }
 
 // TestListLinesSinPrefijoConservanLaRuta completa: una sección con un solo ítem no
-// puede declarar prefijo común, así que la celda lleva la ruta ella sola. Si
-// cabe, entera; si no, recortada por la cola, que es donde está el número.
+// puede declarar prefijo común, así que la celda lleva la ruta ella sola, sin
+// línea de prefijo. Si cabe, entera; si no, recortada por la cola, que es donde
+// está el número.
 func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 	render := func(project string) []string {
 		m := newTestModel(t, ghAdapter())
@@ -203,19 +213,16 @@ func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 	}
 
 	// Ruta corta: entra entera y sin recortes.
-	for _, line := range render("g/p") {
-		if strings.Contains(line, "g/p#100") {
-			return
-		}
+	if !containsSubstring(render("g/p"), "g/p#100") {
+		t.Fatal("una ruta corta en sección de un ítem no se pintó entera")
 	}
-	t.Fatal("una ruta corta en sección de un ítem no se pintó entera")
 
 	// Ruta larga: sin prefijo que la compense, se recorta por la cola y el
-	// "#número" sigue visible. Es el límite del que el detalle es red de seguridad.
+	// "#número" sigue visible; y no aparece ninguna línea de prefijo.
 	var cell string
 	for _, line := range render("APPCITTI/vsocial/backend/api-gateway") {
-		if strings.HasPrefix(line, model.SectionReview.String()) && strings.Contains(line, "APPCITTI") {
-			t.Errorf("cabecera = %q, want el prefijo solo si lo comparten varios ítems", line)
+		if strings.Contains(line, "APPCITTI") {
+			t.Errorf("sin prefijo común no debe haber línea de prefijo: %q", line)
 		}
 		if strings.Contains(line, "api-gateway#100") {
 			cell = line
@@ -224,9 +231,19 @@ func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 	if cell == "" {
 		t.Fatal("ninguna línea pintó el sufijo del ítem")
 	}
-	if !strings.HasPrefix(cell, "…") {
+	if !strings.Contains(cell, "…") {
 		t.Errorf("celda = %q, want el recorte por la cola", cell)
 	}
+}
+
+// containsSubstring indica si alguna línea contiene s.
+func containsSubstring(lines []string, s string) bool {
+	for _, l := range lines {
+		if strings.Contains(l, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestRefColInvariantes sobre rutas aleatorias: la celda es exactamente el

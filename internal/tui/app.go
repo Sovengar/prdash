@@ -167,6 +167,14 @@ type forgeStatus struct {
 	loading   bool
 }
 
+// sectionPos es la posición recordada de una sección: dónde estaba el cursor y
+// qué línea encabezaba la ventana cuando se dejó de ver. Al volver a una sección
+// se restaura, acotada al contenido nuevo.
+type sectionPos struct {
+	cursor int
+	scroll int
+}
+
 // noticeLevel clasifica el aviso de la cabecera.
 type noticeLevel int
 
@@ -187,6 +195,14 @@ type Model struct {
 	streams  map[streamKey]*stream
 	statuses map[string]*forgeStatus
 	inbox    inbox.Inbox
+
+	// activeSection es la sección que se pinta y sobre la que opera el cursor.
+	// El inbox muestra una sola a la vez; el resto se resume en la leyenda del
+	// borde. Por defecto Assigned (SectionReview).
+	activeSection model.Section
+	// pos recuerda el cursor y el scroll de cada sección para restaurarlos al
+	// volver a ella. Los de la sección activa son los campos cursor/scroll.
+	pos map[model.Section]sectionPos
 
 	cursor int
 	// scroll es la primera línea visible de la lista. No lo reajusta la vista
@@ -306,6 +322,10 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		loading:     true,
 		cycle:       1, // el primer ciclo lo lanza Init
 		readers:     1, // Init arma el primer lector del canal
+		// Assigned es la sección que se ve al abrir: es la que lleva el trabajo
+		// asignado, y el resto queda a un `tab`.
+		activeSection: model.SectionReview,
+		pos:           map[model.Section]sectionPos{},
 	}
 	// Init arma el primer tick si el auto-refresco está habilitado.
 	m.tickPending = cfg.RefreshInterval > 0
@@ -711,13 +731,55 @@ func (m *Model) clampCursor() {
 	m.cursor = min(max(0, m.cursor), len(rows)-1)
 }
 
-// rows devuelve los ítems de todas las secciones en orden de pintado.
+// rows devuelve los ítems de la sección activa. El inbox pinta una sola sección
+// a la vez, así que el cursor y la navegación solo recorren esa; el resto se
+// resume en su conteo en la leyenda del borde.
 func (m *Model) rows() []model.Item {
-	var out []model.Item
-	for _, s := range m.inbox.Sections {
-		out = append(out, s.Items...)
+	return m.sectionItems(m.activeSection)
+}
+
+// sectionCycle es el orden en que `section-next` recorre las secciones activas:
+// Assigned → Mentioned → Mine → Assigned. No es el orden de la leyenda (Mine ·
+// Assigned · Mentioned, que es el de autoridad del inbox): el ciclo arranca en
+// la sección por defecto y la leyenda conserva el orden con el que se apilan.
+var sectionCycle = []model.Section{
+	model.SectionReview,
+	model.SectionMentions,
+	model.SectionAuthored,
+}
+
+// sectionCycleIndex devuelve la posición de la sección activa dentro del ciclo.
+func (m *Model) sectionCycleIndex() int {
+	for i, s := range sectionCycle {
+		if s == m.activeSection {
+			return i
+		}
 	}
-	return out
+	return 0
+}
+
+// cycleSection avanza la sección activa al siguiente paso del ciclo. Cicla
+// siempre, aunque la sección destino esté vacía: su estado y su conteo son
+// justo lo que el usuario quiere poder ver.
+func (m *Model) cycleSection() {
+	m.setActiveSection(sectionCycle[(m.sectionCycleIndex()+1)%len(sectionCycle)])
+}
+
+// setActiveSection cambia la sección activa recordando la posición de la que
+// sale y restaurando la de la destino (cursor 0 y scroll 0 si nunca se vio),
+// acotada al contenido nuevo. El veto de aprobar lo propio se recalcula: se
+// deriva de los ítems visibles, y ahora son los de otra sección.
+func (m *Model) setActiveSection(kind model.Section) {
+	if m.pos == nil {
+		m.pos = map[model.Section]sectionPos{}
+	}
+	m.pos[m.activeSection] = sectionPos{cursor: m.cursor, scroll: m.scroll}
+	m.activeSection = kind
+	p := m.pos[kind]
+	m.cursor, m.scroll = p.cursor, p.scroll
+	m.refreshSelfDenied()
+	m.clampCursor()
+	m.syncScroll()
 }
 
 // selected devuelve el ítem bajo el cursor, si lo hay.

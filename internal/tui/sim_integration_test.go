@@ -99,7 +99,7 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	if !strings.Contains(view, "simulate: merge") {
 		t.Errorf("la vista no muestra el título del popup:\n%s", view)
 	}
-	if !strings.Contains(view, "Inbox") {
+	if !strings.Contains(view, "Assigned (1)") {
 		t.Error("el popup tapó la vista de fondo")
 	}
 	if len(m.sim.cells) != m.sim.cellH {

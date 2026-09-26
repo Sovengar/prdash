@@ -7,6 +7,18 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed
+
+- **El Inbox pinta una sola sección a la vez, con leyenda de conteos en el borde.**
+  Al abrir, la sección activa es **Assigned**, y `tab` cicla
+  `Assigned → Mentioned → Mine → Assigned` (siempre, aunque la destino esté
+  vacía). El título `Inbox` se sustituye por la leyenda `Mine (n) · Assigned (n) ·
+  Mentioned (n)`, con la activa resaltada; en terminal estrecho el borde la trunca
+  sin descuadrar la caja. Cada sección recuerda su cursor y su scroll, el prefijo
+  de ruta común (ADR 0002) se muestra en una línea fija de la activa, y `(empty)`,
+  `loading more…` y los avisos son los de la sección activa. `--print`, el formato
+  de cache y la API de `[keybindings]` no cambian (ADR 0004).
+
 ### Fixed
 
 - **La simulación ocupaba un rincón del popup y salía deformada.** El ancho de las

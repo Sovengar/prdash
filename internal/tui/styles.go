@@ -41,18 +41,22 @@ const defaultOuterWidth = 124
 var (
 	styleCursor = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	styleDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	styleHeader = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-	styleCount  = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	styleForge  = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	styleRef    = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	styleTitle  = lipgloss.NewStyle()
-	styleRole   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	styleEmpty  = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
-	styleWarn   = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-	styleHint   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	styleInfo   = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	styleOK     = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-	styleError  = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	// styleLegendActive resalta el tramo de la sección activa en la leyenda del
+	// borde: la activa se distingue del resto con color y negrita, y las demás
+	// van atenuadas con styleDim. Comparte el color del cursor para leerlas como
+	// la misma selección, una en la lista y otra en la leyenda.
+	styleLegendActive = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	styleCount        = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	styleForge        = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	styleRef          = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	styleTitle        = lipgloss.NewStyle()
+	styleRole         = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	styleEmpty        = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
+	styleWarn         = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	styleHint         = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	styleInfo         = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	styleOK           = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+	styleError        = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 
 	styleDetailKey   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	styleDetailTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))

@@ -31,6 +31,7 @@ func modelWithComments(t *testing.T, height int, list []model.Comment, total int
 	m := newTestModel(t, gh)
 	m.width, m.height = 160, height
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+	m = showSection(m, model.SectionAuthored)
 	return withConversation(t, m, it, forge.CommentPage{Comments: list, Total: total})
 }
 
@@ -176,6 +177,7 @@ func TestSelfDenyTakesNoRoomInTheDetail(t *testing.T) {
 	it.Author = "Sovengar"
 	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "Sovengar"}})
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+	m = showSection(m, model.SectionAuthored)
 
 	if m.selfDenied[it.ID()] == "" {
 		t.Fatal("el ítem propio debería estar vetado")
@@ -490,6 +492,7 @@ func TestLastGridRowCarriesTheActionFields(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
 		mkItem("github", "github.com", "acme/widget", "Add widget", 42, "CHANGES_REQUESTED"),
 	}, false))
+	m = showSection(m, model.SectionAuthored)
 	it := mustSelected(t, m)
 
 	// Un panel de 4 filas solo deja la última fila de la rejilla y los avisos.
@@ -993,6 +996,7 @@ func TestCommentFailIsNotCachedAsEmpty(t *testing.T) {
 	m := newTestModel(t, gh)
 	m.width, m.height = 160, 45
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+	m = showSection(m, model.SectionAuthored)
 	m = send(t, m, commentsMsg{id: it.ID(), err: "API rate limit exceeded"})
 
 	st := m.comments[it.ID()]
@@ -1014,6 +1018,7 @@ func TestCommentsFetchedOnceForTheSelectedItem(t *testing.T) {
 		mkItem("github", "github.com", "acme/widget", "One", 1, ""),
 		mkItem("github", "github.com", "acme/widget", "Two", 2, ""),
 	}, false))
+	m = showSection(m, model.SectionAuthored)
 	gh := m.byForge["github"].(*testutil.FakeAdapter)
 
 	// Tres ticks seguidos sin respuesta: el primero abre la consulta y los otros
@@ -1047,6 +1052,7 @@ func TestCommentsNotAskedWithoutSession(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
 		mkItem("github", "github.com", "acme/widget", "One", 1, ""),
 	}, false))
+	m = showSection(m, model.SectionAuthored)
 	// El estado de sesión no lo fija New(): lo deja optimista en true hasta que
 	// llega el authMsg del refresco. Por eso hay que inyectarlo aquí, que es como
 	// está en pantalla cuando la cabecera avisa de que no hay sesión.
@@ -1076,6 +1082,7 @@ func TestCommentsInvalidatedByAction(t *testing.T) {
 	m := newTestModel(t, gh)
 	m.width, m.height = 160, 45
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+	m = showSection(m, model.SectionAuthored)
 	m = send(t, m, commentsMsg{id: it.ID(), page: forge.CommentPage{
 		Comments: []model.Comment{conv("alice", "hi")}, Total: 1,
 	}})
@@ -1121,6 +1128,7 @@ func TestCommentTotalNeverBelowShown(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 45
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+	m = showSection(m, model.SectionAuthored)
 	m = send(t, m, commentsMsg{id: it.ID(), page: forge.CommentPage{
 		Comments: []model.Comment{conv("a", "1"), conv("b", "2"), conv("c", "3")}, Total: 1,
 	}})

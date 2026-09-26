@@ -118,9 +118,18 @@ func ghAdapter() *testutil.FakeAdapter {
 	return &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 }
 
-// TestViewShowsThreeSectionsWithBothForges cubre el escenario "el inbox
-// muestra las tres secciones con datos de ambos forges".
-func TestViewShowsThreeSectionsWithBothForges(t *testing.T) {
+// showSection activa la sección dada y recalcula lo derivado de ella (veto de
+// approve, cursor y scroll). Los tests que colocan sus ítems fuera de Assigned
+// —la sección que se ve al abrir— la usan para que el cursor y el detalle miren
+// a esos ítems.
+func showSection(m Model, kind model.Section) Model {
+	m.setActiveSection(kind)
+	return m
+}
+
+// TestLegendCountsBothForgesAndListShowsActiveOnly cubre la leyenda de conteos
+// con datos de ambos forges y que la lista pinta solo la sección activa.
+func TestLegendCountsBothForgesAndListShowsActiveOnly(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
 
 	reviewReq := mkItem("github", "github.com", "acme/lib", "Review me", 2, "REVIEW_REQUIRED")
@@ -131,19 +140,21 @@ func TestViewShowsThreeSectionsWithBothForges(t *testing.T) {
 	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionMentions, "", []model.Item{mkItem("gitlab", "gitlab.example.com", "grp/proj", "Mención", 5, "")}, false))
 
 	view := stripANSI(m.View().Content)
-	for _, want := range []string{
-		"Created by me", "Review / assigned", "Mentions",
-		"GH", "GLab@gitlab", // columna FORGE: abreviatura (+ host si self-hosted)
-		"Add widget", "Review me", "MR propio", "Mención",
-	} {
-		if !strings.Contains(view, want) {
-			t.Errorf("la vista no contiene %q\n%s", want, view)
+	if !strings.Contains(view, "Mine (2) · Assigned (1) · Mentioned (1)") {
+		t.Errorf("la leyenda no refleja los conteos de las tres secciones de ambos forges:\n%s", view)
+	}
+	if !strings.Contains(view, "Review me") {
+		t.Errorf("la lista debería mostrar los ítems de Assigned, la activa:\n%s", view)
+	}
+	for _, hidden := range []string{"Add widget", "MR propio", "Mención"} {
+		if strings.Contains(view, hidden) {
+			t.Errorf("la lista muestra %q, que es de otra sección:\n%s", hidden, view)
 		}
 	}
 }
 
 // TestSectionEmptyVsError cubre "distinguir sección vacía de no se pudo
-// consultar".
+// consultar", ahora sobre la sección activa.
 func TestSectionEmptyVsError(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "github", section: model.SectionReview}, warnings: []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "network", Msg: "boom"}}})
@@ -152,8 +163,12 @@ func TestSectionEmptyVsError(t *testing.T) {
 	if !strings.Contains(view, "could not be queried") {
 		t.Errorf("la sección fallida debería decirlo\n%s", view)
 	}
-	if got := strings.Count(view, "(empty)"); got != 2 {
-		t.Errorf("(empty) appears %d times, want 2 (review no debe decir vacío)\n%s", got, view)
+	// La activa falló y no tiene ítems: se muestra el aviso, no "(empty)".
+	if strings.Contains(view, "(empty)") {
+		t.Errorf("una sección con aviso no debería decir que está vacía\n%s", view)
+	}
+	if !strings.Contains(view, "Assigned (0)") {
+		t.Errorf("la leyenda debería contar 0 en la sección fallida\n%s", view)
 	}
 }
 
@@ -161,9 +176,9 @@ func TestSectionEmptyVsError(t *testing.T) {
 // inbox".
 func TestDegradationKeepsOtherForges(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Sigue visible", 1, "")}, false))
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/widget", "Sigue visible", 1, "")}, false))
 	m = send(t, m, authMsg{cycle: 1, forge: "gitlab", auth: model.AuthState{Forge: "gitlab", OK: false, Reason: "401"}})
-	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "gitlab", section: model.SectionAuthored}, warnings: []model.Warning{{Forge: "gitlab", Kind: "auth", Msg: "401"}}})
+	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "gitlab", section: model.SectionReview}, warnings: []model.Warning{{Forge: "gitlab", Kind: "auth", Msg: "401"}}})
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "Sigue visible") {
@@ -174,16 +189,17 @@ func TestDegradationKeepsOtherForges(t *testing.T) {
 	}
 }
 
-// TestPaginationIndicator cubre el indicador "loading more…" por sección.
+// TestPaginationIndicator cubre el indicador "loading more…" de la sección
+// activa: es de ella y no de la que pagina en segundo plano.
 func TestPaginationIndicator(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
 
-	if !m.sectionLoadingMore(model.SectionAuthored) {
-		t.Fatal("authored debería seguir paginando")
+	if !m.sectionLoadingMore(model.SectionReview) {
+		t.Fatal("review, la sección activa, debería seguir paginando")
 	}
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "loading more…") {
-		t.Errorf("falta el indicador de carga\n%s", view)
+		t.Errorf("falta el indicador de carga de la activa\n%s", view)
 	}
 }
 
@@ -278,7 +294,7 @@ func detailPanel(view string) string {
 // no existe ningún estado "abierto/cerrado" que conservar.
 func TestDetailPanelFollowsCursor(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "Add widget", 1, "APPROVED"),
 		mkItem("github", "github.com", "acme/widget", "Otro", 2, ""),
 	}, false))
@@ -345,6 +361,7 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 			m := newTestModel(t, fake)
 			m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: tc.login}})
 			m = send(t, m, page(1, "github", "github.com", tc.section, tc.kind, []model.Item{item}, false))
+			m = showSection(m, tc.section)
 
 			blocked := m.selfDenied[item.ID()] != ""
 			m = press(t, m, "a")
@@ -391,6 +408,7 @@ func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "Sovengar"}})
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{own}, false))
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{other}, false))
+	m = showSection(m, model.SectionAuthored)
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "own") {
@@ -414,6 +432,7 @@ func TestSelfDenySurvivesRefresh(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 14, "")
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
+	m = showSection(m, model.SectionAuthored)
 	if m.selfDenied[item.ID()] == "" {
 		t.Fatal("el ítem propio debería quedar vetado")
 	}
@@ -451,6 +470,7 @@ func TestPermissionRecordsDenial(t *testing.T) {
 	item := mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR", 4, "")
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
 	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionAuthored, "", []model.Item{item}, false))
+	m = showSection(m, model.SectionAuthored)
 
 	m = send(t, m, actionMsg{outcome: forge.Outcome{Kind: forge.ActionApprove, ID: item.ID(), Perm: true, Msg: "no tienes permiso"}})
 	if !strings.Contains(lastToast(m), "disabled") {
@@ -478,6 +498,7 @@ func TestActionDisabledWhenForgeDown(t *testing.T) {
 	})
 	m = send(t, m, authMsg{cycle: 1, forge: "gitlab", auth: model.AuthState{Forge: "gitlab", OK: false, Reason: "401"}})
 	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionAuthored, "", []model.Item{mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR", 4, "")}, false))
+	m = showSection(m, model.SectionAuthored)
 
 	m = press(t, m, "a")
 	if m.actionBusy {
@@ -501,14 +522,14 @@ func TestSnapshotPaintsInstantly(t *testing.T) {
 	}
 	it := mkItem("github", "github.com", "acme/widget", "Cacheado", 1, "")
 	if err := cache.Save(path, cache.File{Streams: []cache.Stream{{
-		Forge: "github", Host: "github.com", Section: model.SectionAuthored, Items: []model.Item{it},
+		Forge: "github", Host: "github.com", Section: model.SectionReview, Kind: model.ReviewRequested, Items: []model.Item{it},
 	}}}); err != nil {
 		t.Fatal(err)
 	}
 
 	m := New(config.Defaults(), []forge.Adapter{ghAdapter()})
-	if got := len(m.sectionItems(model.SectionAuthored)); got != 1 {
-		t.Fatalf("authored cacheado = %d, want 1", got)
+	if got := len(m.sectionItems(model.SectionReview)); got != 1 {
+		t.Fatalf("review cacheado = %d, want 1", got)
 	}
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "Cacheado") {
 		t.Errorf("la vista debería pintar el cache\n%s", view)
@@ -538,7 +559,7 @@ func TestUnsupportedForgeShowsReason(t *testing.T) {
 		AuthState: model.AuthState{Forge: "bitbucket", OK: false, Reason: "no soportado en esta versión"},
 	})
 	m = send(t, m, authMsg{cycle: 1, forge: "bitbucket", auth: model.AuthState{Forge: "bitbucket", OK: false, Reason: "no soportado en esta versión"}})
-	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "bitbucket", section: model.SectionAuthored}, warnings: []model.Warning{{Forge: "bitbucket", Section: model.SectionAuthored, Kind: "unsupported", Msg: "no soportado"}}})
+	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "bitbucket", section: model.SectionReview}, warnings: []model.Warning{{Forge: "bitbucket", Section: model.SectionReview, Kind: "unsupported", Msg: "no soportado"}}})
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "no soportado") {
@@ -716,6 +737,7 @@ func TestDetailReflectsActionUpdate(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
+	m = showSection(m, model.SectionAuthored)
 
 	refreshed := item
 	refreshed.State = "MERGED"
@@ -766,14 +788,14 @@ func TestDegradedDoesNotComplete(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, pageMsg{
 		cycle: m.cycle,
-		key:   streamKey{forge: "github", section: model.SectionAuthored},
+		key:   streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested},
 		items: []model.Item{mkItem("github", "github.com", "acme/widget", "X", 1, "")},
 		first: true,
 		warnings: []model.Warning{
-			{Forge: "github", Section: model.SectionAuthored, Kind: "degraded", Msg: "datos parciales vía REST"},
+			{Forge: "github", Section: model.SectionReview, Kind: "degraded", Msg: "datos parciales vía REST"},
 		},
 	})
-	if m.streams[streamKey{forge: "github", section: model.SectionAuthored}].complete {
+	if m.streams[streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested}].complete {
 		t.Fatal("un fallback degradado no debe marcarse como completo")
 	}
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "datos parciales") {
