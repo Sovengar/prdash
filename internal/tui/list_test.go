@@ -341,7 +341,10 @@ func TestDetailDropsDiffBeforeLosingTheTitle(t *testing.T) {
 		it := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 		it.Diff = model.DiffStat{Additions: 42, Deletions: 1, Files: 2, Known: true}
 		m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{it}, false))
-		m.selfDenied[it.ID()] = "you cannot approve your own PR/MR"
+		// El aviso de acción deshabilitada es el del forge (`denied`), el único que la
+		// ficha sigue pintando: ocupa dos filas (blanco + texto) y es lo que obliga a
+		// la rejilla a ceder.
+		m.denied[it.ID()] = "the forge refused the action"
 		return stripANSI(strings.Join(m.detailPane(rows), "\n"))
 	}
 

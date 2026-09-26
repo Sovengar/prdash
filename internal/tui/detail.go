@@ -150,15 +150,22 @@ func withoutField(fields []detailField, key string) []detailField {
 }
 
 // detailWarnings son los avisos de acción deshabilitada del ítem.
+//
+// Solo el veto que impone el forge, que además es pegajoso: se recuerda por ítem
+// hasta que un refresco lo levanta, así que puede seguir ahí después de que la
+// cabecera haya dejado de avisar. Por eso merece una fila.
+//
+// El veto de aprobar lo propio NO se pinta, y es a propósito. Se deriva del ítem y
+// del login, así que saldría en todos los renders de todos tus PRs —que son casi
+// todos los de "Created by me"— y la ficha acabaría con una línea permanente
+// repitiendo lo que el campo Role ya dice. Además es lo único que se puede pedir
+// de otro modo: la razón se entrega al pulsar la tecla, en el aviso, que es
+// cuando se puede actuar sobre ella. En la ficha solo ocuparía filas.
 func (m *Model) detailWarnings(it model.Item) []string {
-	var out []string
 	if reason := m.denied[it.ID()]; reason != "" {
-		out = append(out, "", styleWarn.Render("  action disabled: "+reason))
+		return []string{"", styleWarn.Render("  action disabled: " + reason)}
 	}
-	if reason := m.selfDenied[it.ID()]; reason != "" {
-		out = append(out, "", styleWarn.Render("  approve unavailable: "+reason+" · merge still applies"))
-	}
-	return out
+	return nil
 }
 
 // fullWidthField compone un campo que ocupa la fila entera en vez de media.

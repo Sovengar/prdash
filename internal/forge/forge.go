@@ -64,6 +64,20 @@ type CommentPage struct {
 	Total    int
 }
 
+// KeepLast recorta la página a los CommentLimit últimos comentarios y deja el total
+// intacto.
+//
+// Recorta por la COLA y no por la cabeza, que es lo que distingue "los últimos" de
+// "los primeros": con la conexión pedida al revés, lo que sobra por delante es
+// justo la parte que la ficha no iba a enseñar. El total no se toca, porque es lo
+// que permite saber que lo que se ve no es todo lo que hay.
+func (p CommentPage) KeepLast() CommentPage {
+	if len(p.Comments) > CommentLimit {
+		p.Comments = p.Comments[len(p.Comments)-CommentLimit:]
+	}
+	return p
+}
+
 // Adapter es el contrato de un forge. Las implementaciones hablan con su CLI
 // (`gh`, `glab`, …) por subproceso.
 type Adapter interface {
@@ -77,11 +91,11 @@ type Adapter interface {
 	List(ctx context.Context, q Query) (Page, []model.Warning)
 	// ItemState relee el estado de un ítem concreto.
 	ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning)
-	// Comments devuelve los primeros comentarios de la conversación de un ítem,
-	// del más antiguo al más reciente. El tope es CommentLimit, no un parámetro:
-	// lo consume la ficha, que tiene un alto fijo, y una consulta se paga por lo
-	// que devuelve. Como todos los métodos, nunca falla duro: si el forge no
-	// llega a responder devuelve warnings.
+	// Comments devuelve los Últimos comentarios de la conversación de un ítem, en
+	// orden cronológico: los más recientes, del más antiguo de esos al más nuevo. El
+	// tope es CommentLimit, no un parámetro: lo consume la ficha, que tiene un alto
+	// fijo, y una consulta se paga por lo que devuelve. Como todos los métodos,
+	// nunca falla duro: si el forge no llega a responder devuelve warnings.
 	Comments(ctx context.Context, ref model.RepoRef, number int) (CommentPage, []model.Warning)
 	// Approve aprueba un ítem.
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning

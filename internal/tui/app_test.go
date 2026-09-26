@@ -16,6 +16,7 @@ import (
 	"prdash/internal/config"
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
+	"prdash/internal/state"
 	"prdash/internal/testutil"
 )
 
@@ -369,8 +370,13 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 	}
 }
 
-// TestOwnItemShowsRoleAndDetail: la fila y el detalle anticipan que approve no
-// aplica, para no tener que descubrirlo fallando.
+// TestOwnItemShowsRoleAndDetail: la fila marca el rol, y el veto de approve sobre
+// un PR propio lo explica el aviso al pulsar la tecla, no la ficha.
+//
+// Que el veto este solo en el aviso es una decision y no un olvido: la ficha lo
+// repetiria en todos los renders de todos tus PRs -casi todos los de "Created by
+// me"- y el campo Role ya dice que es tuyo. Serian filas para repetir lo que el
+// campo de al lado ya enseña.
 func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 	own := mkItem("github", "github.com", "acme/widget", "Mío", 12, "")
 	own.Author = "Sovengar"
@@ -386,11 +392,14 @@ func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 		t.Errorf("la fila de un PR propio debería marcar el rol:\n%s", view)
 	}
 
-	// El veto de approve sobre un PR propio lo explica el panel de detalle, sin
-	// abrir ninguna vista aparte.
-	if detail := stripANSI(m.View().Content); !strings.Contains(detail, "approve unavailable") {
-		t.Errorf("el panel debería explicar que approve no aplica:\n%s", detail)
+	// El veto no ocupa filas de la ficha.
+	if view := stripANSI(m.View().Content); strings.Contains(view, "approve unavailable") {
+		t.Errorf("el veto de aprobar lo propio no debería ocupar una fila de la ficha:\n%s", view)
 	}
+
+	// Y la razón llega cuando se puede hacer algo con ella: al pulsar la tecla.
+	m = press(t, m, "a")
+	assertToast(t, m, state.SelfReviewReason)
 }
 
 // TestSelfDenySurvivesRefresh: el veto se deriva del ítem y del login, no es

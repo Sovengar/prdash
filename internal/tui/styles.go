@@ -82,6 +82,13 @@ var (
 	// borderColor es el color del borde de las cajas: gris muy tenue, para que
 	// la estructura se lea sin competir con el contenido.
 	borderColor = lipgloss.Color("238")
+
+	// commentBorderColor es el del borde de la caja de comentarios, que va anidada
+	// dentro del panel de detalle. Un tono por encima del de las cajas de la
+	// pantalla: si fuera el mismo, los dos bordes se fundirían en una sola línea y
+	// el anidamiento dejaría de leerse. Sigue siendo un gris para no competir con el
+	// texto, que es lo que manda en la caja.
+	commentBorderColor = lipgloss.Color("240")
 )
 
 // styleForState elige el estilo de la columna de estado.

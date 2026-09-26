@@ -73,7 +73,7 @@ La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem
 seleccionado en el 40% inferior, que se mueve con el cursor. No hay una vista a
 pantalla completa: el panel es lo único que hay. La ficha son tres bloques: los
 campos cortos en rejilla de dos columnas, el URL en una fila a ancho completo, y
-los comentarios debajo.
+debajo los comentarios en su propia caja.
 
 Los campos van **siempre** en rejilla, no solo cuando no caben en una: en una
 sola columna ocupaban 16 de las ~18 líneas que concede el 40% de un terminal
@@ -82,10 +82,10 @@ columna se leen 40 caracteres de una URL de 80, y una URL que no se puede copiar
 entera no sirve para nada. No cuesta alto: 12 campos en dos columnas son 6 filas,
 las mismas 7 que ocupaban los 13.
 
-### Los primeros comentarios, en la misma ficha
+### Los últimos comentarios, en su propia caja
 
-Debajo de la ficha se enseñan hasta 5 comentarios de la conversación, del más
-antiguo al más reciente, con su autor. Se piden al forge **al llegar el cursor al
+Debajo de la ficha se enseñan hasta 5 comentarios de la conversación, en una caja
+redondeada con "Comments" en el borde. Se piden al forge **al llegar el cursor al
 ítem** y se cachean: moverte arriba y abajo no vuelve a preguntar, y el refresco
 del inbox no los tira (una conversación no cambia al ritmo de un ciclo de un
 minuto). La única invalidación es una acción sobre el ítem, que sí puede escribir
@@ -98,10 +98,20 @@ conversación".
 
 Lo que se enseña, y por qué:
 
-- **Los primeros, no los últimos.** El principio de la conversación es donde está
-  el contexto de qué se pidió y por qué; las últimas respuestas se pelean por el
-  sitio. Si hay más de los que caben, la etiqueta lo dice (`5 of 23`) porque es lo
-  que indica que conviene abrir el PR.
+- **Los últimos, no los primeros.** El final de la conversación es donde está lo
+  último que se dijo del PR y el estado actual de la discusión. Van del más antiguo
+  de esos al más nuevo, que es como se lee una discusión. Si hay más de los que
+  caben, la caja lo dice (`5 of 23`) porque es lo que indica que conviene abrir el
+  PR.
+- **Una caja, no campos más.** La conversación no es un dato del PR sino lo que la
+  gente dijo de él, y un borde lo dice sin explicarlo. Sin comentarios —y también
+  sin que el forge haya respondido todavía— no hay caja: se queda la línea de
+  campo de siempre, porque una caja alrededor de la palabra "none" no separa nada y
+  aparecería y desaparecería en cada movimiento del cursor.
+- **La caja es todo o nada.** Si no caben sus dos bordes más una fila por
+  comentario, no se pinta. Es preferible ver la ficha entera que una caja con un
+  solo comentario, porque un recorte de la caja no parece un recorte: parece que el
+  PR solo tiene ese.
 - **Notas de sistema fuera.** En GitLab, "assigned to @x" o "added 3 commits" no
   son conversación: son el historial de acciones del MR, y mezclado con lo que
   escribió la gente se comería las cinco filas con ruido que ya está en otra parte
@@ -117,6 +127,18 @@ Lo que se enseña, y por qué:
 Cuando el panel es demasiado pequeño los comentarios son lo primero que se cae,
 antes que un campo de la ficha: son lo único que se puede volver a pedir en un
 instante, y un campo que se va no vuelve.
+
+### Por qué `approve` no dice nada en la ficha
+
+Aprobar un PR propio no lo admite ningún forge, y el veto no aparece en el detalle:
+solo en el aviso, al pulsar la tecla, que es cuando se puede actuar sobre él.
+
+La ficha lo pintaba en todos los renders de todos tus PRs —casi todos los de
+"Created by me"— repitiendo lo que el campo `Role` ya dice, y le quitaba dos filas
+a los comentarios en justo los ítems donde más se echa de menos. El veto sigue
+funcionando igual: `approve` no sale y el motivo se explica entero. Lo que sí
+permanece en la ficha es la denegación del forge (`action disabled: …`), que es
+pegajosa y su aviso caduca.
 
 ### Merge pide dos teclas y una de ellas es el modo
 
@@ -142,8 +164,8 @@ hizo.
 
 `approve` no aplica a los PR/MR propios: ningún forge admite aprobar lo que
 escribes tú (GitHub lo rechaza en la API y no hay opción para activarlo). prdash
-lo detecta antes de llamar a la CLI, marca esos ítems con `ROLE: own` y explica
-el motivo; `merge` sí funciona sobre ellos.
+lo detecta antes de llamar a la CLI y marca esos ítems con `ROLE: own`; al pulsar
+`a` sale el motivo en el aviso. `merge` sí funciona sobre ellos.
 
 ### Layout de review
 

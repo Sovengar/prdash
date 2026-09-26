@@ -186,16 +186,16 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-// TestNotesQueryShape: las notas se piden aparte del inbox, con `first` (el
-// principio de la conversación es donde está el contexto) y con `system`, que es
-// lo único que distingue una nota escrita de una que dejó el MR al abrirse. El
-// iid va como literal de string porque el schema lo declara `String!`.
+// TestNotesQueryShape: las notas se piden aparte del inbox, con `last` (la ficha
+// enseña el final de la conversación) y con `system`, que es lo único que distingue
+// una nota escrita de una que dejó el MR al abrirse. El iid va como literal de string
+// porque el schema lo declara `String!`.
 func TestNotesQueryShape(t *testing.T) {
 	q := glNotesQuery("grupo/sub/proy", 42, commentFetch)
 	for _, want := range []string{
 		`project(fullPath: "grupo/sub/proy")`,
 		`mergeRequest(iid: "42")`,
-		"notes(first: 15)",
+		"notes(last: 15)",
 		"author { username }",
 		"system",
 		"body",
@@ -213,9 +213,9 @@ func TestNotesQueryShape(t *testing.T) {
 	}
 }
 
-// TestCommentsDropsSystemNotesAndCaps: las notas de sistema se descartan y el
-// resto se recorta al tope de la ficha. El total es el de las leídas: GitLab no
-// expone recuento, así que nunca hay "5 de N" y la línea del total no engaña.
+// TestCommentsDropsSystemNotesAndCaps: las notas de sistema se descartan y el resto
+// se recorta por la cola al tope de la ficha. El total es el de las leídas: GitLab
+// no expone recuento, así que nunca hay "5 de N" y la línea del total no engaña.
 func TestCommentsDropsSystemNotesAndCaps(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "glab", `#!/bin/sh
@@ -240,8 +240,18 @@ OUT
 	if len(page.Comments) != forge.CommentLimit {
 		t.Fatalf("comments = %d, want %d", len(page.Comments), forge.CommentLimit)
 	}
-	if page.Comments[0].Body != "first human" {
-		t.Errorf("la nota de sistema no debería ocupar la primera fila: %q", page.Comments[0].Body)
+	// Ni la nota de sistema ni las humanas más antiguas se colan: la conexión
+	// pedía las 15 últimas notas y el recorte se queda con las 5 últimas humanas.
+	for _, c := range page.Comments {
+		if c.Body == "added 56 commits" {
+			t.Errorf("coló una nota de sistema: %q", c.Body)
+		}
+	}
+	want := []string{"third human", "fourth human", "fifth human", "sixth human", "seventh human"}
+	for i, w := range want {
+		if page.Comments[i].Body != w {
+			t.Errorf("comments[%d] = %q, want %q (los últimos, en orden)", i, page.Comments[i].Body, w)
+		}
 	}
 	// GitLab no expone recuento: el total es lo leído (7), no lo pintado (5). Es
 	// una cota inferior, que es justo lo que hace falta para insinuar que hay más

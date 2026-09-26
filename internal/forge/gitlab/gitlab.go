@@ -151,9 +151,9 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 	return it, nil
 }
 
-// Comments devuelve las notas de la conversación de un MR, del más antiguo al
-// más reciente. Las de sistema ("assigned to @x", "added 3 commits") se descartan
-// al parsear: no son conversación.
+// Comments devuelve las últimas notas de la conversación de un MR, del más antiguo
+// de esas al más reciente. Las de sistema ("assigned to @x", "added 3 commits") se
+// descartan al parsear: no son conversación.
 func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
 	if ref.Project == "" {
 		return forge.CommentPage{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
@@ -167,10 +167,7 @@ func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (
 	if perr != nil {
 		return forge.CommentPage{}, []model.Warning{a.warn("", "parse", perr)}
 	}
-	if len(comments) > forge.CommentLimit {
-		comments = comments[:forge.CommentLimit]
-	}
-	return forge.CommentPage{Comments: comments, Total: total}, nil
+	return forge.CommentPage{Comments: comments, Total: total}.KeepLast(), nil
 }
 
 // Approve aprueba un MR con `glab mr approve`.
@@ -359,14 +356,15 @@ func glAssignedQuery(cursor string) string {
 //
 // El iid va como literal de cadena por lo mismo que en glMRQuery: el schema lo
 // declara `String!` y GraphQL no coacciona un Int. Se pide `system` porque es lo
-// que distingue una nota escrita de una que dejó el MR al abrirse, y `first` (no
-// `last`) porque la ficha enseña el principio de la conversación, donde está el
-// contexto de qué se pidió.
-func glNotesQuery(fullPath string, iid, first int) string {
+// que distingue una nota escrita de una que dejó el MR al abrirse, y `last` (no
+// `first`) porque la ficha enseña el final de la conversación, que es donde está lo
+// último que se dijo del MR. Como en GitHub, `last` no invierte el orden: el más
+// antiguo de los últimos va primero.
+func glNotesQuery(fullPath string, iid, last int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { `+
-			`notes(first: %d) { nodes { author { username } body createdAt system } } } } }`,
-		escapeGraphQL(fullPath), iid, first,
+			`notes(last: %d) { nodes { author { username } body createdAt system } } } } }`,
+		escapeGraphQL(fullPath), iid, last,
 	)
 }
 

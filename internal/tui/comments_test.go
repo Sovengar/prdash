@@ -95,6 +95,24 @@ func rowWithField(rows []string, label string) int {
 	return -1
 }
 
+// hasCommentBox dice si el texto pintado trae la caja de comentarios, busca el
+// título embebido en el borde (dentro de la caja el nombre ya no va como etiqueta).
+func hasCommentBox(text string) bool {
+	return strings.Contains(text, " "+commentTitle+" ")
+}
+
+// rowWithCommentBox devuelve el índice de la fila del borde de arriba de la caja de
+// comentarios, o -1. Busca el título embebido, no una etiqueta: dentro de la caja
+// el nombre va en el borde.
+func rowWithCommentBox(rows []string) int {
+	for i, l := range rows {
+		if strings.Contains(stripANSI(l), " "+commentTitle+" ") {
+			return i
+		}
+	}
+	return -1
+}
+
 // TestURLGetsItsOwnFullWidthRow: el URL sale de la rejilla a una fila a todo el
 // ancho. En media columna se leen 40 caracteres de una URL de 80 y queda un resto
 // inútil, y una URL que no se puede copiar entera no sirve para nada, que es para
@@ -134,7 +152,7 @@ func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 		}
 	}
 	// Sale antes de los comentarios, que van debajo de toda la ficha.
-	iComment := rowWithField(rows, "Comments:")
+	iComment := rowWithCommentBox(rows)
 	if iComment < 0 {
 		t.Fatalf("los comentarios deberían caber a esta altura:\n%s", strings.Join(rows, "\n"))
 	}
@@ -143,7 +161,160 @@ func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 	}
 }
 
-// TestURLRowDoesNotCostHeight: sacar el URL de la rejilla no puede costar una fila.
+// TestSelfDenyTakesNoRoomInTheDetail: el veto de aprobar lo propio no ocupa ni una
+// fila de la ficha, aunque esté activo. Se deriva del ítem y del login, así que
+// saldría en todos los renders de todos tus PRs —casi todos los de "Created by
+// me"— y repetiría lo que el campo Role ya dice. La razón llega en el aviso al
+// pulsar la tecla, que es cuando se puede actuar sobre ella.
+//
+// El veto del forge (`denied`) sí se pinta: es pegajoso y el aviso caduca.
+func TestSelfDenyTakesNoRoomInTheDetail(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m.width, m.height = 160, 45
+	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
+	it.Author = "Sovengar"
+	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "Sovengar"}})
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+
+	if m.selfDenied[it.ID()] == "" {
+		t.Fatal("el ítem propio debería estar vetado")
+	}
+	detail := detailText(t, m)
+	if strings.Contains(detail, "approve unavailable") {
+		t.Errorf("el veto no debería pintar nada en la ficha:\n%s", detail)
+	}
+	// Y el rol sigue ahí, que es la información que sí importa sin pulsar nada.
+	if !strings.Contains(detail, "Role:") || !strings.Contains(detail, "own") {
+		t.Errorf("el campo Role debería seguir diciendo que es propio:\n%s", detail)
+	}
+	// La denegación del forge, en cambio, sí ocupa filas: es pegajosa.
+	m.denied[it.ID()] = "the forge refused the action"
+	if !strings.Contains(detailText(t, m), "action disabled") {
+		t.Error("el aviso de denegación del forge debería seguir en la ficha")
+	}
+}
+
+// con "Comments" en el borde, no como campos más de la ficha. Un borde dice "esto no
+// es un dato del PR" sin tener que explicarlo, que es justo lo que la distingue.
+func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
+	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
+
+	top := rowWithCommentBox(rows)
+	if top < 0 {
+		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
+	}
+	first := stripANSI(rows[top])
+	for _, want := range []string{"╭", commentTitle, "╮"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("el borde de arriba debería llevar %q:\n%s", want, first)
+		}
+	}
+	// La caja se cierra por abajo, pero no es la última fila del detalle: detrás
+	// vienen los avisos de acción, si los hay.
+	bottom := -1
+	for i := top + 1; i < len(rows); i++ {
+		if strings.HasPrefix(strings.TrimSpace(stripANSI(rows[i])), "╰") {
+			bottom = i
+			break
+		}
+	}
+	if bottom < 0 {
+		t.Fatalf("la caja no se cierra por abajo:\n%s", strings.Join(rows, "\n"))
+	}
+	// Todas las líneas de la caja miden el ancho útil del panel: si no, se salen
+	// del borde de la de fuera.
+	width := m.contentWidth()
+	for i := top; i <= bottom; i++ {
+		if n := len([]rune(stripANSI(rows[i]))); n != width {
+			t.Errorf("línea %d de la caja mide %d, want %d (el ancho del panel)", i, n, width)
+		}
+	}
+	// Dentro de la caja el nombre ya no va como etiqueta de campo: el título está en
+	// el borde y repetirlo dentro sería el ruido de una fila entera.
+	for i := top; i <= bottom; i++ {
+		if strings.Contains(stripANSI(rows[i]), "Comments:") {
+			t.Errorf("dentro de la caja no debería repetirse la etiqueta:\n%s", stripANSI(rows[i]))
+		}
+	}
+}
+
+// TestNoBoxWhenThereAreNoComments: sin conversación no hay caja. Una caja alrededor
+// de la palabra "none" no separa nada, y es además el estado de todos los PRs sin
+// comentarios, así que un borde apareciendo y desapareciendo en cada movimiento del
+// cursor es ruido puro.
+func TestNoBoxWhenThereAreNoComments(t *testing.T) {
+	m := modelWithComments(t, 45, nil, 0)
+	detail := stripANSI(strings.Join(m.detailLines(mustSelected(t, m), true, m.layout().detailLines), "\n"))
+	if hasCommentBox(detail) {
+		t.Errorf("sin comentarios no debería haber caja:\n%s", detail)
+	}
+	if !strings.Contains(detail, "Comments:") || !strings.Contains(detail, "none") {
+		t.Errorf("debería quedarse la línea de campo como estaba:\n%s", detail)
+	}
+}
+
+// TestBoxIsAllOrNothing: la caja se come dos filas, y una de las dos es borde. Si el
+// presupuesto no da para los dos bordes más una fila por comentario, la caja no se
+// pinta: dar la ficha completa es mejor que una caja con un solo comentario, que
+// parece que el PR solo tiene ese.
+func TestBoxIsAllOrNothing(t *testing.T) {
+	list := []model.Comment{conv("alice", "one"), conv("bob", "two"), conv("carol", "three")}
+	for _, tc := range []struct {
+		name    string
+		avail   int
+		wantBox bool
+	}{
+		{"caben los tres más los dos bordes", commentChrome + 3, true},
+		{"falta una fila para un comentario", commentChrome + 2, false},
+		{"solo caben los bordes", commentChrome, false},
+		{"no cabe ni un borde", 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := modelWithComments(t, 45, list, 3)
+			rows := m.commentLines(mustSelected(t, m), tc.avail, m.contentWidth())
+			got := len(rows) > 0
+			if got != tc.wantBox {
+				t.Errorf("con avail=%d la caja=%v, want %v", tc.avail, got, tc.wantBox)
+			}
+			if !got {
+				return
+			}
+			if n := len(rows); n != tc.avail {
+				t.Errorf("la caja ocupa %d filas y el presupuesto era %d", n, tc.avail)
+			}
+		})
+	}
+}
+
+// TestBoxNeverOverflowsItsBudget: con cualquier número de comentarios, a cualquier
+// alto y con o sin avisos de acción, el bloque no se pasa de las filas que le
+// dieron. Es la invariante que sostiene el layout: la suma de las cajas tiene que dar
+// la altura del terminal.
+func TestBoxNeverOverflowsItsBudget(t *testing.T) {
+	for _, height := range []int{24, 30, 40, 45, 60, 80} {
+		for _, n := range []int{1, 3, 5} {
+			list := make([]model.Comment, n)
+			for i := range list {
+				list[i] = conv("u", strings.Repeat("texto largo ", 20))
+			}
+			m := modelWithComments(t, height, list, n)
+			rows := m.layout().detailLines
+			it := mustSelected(t, m)
+			for _, denied := range []bool{false, true} {
+				if denied {
+					m.denied[it.ID()] = "no permission"
+				}
+				lines := m.detailLines(it, true, rows)
+				if len(lines) > rows {
+					t.Fatalf("alto %d con %d comentarios: el detalle devolvió %d filas para un panel de %d (denied=%v)",
+						height, n, len(lines), rows, denied)
+				}
+			}
+		}
+	}
+}
+
 // Los 13 campos ocupaban 7; los 12 que quedan más el URL a ancho completo tienen que
 // seguir siendo 7. Si esto falla, la decisión de darle al URL su fila se está
 // pagando con el espacio de los comentarios.
@@ -287,6 +458,11 @@ func TestAllocateIsDeterministic(t *testing.T) {
 // TestLongCommentKeepsItsRowsWhenOthersAreShort: el caso que motiva el reparto. Con
 // cuatro comentarios de una línea y uno de varios párrafos, el largo no puede
 // quedarse en su primera frase mientras sobran filas.
+//
+// El viewer se declara para que el ítem NO sea propio y no se pinten los dos avisos
+// de "approve unavailable": esos dos avisos son filas reales del panel, y lo que se
+// quiere comprobar aquí es el reparto entre comentarios, no cómo se come el espacio
+// un aviso de acción. El caso con avisos está cubierto por TestDetailAlwaysFitsThePanel.
 func TestLongCommentKeepsItsRowsWhenOthersAreShort(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
 		conv("alice", "one liner"),
@@ -296,6 +472,22 @@ func TestLongCommentKeepsItsRowsWhenOthersAreShort(t *testing.T) {
 		conv("dave", "one liner"),
 		conv("erin", "one liner"),
 	}, 5)
+	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "reviewer"}})
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
+		mkItem("github", "github.com", "acme/widget", "Add widget", 42, ""),
+	}, false))
+	m = withConversation(t, m, mustSelected(t, m), forge.CommentPage{
+		Comments: []model.Comment{
+			conv("alice", "one liner"),
+			conv("bob", "the timeout is 30x too high\n\nI would put it at 2s like the rest of the endpoints, "+
+				"otherwise the pool exhausts and the requests die in the queue without ever logging"),
+			conv("carol", "one liner"),
+			conv("dave", "one liner"),
+			conv("erin", "one liner"),
+		},
+		Total: 5,
+	})
+
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "I would put it at 2s") {
 		t.Errorf("el comentario largo debería ocupar más de su primera línea:\n%s", detail)
@@ -319,7 +511,7 @@ func TestCommentsShowBelowTheFields(t *testing.T) {
 
 	detail := detailText(t, m)
 	iField := strings.Index(detail, "State:")
-	iComment := strings.Index(detail, "Comments:")
+	iComment := strings.Index(detail, " "+commentTitle+" ")
 	if iField < 0 || iComment < 0 {
 		t.Fatalf("faltan bloques en el detalle:\n%s", detail)
 	}
@@ -388,13 +580,57 @@ func TestCommentsCapAtFive(t *testing.T) {
 // perdiendo conversación, que es el momento de abrir el PR. Sin él, cinco
 // comentarios se leerían como cinco comentarios y nadie iría a mirar los otros.
 func TestCommentsAnnounceThereAreMore(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{
+	list := []model.Comment{
 		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
 		conv("dave", "four"), conv("erin", "five"),
-	}, 23)
+	}
+	// Con viewer conocido el ítem no es propio y no hay avisos de acción, que es lo
+	// que hace falta para que el panel tenga hueco de verdad: entre los dos bordes
+	// de la caja, la línea del recuento y los cinco comentarios, un panel corto se
+	// queda sin sitio y el recuento es lo primero que cae.
+	m := modelWithComments(t, 45, list, 23)
+	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "reviewer"}})
+	it := mustSelected(t, m)
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
+	m = withConversation(t, m, it, forge.CommentPage{Comments: list, Total: 23})
+
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "5 of 23") {
 		t.Errorf("con 23 comentarios la ficha debería decir cuáles enseña:\n%s", detail)
+	}
+}
+
+// TestCountIsFirstToGoWhenSpaceIsTight: la línea del recuento es lo primero que se
+// cae cuando el panel va justo, antes que un comentario. Es lo que menos dice: lo que
+// dijo la gente está en las líneas de al lado, y el recuento solo añade que hay más
+// conversación fuera del panel.
+func TestCountIsFirstToGoWhenSpaceIsTight(t *testing.T) {
+	list := []model.Comment{
+		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
+		conv("dave", "four"), conv("erin", "five"),
+	}
+	m := modelWithComments(t, 45, list, 23)
+	it := mustSelected(t, m)
+	// El aviso del forge mete las dos filas que aprietan el panel (blanco + texto).
+	// Es el aviso que la ficha sigue pintando: el veto de aprobar lo propio ya no
+	// ocupa filas, así que hay que apretar por la vía que queda. No hace falta
+	// mandarla después de la página porque modelWithComments ya la envió, y
+	// applyPage borraría el denied del ítem.
+	m.denied[it.ID()] = "the forge refused the action"
+	m = withConversation(t, m, it, forge.CommentPage{Comments: list, Total: 23})
+
+	detail := detailText(t, m)
+	if !hasCommentBox(detail) {
+		t.Fatalf("la caja debería salir:\n%s", detail)
+	}
+	if strings.Contains(detail, "5 of 23") {
+		t.Errorf("con el panel justo el recuento es lo que tiene que caer, no un comentario:\n%s", detail)
+	}
+	// Los cinco siguen estando: es el recorte del recuento, no el de un comentario.
+	for _, want := range []string{"alice:", "bob:", "carol:", "dave:", "erin:"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("no debería caerse %q para que quepa el recuento:\n%s", want, detail)
+		}
 	}
 }
 
@@ -406,8 +642,8 @@ func TestCommentsCountOnlyWhenItMatters(t *testing.T) {
 	if strings.Contains(detail, "of 2") {
 		t.Errorf("no hay nada que avisar si se ve todo:\n%s", detail)
 	}
-	if !strings.Contains(detail, "Comments:") {
-		t.Errorf("debería seguir estando la etiqueta:\n%s", detail)
+	if !hasCommentBox(detail) {
+		t.Errorf("la caja de comentarios debería salir:\n%s", detail)
 	}
 }
 
@@ -473,7 +709,7 @@ func TestCommentCutIsMarked(t *testing.T) {
 	long := strings.Repeat("palabra ", 400)
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", long)}, 1)
 	detail := detailText(t, m)
-	if !strings.Contains(detail, "Comments:") {
+	if !hasCommentBox(detail) {
 		t.Fatalf("a 45 filas los comentarios deberían caber:\n%s", detail)
 	}
 	if !strings.Contains(detail, "…") {

@@ -9,14 +9,41 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
-- **Los primeros 5 comentarios del PR/MR se ven en el detalle.** Debajo de la
-  ficha, con su autor, del más antiguo al más reciente. Se piden al forge al llegar
-  el cursor al ítem y se cachean, así que navegar no vuelve a preguntar y el
-  refresco del inbox no los tira; solo una acción sobre el ítem los invalida, que
-  es lo único que puede escribir en la conversación. No hay tecla nueva: son parte
-  de la ficha, no una vista aparte, y si el forge no responde el panel lo dice
-  (`loading…` / `not read: …` / `none`) en vez de dejar un hueco que no se
-  distingue de "este PR no tiene comentarios".
+- **Los últimos 5 comentarios del PR/MR se ven en el detalle.** En una caja propia
+  con su "Comments" en el borde, debajo de la ficha y con su autor. Se piden al
+  forge al llegar el cursor al ítem y se cachean, así que navegar no vuelve a
+  preguntar y el refresco del inbox no los tira; solo una acción sobre el ítem los
+  invalida, que es lo único que puede escribir en la conversación. No hay tecla
+  nueva: son parte de la ficha, no una vista aparte, y si el forge no responde el
+  panel lo dice (`loading…` / `not read: …` / `none`) en vez de dejar un hueco que
+  no se distingue de "este PR no tiene comentarios".
+  - Se enseña el **final** de la conversación: los últimos 5, en orden
+    cronológico y del más antiguo de esos al más nuevo, que es como se lee una
+    discusión. Es donde está lo último que se dijo del PR. Si hay más de los que
+    caben, la etiqueta lo dice (`5 of 23`), que es lo que indica que conviene abrir
+    el PR.
+  - Van en una **caja redondeada con "Comments" en el borde**, no como campos más de
+    la ficha: la conversación no es un dato del PR sino lo que la gente dijo de él, y
+    un borde lo dice sin tener que explicarlo. El borde es un gris un tono por encima
+    del de las cajas de la pantalla, o los dos bordes se fundirían en una sola línea
+    y el anidamiento dejaría de leerse.
+  - **Sin comentarios no hay caja.** Una caja alrededor de la palabra "none" no
+    separa nada, y como es el estado de todos los PRs sin conversación, un borde
+    apareciendo y desapareciendo en cada movimiento del cursor sería ruido. Se queda
+    la línea de campo de siempre. Lo mismo con `loading…` y `not read: …`: son
+    mensajes de una línea, no conversación.
+  - La caja es **todo o nada**: si el presupuesto no da para sus dos bordes más una
+    fila por comentario, no se pinta. En un terminal de 30 filas con tres comentarios
+    y tres filas libres, la caja cabría para un comentario y perdería los otros dos;
+    ver uno y perder dos es peor que no ver ninguno, porque un recorte de la caja no
+    parece un recorte: parece que el PR solo tiene ese comentario.
+  - El recuento (`5 of 23`) es lo **primero que se cae** cuando el panel va justo,
+    antes que un comentario: entre sus dos bordes y él, un panel de 18 filas solo deja
+    sitio para cuatro de los cinco. Y es lo que menos dice de lo que dijo la gente.
+  - Las **notas de sistema de GitLab se descartan** ("assigned to @x", "added 3
+    commits"): no son conversación sino historial de acciones del MR, y llenaban las
+    cinco filas con ruido que ya está en otra parte de la ficha. Por eso se piden
+    3× el tope y se recorta por la cola después.
   - Para que cupieran, los campos de la ficha pasan a **rejilla de dos columnas
     siempre**, no solo en terminales bajos. En una columna ocupaban 16 de las ~18
     líneas que da el 40% de un terminal normal y no cabía ni un comentario; en
@@ -44,6 +71,17 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   - Cuando el panel es pequeño los comentarios son lo **primero que se cae**,
     antes que un campo de la ficha: son lo único que se puede volver a pedir en un
     instante, y un campo que se va no vuelve.
+
+### Removed
+
+- El veto de aprobar un PR/MR propio **ya no ocupa una línea de la ficha** ("approve
+  unavailable: … · merge still applies"). Se queda solo en el aviso, que salta al pulsar
+  la tecla, que es cuando se puede actuar sobre él. La ficha lo pintaba en todos los
+  renders de todos tus PRs —casi todos los de "Created by me"— repitiendo lo que el
+  campo `Role` ya dice, y le quitaba dos filas a los comentarios en justo los ítems
+  donde más se echa de menos. El veto en sí no cambia: `approve` sigue sin salir y la
+  razón se sigue explicando entera. La denegación del forge (`action disabled: …`),
+  que es pegajosa y su aviso caduca, sigue en la ficha.
 
 ### Fixed
 

@@ -183,16 +183,16 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-// TestCommentsQueryShape: la conversación se pide aparte del inbox y con `first`,
-// no `last`, porque la ficha enseña el principio de la conversación (dónde está
-// el contexto de qué se pidió) y no las últimas respuestas peleándose por el
-// sitio. `totalCount` va en la misma conexión para no gastar una segunda consulta.
+// TestCommentsQueryShape: la conversación se pide aparte del inbox y con `last`,
+// porque la ficha enseña el final de la conversación: lo último que se dijo del PR
+// y el estado actual de la discusión. `totalCount` va en la misma conexión para no
+// gastar una segunda consulta.
 func TestCommentsQueryShape(t *testing.T) {
 	q := commentsQuery("acme", "widget", 42, commentFetch)
 	for _, want := range []string{
 		`repository(owner: "acme", name: "widget")`,
 		"pullRequest(number: 42)",
-		"comments(first: 15)",
+		"comments(last: 15)",
 		"totalCount",
 		"author { login }",
 		"body",
@@ -202,8 +202,8 @@ func TestCommentsQueryShape(t *testing.T) {
 			t.Errorf("commentsQuery no contiene %q:\n%s", want, q)
 		}
 	}
-	if strings.Contains(q, "last:") {
-		t.Errorf("commentsQuery no debería pedir los últimos comentarios:\n%s", q)
+	if strings.Contains(q, "first:") {
+		t.Errorf("commentsQuery no debería pedir el principio de la conversación:\n%s", q)
 	}
 	// El margen sobre el tope de la ficha es lo que hace que un PR con boilerplate
 	// de bots no llegue corto tras filtrar.
@@ -223,10 +223,11 @@ func TestCommentsEscapesRepoNames(t *testing.T) {
 	}
 }
 
-// TestCommentsCapsAtFichaLimitKeepingTotal: la consulta trae más de los que la
-// ficha enseña, así que se recorta a CommentLimit. El total se conserva entero:
-// es lo que permite decir "5 de 23" y saber que la ficha se está perdiendo
-// conversación, que es justo lo que decide abrir el PR.
+// TestCommentsKeepLastAtFichaLimitKeepingTotal: la consulta trae más de los que la
+// ficha enseña, así que se recorta a CommentLimit. El recorte es por la COLA: la
+// conexión llega al revés y lo que sobra por delante es justo lo que no se iba a
+// enseñar. El total se conserva entero: es lo que permite decir "5 de 23" y saber que
+// la ficha se está perdiendo conversación, que es justo lo que decide abrir el PR.
 func TestCommentsCapsAtFichaLimitKeepingTotal(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", `#!/bin/sh
@@ -253,8 +254,13 @@ OUT
 	if page.Total != 23 {
 		t.Errorf("total = %d, want 23 (no se recorta)", page.Total)
 	}
-	if page.Comments[0].Body != "c0" {
-		t.Errorf("el primero debería ser el más antiguo, no %q", page.Comments[0].Body)
+	// La conexión devuelve los 7 en orden cronológico, y el recorte se queda con
+	// los últimos 5 sin invertirlos: primero el más antiguo de esos.
+	want := []string{"c2", "c3", "c4", "c5", "c6"}
+	for i, w := range want {
+		if page.Comments[i].Body != w {
+			t.Errorf("comments[%d] = %q, want %q (los últimos, en orden)", i, page.Comments[i].Body, w)
+		}
 	}
 }
 

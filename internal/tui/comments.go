@@ -9,6 +9,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -17,6 +18,7 @@ import (
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/forge/parse"
+	"prdash/internal/tui/bordered"
 )
 
 // commentState es lo que la ficha sabe de un ítem en lo que a conversación se
@@ -120,10 +122,16 @@ func (m *Model) applyComments(msg commentsMsg) {
 // tras la ficha. `avail` son las filas que quedan; el bloque se queda en ellas o
 // no se pinta.
 //
-// Se reparte el hueco entre los comentarios en vez de darle al primero todo lo que
-// sobre: así los cinco se ven siempre, y en un terminal alto se lee algo más que
-// la primera línea de cada uno. Al revés, un comentario largo se comería el
-// panel y la ficha enseñaría un comentario y un hueco.
+// Cuando hay comentarios van en una caja propia titulada, no como campos más de la
+// ficha: la conversación no es un dato del PR sino lo que la gente dijo de él, y un
+// borde lo dice sin tener que explicarlo. Los estados sueltos (cargando, error,
+// ninguno) se quedan como líneas de campo porque son mensajes de una línea, no
+// conversación.
+//
+// El hueco se reparte entre los comentarios en vez de dárselo al primero: así los
+// cinco se ven siempre y en un terminal alto se lee algo más que la primera
+// línea de cada uno. Al revés, un comentario largo se comería el panel y la
+// ficha enseñaría un comentario y un hueco.
 func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if avail <= 0 {
 		return nil
@@ -139,13 +147,34 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	case !st.ready:
 		// La consulta está en vuelo. Se dice en vez de dejar un hueco en blanco:
 		// un hueco no se distingue de "este PR no tiene comentarios" y aquí
-		// Todavía no se sabe.
+		// todavía no se sabe.
 		return []string{label("Comments", styleDim.Render("loading…"))}
 	case st.err != "":
 		return []string{label("Comments", styleWarn.Render(truncate("not read: "+st.err, max(1, inner-labelWidth))))}
 	case len(st.list) == 0:
+		// Sin comentarios no hay caja. La caja existe para separar la conversación
+		// de los campos, y una caja alrededor de la palabra "none" no separa nada:
+		// además es el estado de todos los PRs sin conversación, así que un borde
+		// apareciendo y desapareciendo en cada movimiento del cursor es ruido.
 		return []string{label("Comments", styleDim.Render("none"))}
 	}
+
+	// La caja no se pinta a medias. Un bloque con su borde de arriba y sin el de
+	// abajo no es media caja, es ruido que ocupa lo mismo que el bloque entero: si
+	// no caben los dos bordes, no cabe la conversación y se cae entera (ver la
+	// escalera de degradación en detailLines).
+	//
+	// Y además tiene que caber TODA la conversación, no un trozo. La caja se come
+	// dos filas, y una de las dos es borde: en un terminal de 30 filas, con tres
+	// comentarios y tres filas de presupuesto, el bloque cabría sin caja para tres
+	// comentarios y con caja para uno. Ver uno y perder los otros dos es peor que no
+	// ver ninguno, porque un recorte de la caja no parece un recorte: parece que el
+	// PR solo tiene ese comentario. Sin caja los pierde enteros, y el usuario ve la
+	// ficha completa, que es lo que corresponde a un terminal corto.
+	if avail < commentChrome+len(st.list) {
+		return nil
+	}
+	budget := avail - commentChrome
 
 	// Se acota aquí y no solo en el adapter. CommentLimit es una decisión de la
 	// ficha, y una ficha que se la salta porque confió en quién la llenó enseñaría
@@ -154,8 +183,14 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if len(shown) > forge.CommentLimit {
 		shown = shown[:forge.CommentLimit]
 	}
+	// El mismo mínimo, medido ya sobre lo que se va a enseñar y no sobre lo que vino.
+	if avail < commentChrome+len(shown) {
+		return nil
+	}
 
-	out := []string{label("Comments", styleCount.Render(commentCount(len(shown), st.total)))}
+	// El cuerpo va dentro de la caja, así que el ancho de texto son dos runes
+	// menos: los bordes verticales.
+	bodyWidth := max(8, inner-commentBoxBorder)
 
 	// Se cuenta cuántas filas necesita cada comentario componiéndolo con el tope
 	// alto, que es el mismo código que lo pinta, así que el reparto no puede mentir
@@ -164,8 +199,19 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	need := make([]int, len(shown))
 	total := 0
 	for i, c := range shown {
-		need[i] = len(commentBody(c, maxCommentLines, inner))
+		need[i] = len(commentBody(c, maxCommentLines, bodyWidth))
 		total += need[i]
+	}
+
+	// El recuento es la primera línea del cuerpo y lo primero que se cae si el
+	// presupuesto va justo: entre sus dos bordes y él, un panel de 18 filas solo
+	// deja sitio para cuatro de los cinco comentarios. Y es lo que menos dice de
+	// lo que dijo la gente —eso está en las líneas de al lado—, el recuento solo
+	// añade que hay más conversación fuera del panel.
+	showCount := budget >= 1+len(shown)
+	body := make([]string, 0, budget)
+	if showCount {
+		body = append(body, commentIndent+styleCount.Render(commentCount(len(shown), st.total)))
 	}
 
 	// Si caben enteros, cada uno toma lo que necesita. Es lo que evita que un
@@ -173,21 +219,48 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	// de cuatro de una línea, que es lo que pasaba con un reparto a ciegas.
 	//
 	// Y si no caben, a todos se les da una fila —para que los cinco estén presentes,
-	// que es lo pedido— y el sobrante va a quien más tiene que perder, ordenado por
-	// lo que le falta. Es preferible a darle el panel al primero, que se comería
-	// los cinco.
+	// que es lo pedido— y el sobrante va a quién más tiene que perder. Es preferible
+	// a darle el panel al primero, que se comería los cinco.
+	forRows := budget - len(body)
 	rows := need
-	if total > avail-1 {
-		rows = allocate(need, avail-1)
+	if total > forRows {
+		rows = allocate(need, forRows)
 	}
 
 	for i, c := range shown {
-		if len(out) >= avail {
-			break
+		lines := commentBody(c, max(1, rows[i]), bodyWidth)
+		if len(body)+len(lines) > budget {
+			// Red de seguridad: la comprobación de arriba ya garantiza que cada
+			// comentario tiene al menos su fila, así que aquí no debería entrar. Si
+			// entra, es que el reparto dio más de una fila a alguien y no se
+			// descuadra la caja: se cae entera.
+			return nil
 		}
-		out = append(out, commentBody(c, max(1, rows[i]), inner)...)
+		body = append(body, lines...)
 	}
-	return out
+	return commentBox(body, inner)
+}
+
+// commentChrome son las filas que cuesta la caja: borde de arriba y de abajo. El
+// título va embebido en la de arriba, así que no gasta una más.
+const commentChrome = 2
+
+// commentBoxBorder son las columnas que se come la caja: un borde a cada lado.
+const commentBoxBorder = 2
+
+// commentTitle es el título de la caja. Va en el borde y no como etiqueta de
+// campo: eso es justo lo que distingue este bloque de los datos de la ficha.
+const commentTitle = "Comments"
+
+// commentBox envuelve el bloque de comentarios en una caja redondeada titulada y
+// devuelve sus líneas sueltas. El ancho es el interior del panel de detalle, para
+// que la caja quede dentro y no se pase del borde de la de fuera.
+func commentBox(body []string, width int) []string {
+	text := bordered.RenderWithTitle(
+		bordered.Rounded(), commentBorderColor, " "+commentTitle+" ",
+		strings.Join(body, "\n"), width,
+	)
+	return strings.Split(text, "\n")
 }
 
 // allocate reparte un presupuesto de filas entre comentarios que piden más de la
