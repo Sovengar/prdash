@@ -144,6 +144,10 @@ type NotifyOptions struct {
 // Container identifica dónde abrir un layout: el workspace y el pane base que
 // se reutiliza como primer pane del plan. Un PaneID vacío hace que el layout
 // cree su propio workspace.
+//
+// El WorkspaceID se usa para abrir los tabs siguientes al primero, así que
+// ambos vienen juntos: la provisión nativa los entrega emparejados y, sin
+// ninguno, el layout crea el workspace y toma de ahí los dos.
 type Container struct {
 	WorkspaceID string
 	PaneID      string
@@ -191,6 +195,7 @@ type Port interface {
 	WorkspaceCreate(ctx context.Context, spec WorkspaceSpec) (WorkspaceInfo, error)
 	WorkspaceClose(ctx context.Context, workspaceID string, group bool) error
 	TabCreate(ctx context.Context, spec TabSpec) (TabInfo, error)
+	TabRename(ctx context.Context, tabID, label string) error
 
 	PaneSplit(ctx context.Context, spec SplitSpec) (PaneInfo, error)
 	PaneRun(ctx context.Context, paneID string, argv []string) error

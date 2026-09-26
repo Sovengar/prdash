@@ -20,7 +20,6 @@ import (
 	"prdash/internal/forge/model"
 	"prdash/internal/inbox"
 	"prdash/internal/review/executor"
-	"prdash/internal/selection"
 	"prdash/internal/state"
 )
 
@@ -167,10 +166,6 @@ type Model struct {
 	// cursor, y rebuild, cuando llegan datos nuevos.
 	scroll int
 
-	detailOpen bool
-	detailID   model.ID
-	detailItem model.Item // último estado conocido, por si el ítem sale del inbox
-
 	width, height int
 	loading       bool
 	backoff       time.Duration
@@ -206,6 +201,13 @@ type Model struct {
 	mounter   Mounter
 	mountBusy bool
 
+	// mergeArmed es la primera pulsación de merge: espera la segunda, que es la
+	// que elige el modo y ejecuta. mergeArmedID fija el ítem que se armó, porque
+	// un refresco puede recolocar el cursor entre medias y el merge debe salir
+	// sobre lo que el usuario confirmó, no sobre lo que ahora esté debajo.
+	mergeArmed   bool
+	mergeArmedID model.ID
+
 	events  chan event
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -213,14 +215,6 @@ type Model struct {
 
 	// cachePath es la ruta del snapshot; vacía = sin cache (tests).
 	cachePath string
-
-	// selectionPath es la ruta donde se persiste el ítem seleccionado para que
-	// la acción `prdash.mount-review` sin URL lo pueda montar; vacía = sin
-	// persistencia (tests).
-	selectionPath string
-	// selectionID es la identidad de la última selección persistida, para no
-	// reescribir el fichero en cada refresco.
-	selectionID model.ID
 }
 
 // New construye el modelo con la config y los adapters habilitados. Pinta el
@@ -274,30 +268,6 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 // SetMounter inyecta el montador de reviews. nil lo deshabilita: la acción de
 // montar review informa entonces que requiere Herdr.
 func (m *Model) SetMounter(mounter Mounter) { m.mounter = mounter }
-
-// SetSelectionPath fija dónde se persiste el ítem seleccionado y sincroniza la
-// selección actual. Vacío deshabilita la persistencia (tests).
-func (m *Model) SetSelectionPath(path string) {
-	m.selectionPath = path
-	m.syncSelection()
-}
-
-// syncSelection persiste la selección actual si cambió respecto a la última
-// escrita. Es best-effort: un fallo de disco no debe tumbar la TUI.
-func (m *Model) syncSelection() {
-	if m.selectionPath == "" {
-		return
-	}
-	it, ok := m.selected()
-	if !ok {
-		return
-	}
-	if it.ID() == m.selectionID {
-		return
-	}
-	m.selectionID = it.ID()
-	_ = selection.Save(m.selectionPath, selection.FromItem(it, time.Now()))
-}
 
 // Init lanza el primer refresco, la bomba de eventos, el spinner y el tick.
 func (m Model) Init() tea.Cmd {
@@ -609,7 +579,6 @@ func (m *Model) rebuild() {
 	// Un refresco puede cambiar cuántas líneas ocupa cada sección: el
 	// desplazamiento se reacomoda para no dejar el cursor fuera de la ventana.
 	m.syncScroll()
-	m.syncSelection()
 }
 
 // forgeResults compone un resultado por forge de forma determinista.
@@ -701,18 +670,6 @@ func (m *Model) selected() (model.Item, bool) {
 		return model.Item{}, false
 	}
 	return rows[m.cursor], true
-}
-
-// liveDetail deriva el ítem del detalle del estado vivo del inbox por su
-// identidad, de modo que refleje refrescos y acciones sin volver a abrirlo. Si
-// el ítem ya no está en el inbox, devuelve el último estado conocido.
-func (m *Model) liveDetail() model.Item {
-	for _, it := range m.rows() {
-		if it.ID() == m.detailID {
-			return it
-		}
-	}
-	return m.detailItem
 }
 
 // sectionItems devuelve los ítems de una sección.

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -322,18 +321,15 @@ func TestToastTickDoesNotTouchTheEventChannel(t *testing.T) {
 	}
 }
 
-// TestToastInViewOfDetail: el overlay también se aplica con el detalle abierto.
+// TestToastInViewOfDetail: el overlay también se aplica sobre el panel de
+// detalle, que es la única vista que hay.
 func TestToastInViewOfDetail(t *testing.T) {
 	m, _ := toastTestModel(t)
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
-	m = send(t, m, tea.KeyPressMsg{Code: []rune(m.cfg.KeyFor("detail"))[0], Text: m.cfg.KeyFor("detail")})
-	if !m.detailOpen {
-		t.Fatal("el detalle debería estar abierto")
-	}
 	m.toast.show(state.SelfReviewReason, toastWarning)
 	if !strings.Contains(stripANSI(m.View().Content), "you cannot approve your own") {
-		t.Fatal("el aviso debería verse también con el detalle abierto")
+		t.Fatal("el aviso debería verse sobre el panel de detalle")
 	}
 }
 

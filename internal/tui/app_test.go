@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -62,6 +63,10 @@ func send(t *testing.T, m Model, msg tea.Msg) Model {
 	return out.(Model)
 }
 
+// press pulsa una tecla. Las mayúsculas se construyen como las construye el
+// decoder de verdad —Code en minúscula, Mod shift y Text en mayúscula— porque
+// Key.String() prioriza Text: montar el Code en mayúscula probaría un camino que
+// el terminal nunca produce.
 func press(t *testing.T, m Model, key string) Model {
 	t.Helper()
 	km := tea.KeyPressMsg{Code: []rune(key)[0], Text: key}
@@ -80,6 +85,10 @@ func press(t *testing.T, m Model, key string) Model {
 		km = tea.KeyPressMsg{Code: tea.KeyPgUp}
 	case "pgdown":
 		km = tea.KeyPressMsg{Code: tea.KeyPgDown}
+	default:
+		if len(key) == 1 && unicode.IsUpper(rune(key[0])) {
+			km = tea.KeyPressMsg{Code: unicode.ToLower(rune(key[0])), Mod: tea.ModShift, Text: key}
+		}
 	}
 	out, _ := m.Update(km)
 	return out.(Model)
@@ -197,7 +206,7 @@ func TestIncrementalPages(t *testing.T) {
 func TestManualRefreshIncrementsCycle(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	before := m.cycle
-	m = press(t, m, "r")
+	m = press(t, m, "R")
 	if m.cycle != before+1 {
 		t.Fatalf("cycle = %d, want %d", m.cycle, before+1)
 	}
@@ -245,37 +254,48 @@ func TestRefreshUpdatesOtherItemsDuringAction(t *testing.T) {
 	}
 }
 
-// TestDetailOpenAndBack cubre el escenario de detalle: se ve la info y se
-// vuelve al inbox sin perder la selección.
-func TestDetailOpenAndBack(t *testing.T) {
+// detailPanel acota el texto de la vista a la caja del panel de detalle, desde
+// su borde superior. La lista de arriba menciona también el resto de ítems, así
+// que sin acotar, "el panel no se ha actualizado" daría falsos positivos.
+func detailPanel(view string) string {
+	lines := strings.Split(stripANSI(view), "\n")
+	for i, l := range lines {
+		if strings.Contains(l, "╭ acme/") {
+			return strings.Join(lines[i:], "\n")
+		}
+	}
+	return ""
+}
+
+// TestDetailPanelFollowsCursor: la ficha del ítem vive en el panel inferior y no
+// hay que abrirla. Se ve desde el primer momento y cambia con el cursor, así que
+// no existe ningún estado "abierto/cerrado" que conservar.
+func TestDetailPanelFollowsCursor(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
 		mkItem("github", "github.com", "acme/widget", "Add widget", 1, "APPROVED"),
 		mkItem("github", "github.com", "acme/widget", "Otro", 2, ""),
 	}, false))
-	m = press(t, m, "down") // selecciona el segundo
-	cursor := m.cursor
 
-	m = press(t, m, "enter")
-	if !m.detailOpen {
-		t.Fatal("el detalle debería estar abierto")
+	// Sin tocar ninguna tecla, el panel ya describe el primer ítem.
+	panel := detailPanel(m.View().Content)
+	if panel == "" {
+		t.Fatalf("no hay caja de detalle en la vista:\n%s", m.View().Content)
 	}
-	view := stripANSI(m.View().Content)
-	for _, want := range []string{"Otro", "Author", "Source", "feat/x", "Target", "main", "#2", "https://"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("el detalle no contiene %q\n%s", want, view)
+	for _, want := range []string{"Add widget", "Author", "Source", "feat/x", "Target", "main", "#1"} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("el panel no contiene %q\n%s", want, panel)
 		}
 	}
-	if m.cursor != cursor {
-		t.Fatalf("abrir el detalle no debería mover el cursor")
-	}
 
-	m = press(t, m, "esc")
-	if m.detailOpen {
-		t.Fatal("el detalle debería cerrarse")
+	// Y sigue al cursor: el segundo ítem se ve sin abrir nada.
+	m = press(t, m, "down")
+	panel = detailPanel(m.View().Content)
+	if !strings.Contains(panel, "Otro") || !strings.Contains(panel, "#2") {
+		t.Errorf("el panel no siguió al cursor\n%s", panel)
 	}
-	if m.cursor != cursor {
-		t.Fatalf("volver no debería perder la selección (cursor=%d, want %d)", m.cursor, cursor)
+	if strings.Contains(panel, "#1") || strings.Contains(panel, "Add widget") {
+		t.Errorf("el panel sigue mostrando el ítem anterior\n%s", panel)
 	}
 }
 
@@ -366,10 +386,10 @@ func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 		t.Errorf("la fila de un PR propio debería marcar el rol:\n%s", view)
 	}
 
-	m = send(t, m, tea.KeyPressMsg{Code: []rune(m.cfg.KeyFor("detail"))[0], Text: m.cfg.KeyFor("detail")})
-	detail := stripANSI(m.View().Content)
-	if !strings.Contains(detail, "approve unavailable") {
-		t.Errorf("el detalle debería explicar que approve no aplica:\n%s", detail)
+	// El veto de approve sobre un PR propio lo explica el panel de detalle, sin
+	// abrir ninguna vista aparte.
+	if detail := stripANSI(m.View().Content); !strings.Contains(detail, "approve unavailable") {
+		t.Errorf("el panel debería explicar que approve no aplica:\n%s", detail)
 	}
 }
 
@@ -591,7 +611,7 @@ func TestManualOnlyRefreshHasNoTick(t *testing.T) {
 // vigente siempre emite su refreshDone, que baja loading y rearma el tick.
 func TestCurrentCycleDrainsLoading(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = press(t, m, "r")
+	m = press(t, m, "R")
 	if !m.loading {
 		t.Fatal("el refresco debe quedar en carga")
 	}
@@ -612,9 +632,9 @@ func TestCurrentCycleDrainsLoading(t *testing.T) {
 // TestRefreshDoesNotOverlap cubre M-1: no se solapan ciclos.
 func TestRefreshDoesNotOverlap(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = press(t, m, "r")
+	m = press(t, m, "R")
 	cycle := m.cycle
-	m = press(t, m, "r") // con el ciclo en vuelo
+	m = press(t, m, "R") // con el ciclo en vuelo
 	if m.cycle != cycle {
 		t.Fatalf("no debe arrancar un ciclo solapado (cycle=%d, want %d)", m.cycle, cycle)
 	}
@@ -659,7 +679,7 @@ func TestSingleChannelReader(t *testing.T) {
 		m = send(t, m, tickMsg{})
 		m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 	}
-	m = press(t, m, "r")
+	m = press(t, m, "R")
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 
 	// Un evento del canal consume un lector y rearma exactamente uno.
@@ -675,7 +695,6 @@ func TestDetailReflectsActionUpdate(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
-	m = press(t, m, "enter")
 
 	refreshed := item
 	refreshed.State = "MERGED"

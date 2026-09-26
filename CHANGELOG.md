@@ -7,6 +7,142 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Reutilizar un worktree cuyo workspace de Herdr estaba cerrado ya no produce un
+  review en un workspace suelto. `worktree list` puede devolver un
+  `open_workspace_id` **obsoleto**: Herdr lo guarda en su sesión persistida, así
+  que un workspace cerrado deja el id apuntando a nada y `pane list` responde
+  `workspace_not_found` (verificado en 0.9.1). prdash lo aceptaba sin
+  comprobarlo, se quedaba sin pane base, y el layout abría un `workspace create`
+  de repuesto: el review aparecía como un workspace independiente del worktree
+  que lo contiene, y uno nuevo en cada montaje. Por eso el montaje de un PR
+  **nuevo** salía bien y el de uno ya existente no. Ahora el id se valida con
+  `pane list` —que de paso da el pane base, y ahorra un viaje— y si no responde
+  se cae a la adopción de siempre.
+- Un `pane list` que falla ya no degrada en silencio a abrir un workspace
+  distinto. Si el contenedor dice que el worktree vive en un workspace y ese
+  workspace no responde, el montaje falla nombrando el id en vez de montar el
+  review en un sitio que no es el suyo. Es la diferencia entre un error legible y
+  un workspace fantasma.
+- El review ya no aparece como un workspace suelto de Herdr. `herdr worktree
+  create` se niega a abrir un path que ya existe (`fatal: '…' already exists`,
+  verificado en 0.9.1), así que al reutilizar un checkout de una sesión anterior
+  prdash no tenía forma de crear el workspace nativo: `worktree list` no
+  devolvía `open_workspace_id`, el worktree volvía sin contenedor y el layout se
+  fabricaba un `workspace create` propio. El resultado era un workspace
+  desligado del worktree que lo contiene, y uno nuevo en cada montaje. Ahora la
+  reutilización **adopta** el checkout: si no hay workspace abierto, se abre uno
+  con cwd en el propio worktree, que es lo que Herdr registra como su workspace
+  (comprobado contra 0.9.1: `open_workspace_id` aparece). Si ni eso se puede, el
+  montaje falla nombrando la ruta a limpiar en vez de fingir que salió bien.
+- El pane de Hunk revisa el **working tree** (`hunk diff` sin revspec) en vez del
+  diff del PR contra la rama destino. El pane comparte tab con el editor y el
+  agente, así que lo que interesa es lo que se está tocando: el diff del PR es un
+  objetivo fijo que no se mueve mientras editas y esconde los cambios en curso.
+  El diff del PR sigue disponible por `[commands].hunk` (`hunk diff main...HEAD`).
+  La rama destino no se pierde: sigue llegando al pane por `PRDASH_BASE`.
+
+### Changed
+
+- El montaje de `r` abre **dos tabs** en vez de un layout de tres panes: `Review`
+  (TUICR + editor) y `Edit` (Hunk + agente), con los dos panes de cada tab al 50 %.
+  Leer y editar son dos modos de atención distintos y meterlos en un mismo grid
+  hacía que el diff, la review y el agente peleasen por el mismo espacio. El
+  primer tab **renombra** el tab que ya trae el worktree en vez de crear uno
+  nuevo, precisamente para no dejar una pestaña huérfana de la que el usuario
+  tendría que acordarse de cerrar; el segundo lo crea Herdr con `tab create
+  --no-focus`. Un tab que se queda sin panes no se abre: una pestaña en blanco es
+  ruido, no un layout.
+- El pane del editor es nuevo y su orden sale de `[tools].editor` (default `vi`),
+  con override verbatim por `[commands].editor`. A diferencia de tuicr, hunk y el
+  agente, **nunca se omite**: su orden es un comando de shell y el caso normal es
+  justo el que un chequeo de binarios no puede ver — el `vi` que expande a `nvim .`
+  en tu rc no existe en el `PATH`, así que buscarlo lo declararía ausente y el tab
+  de review se quedaría con un solo pane sin explicación. Una orden mal escrita se
+  ve en el propio pane, que es cuando el usuario la está mirando.
+
+### Removed
+
+- **Fuera el plugin de Herdr.** No era necesario para nada de lo que prdash
+  promises: el worktree y los panes los abre el propio binario llamando a la CLI
+  de Herdr por subproceso (`herdr worktree create`, `herdr pane split`, `herdr
+  pane run`). El plugin era solo el punto de entrada que Herdr usaba para llamar
+  a prdash. Se van el manifiesto, los subcomandos `prdash herdr <inbox|mount|link>`
+  y su dispatch.
+  - Con ello cae también la persistencia de la selección
+    (`internal/selection`, `SetSelectionPath`, `trackSelection`): existía únicamente
+    para que la tecla global del plugin montara lo último seleccionado desde otro
+    pane, y sin plugin nadie la lee.
+  - **Se pierde** el Ctrl+click sobre una URL de PR/MR para montarla, y la tecla
+    de Herdr que montaba lo seleccionado desde fuera de prdash. Para lo segundo
+    se salta al pane de prdash y se pulsa `r`. No hay alternativa para lo primero:
+    los link handlers son exclusivamente de plugin.
+  - **No cambia** cómo se abre el inbox. Sigue siendo `prdash`, y sigue montando
+    worktree y panes igual. Lo único que hace falta es lanzarlo desde un pane de
+    Herdr (el cliente exige `HERDR_ENV=1`, que Herdr solo inyecta a sus hijos);
+    un atajo en `config.toml` es una comodidad, no un requisito.
+  - `internal/herdr/` **se queda**: lo sigue usando el orquestador para el layout
+    de panes y la provisión nativa de worktrees.
+
+### Added
+
+- Merge con modo elegible y doble confirmación. `m` ya no mergea a la primera: la
+  primera pulsación solo arma, la caja de Keybinds se sustituye por la
+  confirmación, y la segunda tecla **es** la elección del modo — `m` merge commit,
+  `r` rebase, `s` squash, `esc` cancelar. No hay modo por defecto: un merge
+  reescribe historia y no se deshace con un comando, así que no debe existir
+  ningún camino que lo dispare con una estrategia que el usuario no ha nombrado.
+  Cualquier otra tecla desarma y hace lo que haría normalmente, para que un `m` a
+  destiempo no deje la vista esperando la segunda pulsación; `q` y `ctrl+c`
+  siguen cerrando. Los guards se comprueban al armar y no al confirmar, y el
+  armado fija el ítem: si un refresco recoloca el cursor entre medias, el merge
+  sale sobre lo que se confirmó o no sale. Los avisos nombran el modo al empezar y
+  al terminar, porque un "merge ok" a secas no dice si se aplicó el rebase que
+  nadie pidió. Cada forge traduce el modo a su flag: `gh pr merge --merge /
+  --rebase / --squash` y `glab mr merge` con `--rebase` / `--squash` o sin
+  estrategia (merge commit es ahí la ausencia de flag). Un modo desconocido es un
+  warning y no lanza la CLI, porque `gh pr merge` sin flag de estrategia abre un
+  prompt que en un subproceso no interactivo se queda colgado.
+- Esquema de teclas reorganizado: `r` monta el review, `R` refresca, `m` mergea y
+  `a` aprueba. Antes `m` era el review y `M` el merge, así que la tecla de la
+  acción destructiva y la de la de montar vivían en el mismo dedo. Un test
+  comprueba que los defaults no comparten tecla: `ActionForKey` resuelve por
+  orden alfabético, así que una colisión deja una acción muerta sin avisar.
+
+### Fixed
+
+- GitLab ya no reporta "merge ok" sin haber mergeado. `glab mr merge` tiene
+  `--auto-merge` en **true** por defecto, así que con un pipeline en marcha la
+  orden no mergeaba: solo dejaba el MR en cola de auto-merge y salía con exit 0.
+  prdash ahora pasa `--auto-merge=false` siempre. Era un bug silencioso en la
+  dirección más incómoda posible: la UI confirmaba algo que no había ocurrido.
+
+- La caja de atajos ya no esconde dos teclas que sí funcionaban. `m` (montar
+  review) y `o` (abrir en el navegador) estaban bound y operativas, pero no se
+  pintaban nunca: la barra se componía con una lista a mano de seis acciones que
+  se había quedado desfasada, mientras la config sí sabía de las ocho. Ahora hay
+  una sola fuente —`config.Hints()`, una lista ordenada de la que salen tanto las
+  acciones configurables como las teclas fijas—, y un test vigila que ninguna
+  acción de `[keybindings]` se quede fuera, así que el desfase no puede volver a
+  colarse en silencio.
+- `section-next` ya responde a su propio atajo. Estaba cableada a `tab` por
+  encima del dispatcher, así que rebindearla en `[keybindings]` anunciaba una tecla
+  en la barra de atajos que no hacía nada. Sale ya del mapa configurado.
+- La tecla de salir sobrevive al recorte de la barra. Con terminal estrecho las
+  líneas de atajos se acotan a tres y se perdía la cola, que era justo donde
+  estaba `quit` —el propio comentario del código decía que no podía faltar,
+  mientras lo colocaba donde más fácil se perdía. `quit` abre ahora la lista, y
+  como el recorte tira por el final es lo último que se cae.
+
+- Fuera la vista de detalle a pantalla completa y su tecla `enter`. El panel
+  inferior del 40% ya está siempre visible y se mueve con el cursor, así que la
+  ficha no tenía nada que aportar y solo costaba un estado `abierto/cerrado` que
+  había que mantener, sincronizar con el refresco y cerrar con `esc`. El detalle
+  se lee ahora siempre en el panel, que cuando no cabe entero pasa a rejilla de
+  dos columnas antes que recortar campos. Se va con ella la acción `detail` de
+  `[keybindings]`.
+
 ### Added
 
 - Diffstat en el detalle y en la lista: cuántas líneas añade y borra un PR/MR, y

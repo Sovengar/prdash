@@ -56,7 +56,7 @@ func waitMount(t *testing.T, m Model) tea.Msg {
 func TestMountReviewWithoutMounterInformsHerdrRequired(t *testing.T) {
 	m, _ := mountModel(t)
 
-	m = press(t, m, "m")
+	m = press(t, m, "r")
 	if !strings.Contains(lastToast(m), "requires Herdr") {
 		t.Fatalf("toast = %q, wants it to mention Herdr", lastToast(m))
 	}
@@ -75,7 +75,7 @@ func TestMountReviewOutsideHerdrReportsLayoutUnavailable(t *testing.T) {
 	}}
 	m.SetMounter(fm)
 
-	m = press(t, m, "m")
+	m = press(t, m, "r")
 	if !m.mountBusy {
 		t.Fatal("el montaje debería quedar marcado en curso")
 	}
@@ -98,7 +98,7 @@ func TestMountReviewErrorSurfacesNotice(t *testing.T) {
 	m, _ := mountModel(t)
 	m.SetMounter(&fakeMounter{err: errors.New("sin permisos de fetch")})
 
-	m = press(t, m, "m")
+	m = press(t, m, "r")
 	m = send(t, m, waitMount(t, m))
 
 	if !strings.Contains(lastToast(m), "could not mount review") {

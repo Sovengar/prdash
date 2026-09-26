@@ -1,6 +1,6 @@
 // Cableado del orquestador de review: junta el resolutor de repos, la provisión
 // de worktree (nativa dentro de Herdr, git directo fuera) y el puerto de layout
-// en un executor listo para la TUI o los subcomandos del plugin.
+// en un executor listo para la TUI.
 package main
 
 import (
@@ -13,28 +13,18 @@ import (
 	"prdash/internal/reporesolver"
 	"prdash/internal/review/executor"
 	"prdash/internal/review/plan"
-	"prdash/internal/selection"
-	"prdash/internal/tui"
 	"prdash/internal/worktree"
 )
-
-// trackSelection hace que la TUI persista el ítem seleccionado para que la
-// acción `prdash.mount-review` invocada sin URL pueda montarlo. Si la ruta de
-// estado no se puede resolver, la TUI sigue funcionando sin persistencia.
-func trackSelection(m *tui.Model) {
-	if p, err := selection.Path(); err == nil {
-		m.SetSelectionPath(p)
-	}
-}
 
 // buildExecutor arma el orquestador de review sobre la config. La selección del
 // provisioner la decide worktree.Select: el llamador no sabe cuál corre.
 func buildExecutor(cfg config.Config) *executor.Executor {
 	client := herdr.New()
 	tools := plan.Tools{
-		Tuicr: paneTool(cfg, "tuicr"),
-		Hunk:  paneTool(cfg, "hunk"),
-		Agent: paneTool(cfg, "agent"),
+		Tuicr:  paneTool(cfg, "tuicr"),
+		Hunk:   paneTool(cfg, "hunk"),
+		Agent:  paneTool(cfg, "agent"),
+		Editor: paneTool(cfg, "editor"),
 	}
 	return &executor.Executor{
 		Resolver: reporesolver.New(reporesolver.Options{
@@ -93,6 +83,11 @@ func paneTool(cfg config.Config, name string) plan.Tool {
 
 // toolAvailability comprueba qué binarios del plan están instalados, de modo
 // que un pane ausente se omita con aviso en vez de tumbar el layout.
+//
+// El editor no aparece en el mapa a propósito: su orden puede ser una función o
+// un alias del shell (el `vi` que expande a `nvim .`), que no existe como
+// binario, y buscarlo en el PATH lo declararía ausente siempre. El plan no lo
+// omite por eso. Ver plan.Build.
 func toolAvailability(tools plan.Tools) map[string]bool {
 	return map[string]bool{
 		string(plan.KindTuicr): binaryAvailable(tools.Binary(plan.KindTuicr)),

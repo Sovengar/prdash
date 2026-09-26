@@ -20,9 +20,8 @@ const (
 )
 
 // layout describe las cajas visibles y el alto reservado a cada cuerpo.
-// bodyLines es el del cuerpo central: la lista en la vista partida, la ficha del
-// ítem a pantalla completa. detailLines es el del panel inferior, que solo
-// existe en la vista partida.
+// bodyLines es el del cuerpo central, que es la lista. detailLines es el del
+// panel inferior con la ficha del ítem seleccionado.
 type layout struct {
 	showHeader   bool
 	showKeybinds bool
@@ -52,10 +51,9 @@ const (
 //
 // hintAvailable son las líneas de atajos que hay realmente, ya envueltas al
 // ancho interior: la caja de atajos nunca pide más de las que se van a pintar.
-// fullDetail compone la ficha a pantalla completa: el panel inferior desaparece y
-// su alto pasa al cuerpo central. show es false antes del primer WindowSizeMsg,
-// en cuyo caso no se recorta nada y la vista se pinta entera.
-func computeLayout(height, hintAvailable int, show, fullDetail bool) layout {
+// show es false antes del primer WindowSizeMsg, en cuyo caso no se recorta nada
+// y la vista se pinta entera.
+func computeLayout(height, hintAvailable int, show bool) layout {
 	if !show || height <= 0 {
 		return layout{}
 	}
@@ -65,23 +63,14 @@ func computeLayout(height, hintAvailable int, show, fullDetail bool) layout {
 		showKeybinds: true,
 		hintLines:    min(maxHintLines, max(1, hintAvailable)),
 	}
-	// El cuerpo central es la lista o la ficha: cada una cobra sus 2 bordes.
+	// El cuerpo central es la lista: cobra sus 2 bordes.
 	lay.bodyLines = height
-	if fullDetail {
-		lay.detailLines = 0
-	} else {
-		lay.detailLines = max(minDetailRows, height*detailShare/5)
-	}
+	lay.detailLines = max(minDetailRows, height*detailShare/5)
 
 	// reserved es todo lo que no es cuerpo central: los bordes de las cajas
 	// visibles, la línea de estado de la cabecera, el panel y los atajos.
 	reserved := func() int {
-		n := 2 // bordes de la caja central
-		if fullDetail {
-			n = detailChrome
-		} else {
-			n = listChrome + detailChrome + lay.detailLines
-		}
+		n := listChrome + detailChrome + lay.detailLines
 		if lay.showHeader {
 			n += headerLines
 		}

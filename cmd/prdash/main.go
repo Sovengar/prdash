@@ -23,17 +23,8 @@ import (
 )
 
 func main() {
-	// Los subcomandos del plugin de Herdr no pasan por el flag parser.
-	if len(os.Args) > 1 && os.Args[1] == "herdr" {
-		cfg, warn := config.Load()
-		if warn != "" {
-			fmt.Fprintln(os.Stderr, "prdash:", warn)
-		}
-		os.Exit(runHerdr(cfg, buildAdapters(cfg), os.Args[2:]))
-	}
-
-	// La limpieza de worktrees tampoco: es un subcomando explícito y no
-	// interactivo.
+	// La limpieza de worktrees tampoco pasa por el flag parser: es un subcomando
+	// explícito y no interactivo.
 	if len(os.Args) > 1 && os.Args[1] == "worktrees" {
 		cfg, warn := config.Load()
 		if warn != "" {
@@ -64,7 +55,6 @@ func main() {
 
 	model := tui.New(cfg, adapters)
 	model.SetMounter(buildExecutor(cfg))
-	trackSelection(&model)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "prdash:", err)
 		os.Exit(1)

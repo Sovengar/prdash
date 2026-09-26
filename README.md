@@ -4,7 +4,7 @@ Inbox de PRs/MRs multi-forge + orquestador de review sobre [Herdr](https://herdr
 
 Responde "¿qué PR/MR me toca?" mezclando GitHub y un GitLab self-managed en un
 solo inbox, y al elegir un ítem deja listo el entorno de review (worktree +
-layout de 3 panes) para que el loop de comentarios ocurra sin montar nada a
+layout de 2 tabs) para que el loop de comentarios ocurra sin montar nada a
 mano.
 
 Estado: **MVP F1 + F2**. F3 (auto-review con gate y allowlist) es un milestone
@@ -65,33 +65,84 @@ prdash worktrees  # lista los worktrees de review propiedad de prdash
 ```
 
 Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
-`tab` sección, `enter` detalle a pantalla completa, `r` refrescar,
-`m` montar review (requiere Herdr), `a` approve, `M` merge, `o` abrir en el
+`tab` sección, `r` montar review (el worktree siempre; el layout de 2 tabs
+requiere Herdr), `R` refrescar, `a` approve, `m` merge, `o` abrir en el
 navegador, `q` salir. Son configurables en `[keybindings]`.
 
 La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem
-seleccionado en el 40% inferior, que se mueve con el cursor. `enter` lo abre a
-pantalla completa por si necesitas más espacio.
+seleccionado en el 40% inferior, que se mueve con el cursor. No hay una vista a
+pantalla completa: el panel es lo único que hay, y cuando no cabe entero pasa a
+rejilla de dos columnas antes que recortar campos.
+
+### Merge pide dos teclas y una de ellas es el modo
+
+`merge` no se ejecuta a la primera. La primera pulsación solo arma: la caja de
+Keybinds se sustituye por la confirmación y no queda nada en curso. La segunda
+tecla **es** la elección del modo, y no hay modo por defecto:
+
+| Segunda tecla | Modo |
+|---|---|
+| `m` | merge commit |
+| `r` | rebase |
+| `s` | squash |
+| `esc` | cancelar |
+
+El motivo es que un merge reescribe historia y no se deshace con un comando, así
+que no debe existir ningún camino que lo dispare con una estrategia que no hayas
+nombrado. Cualquier otra tecla desarma y hace lo que haría normalmente, para que
+un `m` a destiempo no deje la vista esperando. `q` y `ctrl+c` siguen saliendo.
+
+Los avisos nombran el modo tanto al empezar (`merge (rebase) en curso…`) como
+al terminar (`merge (squash) ok`), porque sin eso un "merge ok" no dice qué se
+hizo.
 
 `approve` no aplica a los PR/MR propios: ningún forge admite aprobar lo que
 escribes tú (GitHub lo rechaza en la API y no hay opción para activarlo). prdash
 lo detecta antes de llamar a la CLI, marca esos ítems con `ROLE: own` y explica
 el motivo; `merge` sí funciona sobre ellos.
 
+### Layout de review
+
+`r` sobre un ítem monta el worktree y, dentro de su workspace, **dos tabs**:
+
+| Tab | Panes | Para qué |
+|---|---|---|
+| `Review` | TUICR \| editor | leer la review y editar el código en paralelo |
+| `Edit` | Hunk \| agente | el diff contra la rama destino y el agente trabajando |
+
+Los dos panes de cada tab se abren al 50 %, y el primero reutiliza el pane que ya
+traía el workspace, así que no queda ninguna pestaña huérfana.
+
+El tab de `Review` se queda aunque falte una herramienta: si no hay binario de
+TUICR, del diff o del agente, su pane no se monta y prdash lo avisa en vez de
+dejar un hueco mudo. El pane del editor **nunca** se omite, porque su orden
+suele ser una función del shell (el típico `vi` que expande a `nvim .`) que no
+existe como binario en el `PATH`; si la orden está mal escrita, el error se ve en
+el propio pane.
+
 ### Comandos de los panes (`[commands]`)
 
-El layout de review abre tres panes y cada uno se puede sustituir por completo
-desde `[commands]`:
+Cada pane se puede sustituir por completo desde `[commands]`:
 
 | Clave | Default | Qué abre |
 |---|---|---|
 | `tuicr` | `tuicr pr <URL del ítem>` | review de TUICR |
-| `hunk` | `hunk diff <rama destino>...HEAD` | diff del PR/MR con Hunk |
+| `hunk` | `hunk diff` | diff del **working tree** con Hunk |
 | `agent` | `opencode` | agente |
+| `editor` | `vi` | editor en el worktree |
 
 Si defines la clave, su valor se usa **verbatim** como argv completo del pane:
 no se le añade la URL del ítem ni el target del diff. Sin clave se usa el
 default. Las herramientas de forge (`gh`/`glab`) también se configuran aquí.
+
+Hunk revisa el working tree, no el diff del PR: el pane vive junto al editor, así
+que lo que se mira es lo que se está tocando. Para el diff del PR contra la rama
+destino, cambia su clave:
+
+```toml
+[commands]
+hunk = "hunk diff main...HEAD --watch"
+```
 
 La rama destino debe ser una **ref local**: prdash clona en bare
 (`git clone --bare`), así que las ramas remotas quedan en `refs/heads/*` y no
@@ -120,64 +171,58 @@ prdash worktrees list            # idem, explícito
 prdash worktrees remove <ruta>   # borra SOLO lo pedido y solo si es de prdash
 ```
 
+El editor es el único que se ajusta mejor con `[tools].editor`, que es un atajo
+para su base sin override:
+
+```toml
+[tools]
+editor = "nvim ."   # por si no usas el `vi` → `nvim .` de tu shell
+```
+
 Funciona igual con la provisión nativa de Herdr (dentro de Herdr) y con git
 directo (fuera).
 
-## Plugin de Herdr
+## Dentro de Herdr
 
-El plugin es **el mismo binario más subcomandos más un manifiesto**
-(`plugin/herdr/herdr-plugin.toml`). Una sola fuente de config, credenciales y
-versión.
+prdash **no es un plugin de Herdr**. Habla con la CLI de Herdr por subproceso
+(`herdr worktree create`, `herdr tab create`, `herdr pane split`, `herdr pane
+run`), así que el worktree, los tabs y los panes los abre él mismo cuando pulsas
+`r` sobre un ítem.
 
-### Instalar/enlazar en desarrollo
+Lo único que necesita es **estar dentro de Herdr**: el cliente exige
+`HERDR_ENV=1`, que Herdr solo inyecta a sus propios hijos. Lanzado desde una
+terminal normal, `r` degrada a git directo y monta el worktree sin panes.
 
-`herdr plugin link` registra el manifiesto sin correr build (a diferencia de
-`herdr plugin install`, que clona un repo de GitHub):
+Lánzalo desde cualquier pane:
 
 ```sh
-make plugin-link          # herdr plugin link "$(pwd)/plugin/herdr"
-# equivalente manual:
-herdr plugin link ./plugin/herdr
+prdash
 ```
 
-Asegúrate de que `prdash` está en el PATH del servidor de Herdr (`make install`
-lo deja en `~/.local/bin/prdash`). Para desenlazar: `make plugin-unlink`
-(`herdr plugin unlink prdash`). No se edita `plugins.json` a mano: es derivado
-de los manifiestos.
-
-### Subcomandos que consume el plugin
-
-| Subcomando | Uso |
-|---|---|
-| `prdash herdr inbox` | Abre la TUI del inbox en el pane que declara el manifiesto. |
-| `prdash herdr mount [URL]` | Monta el review del PR/MR: la URL recibida por argumento o, si no, `HERDR_PLUGIN_CLICKED_URL` / `clicked_url` del contexto del plugin. Sin URL, monta el **ítem seleccionado en la TUI** del inbox. |
-| `prdash herdr link` | Igual que `mount`, para el link handler de Ctrl+click (solo confía en `clicked_url`, nunca en `selected_text`). |
-
-
 PR de prueba 10/10: nota de humo para practicar el ciclo de resolucion de PRs.
-### Keybinding
 
-El manifiesto **no** declara teclas. Para bindear la acción de montar review,
-añade este bloque a `~/.config/herdr/config.toml` (prdash no edita ese fichero
-por ti) y recarga la config:
+Si quieres una tecla para abrirlo, declárala tú en `~/.config/herdr/config.toml`
+(prdash no edita ese fichero) y recarga:
 
 ```toml
 [[keys.command]]
-key = "prefix+m"
-type = "plugin_action"
-command = "prdash.mount-review"
-description = "prdash: montar review del PR/MR"
+key = "prefix+p"
+type = "command"
+command = "prdash"
+description = "prdash: inbox de PRs/MRs"
 ```
 
 ```sh
 herdr server reload-config
 ```
 
-La acción resuelve qué montar en este orden: URL por argumento o `clicked_url`
-del contexto (link handler); si no hay, el **ítem seleccionado en la TUI** del
-inbox. La TUI persiste la selección en `$XDG_STATE_HOME/prdash/selection.json`
-(estado efímero de UI). Sin selección, con el estado corrupto o si está
-obsoleto, la acción falla con un aviso claro y no monta nada.
+El atajo es una comodidad, no un requisito: `prdash` a mano en un pane funciona
+igual. Lo que sí es un requisito es que el pane esté en el **repo root**, porque
+`herdr worktree create` se rechaza desde un workspace de worktree vinculado.
+
+**Lo que no hay:** Ctrl+click sobre una URL de PR/MR para montarla, ni una tecla
+de Herdr que monte lo último seleccionado en prdash desde otro pane. Sin plugin no
+hay link handlers; para el segundo, salta al pane de prdash y pulsa `r`.
 
 ## Desarrollo
 

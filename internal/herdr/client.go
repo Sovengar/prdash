@@ -257,6 +257,17 @@ func (c *Client) TabCreate(ctx context.Context, spec TabSpec) (TabInfo, error) {
 	return parseTabCreated(out)
 }
 
+// TabRename etiqueta un tab. Es la única forma de nombrar el tab que ya trae el
+// contenedor (el root pane del worktree): `tab create --label` solo aplica a los
+// tabs que crea quien lo invoca.
+func (c *Client) TabRename(ctx context.Context, tabID, label string) error {
+	if err := c.guard("tab", "rename"); err != nil {
+		return err
+	}
+	_, err := c.result(ctx, "tab", "rename", tabID, label)
+	return err
+}
+
 // PaneSplit divide un pane y devuelve el pane nuevo.
 func (c *Client) PaneSplit(ctx context.Context, spec SplitSpec) (PaneInfo, error) {
 	if err := c.guard("pane", "split"); err != nil {

@@ -298,19 +298,74 @@ func TestLoadFromReadsPaneCommands(t *testing.T) {
 	}
 }
 
-func TestHintBarLines(t *testing.T) {
-	lines := Defaults().HintBarLines()
-	if len(lines) != 2 {
-		t.Fatalf("líneas = %d, want 2", len(lines))
+// `[tools].editor` fija la orden del editor; `[commands].editor` la sustituye
+// entera. El default es `vi` porque es un comando de shell (típicamente el que
+// expande a `nvim .`), no un binario que prdash pueda localizar.
+func TestEditorToolAndOverride(t *testing.T) {
+	if got := strings.Join(Defaults().ToolArgs("editor"), " "); got != "vi" {
+		t.Fatalf("editor por defecto = %q, quiero %q", got, "vi")
 	}
-	if !strings.Contains(lines[0], "j/k move") || !strings.Contains(lines[1], "refresh") {
-		t.Errorf("hints = %v", lines)
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[tools]\neditor = \"nvim .\"\n[commands]\neditor = \"nvim README.md\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warn := LoadFrom(path)
+	if warn != "" {
+		t.Fatalf("warning = %q", warn)
+	}
+	if cfg.Tools.Editor != "nvim ." {
+		t.Fatalf("tools.editor = %q", cfg.Tools.Editor)
+	}
+	got, ok := cfg.PaneOverride("editor")
+	if !ok || strings.Join(got, " ") != "nvim README.md" {
+		t.Fatalf("commands.editor = %v (override=%v)", got, ok)
+	}
+}
+
+func TestHints(t *testing.T) {
+	got := Defaults().Hints()
+	want := []string{
+		"q quit", "tab section", "r mount review",
+		"a approve", "m merge ×2", "o open", "R refresh", "j/k move", "pgup/dn page",
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("Hints() = %v, quiero %v", got, want)
+	}
+}
+
+// TestHintsCubrenTodosLosKeybindings es el guard anti-drift: si se añade una
+// acción a DefaultKeybindings() y no se mete en hintOrder, la barra deja de
+// decir la verdad sobre qué teclas existen y nadie se entera hasta que alguien
+// prueba la tecla y no pasa nada.
+func TestHintsCubrenTodosLosKeybindings(t *testing.T) {
+	bar := strings.Join(Defaults().Hints(), " ")
+	for action, key := range DefaultKeybindings() {
+		if !strings.Contains(bar, key+" ") {
+			t.Errorf("la acción %q (tecla %q) no sale en la barra de hints", action, key)
+		}
+	}
+}
+
+// TestHintsSiguenElRebind: la barra se deriva de [keybindings], no de una lista
+// de teclas fija escrita a mano.
+func TestHintsSiguenElRebind(t *testing.T) {
+	cfg := Defaults()
+	cfg.Keybindings["open-browser"] = "b"
+	cfg.Keybindings["mount-review"] = "v"
+	bar := strings.Join(cfg.Hints(), " ")
+	if !strings.Contains(bar, "b open") || !strings.Contains(bar, "v mount review") {
+		t.Errorf("el rebind no llegó a la barra: %v", cfg.Hints())
+	}
+	if strings.Contains(bar, "o open") || strings.Contains(bar, "m mount review") {
+		t.Errorf("la barra sigue mostrando la tecla anterior: %v", cfg.Hints())
 	}
 }
 
 func TestDefaultKeybindingsCoverActions(t *testing.T) {
 	kb := DefaultKeybindings()
-	for _, action := range []string{"quit", "refresh", "detail", "mount-review", "approve", "merge", "section-next", "open-browser"} {
+	for _, action := range []string{"quit", "refresh", "mount-review", "approve", "merge", "section-next", "open-browser"} {
 		if kb[action] == "" {
 			t.Errorf("falta keybinding %q", action)
 		}
@@ -319,17 +374,35 @@ func TestDefaultKeybindingsCoverActions(t *testing.T) {
 
 func TestActionForKey(t *testing.T) {
 	cfg := Defaults()
-	if got := cfg.ActionForKey("r"); got != "refresh" {
+	if got := cfg.ActionForKey("R"); got != "refresh" {
+		t.Errorf("ActionForKey(R) = %q", got)
+	}
+	if got := cfg.ActionForKey("r"); got != "mount-review" {
 		t.Errorf("ActionForKey(r) = %q", got)
 	}
 	if got := cfg.ActionForKey("a"); got != "approve" {
 		t.Errorf("ActionForKey(a) = %q", got)
 	}
-	if got := cfg.ActionForKey("M"); got != "merge" {
-		t.Errorf("ActionForKey(M) = %q", got)
+	if got := cfg.ActionForKey("m"); got != "merge" {
+		t.Errorf("ActionForKey(m) = %q", got)
 	}
 	if got := cfg.ActionForKey("z"); got != "" {
 		t.Errorf("ActionForKey(z) = %q, want vacío", got)
+	}
+}
+
+// TestDefaultKeybindingsNoColisionan es el invariante que hace legible el
+// esquema r=review / R=refresh / m=merge: si dos acciones comparten tecla,
+// ActionForKey resuelve una por orden alfabético y la otra queda muerta sin que
+// nada lo diga.
+func TestDefaultKeybindingsNoColisionan(t *testing.T) {
+	kb := DefaultKeybindings()
+	owner := map[string]string{}
+	for action, key := range kb {
+		if other, dup := owner[key]; dup {
+			t.Errorf("tecla %q compartida por %q y %q", key, other, action)
+		}
+		owner[key] = action
 	}
 }
 

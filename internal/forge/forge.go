@@ -9,6 +9,7 @@ package forge
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -55,8 +56,9 @@ type Adapter interface {
 	ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning)
 	// Approve aprueba un ítem.
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
-	// Merge mergea un ítem.
-	Merge(ctx context.Context, ref model.RepoRef, number int) []model.Warning
+	// Merge mergea un ítem con la estrategia indicada. El modo no es opcional:
+	// un merge sin estrategia nombrada es un prompt interactivo colgado.
+	Merge(ctx context.Context, ref model.RepoRef, number int, mode MergeMode) []model.Warning
 }
 
 // PageResult es una página emitida por Stream.
@@ -216,14 +218,67 @@ const (
 	ActionMerge ActionKind = "merge"
 )
 
+// MergeMode es cómo se integra el PR/MR en la rama destino.
+//
+// No hay modo por defecto a propósito: la TUI exige una doble pulsación y la
+// segunda tecla ES la elección del modo, así que un merge nunca se dispara con
+// una estrategia que el usuario no ha nombrado. Un rebase donde tocaba squash
+// reescribe historia ya publicada y no se deshace con un comando.
+type MergeMode string
+
+const (
+	// MergeCommit integra los commits con la rama destino.
+	MergeCommit MergeMode = "merge"
+	// Rebase reaplica los commits encima de la rama destino.
+	Rebase MergeMode = "rebase"
+	// Squash aplana los commits en uno solo.
+	Squash MergeMode = "squash"
+)
+
+// Label es el nombre del modo para la UI y los avisos: es lo que el usuario
+// lee antes de confirmar y lo que ve después.
+func (m MergeMode) Label() string {
+	switch m {
+	case MergeCommit:
+		return "merge commit"
+	case Rebase:
+		return "rebase"
+	case Squash:
+		return "squash"
+	default:
+		return string(m)
+	}
+}
+
+// Valid informa si el modo es uno de los conocidos. Cada adapter lo consulta
+// antes de construir su argv: un modo desconocido tiene que ser un warning
+// explícito, no un flag vacío, porque `gh pr merge` sin flag de estrategia
+// cae en un prompt interactivo y se quedaría colgado.
+func (m MergeMode) Valid() bool {
+	switch m {
+	case MergeCommit, Rebase, Squash:
+		return true
+	default:
+		return false
+	}
+}
+
+// ErrUnknownMergeMode es el motivo que devuelve un adapter cuando le llega un
+// modo que no reconoce. Vive aquí para que los dos forges que sí implementan
+// merge hablen del mismo modo y no cada uno del suyo.
+func ErrUnknownMergeMode(mode MergeMode) error {
+	return fmt.Errorf("unknown merge mode %q: expected merge, rebase or squash", string(mode))
+}
+
 // Outcome es el resultado de ejecutar una acción rápida.
 type Outcome struct {
 	Kind     ActionKind
 	ID       model.ID
-	OK       bool   // la acción se aplicó
-	Conflict bool   // el ítem cambió (cerrado/mergeado/ausente): hay que refrescar
-	Perm     bool   // acción deshabilitada por permisos o por no soportado
-	Msg      string // motivo para la UI
+	Mode     MergeMode // estrategia usada; solo tiene sentido en ActionMerge
+	OK       bool      // la acción se aplicó
+	Conflict bool      // el ítem cambió (cerrado/mergeado/ausente): hay que refrescar
+	Perm     bool      // acción deshabilitada por permisos o por no soportado
+	Msg      string    // motivo para la UI
 	Item     model.Item
 	HasItem  bool // Item trae el estado releído
 }
@@ -232,8 +287,11 @@ type Outcome struct {
 // que sigue accionable, ejecuta la acción y vuelve a releer el estado para
 // dejarlo consistente. Nunca devuelve error duro: clasifica el fallo en
 // conflicto (el ítem cambió), permiso o error genérico.
-func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int) Outcome {
-	out := Outcome{Kind: kind, ID: model.With(ref.Forge, ref.Host, ref.Project, number)}
+//
+// mode solo aplica a ActionMerge; approve lo ignora. Se pasa siempre para que la
+// firma no dependa de la acción, que es lo que permite dispatchar con un switch.
+func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, mode MergeMode) Outcome {
+	out := Outcome{Kind: kind, ID: model.With(ref.Forge, ref.Host, ref.Project, number), Mode: mode}
 
 	cur, warns := a.ItemState(ctx, ref, number)
 	if stage := checkBeforeAction(cur, warns); stage != nil {
@@ -247,7 +305,7 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	case ActionApprove:
 		actionWarns = a.Approve(ctx, ref, number)
 	case ActionMerge:
-		actionWarns = a.Merge(ctx, ref, number)
+		actionWarns = a.Merge(ctx, ref, number, mode)
 	}
 	out.OK, out.Conflict, out.Perm, out.Msg = classifyAction(actionWarns)
 

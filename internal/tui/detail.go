@@ -11,14 +11,6 @@ import (
 	"prdash/internal/state"
 )
 
-// renderDetail pinta el detalle a pantalla completa: identidad, ramas, estado de
-// review y de checks, sin salir de la TUI. El ítem se deriva del estado vivo.
-func (m *Model) renderDetail() string {
-	lines := m.detailLines(m.liveDetail(), true, 0) // 0 = sin límite de alto
-	lines = append(lines, "", styleHint.Render("esc/"+m.cfg.KeyFor("detail")+" back to the inbox · cursor is preserved"))
-	return strings.Join(lines, "\n")
-}
-
 // detailPane compone el detalle para el alto del panel inferior.
 func (m *Model) detailPane(rows int) []string {
 	it, ok := m.selected()
@@ -36,11 +28,9 @@ const labelWidth = 14
 // detailGap separa las dos columnas cuando el detalle va en rejilla.
 const detailGap = 4
 
-// detailLines compone el detalle de un ítem como líneas sueltas, sin el hint de
-// cierre: lo comparten la vista a pantalla completa y el panel inferior, que son
-// el mismo contenido en distinto hueco de pantalla. `rows` es el alto disponible
-// (0 = sin límite). Sin ítem que describir (inbox vacío) lo dice en vez de
-// inventar datos.
+// detailLines compone el detalle de un ítem como líneas sueltas para el panel
+// inferior. `rows` es el alto disponible. Sin ítem que describir (inbox vacío)
+// lo dice en vez de inventar datos.
 func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	if !ok {
 		return []string{styleDim.Render("no selection: move the cursor onto an item")}

@@ -132,9 +132,30 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 	return a.action(ctx, "pr", "review", strconv.Itoa(number), "--repo", ref.Project, "--approve")
 }
 
-// Merge mergea un PR con `gh pr merge --squash`.
-func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
-	return a.action(ctx, "pr", "merge", strconv.Itoa(number), "--repo", ref.Project, "--squash")
+// Merge mergea un PR con `gh pr merge` y el flag de estrategia que toque. Los
+// tres modos tienen flag propio en gh, así que siempre se pasa uno: sin
+// estrategia, gh abre un prompt interactivo que en un subproceso no
+// interactivo se queda colgado.
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode) []model.Warning {
+	flag, ok := ghMergeFlag(mode)
+	if !ok {
+		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(mode))}
+	}
+	return a.action(ctx, "pr", "merge", strconv.Itoa(number), "--repo", ref.Project, flag)
+}
+
+// ghMergeFlag traduce el modo al flag de `gh pr merge`.
+func ghMergeFlag(mode forge.MergeMode) (string, bool) {
+	switch mode {
+	case forge.MergeCommit:
+		return "--merge", true
+	case forge.Rebase:
+		return "--rebase", true
+	case forge.Squash:
+		return "--squash", true
+	default:
+		return "", false
+	}
 }
 
 func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {

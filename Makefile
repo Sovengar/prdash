@@ -5,11 +5,10 @@ BINARY  := prdash
 PKG     := ./cmd/prdash
 BINDIR  ?= $(HOME)/.local/bin
 CONFDIR ?= $(HOME)/.config/prdash
-PLUGIN  := $(CURDIR)/plugin/herdr
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path plugin-link plugin-unlink
+.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path
 
 help: ## Muestra las tareas disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -47,11 +46,6 @@ fmt: ## Formatea el código
 vet: ## Analiza el código
 	go vet ./...
 
-plugin-link: build ## Enlaza el plugin de desarrollo en Herdr (herdr plugin link)
-	herdr plugin link "$(PLUGIN)"
-
-plugin-unlink: ## Desenlaza el plugin de desarrollo de Herdr
-	herdr plugin unlink prdash
 
 tidy: ## Sincroniza go.mod/go.sum
 	go mod tidy

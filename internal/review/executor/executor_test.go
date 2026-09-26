@@ -304,8 +304,8 @@ func TestMountWithoutHerdrStillProvisionsWorktree(t *testing.T) {
 	if !worktree.Exists(res.Worktree.Path) {
 		t.Fatal("el worktree debe montarse igualmente sin Herdr")
 	}
-	if len(res.Plan.Panes) != 2 {
-		t.Fatalf("el pane de Hunk ausente debería omitirse: %+v", res.Plan.Panes)
+	if res.Plan.PaneCount() != 3 {
+		t.Fatalf("el pane de Hunk ausente debería omitirse: %+v", res.Plan)
 	}
 }
 
@@ -322,7 +322,7 @@ func TestMountWithHerdrAppliesPlan(t *testing.T) {
 	if !res.Herdr || !herdr.mounted {
 		t.Fatalf("Herdr debería haber montado el plan: %+v", herdr)
 	}
-	if len(herdr.plan.Panes) != 3 {
+	if herdr.plan.PaneCount() != 4 {
 		t.Fatalf("el plan montado = %+v", herdr.plan)
 	}
 	if len(herdr.notified) == 0 {

@@ -24,21 +24,75 @@ const (
 	KindHunk Kind = "hunk"
 	// KindAgent es el pane del agente.
 	KindAgent Kind = "agent"
+	// KindEditor es el pane del editor. No lleva herramientas de review: solo la
+	// orden con la que el usuario edita el worktree.
+	KindEditor Kind = "editor"
+)
+
+// Dirección con la que un pane se divide respecto al pane anterior de su tab.
+const (
+	// DirReuse marca el pane que reutiliza el pane base de su tab, sin dividir.
+	DirReuse = ""
+	// DirRight divide a la derecha del pane anterior.
+	DirRight = "right"
+	// DirDown divide hacia abajo del pane anterior.
+	DirDown = "down"
+)
+
+// Etiquetas de los tabs del review. Son la nomenclatura que ve el usuario en la
+// barra de pestañas del workspace, así que viven aquí y no en el puerto que las
+// aplica.
+const (
+	// LabelReview es el tab de lectura: la review y el editor.
+	LabelReview = "Review"
+	// LabelEdit es el tab de trabajo: el diff y el agente.
+	LabelEdit = "Edit"
 )
 
 // Pane es un pane planificado, aún sin abrir.
 type Pane struct {
 	Kind  Kind
 	Label string
-	Cwd   string
-	Argv  []string
-	Env   []string
+	// Dir es la dirección de la división que crea el pane respecto al anterior
+	// de su tab. DirReuse (vacío) marca el pane que reutiliza el pane base del
+	// tab, que es el primero.
+	Dir  string
+	Cwd  string
+	Argv []string
+	Env  []string
 }
 
-// Plan es el conjunto de panes más los avisos de lo que se omitió.
+// Tab agrupa los panes que comparten una pestaña del workspace de review.
+type Tab struct {
+	Label string
+	Panes []Pane
+}
+
+// Cwd es el directorio de trabajo del tab: el de su primer pane, que es el del
+// worktree. Vacío si el tab no tiene panes.
+func (t Tab) Cwd() string {
+	if len(t.Panes) == 0 {
+		return ""
+	}
+	return t.Panes[0].Cwd
+}
+
+// Plan es el conjunto de tabs más los avisos de lo que se omitió. Los tabs que
+// se quedan sin panes no se incluyen: una pestaña en blanco es ruido que el
+// usuario tendría que cerrar a mano.
 type Plan struct {
-	Panes    []Pane
+	Tabs     []Tab
 	Warnings []string
+}
+
+// PaneCount es el número de panes del plan, sumados todos los tabs. Es lo que
+// informa el montaje al usuario.
+func (p Plan) PaneCount() int {
+	n := 0
+	for _, t := range p.Tabs {
+		n += len(t.Panes)
+	}
+	return n
 }
 
 // Worktree es el worktree sobre el que trabajan todos los panes.
@@ -54,6 +108,7 @@ const (
 	defaultTuicrBin = "tuicr"
 	defaultHunkBin  = "hunk"
 	defaultAgentBin = "opencode"
+	defaultEditBin  = "vi"
 )
 
 // Tool es la configuración de argv de un pane. Con Override, Argv es el argv
@@ -67,9 +122,10 @@ type Tool struct {
 
 // Tools agrupa la configuración de argv de cada pane.
 type Tools struct {
-	Tuicr Tool
-	Hunk  Tool
-	Agent Tool
+	Tuicr  Tool
+	Hunk   Tool
+	Agent  Tool
+	Editor Tool
 }
 
 // Binary devuelve el ejecutable efectivo de un pane (override, base de `[tools]`
@@ -82,6 +138,8 @@ func (t Tools) Binary(kind Kind) string {
 		return t.Hunk.binary(defaultHunkBin)
 	case KindAgent:
 		return t.Agent.binary(defaultAgentBin)
+	case KindEditor:
+		return t.Editor.binary(defaultEditBin)
 	}
 	return ""
 }
@@ -122,47 +180,77 @@ type Env struct {
 	Available map[string]bool
 }
 
-// Build construye el plan de panes del review. No falla: lo que no se puede
+// Build construye el plan de panes del review: un tab de lectura (la review y el
+// editor) y otro de trabajo (el diff y el agente). No falla: lo que no se puede
 // montar se reporta en Warnings.
 func Build(pr model.Item, wt Worktree, tools Tools, env Env) Plan {
 	var p Plan
 
-	add := func(kind Kind, label string, tool Tool, defaultBin string, extra ...string) {
+	// compose compone un pane del plan. Un argv vacío no es una herramienta
+	// ausente sino configuración inválida, y se avisa con el mismo criterio:
+	// montar un shell en un pane que debería tener la review no es un layout.
+	compose := func(kind Kind, label, dir string, tool Tool, defaultBin string, extra ...string) (Pane, bool) {
+		argv := tool.effective(defaultBin, extra...)
+		if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
+			p.Warnings = append(p.Warnings, label+" has no configured command: pane omitted")
+			return Pane{}, false
+		}
+		return Pane{
+			Kind:  kind,
+			Label: label,
+			Dir:   dir,
+			Cwd:   wt.Path,
+			Argv:  argv,
+			Env:   paneEnv(pr, wt),
+		}, true
+	}
+
+	// add es el pane de una herramienta opcional: sin binario no se monta, pero
+	// se avisa para que el hueco se explique en vez de desaparecer en silencio.
+	add := func(tab *Tab, kind Kind, label, dir string, tool Tool, defaultBin string, extra ...string) {
 		if !env.available(string(kind)) {
 			p.Warnings = append(p.Warnings, label+" is not installed: pane omitted")
 			return
 		}
-		argv := tool.effective(defaultBin, extra...)
-		if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
-			p.Warnings = append(p.Warnings, label+" has no configured command: pane omitted")
-			return
+		if pane, ok := compose(kind, label, dir, tool, defaultBin, extra...); ok {
+			tab.Panes = append(tab.Panes, pane)
 		}
-		p.Panes = append(p.Panes, Pane{
-			Kind:  kind,
-			Label: label,
-			Cwd:   wt.Path,
-			Argv:  argv,
-			Env:   paneEnv(pr, wt),
-		})
 	}
 
-	add(KindTuicr, "TUICR", tools.Tuicr, defaultTuicrBin, "pr", ReviewTarget(pr))
-	add(KindHunk, "Hunk", tools.Hunk, defaultHunkBin, hunkArgs(pr)...)
-	add(KindAgent, "Agente", tools.Agent, defaultAgentBin)
+	review := Tab{Label: LabelReview}
+	add(&review, KindTuicr, "TUICR", DirReuse, tools.Tuicr, defaultTuicrBin, "pr", ReviewTarget(pr))
+	// El editor se compone sin comprobar disponibilidad: a diferencia de
+	// tuicr/hunk/agente, su orden puede ser una función o un alias del shell (el
+	// clásico `vi` que expande a `nvim .`) y no existir como binario en el PATH,
+	// así que un chequeo lo borraría siempre y dejaría el tab de review con un
+	// solo pane sin explicación. Y una orden mal escrita se ve en el propio
+	// pane, que es justo cuando el usuario lo está mirando.
+	if editor, ok := compose(KindEditor, "Editor", DirRight, tools.Editor, defaultEditBin); ok {
+		review.Panes = append(review.Panes, editor)
+	}
+	edit := Tab{Label: LabelEdit}
+	// Hunk sin revspec: `hunk diff` a secas revisa el WORKING TREE. El pane
+	// comparte tab con el editor y el agente, así que lo que se quiere ver es lo
+	// que se está tocando; el diff del PR/MR contra la rama destino es un
+	// objetivo fijo que no se mueve mientras editas y esconde los cambios en
+	// curso. Sigue disponible por `[commands].hunk` (p. ej. `hunk diff
+	// main...HEAD`), y no se usa `hunk session review`, que exporta una sesión
+	// viva y exige `<session-id>`/`--repo` en vez de abrir una review.
+	add(&edit, KindHunk, "Hunk", DirReuse, tools.Hunk, defaultHunkBin, "diff")
+	add(&edit, KindAgent, "Agente", DirRight, tools.Agent, defaultAgentBin)
+	p.Tabs = nonEmpty(review, edit)
 	return p
 }
 
-// hunkArgs son los argumentos del diff del PR/MR para el pane de Hunk: compara
-// contra la rama destino en su merge-base (`<base>...HEAD`), la misma semántica
-// que GitHub/GitLab muestran para un PR/MR. Sin rama destino cae a `hunk diff`
-// (cambios del worktree). Hunk 0.16.0 acepta el revspec de tres puntos como
-// target único de `hunk diff`; no se usa `hunk session review`, que exporta una
-// sesión viva y exige `<session-id>`/`--repo` en vez de abrir una review.
-func hunkArgs(pr model.Item) []string {
-	if pr.TargetBranch == "" {
-		return []string{"diff"}
+// nonEmpty descarta los tabs que se quedaron sin panes.
+func nonEmpty(tabs ...Tab) []Tab {
+	out := make([]Tab, 0, len(tabs))
+	for _, t := range tabs {
+		if len(t.Panes) > 0 {
+			out = append(out, t)
+		}
 	}
-	return []string{"diff", pr.TargetBranch + "...HEAD"}
+	return out
 }
 
 // ReviewTarget es el argumento con el que TUICR identifica el ítem: su URL si

@@ -240,7 +240,7 @@ func TestMutationsRefusedWithoutHerdrEnv(t *testing.T) {
 	if err := c.Notify(ctx, "hola", NotifyOptions{}); err == nil {
 		t.Fatal("no debería notificar fuera de Herdr")
 	}
-	if _, err := c.MountLayout(ctx, Container{PaneID: "w1:p1"}, plan.Plan{Panes: []plan.Pane{{Label: "X", Argv: []string{"x"}}}}); err == nil {
+	if _, err := c.MountLayout(ctx, Container{PaneID: "w1:p1"}, plan.Plan{Tabs: []plan.Tab{{Panes: []plan.Pane{{Label: "X", Argv: []string{"x"}}}}}}); err == nil {
 		t.Fatal("no debería montar layout fuera de Herdr")
 	}
 	if len(f.calls) != 0 {

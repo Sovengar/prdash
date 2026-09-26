@@ -29,9 +29,9 @@ type Keybindings map[string]string
 // Commands mapea nombre de comando → argv base (separado por espacios).
 //
 // Además de los comandos de forge (`gh`/`glab`), acepta las claves de pane del
-// orquestador de review: `tuicr`, `hunk` y `agent`. En ese caso el valor es el
-// argv COMPLETO y verbatim del pane (no se le añade nada); sin clave se usa el
-// default del pane. Ver Config.PaneOverride.
+// orquestador de review: `tuicr`, `hunk`, `agent` y `editor`. En ese caso el
+// valor es el argv COMPLETO y verbatim del pane (no se le añade nada); sin clave
+// se usa el default del pane. Ver Config.PaneOverride.
 type Commands map[string]string
 
 // GitHubConfig es la config del forge GitHub.
@@ -108,8 +108,13 @@ type Tools struct {
 	Tuicr string
 	Hunk  string
 	Agent string
-	GH    string
-	Glab  string
+	// Editor es la orden con la que se abre el editor en el tab de review. No es
+	// una herramienta de review sino un comando de shell, así que puede ser
+	// cualquier cosa que el shell entienda (típicamente el `vi` que expande a
+	// `nvim .`).
+	Editor string
+	GH     string
+	Glab   string
 }
 
 // AutoReview es la config del modo de auto-review (post-MVP; solo se parsea).
@@ -172,11 +177,12 @@ type bitbucketFile struct {
 }
 
 type toolsFile struct {
-	Tuicr *string `toml:"tuicr"`
-	Hunk  *string `toml:"hunk"`
-	Agent *string `toml:"agent"`
-	GH    *string `toml:"gh"`
-	Glab  *string `toml:"glab"`
+	Tuicr  *string `toml:"tuicr"`
+	Hunk   *string `toml:"hunk"`
+	Agent  *string `toml:"agent"`
+	Editor *string `toml:"editor"`
+	GH     *string `toml:"gh"`
+	Glab   *string `toml:"glab"`
 }
 
 type autoReviewFile struct {
@@ -236,6 +242,7 @@ func LoadFrom(path string) (Config, string) {
 		mergeString(fc.Tools.Tuicr, &cfg.Tools.Tuicr)
 		mergeString(fc.Tools.Hunk, &cfg.Tools.Hunk)
 		mergeString(fc.Tools.Agent, &cfg.Tools.Agent)
+		mergeString(fc.Tools.Editor, &cfg.Tools.Editor)
 		mergeString(fc.Tools.GH, &cfg.Tools.GH)
 		mergeString(fc.Tools.Glab, &cfg.Tools.Glab)
 	}
@@ -275,11 +282,10 @@ func Path() (string, error) {
 func DefaultKeybindings() Keybindings {
 	return Keybindings{
 		"quit":         "q",
-		"refresh":      "r",
-		"detail":       "enter",
-		"mount-review": "m",
+		"refresh":      "R",
+		"mount-review": "r",
 		"approve":      "a",
-		"merge":        "M",
+		"merge":        "m",
 		"section-next": "tab",
 		"open-browser": "o",
 	}
@@ -309,11 +315,12 @@ func Defaults() Config {
 			Bitbucket: BitbucketConfig{Enabled: false},
 		},
 		Tools: Tools{
-			Tuicr: "tuicr",
-			Hunk:  "hunk",
-			Agent: "opencode",
-			GH:    "gh",
-			Glab:  "glab",
+			Tuicr:  "tuicr",
+			Hunk:   "hunk",
+			Agent:  "opencode",
+			Editor: "vi",
+			GH:     "gh",
+			Glab:   "glab",
 		},
 		AutoReview:  AutoReview{Allowlist: []string{}},
 		Keybindings: DefaultKeybindings(),
@@ -359,8 +366,9 @@ func (c Config) CmdArgs(action string) []string {
 }
 
 // PaneOverride devuelve el argv completo y verbatim de `[commands]` para el
-// pane de una herramienta (`tuicr`/`hunk`/`agent`), si el usuario lo configuró.
-// Un valor ausente o en blanco no es override: el pane usa su default.
+// pane de una herramienta (`tuicr`/`hunk`/`agent`/`editor`), si el usuario lo
+// configuró. Un valor ausente o en blanco no es override: el pane usa su
+// default.
 func (c Config) PaneOverride(name string) ([]string, bool) {
 	raw, ok := c.Commands[name]
 	if !ok || strings.TrimSpace(raw) == "" {
@@ -384,6 +392,8 @@ func (c Config) ToolArgs(name string) []string {
 		return fieldsOr(c.Tools.Hunk, "hunk")
 	case "agent":
 		return fieldsOr(c.Tools.Agent, "opencode")
+	case "editor":
+		return fieldsOr(c.Tools.Editor, "vi")
 	}
 	return nil
 }
@@ -396,43 +406,54 @@ func fieldsOr(raw, fallback string) []string {
 	return strings.Fields(raw)
 }
 
-// hintLabels es la etiqueta corta de cada acción en la barra de hints.
-var hintLabels = map[string]string{
-	"refresh":      "r refresh",
-	"detail":       "enter detail",
-	"mount-review": "m mount review",
-	"approve":      "a approve",
-	"merge":        "M merge",
-	"section-next": "tab section",
-	"open-browser": "o open",
-	"quit":         "q quit",
+// hint es una entrada de la barra de atajos. Con action vacía es una tecla
+// fija, que no sale de [keybindings] (j/k, pgup/dn). Con action puesta, la
+// tecla se resuelve sobre el mapa ya fusionado, de modo que un override del
+// usuario se refleja en la barra sin tocar nada aquí.
+type hint struct {
+	action string
+	key    string
+	label  string
 }
 
-// HintBarLines devuelve las líneas de hints, separadas por " · ", derivadas
-// de los keybindings configurados. Es API reservada: la TUI compone hoy su
-// barra con las acciones realmente disponibles.
-func (c Config) HintBarLines() []string {
-	first := []string{"j/k move"}
-	second := []string{}
-	for _, action := range []string{
-		"section-next", "refresh", "detail", "mount-review", "approve", "merge", "open-browser", "quit",
-	} {
-		key, ok := c.Keybindings[action]
-		if !ok {
+// hintOrder es la única fuente de la barra de atajos: qué se muestra, en qué
+// orden y con qué etiqueta. La TUI solo une estas partes y las envuelve al
+// ancho de su caja, así que entrar aquí es la única forma de que una tecla
+// aparezca. TestHintsCubrenTodosLosKeybindings vigila que no se quede ninguna
+// fuera.
+//
+// El orden no es decorativo: el recorte a maxHintLines corta por la cola, así
+// que en un terminal estrecho solo sobrevive la cabeza de la lista. Por eso
+// `quit` abre la lista: es la única tecla sin la que no se sale, y si fuera la
+// última sería justo la primera en desaparecer.
+var hintOrder = []hint{
+	{action: "quit", label: "quit"},
+	{action: "section-next", label: "section"},
+	{action: "mount-review", label: "mount review"},
+	{action: "approve", label: "approve"},
+	{action: "merge", label: "merge ×2"},
+	{action: "open-browser", label: "open"},
+	{action: "refresh", label: "refresh"},
+	{key: "j/k", label: "move"},
+	{key: "pgup/dn", label: "page"},
+}
+
+// Hints devuelve la barra de atajos como partes ya resueltas y en orden, cada
+// una "tecla etiqueta". Devuelve partes y no líneas porque el reparto en
+// líneas depende del ancho del terminal, que es del layout y no de la config.
+func (c Config) Hints() []string {
+	out := make([]string, 0, len(hintOrder))
+	for _, h := range hintOrder {
+		key := h.key
+		if h.action != "" {
+			key = c.KeyFor(h.action)
+		}
+		if key == "" {
 			continue
 		}
-		label, ok := hintLabels[action]
-		if !ok {
-			label = key
-		}
-		hint := key + " " + strings.TrimPrefix(label, key+" ")
-		if action == "section-next" {
-			first = append(first, hint)
-			continue
-		}
-		second = append(second, hint)
+		out = append(out, key+" "+h.label)
 	}
-	return []string{strings.Join(first, " · "), strings.Join(second, " · ")}
+	return out
 }
 
 // expandAll expande `~/` a home en cada entrada.

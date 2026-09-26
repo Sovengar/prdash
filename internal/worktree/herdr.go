@@ -15,6 +15,8 @@ type HerdrRunner interface {
 	WorktreeCreate(ctx context.Context, spec herdr.WorktreeSpec) (herdr.WorktreeInfo, error)
 	WorktreeList(ctx context.Context, cwd string) ([]herdr.WorktreeInfo, error)
 	WorktreeRemove(ctx context.Context, workspaceID string, force bool) error
+	WorkspaceCreate(ctx context.Context, spec herdr.WorkspaceSpec) (herdr.WorkspaceInfo, error)
+	PaneList(ctx context.Context, workspaceID string) ([]herdr.PaneInfo, error)
 }
 
 // HerdrNative provisiona worktrees delegando en el nativo de Herdr, que liga el
@@ -97,8 +99,15 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 // reuse devuelve el worktree ya existente y, si sigue abierto como workspace,
 // su id de contenedor. Verifica que la rama coincida con la pedida, igual que
 // la provisión con git directo: reutilizar un checkout de otra rama sería un
-// falso montaje. Un worktree cerrado se devuelve sin contenedor: el layout
-// pedirá entonces un workspace propio.
+// falso montaje.
+//
+// Si el checkout no tiene workspace abierto, abre uno con cwd en el propio
+// worktree en vez de devolver el worktree sin contenedor. Sin esto el layout se
+// fabricaba un workspace propio y el review aparecía como un workspace suelto,
+// desligado del worktree que lo contiene. `herdr worktree create` no puede
+// resolver el caso: hace internamente `git worktree add` y se niega a abrir un
+// path que ya existe, pero `workspace create` con ese cwd sí queda registrado
+// como el workspace abierto del worktree (verificado en Herdr 0.9.1).
 func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 	existing, ok, err := h.scan.inspect(ctx, spec.Path)
 	if err != nil {
@@ -116,17 +125,48 @@ func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 	if spec.Label != "" {
 		wt.Label = spec.Label
 	}
-	// El workspace abierto solo lo conoce Herdr (worktree list); si falla, el
-	// worktree se devuelve sin contenedor y el layout pedirá uno propio.
-	if infos, err := h.client.WorktreeList(ctx, spec.Repo); err == nil {
-		for _, info := range infos {
-			if info.Path == spec.Path {
-				wt.WorkspaceID = info.OpenWorkspaceID
-				break
-			}
-		}
+	if err := h.attach(ctx, &wt, spec); err != nil {
+		return Worktree{}, err
 	}
 	return wt, nil
+}
+
+// attach deja el worktree con un workspace de Herdr. Si el checkout ya tiene uno
+// abierto, se reutiliza; si no, se abre uno con cwd en el propio worktree, que es
+// lo que Herdr registra como suyo.
+//
+// el `open_workspace_id` de `worktree list` NO se confía a ciegas: Herdr lo
+// guarda en su sesión persistida, así que un workspace cerrado deja el id
+// apuntando a nada y `pane list` responde `workspace_not_found` (comprobado en
+// 0.9.1). Confiar en él dejaba el worktree sin pane base, y el layout se
+// fabricaba entonces un workspace propio desligado del worktree: el review
+// aparecía como un workspace suelto y nuevo en cada montaje. Por eso se
+// comprueba con `pane list`, que además de validar el id da el pane base.
+func (h *HerdrNative) attach(ctx context.Context, wt *Worktree, spec Spec) error {
+	if infos, err := h.client.WorktreeList(ctx, spec.Repo); err == nil {
+		for _, info := range infos {
+			if info.Path != spec.Path || info.OpenWorkspaceID == "" {
+				continue
+			}
+			if panes, err := h.client.PaneList(ctx, info.OpenWorkspaceID); err == nil && len(panes) > 0 {
+				wt.WorkspaceID = info.OpenWorkspaceID
+				wt.RootPaneID = panes[0].PaneID
+				return nil
+			}
+			break // el id no es fiable: se cae a la adopción
+		}
+	}
+	info, err := h.client.WorkspaceCreate(ctx, herdr.WorkspaceSpec{
+		Cwd:     spec.Path,
+		Label:   spec.Label,
+		NoFocus: true,
+	})
+	if err != nil {
+		return fmt.Errorf("open a Herdr workspace for the worktree at %s (remove it with `prdash worktrees remove %s` and mount again to recreate it): %w", spec.Path, spec.Path, err)
+	}
+	wt.WorkspaceID = info.WorkspaceID
+	wt.RootPaneID = info.RootPaneID
+	return nil
 }
 
 // Remove quita el worktree nativo (y su workspace) si puede resolver el

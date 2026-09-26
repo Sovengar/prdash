@@ -155,7 +155,7 @@ func TestRunActionApproveOK(t *testing.T) {
 		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 1): item},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 1)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 1, forge.Squash)
 	if !out.OK || out.Conflict || out.Perm {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -176,7 +176,7 @@ func TestRunActionConflictWhenMerged(t *testing.T) {
 		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 2): item},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 2)
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 2, forge.Squash)
 	if !out.Conflict || out.OK {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -193,7 +193,7 @@ func TestRunActionConflictWhenNotFound(t *testing.T) {
 		StateWarnings: map[string][]model.Warning{testutil.ItemKey("grp/proj", 3): {{Forge: "gitlab", Kind: "notfound", Msg: "404"}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 3)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 3, forge.Squash)
 	if !out.Conflict {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -208,7 +208,7 @@ func TestRunActionPermissionDisabled(t *testing.T) {
 		ActionWarnings: map[string][]model.Warning{"approve:grp/proj#4": {{Forge: "gitlab", Kind: "permission", Msg: "no tienes permiso"}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 4)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 4, forge.Squash)
 	if !out.Perm || out.OK {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -223,7 +223,7 @@ func TestRunActionUnsupportedDisabled(t *testing.T) {
 		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#5": {{Forge: "bitbucket", Kind: "unsupported", Msg: "no soportado"}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5)
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5, forge.Squash)
 	if !out.Perm {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -245,7 +245,7 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 		}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 6)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 6, forge.Squash)
 	if !out.Perm || out.OK || out.Conflict {
 		t.Fatalf("outcome = %+v", out)
 	}

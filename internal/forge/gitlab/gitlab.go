@@ -152,8 +152,36 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 }
 
 // Merge mergea un MR con `glab mr merge`.
-func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
-	return a.action(ctx, a.mrArgs("merge", number, ref.Project, "--yes")...)
+// Merge mergea un MR con `glab mr merge` y el flag de estrategia que toque.
+//
+// `--auto-merge=false` no es opcional: glab lo tiene en true por defecto, así que
+// con un pipeline en marcha la orden no mergeaba, solo dejaba el MR en cola de
+// auto-merge y salía con exit 0. El TUI informaba "merge ok" de un MR que
+// seguía abierto. Con `--yes` la confirmación tampoco se le pregunta a nadie.
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode) []model.Warning {
+	extra := []string{"--yes", "--auto-merge=false"}
+	if flag, ok := glabMergeFlag(mode); ok {
+		extra = append(extra, flag)
+	} else {
+		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(mode))}
+	}
+	return a.action(ctx, a.mrArgs("merge", number, ref.Project, extra...)...)
+}
+
+// glabMergeFlag traduce el modo al flag de `glab mr merge`. Merge commit no
+// tiene flag propio: es la ausencia de estrategia, y por eso devuelve ok con la
+// lista vacía en vez de un flag.
+func glabMergeFlag(mode forge.MergeMode) (string, bool) {
+	switch mode {
+	case forge.MergeCommit:
+		return "", true
+	case forge.Rebase:
+		return "--rebase", true
+	case forge.Squash:
+		return "--squash", true
+	default:
+		return "", false
+	}
 }
 
 func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {

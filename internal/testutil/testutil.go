@@ -43,6 +43,8 @@ type FakeAdapter struct {
 	calls       map[FakeKey]int
 	listCalls   int
 	actionCalls map[string]int
+	// MergeModes cuenta quantas veces se pidió cada estrategia de merge.
+	MergeModes map[forge.MergeMode]int
 }
 
 // Cumple el contrato en compilación.
@@ -103,8 +105,23 @@ func (f *FakeAdapter) Approve(_ context.Context, ref model.RepoRef, number int) 
 }
 
 // Merge devuelve los warnings configurados para la acción.
-func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int) []model.Warning {
+func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, mode forge.MergeMode) []model.Warning {
+	// El modo se registra aparte para que un test pueda afirmar con qué
+	// estrategia se pidió el merge, no solo que se pidió.
+	f.mu.Lock()
+	if f.MergeModes == nil {
+		f.MergeModes = map[forge.MergeMode]int{}
+	}
+	f.MergeModes[mode]++
+	f.mu.Unlock()
 	return f.record("merge", ref, number)
+}
+
+// MergeModeCount devuelve cuántas veces se pidió el merge con una estrategia.
+func (f *FakeAdapter) MergeModeCount(mode forge.MergeMode) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.MergeModes[mode]
 }
 
 // record cuenta la acción y devuelve sus warnings: los tests pueden afirmar que
@@ -181,7 +198,7 @@ func RunConformance(t *testing.T, a forge.Adapter, opts ConformanceOptions) {
 	if warns := a.Approve(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Approve debería reportar unsupported", a.Forge())
 	}
-	if warns := a.Merge(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
+	if warns := a.Merge(ctx, ref, 1, forge.Squash); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Merge debería reportar unsupported", a.Forge())
 	}
 }

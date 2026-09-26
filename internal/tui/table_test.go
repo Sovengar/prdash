@@ -174,6 +174,35 @@ func TestNavigationMovesCursor(t *testing.T) {
 	}
 }
 
+// TestSectionNextHonorsRebind comprueba que la tecla de section-next sale de
+// [keybindings] y no de un "tab" cableado. Con el atajo hardcodeado, un
+// rebind en la config se anunciaba en la barra de hints y no hacia nada: la
+// tecla nueva era un fantasma.
+func TestSectionNextHonorsRebind(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m.cfg.Keybindings["section-next"] = "n"
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
+		mkItem("github", "github.com", "acme/widget", "A", 1, ""),
+	}, false))
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
+		mkItem("github", "github.com", "acme/widget", "C", 3, ""),
+	}, false))
+
+	m = press(t, m, "n")
+	if m.cursor != 1 {
+		t.Fatalf("cursor tras n = %d, want 1 (primer ítem de review)", m.cursor)
+	}
+	if it, ok := m.selected(); !ok || it.Title != "C" {
+		t.Fatalf("seleccionado = %+v", it)
+	}
+	// tab ya no es la tecla de la acción: debe ser una tecla muerta y no
+	// advancing de sección, para que la barra no prometa lo que no hay.
+	m = press(t, m, "tab")
+	if m.cursor != 1 {
+		t.Fatalf("tab movió la sección aun estando rebindeada: cursor = %d, want 1", m.cursor)
+	}
+}
+
 // TestAuthoredOnlyShowsOwnItems comprueba que la sección authored solo contiene
 // lo que abrí yo.
 func TestAuthoredOnlyShowsOwnItems(t *testing.T) {

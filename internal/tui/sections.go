@@ -1,12 +1,12 @@
 // Composición de las cajas de la vista. Cada región de pantalla es una caja con
-// borde redondeado y título embebido en la línea superior: cabecera, cuerpo
-// central (la lista del inbox o la ficha a pantalla completa), panel de detalle
-// y atajos. Se apilan sin líneas en blanco entre ellas —los bordes ya separan— y
-// todas usan el ancho exterior de la terminal, así que la suma de alturas da
-// exactamente la altura del terminal.
+// borde redondeado y título embebido en la línea superior: cabecera, lista del
+// inbox, panel de detalle del ítem seleccionado y atajos. Se apilan sin líneas en
+// blanco entre ellas —los bordes ya separan— y todas usan el ancho exterior de
+// la terminal, así que la suma de alturas da exactamente la altura del terminal.
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -72,20 +72,14 @@ func (m Model) sectionLines(title string, content []string, paintable bool) box 
 	}
 }
 
-// layout calcula el reparto de alto de la vista partida (lista arriba, detalle
-// abajo).
+// layout calcula el reparto de alto de la vista: lista arriba, panel de detalle
+// abajo.
 func (m Model) layout() layout {
-	return computeLayout(m.height, len(m.hintLines()), m.height > 0, false)
-}
-
-// layoutFullDetail es layout para la ficha a pantalla completa: el cuerpo central
-// es la ficha y no hay panel inferior.
-func (m Model) layoutFullDetail() layout {
-	return computeLayout(m.height, len(m.hintLines()), m.height > 0, true)
+	return computeLayout(m.height, len(m.hintLines()), m.height > 0)
 }
 
 // compose apila las cajas visibles: la cabecera, las que le pase el cuerpo
-// (lista y panel de detalle, o solo la ficha a pantalla completa) y los atajos.
+// (lista y panel de detalle) y los atajos.
 func (m Model) compose(lay layout, boxes ...box) view {
 	var s stack
 	if lay.showHeader {
@@ -173,21 +167,53 @@ func (m Model) keybindsSection(hintLines int) box {
 	return m.sectionLines("Keybinds", lines, false)
 }
 
+// hintSep une las partes de la barra de atajos. Lo compone la TUI y no la
+// config porque es una decisión de maquetación, no de datos: la lista y su
+// orden son cosa de config.Hints().
+const hintSep = " · "
+
 // hintLines parte la barra de atajos en las líneas que caben en el ancho interior
 // de la caja, acotadas por maxHintLines. En un terminal estrecho los atajos se
-// reparten en varias líneas en vez de perder la cola: el de salir es el último
-// y es justo el que no puede faltar. Se parte el texto plano y se viste cada
-// línea después, para que el color no dependa de dónde caiga el corte.
+// reparten en varias líneas en vez de perder la cola, y la cola es precisamente
+// lo que config.Hints() ordena para que no se pierda lo imprescindible: `quit`
+// va primero porque el recorte tira por el final.
+//
+// Con merge armado la caja deja de ser ayuda y pasa a ser la Confirmación: es el
+// aviso que el usuario tiene que leer antes de la segunda pulsación, y por eso
+// sustituye a la barra en vez de competir con ella. Vive aquí y no en un toast
+// porque un toast caduca a los 4 s y una Confirmación a la que se contesta
+// después de mirar a otro lado tiene que seguir ahí.
 func (m Model) hintLines() []string {
-	plain := wrapText(m.hintLine(), m.contentWidth())
+	if m.mergeArmed {
+		return wrapHint(m.mergeConfirmText(), m.contentWidth(), func(s string) string { return styleWarn.Render(s) })
+	}
+	return wrapHint(strings.Join(m.cfg.Hints(), hintSep), m.contentWidth(), func(s string) string { return styleHint.Render(s) })
+}
+
+// wrapHint parte el texto a lo ancho y lo viste línea a línea, para que el color
+// no dependa de dónde caiga el corte.
+func wrapHint(text string, width int, paint func(string) string) []string {
+	plain := wrapText(text, width)
 	if len(plain) > maxHintLines {
 		plain = plain[:maxHintLines]
 	}
 	lines := make([]string, 0, len(plain))
 	for _, l := range plain {
-		lines = append(lines, styleHint.Render(l))
+		lines = append(lines, paint(l))
 	}
 	return lines
+}
+
+// mergeConfirmText compone la Confirmación de merge. La segunda tecla ES el
+// modo, así que no hay estrategia por defecto que se pueda ejecutar sin
+// nombrarla: las tres opciones se leen enteras en la caja. Va en inglés como
+// todos los avisos de la TUI.
+func (m Model) mergeConfirmText() string {
+	it, _ := m.selected()
+	return fmt.Sprintf(
+		"merge %s? Are you sure you want to merge this PR/MR · press the mode: m merge commit · r rebase · s squash · esc cancel",
+		refLabel(it),
+	)
 }
 
 // outerWidth es el ancho exterior de las cajas: el de la terminal. Antes del

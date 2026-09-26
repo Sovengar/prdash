@@ -13,6 +13,7 @@ import (
 type fakeLayout struct {
 	fakeCLI
 	splits int
+	tabs   int
 }
 
 func newFakeLayout() *fakeLayout {
@@ -24,6 +25,9 @@ func newFakeLayout() *fakeLayout {
 			return []byte("herdr 0.9.1\n"), nil, nil
 		case args[0] == "workspace":
 			return []byte(fixtureWorkspaceCreated), nil, nil
+		case args[0] == "tab" && args[1] == "create":
+			f.tabs++
+			return []byte(fmt.Sprintf(`{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w18:t%d"},"root_pane":{"pane_id":"w18:p%d"}}}`, f.tabs+1, f.splits+1)), nil, nil
 		case args[0] == "pane" && args[1] == "split":
 			f.splits++
 			pane := fmt.Sprintf("w18:p%d", f.splits+1)
@@ -37,15 +41,25 @@ func newFakeLayout() *fakeLayout {
 	return f
 }
 
+// testPlan es el layout de dos tabs: Review (review + editor) sobre el tab que
+// ya trae el contenedor, y Edit (diff + agente) en un tab nuevo.
 func testPlan() plan.Plan {
-	return plan.Plan{Panes: []plan.Pane{
-		{Kind: plan.KindTuicr, Label: "TUICR", Cwd: "/wt/prdash-pr-7", Argv: []string{"tuicr", "pr", "https://github.com/o/r/pull/7"}, Env: []string{"PRDASH_NUMBER=7"}},
-		{Kind: plan.KindAgent, Label: "Agente", Cwd: "/wt/prdash-pr-7", Argv: []string{"opencode"}, Env: []string{"PRDASH_NUMBER=7"}},
-		{Kind: plan.KindHunk, Label: "Hunk", Cwd: "/wt/prdash-pr-7", Argv: []string{"hunk", "diff", "main...HEAD"}, Env: []string{"PRDASH_NUMBER=7"}},
+	return plan.Plan{Tabs: []plan.Tab{
+		{Label: plan.LabelReview, Panes: []plan.Pane{
+			{Kind: plan.KindTuicr, Label: "TUICR", Cwd: "/wt/prdash-pr-7", Argv: []string{"tuicr", "pr", "https://github.com/o/r/pull/7"}, Env: []string{"PRDASH_NUMBER=7"}},
+			{Kind: plan.KindEditor, Label: "Editor", Dir: plan.DirRight, Cwd: "/wt/prdash-pr-7", Argv: []string{"vi"}, Env: []string{"PRDASH_NUMBER=7"}},
+		}},
+		{Label: plan.LabelEdit, Panes: []plan.Pane{
+			{Kind: plan.KindHunk, Label: "Hunk", Cwd: "/wt/prdash-pr-7", Argv: []string{"hunk", "diff", "main...HEAD"}, Env: []string{"PRDASH_NUMBER=7"}},
+			{Kind: plan.KindAgent, Label: "Agente", Dir: plan.DirRight, Cwd: "/wt/prdash-pr-7", Argv: []string{"opencode"}, Env: []string{"PRDASH_NUMBER=7"}},
+		}},
 	}}
 }
 
-func TestMountLayoutUsesRootPaneAndSplits(t *testing.T) {
+// TestMountLayoutRenamesRootTabAndCreatesTheRest: el primer tab se monta sobre el
+// que ya trae el contenedor y toma su nombre, así que el workspace no queda con
+// una pestaña raíz huérfana; el segundo lo crea Herdr etiquetado y sin foco.
+func TestMountLayoutRenamesRootTabAndCreatesTheRest(t *testing.T) {
 	f := newFakeLayout()
 	c := f.client()
 
@@ -60,18 +74,54 @@ func TestMountLayoutUsesRootPaneAndSplits(t *testing.T) {
 		t.Fatal("con root pane no debería crear otro workspace")
 	}
 
-	// Primer pane: run y rename sobre el root.
-	if !f.called("pane", "run", "w18:p1") {
-		t.Fatal("el primer pane debería lanzarse sobre el root pane")
+	// El tab del contenedor se renombra a la etiqueta del primer tab.
+	if !f.called("tab", "rename", "w18:t1", plan.LabelReview) {
+		t.Fatalf("el tab raíz debería renombrarse a %q: %v", plan.LabelReview, f.calls)
 	}
-	if !f.called("pane", "rename", "w18:p1", "TUICR") {
-		t.Fatal("el primer pane debería renombrarse")
+	if f.tabs != 1 {
+		t.Fatalf("tabs creados = %d, quiero 1 (el primero reutiliza el del contenedor)", f.tabs)
 	}
-	// Divisiones: right sobre el root y down sobre el pane nuevo.
-	if !hasSplit(f.calls, "w18:p1", "right") || !hasSplit(f.calls, "w18:p2", "down") {
-		t.Fatalf("divisiones = %v", f.calls)
+	if !hasCall(f.calls, "tab", "create", "--workspace", "w18", "--label", plan.LabelEdit, "--no-focus") {
+		t.Fatalf("el segundo tab debería crearse en el workspace: %v", f.calls)
 	}
-	// Todos los splits sin foco y con cwd.
+}
+
+// TestMountLayoutFillsEachTabIndependently: cada tab divide su propio pane base
+// hacia la derecha, no el del tab anterior.
+func TestMountLayoutFillsEachTabIndependently(t *testing.T) {
+	f := newFakeLayout()
+	c := f.client()
+
+	if _, err := c.MountLayout(context.Background(), Container{WorkspaceID: "w18", PaneID: "w18:p1"}, testPlan()); err != nil {
+		t.Fatalf("MountLayout: %v", err)
+	}
+
+	// Review: TUICR sobre el root, Editor a su derecha.
+	if !f.called("pane", "run", "w18:p1") || !f.called("pane", "rename", "w18:p1", "TUICR") {
+		t.Fatalf("el primer pane debería lanzarse sobre el root pane: %v", f.calls)
+	}
+	// Edit: Hunk sobre el root pane del tab nuevo, Agente a su derecha.
+	if !f.called("pane", "run", "w18:p2") || !f.called("pane", "rename", "w18:p2", "Hunk") {
+		t.Fatalf("el segundo tab debería poblarse desde su propio root pane: %v", f.calls)
+	}
+	if !f.called("pane", "rename", "w18:p3", "Agente") {
+		t.Fatalf("el agente debería ocupar el pane dividido: %v", f.calls)
+	}
+	if hasSplit(f.calls, "w18:p1", "right") && hasSplit(f.calls, "w18:p2", "right") {
+		return
+	}
+	t.Fatalf("cada tab debería dividir a la derecha desde su base: %v", f.calls)
+}
+
+// TestMountLayoutUsesRootPaneAndSplits comprueba el envío de cwd y env del plan
+// en cada división.
+func TestMountLayoutSendsCwdAndEnvToEverySplit(t *testing.T) {
+	f := newFakeLayout()
+	c := f.client()
+
+	if _, err := c.MountLayout(context.Background(), Container{WorkspaceID: "w18", PaneID: "w18:p1"}, testPlan()); err != nil {
+		t.Fatalf("MountLayout: %v", err)
+	}
 	for _, call := range f.calls {
 		if len(call) >= 2 && call[0] == "pane" && call[1] == "split" {
 			if !contains(call, "--no-focus") {
@@ -87,10 +137,36 @@ func TestMountLayoutUsesRootPaneAndSplits(t *testing.T) {
 	}
 }
 
+// TestMountLayoutFailsOnDeadWorkspace: si el contenedor apunta a un workspace que
+// Herdr ya no conoce, el montaje debe fallar nombrándolo. Fabricar otro workspace
+// es lo que hacía que el review apareciera como un workspace suelto, sin relación
+// con el worktree y sin ningún aviso.
+func TestMountLayoutFailsOnDeadWorkspace(t *testing.T) {
+	f := newFakeLayout()
+	base := f.respond
+	f.respond = func(args []string) ([]byte, []byte, error) {
+		if len(args) > 2 && args[0] == "pane" && args[1] == "list" {
+			return nil, nil, fmt.Errorf("workspace w1B not found")
+		}
+		return base(args)
+	}
+
+	warns, err := f.client().MountLayout(context.Background(), Container{WorkspaceID: "w1B"}, testPlan())
+	if err == nil {
+		t.Fatalf("un workspace muerto no debería montar en silencio (warnings=%v)", warns)
+	}
+	if !strings.Contains(err.Error(), "w1B") {
+		t.Fatalf("el error debería nombrar el workspace: %v", err)
+	}
+	if f.called("workspace", "create") {
+		t.Fatal("no debería crear un workspace de repuesto")
+	}
+}
+
 func TestMountLayoutCreatesWorkspaceWithoutContainer(t *testing.T) {
 	f := newFakeLayout()
 	c := f.client()
-	pl := plan.Plan{Panes: []plan.Pane{{Kind: plan.KindTuicr, Label: "TUICR", Cwd: "/wt", Argv: []string{"tuicr"}}}}
+	pl := plan.Plan{Tabs: []plan.Tab{{Label: plan.LabelReview, Panes: []plan.Pane{{Kind: plan.KindTuicr, Label: "TUICR", Cwd: "/wt", Argv: []string{"tuicr"}}}}}}
 
 	if _, err := c.MountLayout(context.Background(), Container{}, pl); err != nil {
 		t.Fatalf("MountLayout: %v", err)
@@ -109,9 +185,32 @@ func TestMountLayoutEmptyPlanIsNoop(t *testing.T) {
 		t.Fatalf("plan vacío: warns=%v err=%v", warns, err)
 	}
 	for _, call := range f.calls {
-		if call[0] == "pane" {
-			t.Fatalf("no debería tocar panes con plan vacío: %v", call)
+		if call[0] == "pane" || call[0] == "tab" {
+			t.Fatalf("no debería tocar panes ni tabs con plan vacío: %v", call)
 		}
+	}
+}
+
+// TestMountLayoutTabFailureIsWarning: un tab que no se puede abrir no tumba el
+// que ya está montado; el review queda utilizable y el aviso explica el hueco.
+func TestMountLayoutTabFailureIsWarning(t *testing.T) {
+	f := newFakeLayout()
+	base := f.respond
+	f.respond = func(args []string) ([]byte, []byte, error) {
+		if len(args) > 1 && args[0] == "tab" && args[1] == "create" {
+			return nil, nil, fmt.Errorf("sin espacio")
+		}
+		return base(args)
+	}
+	warns, err := f.client().MountLayout(context.Background(), Container{WorkspaceID: "w18", PaneID: "w18:p1"}, testPlan())
+	if err != nil {
+		t.Fatalf("un tab fallido no debería abortar: %v", err)
+	}
+	if len(warns) == 0 || !strings.Contains(strings.Join(warns, " "), plan.LabelEdit) {
+		t.Fatalf("warnings = %v", warns)
+	}
+	if !f.called("pane", "rename", "w18:p1", "TUICR") {
+		t.Fatalf("el primer tab debería quedarse montado: %v", f.calls)
 	}
 }
 
@@ -125,11 +224,11 @@ func TestMountLayoutPaneFailureIsWarning(t *testing.T) {
 		return base(args)
 	}
 	pl := testPlan()
-	warns, err := f.client().MountLayout(context.Background(), Container{PaneID: "w18:p1"}, pl)
+	warns, err := f.client().MountLayout(context.Background(), Container{WorkspaceID: "w18", PaneID: "w18:p1"}, pl)
 	if err != nil {
 		t.Fatalf("un split fallido no debería abortar: %v", err)
 	}
-	if len(warns) == 0 || !strings.Contains(strings.Join(warns, " "), "Hunk") {
+	if len(warns) == 0 || !strings.Contains(strings.Join(warns, " "), "Editor") {
 		t.Fatalf("warnings = %v", warns)
 	}
 }
@@ -151,6 +250,28 @@ func TestPaneCommandQuotesCwdAndEnv(t *testing.T) {
 func hasSplit(calls [][]string, parent, direction string) bool {
 	for _, c := range calls {
 		if len(c) >= 4 && c[0] == "pane" && c[1] == "split" && contains(c, parent) && contains(c, direction) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCall exige que la invocación empiece por sub (sus primeros elementos, tal
+// cual) y que lleve el resto de flags en cualquier orden: el orden de los flags
+// en la línea de comandos no es un contrato de prdash, su presencia sí.
+func hasCall(calls [][]string, sub string, flags ...string) bool {
+	for _, c := range calls {
+		if len(c) == 0 || c[0] != sub {
+			continue
+		}
+		all := true
+		for _, want := range flags {
+			if !contains(c, want) {
+				all = false
+				break
+			}
+		}
+		if all {
 			return true
 		}
 	}
