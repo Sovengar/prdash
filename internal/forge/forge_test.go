@@ -127,7 +127,7 @@ func TestRunActionApproveOK(t *testing.T) {
 		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 1): item},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 1, forge.Squash)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 1, forge.MergeRequest{Mode: forge.Squash})
 	if !out.OK || out.Conflict || out.Perm {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -148,7 +148,7 @@ func TestRunActionConflictWhenMerged(t *testing.T) {
 		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 2): item},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 2, forge.Squash)
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 2, forge.MergeRequest{Mode: forge.Squash})
 	if !out.Conflict || out.OK {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -165,7 +165,7 @@ func TestRunActionConflictWhenNotFound(t *testing.T) {
 		StateWarnings: map[string][]model.Warning{testutil.ItemKey("grp/proj", 3): {{Forge: "gitlab", Kind: "notfound", Msg: "404"}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 3, forge.Squash)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 3, forge.MergeRequest{Mode: forge.Squash})
 	if !out.Conflict {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -180,7 +180,7 @@ func TestRunActionPermissionDisabled(t *testing.T) {
 		ActionWarnings: map[string][]model.Warning{"approve:grp/proj#4": {{Forge: "gitlab", Kind: "permission", Msg: "no tienes permiso"}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 4, forge.Squash)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 4, forge.MergeRequest{Mode: forge.Squash})
 	if !out.Perm || out.OK {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -195,7 +195,7 @@ func TestRunActionUnsupportedDisabled(t *testing.T) {
 		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#5": {{Forge: "bitbucket", Kind: "unsupported", Msg: "no soportado"}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5, forge.Squash)
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5, forge.MergeRequest{Mode: forge.Squash})
 	if !out.Perm {
 		t.Fatalf("outcome = %+v", out)
 	}
@@ -217,12 +217,71 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 		}}},
 	}
 
-	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 6, forge.Squash)
+	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 6, forge.MergeRequest{Mode: forge.Squash})
 	if !out.Perm || out.OK || out.Conflict {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if out.Msg != state.SelfReviewReason {
 		t.Errorf("Msg = %q, want %q (no el stderr de la CLI)", out.Msg, state.SelfReviewReason)
+	}
+}
+
+// TestRunActionUnmergeableIsNotAConflict: el rechazo por ramas que se pisan no
+// es un conflicto de estado, y confundirlos es lo que hacía que la TUI prometiese
+// un refresco que no arregla un rebase.
+//
+// Tiene que llegar con el motivo canónico —que dice lo que hay que hacer— y sin
+// registrarse como denegación: un rebase lo deja integrable, y marcar el ítem
+// como denegado lo dejaría sin merge para siempre.
+func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 7)
+	item.HeadSHA = "abc1234" // sin pin el merge no sale, y esto no es lo que se prueba
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 7): item},
+		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#7": {{
+			Forge: "github", Kind: "unmergeable",
+			Msg: "gh pr merge 7: × Pull request acme/widget#7 is not mergeable: the merge commit cannot be cleanly created. (exit 1)",
+		}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 7, forge.MergeRequest{Mode: forge.Squash})
+	if !out.Unmergeable {
+		t.Fatalf("Unmergeable = false, outcome = %+v", out)
+	}
+	if out.OK || out.Conflict {
+		t.Errorf("un rechazo por ramas no es un conflicto de estado: %+v", out)
+	}
+	if out.Perm {
+		t.Error("Perm = true: un rebase lo arregla, el ítem no queda denegado para siempre")
+	}
+	if out.Msg != state.UnmergeableReason {
+		t.Errorf("Msg = %q, want %q (no el stderr de la CLI)", out.Msg, state.UnmergeableReason)
+	}
+}
+
+// TestRunActionConflictStaysAConflict: el otro lado de la separación. Un ítem que
+// se mergeó mientras lo mirabas se resuelve solo con refrescar, así que sigue
+// siendo conflicto y no "no integrable".
+func TestRunActionConflictStaysAConflict(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 8)
+	item.HeadSHA = "abc1234"
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 8): item},
+		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#8": {{
+			Forge: "github", Kind: "conflict", Msg: "gh pr merge 8: Pull request is already merged (exit 1)",
+		}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 8, forge.MergeRequest{Mode: forge.Squash})
+	if !out.Conflict {
+		t.Fatalf("Conflict = false, outcome = %+v", out)
+	}
+	if out.Unmergeable {
+		t.Error("Unmergeable = true: esto se resuelve refrescando")
 	}
 }
 

@@ -55,6 +55,19 @@ type FakeAdapter struct {
 	commentCalls int
 	// MergeModes cuenta quantas veces se pidió cada estrategia de merge.
 	MergeModes map[forge.MergeMode]int
+	// MergeDeletes registra, en orden, si cada merge pidió borrar la rama. Es una
+	// lista y no un contador porque la pregunta de un test es "este merge, ¿con
+	// borrado o sin él?", y con la lista se contesta sin depender del orden en
+	// que el test firearms las llamadas.
+	MergeDeletes []bool
+	// OnMerge corre sobre el ítem en las lecturas de estado posteriores a un merge.
+	// Sirve para lo que un fake de estado fijo no puede expresar: un merge que
+	// sale y además cambia el ítem, que es el caso del borrado de la rama (el
+	// merge queda hecho aunque el comando salga con error).
+	OnMerge func(*model.Item)
+	// merged marca que ya se pidió un merge, para que OnMerge no se aplique a la
+	// relectura previa (la que decide si el merge sale).
+	merged bool
 }
 
 // Cumple el contrato en compilación.
@@ -104,9 +117,22 @@ func (f *FakeAdapter) ListCallCount() int {
 }
 
 // ItemState devuelve el ítem configurado para "proyecto#número".
+//
+// OnMerge, si está puesto, se aplica SOLO a las lecturas que vienen después de
+// un merge: es lo que hace falta para el único caso en que el estado del ítem
+// cambia por la acción, que es el borrado de la rama (el ítem queda mergeado
+// aunque el comando salga con error). Que sea posterior y no siempre es lo que
+// mantiene honesta la relectura previa, que es la que decide si el merge sale.
 func (f *FakeAdapter) ItemState(_ context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	key := ref.Project + "#" + strconv.Itoa(number)
-	return f.ItemStates[key], f.StateWarnings[key]
+	it := f.ItemStates[key]
+	f.mu.Lock()
+	after := f.merged
+	f.mu.Unlock()
+	if after && f.OnMerge != nil {
+		f.OnMerge(&it)
+	}
+	return it, f.StateWarnings[key]
 }
 
 // Comments devuelve la conversación configurada para "proyecto#número". Sin
@@ -136,24 +162,40 @@ func (f *FakeAdapter) Approve(_ context.Context, ref model.RepoRef, number int) 
 }
 
 // Merge devuelve los warnings configurados para la acción.
-func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, mode forge.MergeMode, headSHA string) []model.Warning {
+func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	// El fake se niega a mergear sin pin, igual que los dos adapters reales, y lo
 	// hace ANTES de registrar nada: un merge que no sale no pidió ninguna
 	// estrategia. Un fake que aceptara lo que producción rechaza haría que
 	// todos los tests de merge de la TUI cubrieran un camino que no existe, y el
 	// fallo real se manifestaría en el adapter, donde ningún test llega.
-	if headSHA == "" {
+	if req.HeadSHA == "" {
 		return []model.Warning{{Forge: f.ForgeName, Kind: "unsupported", Msg: forge.ErrMissingHeadSHA.Error()}}
 	}
-	// El modo se registra aparte para que un test pueda afirmar con qué
-	// estrategia se pidió el merge, no solo que se pidió.
+	// El modo y el borrado se registran aparte para que un test pueda afirmar con
+	// qué estrategia y con qué housekeeping se pidió el merge, no solo que se
+	// pidió.
 	f.mu.Lock()
 	if f.MergeModes == nil {
 		f.MergeModes = map[forge.MergeMode]int{}
 	}
-	f.MergeModes[mode]++
+	f.MergeModes[req.Mode]++
+	f.MergeDeletes = append(f.MergeDeletes, req.DeleteBranch)
+	f.merged = true
 	f.mu.Unlock()
 	return f.record("merge", ref, number)
+}
+
+// MergeDeleteCount cuenta los merges que pidieron borrar la rama.
+func (f *FakeAdapter) MergeDeleteCount(delete bool) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, d := range f.MergeDeletes {
+		if d == delete {
+			n++
+		}
+	}
+	return n
 }
 
 // MergeModeCount devuelve cuántas veces se pidió el merge con una estrategia.
@@ -240,7 +282,7 @@ func RunConformance(t *testing.T, a forge.Adapter, opts ConformanceOptions) {
 	if warns := a.Approve(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Approve debería reportar unsupported", a.Forge())
 	}
-	if warns := a.Merge(ctx, ref, 1, forge.Squash, "deadbeef"); opts.Unsupported && !hasKind(warns, "unsupported") {
+	if warns := a.Merge(ctx, ref, 1, forge.MergeRequest{Mode: forge.Squash, HeadSHA: "deadbeef"}); opts.Unsupported && !hasKind(warns, "unsupported") {
 		t.Errorf("%s: Merge debería reportar unsupported", a.Forge())
 	}
 }

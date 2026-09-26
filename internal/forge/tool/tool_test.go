@@ -29,16 +29,16 @@ func TestEnvIsNonInteractive(t *testing.T) {
 
 func TestKind(t *testing.T) {
 	cases := map[string]string{
-		"context deadline exceeded":   "timeout",
-		"HTTP 429 Too Many Requests":  "ratelimit",
-		"API rate limit exceeded":     "ratelimit",
-		"401 Unauthorized":            "auth",
-		"not logged into any host":    "auth",
-		"403 Forbidden":               "permission",
-		"you must have push access":   "permission",
-		"404 Not Found":               "notfound",
-		"409 conflict: not mergeable": "conflict",
-		"connection refused":          "network",
+		"context deadline exceeded":       "timeout",
+		"HTTP 429 Too Many Requests":      "ratelimit",
+		"API rate limit exceeded":         "ratelimit",
+		"401 Unauthorized":                "auth",
+		"not logged into any host":        "auth",
+		"403 Forbidden":                   "permission",
+		"you must have push access":       "permission",
+		"404 Not Found":                   "notfound",
+		"409 conflict: head sha mismatch": "conflict",
+		"connection refused":              "network",
 	}
 	for msg, want := range cases {
 		if got := Kind(errors.New(msg)); got != want {
@@ -72,6 +72,40 @@ func TestKindHTTPFirst(t *testing.T) {
 	for msg, want := range cases {
 		if got := Kind(errors.New(msg)); got != want {
 			t.Errorf("Kind(%q) = %q, want %q", msg, got, want)
+		}
+	}
+}
+
+// TestKindUnmergeableIsNotConflict: las ramas que se pisan y el ítem que cambió
+// son hechos opuestos y ambos suenan a "conflict" en el texto del forge.
+//
+// La diferencia no es cosmética: un conflicto de estado se resuelve solo con
+// refrescar, y uno de ramas no se resuelve nunca así. Meterlos en el mismo cubo
+// obligaba a la TUI a prometer un refresco que no servía de nada, que es la peor
+// forma de equivocarse porque el aviso no dice qué hacer.
+func TestKindUnmergeableIsNotConflict(t *testing.T) {
+	unmergeable := map[string]string{
+		// GitHub
+		"× Pull request acme/widget#6 is not mergeable: the merge commit cannot be cleanly created.": "unmergeable",
+		"HTTP 409: Head branch was modified. Review and try the merge again.":                        "unmergeable",
+		// GitLab
+		"405 Method Not Allowed: The merge request cannot merge.":    "unmergeable",
+		"You need to rebase the branch before you can merge.":        "unmergeable",
+		"Branch is not up to date. Please update it before merging.": "unmergeable",
+		// Y un texto que no se reconoce NO se mete en el cubo nuevo: es
+		// clasificación conservadora, no una promesa.
+		"something entirely new happened": "network",
+	}
+	for msg, want := range unmergeable {
+		if got := Kind(errors.New(msg)); got != want {
+			t.Errorf("Kind(%q) = %q, want %q", msg, got, want)
+		}
+	}
+	// El conflicto de estado sigue siendo conflicto: "already merged" y el 409
+	// genérico se resuelven solos.
+	for _, msg := range []string{"already merged", "409 conflict", "HTTP 409: Conflict"} {
+		if got := Kind(errors.New(msg)); got != "conflict" {
+			t.Errorf("Kind(%q) = %q, want conflict", msg, got)
 		}
 	}
 }

@@ -149,6 +149,13 @@ func Kind(err error) string {
 	if isRateLimitText(msg) {
 		return "ratelimit"
 	}
+	// El texto de "no integrable" se mira antes que el código HTTP por la misma
+	// razón que el de rate limit, y por el mismo conflicto de vocabulario: GitHub
+	// responde 409 a un rechazo de merge por ramas y también a un estado que sí
+	// se resuelve refrescando, así que el código no distingue y el texto sí.
+	if isUnmergeableText(msg) {
+		return "unmergeable"
+	}
 	if code := HTTPStatus(err.Error()); code != 0 {
 		if k := kindForHTTP(code); k != "" {
 			return k
@@ -167,7 +174,7 @@ func Kind(err error) string {
 		return "timeout"
 	case strings.Contains(msg, "rate limit"), strings.Contains(msg, "429"), strings.Contains(msg, "abuse"):
 		return "ratelimit"
-	case strings.Contains(msg, "409"), strings.Contains(msg, "conflict"), strings.Contains(msg, "not mergeable"),
+	case strings.Contains(msg, "409"), strings.Contains(msg, "conflict"),
 		strings.Contains(msg, "already closed"), strings.Contains(msg, "already merged"):
 		return "conflict"
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"),
@@ -182,6 +189,25 @@ func Kind(err error) string {
 	default:
 		return "network"
 	}
+}
+
+// isUnmergeableText reconoce el rechazo de un merge porque el forge no puede
+// crearlo con las ramas como están.
+//
+// Cubre las redacciones de GitHub ("Pull request …#6 is not mergeable: the merge
+// commit cannot be cleanly created", y el 409 "Head branch was modified. Review
+// and try the merge again.") y las de GitLab ("The merge request cannot merge",
+// "You need to rebase", "Branch is not up to date"). Un texto que no se
+// reconoce cae en el cubo genérico, que es el comportamiento correcto ante lo
+// desconocido: se clasifica peor, no se miente mejor.
+func isUnmergeableText(lower string) bool {
+	return strings.Contains(lower, "not mergeable") ||
+		strings.Contains(lower, "cannot be cleanly created") ||
+		strings.Contains(lower, "head branch was modified") ||
+		strings.Contains(lower, "cannot merge") ||
+		strings.Contains(lower, "cannot be merged") ||
+		strings.Contains(lower, "need to rebase") ||
+		strings.Contains(lower, "not up to date")
 }
 
 // isSelfReviewText reconoce el rechazo de aprobar un PR/MR propio. Cubre las

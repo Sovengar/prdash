@@ -124,6 +124,20 @@ func MergeRulesAll() MergeRules {
 	return MergeRules{Known: true, MergeCommit: true, Rebase: true, Squash: true}
 }
 
+// Mergeability resume si el forge puede integrar el ítem tal y como está, sin
+// que haya que resolver nada antes.
+//
+// Known separa "el forge dice que no" de "el forge todavía no lo sabe": GitHub
+// devuelve UNKNOWN y GitLab UNCHECKED mientras calculan la mergeabilidad en
+// segundo plano, y hay caminos (el respaldo REST de GitHub, la API de Todos de
+// GitLab) donde el dato no viaja. Un unknown no es un no, así que no
+// restringe: quien lo consume tiene que tratarlo como tal en vez de suponer que
+// todo se puede mergear.
+type Mergeability struct {
+	Known      bool
+	Conflicted bool
+}
+
 // RepoRef identifica un repositorio dentro de un forge y host concretos.
 type RepoRef struct {
 	Forge   string // "github" | "gitlab" | ...
@@ -149,18 +163,31 @@ func With(forge, host, project string, number int) ID {
 
 // Item es un PR/MR normalizado, listo para pintar, deduplicar y ordenar.
 type Item struct {
-	Section        Section
-	Forge          string
-	Host           string
-	Ref            RepoRef
-	Number         int
-	Title          string
-	Author         string
-	ReviewKind     ReviewKind
-	SourceBranch   string
-	TargetBranch   string
-	URL            string
-	State          string // estado crudo del forge: open/merged/closed…
+	Section      Section
+	Forge        string
+	Host         string
+	Ref          RepoRef
+	Number       int
+	Title        string
+	Author       string
+	ReviewKind   ReviewKind
+	SourceBranch string
+	TargetBranch string
+	URL          string
+	State        string // estado crudo del forge: open/merged/closed…
+	// IsDraft dice que el forge marco el ítem como borrador. Es un campo aparte
+	// y no un valor de State a propósito: State es el enum del forge (OPEN en
+	// GitHub, opened en GitLab) y meter ahí un "draft" derivado obligaba a que
+	// cada adapter tradujera y a que la comprobación dependiera de que la
+	// traducción fuera exacta. Un PR en borrador llega con State="OPEN" y esta
+	// bandera a true, y quien decide qué etiquetas mostrar lo lee aquí.
+	IsDraft bool
+	// IsFork dice que la rama origen del ítem vive en otro repositorio. En
+	// GitHub es `isCrossRepository`; los forges donde la rama siempre es del
+	// repo destino lo dejan en false. Importa por una cosa concreta: borrar la
+	// rama al mergear un PR de fork no borra nada, así que quien affirme lo
+	// contrario en un aviso está mintiendo.
+	IsFork         bool
 	ReviewDecision string // decisión de review del forge: APPROVED/…
 	Checks         Checks
 	Diff           DiffStat
@@ -174,7 +201,13 @@ type Item struct {
 	HeadSHA string
 	// Merge son las estrategias que el repositorio admite. Un repositorio que no
 	// publica el dato llega con Known=false, y eso no restringe nada.
-	Merge     MergeRules
+	Merge MergeRules
+	// Mergeable es si el forge puede integrar esto ahora mismo. Vive separado de
+	// Merge porque son preguntas distintas: MergeRules es lo que el repositorio
+	// PERMITE (y no lo publica GitLab), y esto es lo que el forge puede HACER con
+	// el ítem tal y como está. Un repositorio puede permitirte las tres
+	// estrategias y seguir sin poder integrarte el PR porque las ramas se pisan.
+	Mergeable Mergeability
 	UpdatedAt time.Time
 }
 

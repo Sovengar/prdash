@@ -104,7 +104,7 @@ func Derive(it model.Item) State {
 		return StateApproved
 	}
 
-	if it.State == "draft" {
+	if it.IsDraft {
 		return StateDraft
 	}
 	return StatePending
@@ -160,21 +160,35 @@ type Block struct {
 // carrera que el pin del head SHA no cierra, porque el CI puede pasar después del
 // merge.
 func MergeBlock(it model.Item) Block {
-	// Borrador, mergeado y cerrado se miran en el estado CRUDO y no en Derive, y
-	// no es un detalle: Derive ordena por atención al operador, así que un ítem
-	// en borrador que además está aprobado devuelve StateApproved y el borrador
-	// se pierde. Aquí la pregunta es otra —¿puede este forge integrar esto?—, y la
-	// respuesta no depende de la decisión de review.
+	// Borrador, mergeado y cerrado se miran en la propiedad del ítem y no en
+	// Derive, y no es un detalle: Derive ordena por atención al operador, así que
+	// un ítem en borrador que además está aprobado devuelve StateApproved y el
+	// borrador se pierde. Aquí la pregunta es otra —¿puede este forge integrar
+	// esto?—, y la respuesta no depende de la decisión de review.
 	switch normalize(it.State) {
 	case "merged":
 		return Block{Reason: "item is already merged", Hard: true}
 	case "closed":
 		return Block{Reason: "item is already closed", Hard: true}
-	case "draft":
+	}
+	if it.IsDraft {
 		// GitHub rechaza el merge de un PR en borrador antes de mirar nada más,
 		// así que ofrecerlo sería gastar una llamada para recibir un error que no
 		// depende de la estrategia.
 		return Block{Reason: "item is a draft", Hard: true}
+	}
+	// El conflicto de ramas es BLANDO y no duro, y esa es la decisión de diseño
+	// que importa: GitHub no lo va a integrar mientras siga así, pero un rebase
+	// lo arregla en un comando, y el gate no puede saber si el usuario ya lo ha
+	// hecho. Prohibirlo sería dejar al PR sin salida desde aquí —la que de verdad
+	// no tiene arreglo es la del CI inestable, y esa se avisa sin vetar—, así que
+	// se anuncia y la segunda pulsación decide.
+	//
+	// Va antes que el CI a propósito: un PR que choca no va a pasar el CI, y decir
+	// "CI is failing" cuando lo que hay que rehacer es un rebase manda al
+	// operador a mirar el sitio equivocado.
+	if it.Mergeable.Known && it.Mergeable.Conflicted {
+		return Block{Reason: conflictedReason(it.TargetBranch)}
 	}
 	switch {
 	case it.Checks.State == model.ChecksFailing:
@@ -189,6 +203,26 @@ func MergeBlock(it model.Item) Block {
 		return Block{Reason: "changes were requested on this item"}
 	}
 	return Block{}
+}
+
+// UnmergeableReason explica un rechazo del forge que no se arregla refrescando.
+//
+// Es el motivo de la casa para el fallo que llega por la vía rápida: cuando el
+// gate ya sabía que las ramas se pisan y aun así se intentó, o cuando el dato no
+// venía, el forge responde con su propio inglés y prdash lo tradujo. La
+// diferencia con un "conflicto" —el ítem cambió mientras lo mirabas, que se
+// resuelve solo con refrescar— es la que importa: aquí la acción correcta es
+// rebasar y pushear, y un aviso que diga "refresca" manda al sitio equivocado.
+const UnmergeableReason = "the forge will not merge it as it is: rebase the branch onto the target and push"
+
+// conflictedReason nombra la rama con la que choca el ítem. Con el nombre de la
+// rama delante el aviso dice qué hay que rebasar; sin él, "choca" obliga a abrir
+// el PR para saber contra qué.
+func conflictedReason(target string) string {
+	if strings.TrimSpace(target) == "" {
+		return "the branch conflicts with the target branch"
+	}
+	return "the branch conflicts with " + target
 }
 
 // checksFailingReason nombra los checks que fallan. Con el recuento delante, el

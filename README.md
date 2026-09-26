@@ -72,8 +72,8 @@ Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
 worktree siempre; el layout de 2 tabs requiere Herdr), `R` refrescar, `a`
 approve, `m` merge, `v` simular, `o` abrir en el navegador, `q` salir. Son
 configurables en `[keybindings]`. Con el merge armado, `m`/`r`/`s` eligen
-estrategia y cualquier otra tecla cancela (ver
-[Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
+estrategia, `tab` conmuta si la rama se borra y cualquier otra tecla cancela
+(ver [Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
 
 El Inbox pinta **una sola sección a la vez**: al abrir muestra **Assigned**, y el
 borde superior lleva la leyenda de conteos `Mine (n) · Assigned (n) · Mentioned
@@ -231,6 +231,7 @@ tecla **es** la elección del modo, y no hay modo por defecto:
 | `r` | rebase |
 | `m` | merge commit |
 | `s` | squash |
+| `tab` | conmutar el borrado de la rama |
 | `esc` | cancelar |
 
 El motivo es que un merge reescribe historia y no se deshace con un comando, así
@@ -250,8 +251,49 @@ ofrecen las tres, porque no saber no es lo mismo que no permitir, y un filtro
 inventado dejaría al usuario sin salida legítima.
 
 Los avisos nombran el modo tanto al empezar (`merge (rebase) en curso…`) como al
-terminar (`merge (squash) ok`), porque sin eso un "merge ok" no dice qué se
-hizo.
+terminar (`merge (squash) ok · branch deleted`), porque sin eso un "merge ok" no
+dice qué se hizo.
+
+### El merge también nombra si borra la rama
+
+La segunda de las dos cosas que el merge decide es si la rama origen se borra al
+integrar. Vive en la misma Confirmación y se cambia con la misma tecla que ya
+tenía otro destino: `tab`. La caja lo enseña siempre que el merge está armado —
+`delete branch: yes (tab)`— y fuera de ahí no aparece, porque no es una decisión
+que se pueda tomar en otro sitio.
+
+**El default es borrar.** Es lo que hacen los forges por su cuenta y lo que
+espera quien limpia detrás de un PR merged; pedir un gesto extra para evitarlo es
+pedir confirmaciones de las que la gente se cansa. `tab` lo apaga para el resto
+de la sesión, y `tab` otra vez lo devuelve. El valor es de sesión, no de ítem:
+borrar la housekeeping no depende del PR que tengas delante.
+
+El aviso final dice qué pasó con la rama, y hay tres finales distintos porque
+son tres situaciones distintas:
+
+| Final | Aviso |
+|---|---|
+| Merge y borrado | `merge (squash) ok · branch deleted` |
+| Merge hecho, borrado rechazado por el forge | `merge (squash) ok · branch not deleted: <motivo>` |
+| PR de fork | `merge (squash) ok · branch not deleted: the branch lives in a fork` |
+
+El segundo es el que obliga a mirar dos veces. El borrado va en el **mismo
+comando** que el merge (`gh pr merge --delete-branch`,
+`glab mr merge --remove-source-branch`), así que si el forge lo rechaza la CLI
+sale con error aunque la integración ya esté hecha: sin push, con la rama
+protegida, o contra un repo con merge queue —que rechaza `-d` antes de
+mergear—. Reportarlo como "merge falló" haría que el usuario buscara un cambio
+de estado del forge que no ocurrió. La relectura que el merge ya hacía es la que
+distingue los casos: si el ítem vuelve mergeado, el merge salió y lo que falló
+fue el borrado.
+
+El tercero es un no-op del forge, no un fallo: un PR de fork no tiene rama que
+borrar en el repo destino, y `gh` lo da por hecho y sale con éxito. Sin decirlo,
+"branch deleted" sería mentira.
+
+Lo que **no** toca la llamada es el repositorio local: con `--repo` (GitHub) y
+`-R` (GitLab), la CLI solo borra la rama remota. Los clones bare y los worktrees
+que gestiona prdash quedan intactos.
 
 ### Lo que el merge comprueba antes de salir
 
@@ -266,6 +308,7 @@ que `merge` salía igual en los tres casos. Ahora:
 | Estado | Qué pasa |
 |---|---|
 | Borrador, ya mergeado, ya cerrado | **No arma.** Es una propiedad del forge: GitHub rechaza el merge de un PR en borrador, y ofrecerlo solo gasta una llamada para recibir un error. |
+| **Las ramas se pisan** | **Arma, y avisa** nombrando la rama: `merge acme/widget#6 with the branch conflicts with main · press the mode anyway…`. Es un rebase, y un rebase lo hace el usuario. |
 | CI en rojo | Arma, y la confirmación dice `merge acme/widget#7 with CI is failing (2 of 5) · press the mode anyway…` |
 | CI todavía corriendo | Arma, y avisa: mergear mientras el CI corre es la carrera que el pin del head no cierra, porque el CI puede pasar *después* del merge. |
 | Cambios pedidos | Arma, y avisa. |
@@ -275,6 +318,30 @@ dejaría el PR sin poder mergear nunca—, y no hacer nada los haría invisibles
 gate que avisa siempre entrena a ignorar el aviso, así que en un ítem sano no sale
 ninguno.
 
+El borrador se mira como lo que es —una propiedad del forge— y no como un estado
+del ítem, y por eso frena igual con la review aprobada o sin ella: `State` ordena
+por atención al operador y un borrador aprobado sale como `approved`. La ficha lo
+dice en su propia fila `Draft` en vez de esconderlo dentro de `State`.
+
+El conflicto de ramas también se avisa antes, y por el mismo motivo: sale en la
+caja (`the branch conflicts with main`) y no como un rechazo de la CLI después de
+gastar la llamada. Los dos datos viajan en la consulta que ya se hacía del ítem
+(`mergeable` en GitHub, `detailedMergeStatus` en GitLab), así que no cuestan
+llamada, y donde el forge todavía no lo sabe —GitHub devuelve `UNKNOWN` mientras
+lo calcula— no se dice nada: un aviso sin dato es un aviso falso.
+
+Cuando el rechazo llega igualmente —porque el PR se empujó entre el refresco y la
+pulsación, o porque el dato no venía—, el aviso dice qué hacer y no promete un
+refresco que no arregla un rebase:
+
+| Situación | Aviso |
+|---|---|
+| El ítem cambió mientras lo mirabas (cerrado, mergeado) | `forge conflict: …` — un refresco lo resuelve |
+| Las ramas se pisan | `merge refused: the forge will not merge it as it is: rebase the branch onto the target and push` |
+
+Que sean dos mensajes y no uno es el punto: en el vocabulario de prdash un
+"conflicto" se arregla solo, y mezclarlo con el rechazo por ramas obligaba a
+prometer un refresco que no servía de nada.
 Elegir el modo **es** la confirmación: para eso hay que nombrar una estrategia, y
 quien la nombra después de leer que el CI está rojo ha decidido. No hace falta una
 tercera tecla.

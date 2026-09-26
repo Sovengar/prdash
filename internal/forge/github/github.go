@@ -172,16 +172,29 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 // la pulsación la rama puede haber avanzado: se integratearían commits que nadie
 // revisó, que es el peor resultado posible de una acción irreversible. Por eso
 // un headSHA vacío no degrada a un merge sin pin sino que se niega.
-func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode, headSHA string) []model.Warning {
-	flag, ok := ghMergeFlag(mode)
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
+	flag, ok := ghMergeFlag(req.Mode)
 	if !ok {
-		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(mode))}
+		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(req.Mode))}
 	}
-	if strings.TrimSpace(headSHA) == "" {
+	if strings.TrimSpace(req.HeadSHA) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
 	}
-	return a.action(ctx, "pr", "merge", strconv.Itoa(number), "--repo", ref.Project,
-		flag, "--match-head-commit", headSHA)
+	args := []string{"pr", "merge", strconv.Itoa(number), "--repo", ref.Project,
+		flag, "--match-head-commit", req.HeadSHA}
+	// `--delete-branch` va al final porque nombra la rama, pero con `--repo` gh
+	// solo borra la REMOTA: la parte local está condicionada a no pasar `--repo`
+	// (CanDeleteLocalBranch en su merge.go). Que sea lo que queremos, porque las
+	// ramas locales de prdash viven en clones bare y worktrees que esta llamada
+	// no debe tocar.
+	//
+	// En un repo con merge queue obligatorio gh RECHAZA el comando entero con
+	// este flag, antes de mergear. No se filtra aquí a propósito: la Confirmación
+	// nombra el borrado y el rechazo del forge es la respuesta exacta.
+	if req.DeleteBranch {
+		args = append(args, "--delete-branch")
+	}
+	return a.action(ctx, args...)
 }
 
 // ghMergeFlag traduce el modo al flag de `gh pr merge`.
@@ -296,8 +309,10 @@ func qualifierFor(q forge.Query) (string, bool) {
 // y no cuestan una llamada extra: el primero es lo que permite pinear el merge
 // a un commit concreto y los segundos filtran los modos por lo que el
 // repositorio admite. Un repositorio con squash desactivado no debe ofrecer
-// squash, y sin esto lo haría.
-const ghPRFields = `number title url state isDraft reviewDecision updatedAt headRefName baseRefName ` +
+// squash, y sin esto lo haría. `mergeable` viene en la MISMA consulta por lo mismo:
+// es lo que permite avisar de que las ramas se pisan sin gastarse una llamada en
+// descubrirlo al mergear.
+const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName ` +
 	`headRefOid additions deletions changedFiles ` +
 	`author { login } repository { nameWithOwner name owner { login } ` +
 	`mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } ` +

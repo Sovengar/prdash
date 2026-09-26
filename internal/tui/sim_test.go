@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,8 +23,14 @@ type fakeSimulator struct {
 	available bool
 	res       sim.Result
 	err       error
-	kinds     []sim.Kind
-	items     []model.Item
+	// mu protege kinds e items. Simulate corre en una goroutine (la lanza
+	// startSim) y un test puede pedir dos simulaciones a la vez, así que los
+	// append sin cerrojo son una carrera real: el doble de test escribía en las
+	// dos listas desde dos goroutines y `go test -race` la foundaba de vez en
+	// cuando, según cómo quedara el planificador.
+	mu    sync.Mutex
+	kinds []sim.Kind
+	items []model.Item
 	// delay hace que la llamada espere, para poder comprobar el estado
 	// intermediario sin depender del orden del planificador.
 	delay time.Duration
@@ -32,10 +39,13 @@ type fakeSimulator struct {
 func (f *fakeSimulator) Available() bool { return f.available }
 
 func (f *fakeSimulator) Simulate(_ context.Context, it model.Item, kind sim.Kind) (sim.Result, error) {
+	f.mu.Lock()
 	f.kinds = append(f.kinds, kind)
 	f.items = append(f.items, it)
-	if f.delay > 0 {
-		time.Sleep(f.delay)
+	delay := f.delay
+	f.mu.Unlock()
+	if delay > 0 {
+		time.Sleep(delay)
 	}
 	return f.res, f.err
 }

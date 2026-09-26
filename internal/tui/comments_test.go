@@ -83,8 +83,8 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 // detailLabels son las etiquetas de campo de la ficha. El URL va aparte porque no
 // está en la rejilla, así que se comprueba por separado.
 var detailLabels = []string{
-	"Item:", "Forge:", "Author:", "Source:", "Target:", "Number:",
-	"State:", "Checks:", "Diff:", "Updated:", "Review:", "Role:",
+	"Item:", "Forge:", "Author:", "Source:", "Target:",
+	"State:", "Draft:", "Checks:", "Diff:", "Updated:", "Review:", "Role:",
 }
 
 // rowWithField devuelve el índice de la primera fila que lleva `label`, o -1.

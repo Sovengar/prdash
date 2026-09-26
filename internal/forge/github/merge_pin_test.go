@@ -20,7 +20,7 @@ func TestMergePinsTheHeadCommit(t *testing.T) {
 		bin, argsFile := recorder(t, dir, "gh")
 		const sha = "abc1234"
 
-		warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, mode, sha)
+		warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: mode, HeadSHA: sha})
 		if len(warns) != 0 {
 			t.Fatalf("modo %q: Merge = %+v, want sin warnings", mode, warns)
 		}
@@ -38,7 +38,7 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 		dir := t.TempDir()
 		bin, argsFile := recorder(t, dir, "gh")
 
-		warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.Rebase, sha)
+		warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.Rebase, HeadSHA: sha})
 		if len(warns) == 0 {
 			t.Fatalf("sha %q: un merge sin pin debería reportar warning", sha)
 		}
@@ -58,7 +58,7 @@ func TestMergeRefusesAnUnknownModeBeforePinning(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")
 
-	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeMode("cherry-pick"), "abc1234")
+	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.MergeMode("cherry-pick"), HeadSHA: "abc1234"})
 	if len(warns) == 0 || warns[0].Kind != "unsupported" {
 		t.Fatalf("warnings = %+v, want unsupported", warns)
 	}

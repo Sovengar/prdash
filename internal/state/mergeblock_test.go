@@ -29,7 +29,7 @@ func TestMergeBlockRefusesWhatTheForgeRefuses(t *testing.T) {
 		mutate func(*model.Item)
 		want   string
 	}{
-		{"draft", func(it *model.Item) { it.State = "draft" }, "draft"},
+		{"draft", func(it *model.Item) { it.IsDraft = true }, "draft"},
 		{"merged", func(it *model.Item) { it.State = "merged" }, "merged"},
 		{"closed", func(it *model.Item) { it.State = "closed" }, "closed"},
 	} {
@@ -45,6 +45,95 @@ func TestMergeBlockRefusesWhatTheForgeRefuses(t *testing.T) {
 			}
 			if !strings.Contains(block.Reason, tc.want) {
 				t.Errorf("Reason = %q, want que mencione %q", block.Reason, tc.want)
+			}
+		})
+	}
+}
+
+// TestMergeBlockSeesTheDraftUnderAnyReviewDecision: el caso que el gate no veía
+// cuando leía el borrador en el estado crudo.
+//
+// base() viene aprobado, así que añadirle IsDraft deja un ítem que Derive
+// clasifica como approved y cuyo borrador desaparece de la columna de estado.
+// MergeBlock tiene que seguir frenando el merge, porque la pregunta que hace no
+// es a quién mira el operador primero sino si el forge va a integrar esto, y
+// GitHub rechaza el borrador antes de mirar la review que sea.
+func TestMergeBlockSeesTheDraftUnderAnyReviewDecision(t *testing.T) {
+	for _, decision := range []string{"", "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"} {
+		t.Run("review="+decision, func(t *testing.T) {
+			it := base()
+			it.ReviewDecision = decision
+			it.IsDraft = true
+
+			block := MergeBlock(it)
+			if !strings.Contains(block.Reason, "draft") {
+				t.Errorf("MergeBlock = %q, want que mencione el borrador", block.Reason)
+			}
+			if !block.Hard {
+				t.Error("Hard = false, want true: el borrador no se fuerza")
+			}
+		})
+	}
+}
+
+// TestMergeBlockWarnsAboutConflictingBranches: el conflicto de ramas se anuncia
+// y no se veta.
+//
+// Es la asimetría del gate deliberada: GitHub no va a integrar el PR mientras las
+// ramas se pisen, pero un rebase lo arregla en un comando y el gate no puede
+// saber si el usuario lo ha hecho ya. Vetarlo dejaría al PR sin salida desde
+// aquí; no decirlo gastaría una llamada entera en descubrirlo.
+func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
+	it := base()
+	it.TargetBranch = "main"
+	it.Mergeable = model.Mergeability{Known: true, Conflicted: true}
+
+	block := MergeBlock(it)
+	if !strings.Contains(block.Reason, "conflicts") {
+		t.Fatalf("Reason = %q, want que mencione el conflicto", block.Reason)
+	}
+	// El nombre de la rama delante dice qué hay que rebasar, y sin vetar: un
+	// rebase lo arregla, así que la segunda pulsación tiene que servir.
+	if !strings.Contains(block.Reason, "main") {
+		t.Errorf("Reason = %q, want que nombre la rama destino", block.Reason)
+	}
+	if block.Hard {
+		t.Error("Hard = true, want false: un rebase lo arregla y el veto no tiene salida")
+	}
+}
+
+// TestMergeBlockPrefersTheConflictOverTheCI: un PR que choca tampoco pasa el CI,
+// y decir "CI is failing" manda al operador a mirar el sitio equivocado. El
+// conflicto va primero porque es lo que hay que rehacer.
+func TestMergeBlockPrefersTheConflictOverTheCI(t *testing.T) {
+	it := base()
+	it.TargetBranch = "main"
+	it.Mergeable = model.Mergeability{Known: true, Conflicted: true}
+	it.Checks = model.Checks{State: model.ChecksFailing, Total: 4, Failing: 2}
+
+	if reason := MergeBlock(it).Reason; !strings.Contains(reason, "conflicts") {
+		t.Errorf("Reason = %q, want el conflicto antes que el CI", reason)
+	}
+}
+
+// TestMergeBlockStaysQuietWithoutTheData: lo que no se sabe no se anuncia. Un
+// aviso de conflicto que sale sin datos es un aviso falso, y un aviso falso que
+// se repite entrena a ignorar la caja.
+func TestMergeBlockStaysQuietWithoutTheData(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		m    model.Mergeability
+	}{
+		{"sin dato (GitHub UNKNOWN, la API de Todos)", model.Mergeability{}},
+		{"integrable", model.Mergeability{Known: true}},
+		{"integrable y sin conflicto", model.Mergeability{Known: true, Conflicted: false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := base()
+			it.TargetBranch = "main"
+			it.Mergeable = tc.m
+			if reason := MergeBlock(it).Reason; reason != "" {
+				t.Errorf("Reason = %q, want silencio: no hay conflicto que anunciar", reason)
 			}
 		})
 	}

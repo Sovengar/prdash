@@ -19,7 +19,7 @@ func TestMergePinsTheHeadCommit(t *testing.T) {
 		bin, argsFile := recorder(t, dir, "glab")
 		const sha = "abc1234"
 
-		warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, mode, sha)
+		warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: mode, HeadSHA: sha})
 		if len(warns) != 0 {
 			t.Fatalf("modo %q: Merge = %+v, want sin warnings", mode, warns)
 		}
@@ -37,7 +37,7 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 		dir := t.TempDir()
 		bin, argsFile := recorder(t, dir, "glab")
 
-		warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.Squash, sha)
+		warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.Squash, HeadSHA: sha})
 		if len(warns) == 0 {
 			t.Fatalf("sha %q: un merge sin pin debería reportar warning", sha)
 		}

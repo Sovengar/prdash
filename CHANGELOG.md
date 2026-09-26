@@ -9,6 +9,57 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **La Confirmación de merge avisa de que las ramas se pisan, y el rechazo dice
+  rebase.** `mergeable` (GitHub) y `detailedMergeStatus` (GitLab) viajan en la
+  consulta que ya se hacía del ítem, así que **no cuestan llamada**: el aviso de
+  "choca con `main`" aparece en la caja antes de elegir la estrategia, en vez de
+  aparecer después como un rechazo de la CLI. Es un bloqueo **blando**, como el
+  CI rojo: arma igual y nombra la rama contra la que hay que rehacer, porque un
+  rebase lo arregla en un comando y vetar dejaría al PR sin salida desde aquí.
+  Donde el forge no dice nada (el `UNKNOWN` de GitHub mientras calcula, el
+  respaldo REST de GitHub, la API de Todos de GitLab) no se anuncia nada: un
+  aviso de conflicto sin dato es un aviso falso, y uno que se repite entrena a
+  ignorar la caja.
+
+  El rechazo cambia además de clasificación, y esto era un bug: el texto de un
+  rechazo de merge por ramas y el de "el ítem ya no está como estaba" comparten
+  la palabra *conflict* y son **opuestos**. Con el cubo único, `forge conflict`
+  prometía un refresco que no arregla un rebase —un aviso que no dice qué hacer,
+  que es la peor forma de equivocarse porque parece accionable—. Ahora el rechazo
+  por ramas se clasifica aparte, trae el motivo canónico (`rebase the branch onto
+  the target and push`) en vez del inglés de la CLI, **no** se registra como
+  denegación (un rebase lo deja integrable, y marcado como denegado el PR no
+  volvería a armar nunca) y sale como `merge refused: …`.
+
+  En GitLab se pide el `detailedMergeStatus` y no el `mergeStatus` porque el
+  simple no distingue un conflicto de un pipeline en rojo, y un CI en rojo ya lo
+  avisa el gate por su cuenta. El coste es que GitLab lo calcula por MR en cada
+  petición —su API REST de lista también lo devuelve—, así que es un cálculo por
+  ítem y no una llamada extra.
+
+- **El merge nombra si borra la rama, y `tab` lo decide.** La Confirmación de
+  merge —la caja que sustituye a la barra de atajos con `m`— muestra ahora
+  `delete branch: yes (tab)`, y `tab` conmuta el valor antes de la tecla que
+  dispara. Fuera del merge armado no aparece: no es una decisión que se pueda
+  tomar en otro sitio. El default es **borrar** (`--delete-branch` en `gh`,
+  `--remove-source-branch` en `glab`), que es lo que los forges hacen por su
+  cuenta; `tab` lo apaga para el resto de la sesión y `tab` otra vez lo
+  devuelve. El valor es de sesión, no de ítem: la housekeeping no depende del PR
+  que tengas delante.
+
+  El borrado va en el **mismo comando** que el merge, así que su fallo sale como
+  fallo del comando entero aunque la integración ya esté hecha: sin push, con la
+  rama protegida, o contra un repo con merge queue —que rechaza `-d` antes de
+  mergear—. Por eso el resultado ya no se reporta como "merge falló" en ese
+  caso: la relectura que el merge ya hacía distingue "no se pudo mergear" de "se
+  mergeó y la rama no se borró", y el aviso queda
+  `merge (squash) ok · branch not deleted: <motivo>`. Un PR de fork tampoco
+  puede reportarse como rama borrada (`isCrossRepository`, que ya venía en la
+  misma consulta del ítem): no hay rama que borrar en el repo destino y el forge
+  no protesta. Lo que la llamada **no** toca es el repositorio local: con
+  `--repo`/`-R` la CLI solo borra la rama remota, así que los clones bare y los
+  worktrees de prdash quedan intactos.
+
 - **El prefijo de ruta de la columna ITEM se puede elegir con `p`.** La ruta de
   un ítem se pintaba siempre con el mismo reparto —el prefijo común de la sección
   en su línea, el sufijo en la celda (ADR 0002/0004)— y no había manera de
@@ -37,7 +88,6 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   `one#8`) —su valor es la densidad, no la certeza— y el modo no sobrevive a la
   ejecución siguiente. La ruta completa sigue en la ficha del ítem y en
   `--print`, que **no cambia**.
-
 ### Changed
 
 - **El Inbox pinta una sola sección a la vez, con leyenda de conteos en el borde.**
@@ -52,6 +102,28 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   de cache y la API de `[keybindings]` no cambian (ADR 0004).
 
 ### Fixed
+
+- **El gate de merge no veía los PR/MR en borrador.** `isDraft`/`draft` se pedía
+  en la consulta del ítem desde el principio y se descartaba sin mirar, así que
+  ningún ítem llegaba marcado como borrador. `MergeBlock` solo comparaba
+  `State == "draft"`, un valor que ningún forge emite —GitHub devuelve `OPEN` y
+  GitLab `opened`—, de modo que el bloqueo que el README prometía para los
+  borradores no ocurría nunca: prdash armaba el merge, gastaba la llamada
+  completa y devolvía el rechazo del forge. Lo que lo sostenía era una suite que
+  se inyectaba `State="draft"` a mano, es decir, probaba un valor que el producto
+  real nunca producía, y por eso la suite entera pasaba con la funcionalidad
+  rota.
+
+  Ahora el borrador es una propiedad del ítem (`Item.IsDraft`) y llega por los
+  cuatro caminos de parseo —GraphQL y REST de GitHub, GraphQL y lista REST de
+  GitLab—, con tests que usan JSON con la forma que devuelve cada forge de verdad.
+  El gate la consulta sin importar la decisión de review: un borrador aprobado
+  salía como `approved` y el borrador se perdía de vista justo en el ítem que más
+  se vigila. La ficha enseña `Draft: yes/no` al lado de `State`, porque son
+  preguntas distintas —`State` es prioridad de atención, el borrador es un dato
+  del forge— y ese hueco lo ocupa la fila `Number`, que solo repetía el número
+  que `refLabel` ya enseña tres columnas más allá. En GitLab, `draft` viene en la
+  misma consulta que el resto y no cuesta llamada.
 
 - **La simulación ocupaba un rincón del popup y salía deformada.** El ancho de las
   celdas y el de la caja los decidía cada uno por su cuenta: las celdas se

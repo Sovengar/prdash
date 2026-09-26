@@ -14,6 +14,16 @@ func item(state, decision string, checks model.Checks) model.Item {
 	return it
 }
 
+// draft construye un PR en borrador como lo construye un adapter de verdad:
+// State es el enum del forge ("OPEN") y el hecho de ser borrador va aparte, en
+// IsDraft. Poner State="draft" aquí sería probar un valor que ningún forge
+// emite, que es justo lo que dejó este gate muerto sin que ningún test lo viera.
+func draft(decision string, checks model.Checks) model.Item {
+	it := item("OPEN", decision, checks)
+	it.IsDraft = true
+	return it
+}
+
 func TestDerive(t *testing.T) {
 	cases := []struct {
 		name string
@@ -26,7 +36,12 @@ func TestDerive(t *testing.T) {
 		{"changes requested", item("OPEN", "CHANGES_REQUESTED", model.Checks{}), StateChangesRequested},
 		{"review required", item("OPEN", "REVIEW_REQUIRED", model.Checks{}), StateReviewRequired},
 		{"approved", item("OPEN", "APPROVED", model.Checks{}), StateApproved},
-		{"draft", item("draft", "", model.Checks{}), StateDraft},
+		{"draft", draft("", model.Checks{}), StateDraft},
+		// La precedencia de Derive manda sobre el borrador a propósito: la
+		// columna ordena por atención, así que un borrador con cambios pedidos
+		// sale como changes requested. MergeBlock sí lo ve siempre, porque ahí la
+		// pregunta es si el forge lo integra, no a quién mira el operador primero.
+		{"draft con cambios pedidos", draft("CHANGES_REQUESTED", model.Checks{}), StateChangesRequested},
 		{"abierto sin decisión", item("OPEN", "", model.Checks{}), StatePending},
 	}
 	for _, c := range cases {
