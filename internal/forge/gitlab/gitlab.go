@@ -11,6 +11,7 @@ package gitlab
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -225,6 +226,79 @@ func glabMergeFlag(mode forge.MergeMode) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+// Retarget cambia la rama destino del MR con un PUT de la API y no con `glab mr
+// update --target-branch`.
+//
+// El motivo no es que el comando esté roto, como en GitHub, sino que `glab mr
+// update` es un comando de edición: su raison d'être es abrir título y
+// descripción en el editor, y con un flag de campo abierto esa puerta se
+// entreabre. En un subproceso con stdin en /dev/null no se cuelga —falla—, pero
+// un fallo por un editor que el usuario no ve es el peor género de avería. El PUT
+// manda exactamente el campo que se le pide y nada más.
+//
+// El PUT es explícito porque no es el método por defecto: con `-f`, glab cambia a
+// POST, y un POST sobre la ruta de un MR no actualiza nada.
+//
+// El motivo del rechazo se saca del cuerpo de la respuesta y no de stderr, que es
+// donde solo llega el argv. Un 400 de GitLab ("Reference 'x' does not exist") es
+// accionable; `glab api -X PUT … (exit 1)` no lo es.
+func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
+	if strings.TrimSpace(branch) == "" {
+		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
+	}
+	args := a.mrAPIArgs("PUT", mrEndpoint(ref.Project, number), "target_branch="+branch)
+	out, err := a.runner.Run(ctx, args...)
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if api := tool.APIMessage(out); api != "" {
+		msg = api
+	}
+	return []model.Warning{{Forge: ForgeName, Kind: tool.Kind(err), Msg: msg}}
+}
+
+// Branches lista las ramas del repositorio para el buscador de la base destino.
+func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning) {
+	if strings.TrimSpace(ref.Project) == "" {
+		return nil, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
+	}
+	// `--output ndjson` y no `--jq` porque glab no tiene `--jq` (gh sí), así que el
+	// NDJSON es la única forma de que cada página venga en una línea y se pueda
+	// leer sin un parser de JSON entero. Con `--paginate` son varias páginas, y es
+	// un subconjunto el que no serviría: el buscador tiene que ofrecer el
+	// repositorio, no lo que quepa en una respuesta.
+	endpoint := "projects/" + url.QueryEscape(ref.Project) + "/repository/branches?per_page=100"
+	raw, err := a.runner.Run(ctx, "api", "--hostname", a.host, "-X", "GET", endpoint,
+		"--paginate", "--output", "ndjson")
+	if err != nil {
+		return nil, []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	names, perr := parse.ParseGLBranches(raw)
+	if perr != nil {
+		return nil, []model.Warning{a.warn("", "parse", perr)}
+	}
+	return names, nil
+}
+
+// mrEndpoint compone la ruta REST de un MR con el proyecto urlencoded: un
+// grupo/proyecto anidado necesita el %2F o la ruta se parte en dos y la petición
+// va a un sitio que no existe.
+func mrEndpoint(project string, number int) string {
+	return "projects/" + url.QueryEscape(project) + "/merge_requests/" + strconv.Itoa(number)
+}
+
+// mrAPIArgs compone una llamada REST de escritura sobre un MR. El método es
+// explícito siempre, y no solo para GET: con `-f`, glab cae a POST, que en las
+// rutas de actualización no actualiza nada y contesta 200 como si lo hubiera hecho.
+func (a *Adapter) mrAPIArgs(method, endpoint string, fields ...string) []string {
+	args := []string{"api", "--hostname", a.host, "-X", method, endpoint}
+	for _, f := range fields {
+		args = append(args, "-f", f)
+	}
+	return args
 }
 
 func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {

@@ -6,6 +6,7 @@ package tool
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -177,6 +178,17 @@ func Kind(err error) string {
 	case strings.Contains(msg, "409"), strings.Contains(msg, "conflict"),
 		strings.Contains(msg, "already closed"), strings.Contains(msg, "already merged"):
 		return "conflict"
+	// El 422 es "la petición está bien pero su contenido no vale": un base que no
+	// existe, un título vacío, una etiqueta mal formada. Es su propia clase y no
+	// cabe en ninguna de las de arriba. Antes caía en `network`, porque el texto
+	// que llega por stderr no tiene ni "conflict" ni "not found" —el motivo de
+	// verdad va en el cuerpo JSON—, y el clasificador se quedaba sin nada.
+	//
+	// No es conflicto (un refresco no lo arregla: el valor sigue siendo malo) ni
+	// permiso (eso dejaría la acción deshabilitada para siempre). Es un error de
+	// la llamada, que es lo que la TUI enseña sin prometerle nada a nadie.
+	case strings.Contains(msg, "422"):
+		return "validation"
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"),
 		strings.Contains(msg, "not logged"), strings.Contains(msg, "authentication failed"):
 		return "auth"
@@ -236,6 +248,8 @@ func kindForHTTP(code int) string {
 		return "notfound"
 	case code == 409:
 		return "conflict"
+	case code == 422:
+		return "validation"
 	case code == 429:
 		return "ratelimit"
 	case code >= 500:
@@ -243,6 +257,43 @@ func kindForHTTP(code int) string {
 	default:
 		return ""
 	}
+}
+
+// APIMessage saca el motivo que devuelve la API en el cuerpo de una respuesta con
+// salida distinta de cero.
+//
+// Existe porque las CLIs de forge no lo pasan por stderr: a stderr llega una línea
+// con el argv entero (`gh api -X PATCH repos/o/r/pulls/1 -f base=x: gh: Validation
+// Failed (HTTP 422)`) y el motivo de verdad va en el cuerpo JSON. Sin esto, el
+// motivo que ve el usuario es el comando que falló y no por qué falló, y en un 422
+// la diferencia es enorme: `Proposed base branch 'main2' was not found` es
+// accionable y `Validation Failed` no lo es.
+//
+// Prefiere `errors[].message` sobre `message` porque las APIs los usan para cosas
+// distintas: GitHub escribe `Validation Failed` en el primero y el detalle de qué
+// campo no valía en el segundo, así que al revés se enseñaría el genérico. Cae a
+// `message` cuando no hay `errors`, que es lo que hace GitLab.
+func APIMessage(body string) string {
+	var payload struct {
+		Message any `json:"message"`
+		Errors  []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		return ""
+	}
+	for _, e := range payload.Errors {
+		if msg := strings.TrimSpace(e.Message); msg != "" {
+			return msg
+		}
+	}
+	// El `message` de GitLab puede ser un objeto cuando el error es de campo, y un
+	// objeto no es un motivo que se pueda enseñar: solo se acepta como string.
+	if msg, ok := payload.Message.(string); ok {
+		return strings.TrimSpace(msg)
+	}
+	return ""
 }
 
 // FirstLine recorta un mensaje a su primera línea.

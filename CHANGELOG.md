@@ -9,6 +9,54 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **`e` cambia la rama destino del PR/MR, con un buscador de las ramas del
+  repositorio.** `e` abre un popup con las ramas que pide al forge, escribibles
+  para filtrarlas, y la elección pasa por una confirmación que dice las dos ramas
+  (`main → release/2.0`).
+
+  Las ramas se listan en vez de teclearse porque cambiar la base a una rama que se
+  le parece pero no es (`main` por `main-2`) lo acepta el forge sin quejarse y no
+  se ve hasta que el PR apunta a la rama equivocada: una errata que no marca ni el
+  compilador ni el forge es justo la que un buscador hace imposible. El listado se
+  pide al forge al abrir y se cachea 5 minutos por repositorio, así que abrir y
+  cerrar el popup no cuesta una llamada cada vez; `↑`/`↓` mueven y, con el filtro
+  vacío, también `j`/`k`, que en cuanto hay texto escrito son dos letras más del
+  filtro. `esc` en la confirmación vuelve a la lista en vez de cerrar, porque
+  señalar la fila equivocada es el error más probable.
+
+  La acción entra por el mismo camino que approve y merge —relee el ítem, pasa los
+  guards, ejecuta y relee—, así que un PR mergeado o cerrado no se toca y no se
+  gasta la llamada. Elegir la base que el ítem ya tiene es un no-op que no llega al
+  forge. Los avisos nombran las dos ramas (`retarget (main → release/2.0) ok`) y,
+  si había un review montado, avisan de que **su worktree sigue con la base
+  anterior**: no se rebasea ni se rehace, porque el worktree es del usuario y puede
+  tener cambios sin commitear.
+
+  No se usa `gh pr edit --base` aunque es lo que documenta `gh`: hoy falla antes de
+  tocar nada con `GraphQL: Projects (classic) is being deprecated…`, la query con la
+  que `gh` mira si el PR está en un proyecto. Se usa `gh api -X PATCH …/pulls/N -f
+  base=`. En GitLab, `glab api -X PUT …/merge_requests/N -f target_branch=` y no
+  `glab mr update --target-branch`, que es un comando de edición y su razón de ser
+  es abrir el editor. Y el listado de ramas de GitLab va con `--output ndjson`
+  porque `glab api` no tiene `--jq`. Todo esto, y por qué, en
+  [ADR 0006](docs/adr/0006-retarget-por-la-api.md).
+
+- **Un rechazo con 422 ya no sale como "forge conflict", y dice por qué.** Cuando
+  una llamada a la API falla, las CLIs ponen a stderr **una línea con el argv
+  entero** y el motivo de verdad va en el cuerpo JSON. `tool.Run` cortaba stderr y
+  se quedaba con lo primero, así que el motivo que veía el usuario era el comando
+  que falló —`gh api -X PATCH …: gh: Validation Failed (HTTP 422)`— y no por qué
+  falló. Se añade `tool.APIMessage`, que prefiere `errors[].message` sobre
+  `message` porque GitHub escribe el genérico en el primero y el detalle en el
+  segundo, así que ahora se lee `Proposed base branch 'x' was not found`.
+
+  El 422 tampoco tenía clase propia: como el texto de stderr no tiene ni
+  "conflict" ni "not found", caía en `network`, que el inbox traduce a "forge
+  conflict" —que promete un refresco que no puede arreglar un nombre de rama que no
+  existe—. Ahora es `validation`, que no es conflicto ni permiso ni "no existe el
+  ítem": es un error de la llamada. Afecta a **todas** las acciones, porque
+  `kindForHTTP` es compartido.
+
 - **La Confirmación de merge avisa de que las ramas se pisan, y el rechazo dice
   rebase.** `mergeable` (GitHub) y `detailedMergeStatus` (GitLab) viajan en la
   consulta que ya se hacía del ítem, así que **no cuestan llamada**: el aviso de

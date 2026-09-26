@@ -211,6 +211,72 @@ func ghMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
+// Retarget cambia la rama destino del PR con un PATCH de la API y no con `gh pr
+// edit --base`, que es lo que gh documenta para esto.
+//
+// No es una preferencia de estilo: `gh pr edit` falla hoy antes de tocar nada con
+// `GraphQL: Projects (classic) is being deprecated... (repository.pullRequest.
+// projectCards)`. Es la query con la que gh mira si el PR está en un proyecto, y
+// revienta en los repos donde ese campo da error. El fallo es del cliente, no de
+// permisos ni del PR, y no se esquiva con ningún flag. El PATCH hace lo mismo en
+// una petición, sin campos que se puedan retirar.
+//
+// El motivo del rechazo se saca del cuerpo de la respuesta y no de stderr, que es
+// donde solo llega el argv. Aquí la diferencia es la que separa un mensaje
+// accionable de uno que no: si la rama no existe, GitHub contesta 422 con
+// `Proposed base branch 'x' was not found` en el cuerpo, y a stderr solo
+// `gh: Validation Failed (HTTP 422)`. Ese 422 lo clasifica tool.Kind como
+// "validation", que no es conflicto ni permiso: un refresco no arregla un nombre
+// de rama que no existe, y registrar el ítem como denegado le quitaría la acción
+// para siempre.
+func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
+	if strings.TrimSpace(branch) == "" {
+		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
+	}
+	out, err := a.runner.Run(ctx, "api", "-X", "PATCH", pullsEndpoint(ref.Project, number), "-f", "base="+branch)
+	if err == nil {
+		return nil
+	}
+	return []model.Warning{{Forge: ForgeName, Kind: tool.Kind(err), Msg: failureMsg(out, err)}}
+}
+
+// Branches lista las ramas del repositorio para el buscador de la base destino.
+func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning) {
+	if strings.TrimSpace(ref.Project) == "" {
+		return nil, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
+	}
+	// per_page=100 con --paginate: la API pagina con 30 por defecto y gh sigue los
+	// enlaces hasta el final, así que un repo con 200 ramas serían siete llamadas
+	// con el default. El jq se queda en la CLI y lo que vuelve es un nombre por
+	// línea, que es lo único que el buscador necesita.
+	raw, err := a.runner.Run(ctx, "api", "repos/"+ref.Project+"/branches?per_page=100",
+		"--paginate", "--jq", ".[].name")
+	if err != nil {
+		return nil, []model.Warning{a.warn("", tool.Kind(err), err)}
+	}
+	return parse.ParseGHBranches(raw), nil
+}
+
+// pullsEndpoint compone la ruta REST de un PR. Vive en una función porque
+// Retarget es la única parte del adapter que habla REST: el resto lee por
+// GraphQL.
+func pullsEndpoint(project string, number int) string {
+	return "repos/" + project + "/pulls/" + strconv.Itoa(number)
+}
+
+// failureMsg compone el motivo de un fallo: el que dice la API si lo dice, y el de
+// la CLI si no.
+//
+// El de la CLI incluye el argv entero, que es ruido y además sale con los tokens
+// dentro de la orden. Se usa solo cuando el cuerpo no traía un motivo legible,
+// porque en ese caso es lo único que hay.
+func failureMsg(body string, err error) string {
+	if msg := tool.APIMessage(body); msg != "" {
+		return msg
+	}
+	return err.Error()
+}
+
 func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
 	if _, err := a.runner.Run(ctx, args...); err != nil {
 		return []model.Warning{a.warn("", tool.Kind(err), err)}

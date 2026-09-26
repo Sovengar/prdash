@@ -70,6 +70,17 @@ func (a *Adapter) Merge(context.Context, model.RepoRef, int, forge.MergeRequest)
 	return a.unsupported("")
 }
 
+// Retarget responde "no soportado".
+func (a *Adapter) Retarget(context.Context, model.RepoRef, int, string) []model.Warning {
+	return a.unsupported("")
+}
+
+// Branches responde "no soportado" con la lista vacía, que es lo que hace que el
+// buscador se abra y explique que falta el forge en vez de abrirse sin nada.
+func (a *Adapter) Branches(context.Context, model.RepoRef) ([]string, []model.Warning) {
+	return nil, a.unsupported("")
+}
+
 func (a *Adapter) unsupported(section model.Section) []model.Warning {
 	return []model.Warning{{
 		Forge:   ForgeName,

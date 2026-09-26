@@ -58,6 +58,10 @@ func main() {
 	model.SetMounter(ex)
 	model.SetSimulator(buildSimulator(cfg, ex))
 	model.SetGraphics(herdr.NewGraphics())
+	// El registro de reviews montados es lo que permite avisar de que un cambio
+	// de base deja desfasado un worktree ya montado. Se inyecta el mismo executor:
+	// el sitio que sabe qué review está vivo es el que los montó.
+	model.SetReviewLookup(ex)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "prdash:", err)
 		os.Exit(1)

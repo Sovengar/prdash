@@ -103,6 +103,26 @@ type Adapter interface {
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
 	// Merge mergea un ítem con lo que pide la MergeRequest dada.
 	Merge(ctx context.Context, ref model.RepoRef, number int, req MergeRequest) []model.Warning
+	// Retarget cambia la rama destino del ítem por la dada.
+	//
+	// No es approve/merge con otro nombre: cambia contra qué se integra el PR, así
+	// que a partir de aquí el diff, la mergeabilidad y el CI son otros, y lo que
+	// se ha mergeado o el forge ya no lo recuerda. No lleva pin de head SHA porque
+	// mover la base no integra nada: el pin protege la INTEGRACIÓN, que es lo
+	// irreversible, y aquí lo único que cambia es a qué se compara.
+	//
+	// Un branch vacío es un warning explícito y no un argv con el flag vacío, que
+	// el forge lee como "deja el PR sin base".
+	Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning
+	// Branches lista las ramas del repositorio, para el buscador de la base
+	// destino. Es lo que hace que la acción no dependa de que nadie se acuerde del
+	// nombre de la rama: con texto libre, una errata la acepta el forge y no se ve
+	// hasta que el PR apunta a `main` en vez de a `main-2`, que es el peor sitio
+	// para descubrirlo.
+	//
+	// Las ramas vienen del forge y de ningún otro sitio: preguntarle al clon local
+	// daría solo las refs bajadas, que no son las que el forge puede integrar.
+	Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning)
 }
 
 // MergeRequest es lo que un merge necesita saber: con qué estrategia integrar,
@@ -251,6 +271,8 @@ const (
 	ActionApprove ActionKind = "approve"
 	// ActionMerge mergea el ítem.
 	ActionMerge ActionKind = "merge"
+	// ActionRetarget cambia la rama destino del ítem.
+	ActionRetarget ActionKind = "retarget"
 )
 
 // MergeMode es cómo se integra el PR/MR en la rama destino.
@@ -315,6 +337,15 @@ func ErrUnknownMergeMode(mode MergeMode) error {
 var ErrMissingHeadSHA = errors.New(
 	"the forge did not report the head commit, so the merge cannot be pinned to what was reviewed")
 
+// ErrMissingBaseBranch es el motivo que devuelve un adapter cuando le piden
+// cambiar la base sin decir cuál.
+//
+// El corte es aquí y no en la TUI porque el daño lo hace el argv, no la vista:
+// un flag de base vacío no es una operación que no hace nada, es una que le dice
+// al forge que deixe el ítem sin rama destino, que es justo el estado que el
+// usuario quiere evitar.
+var ErrMissingBaseBranch = errors.New("the new target branch is empty: there is nothing to retarget to")
+
 // AllowedModes devuelve los modos que el repositorio admite, en el orden en que
 // se ofrecen al usuario: rebase, merge commit, squash.
 //
@@ -374,39 +405,48 @@ type Outcome struct {
 	// esta distinción, un "merge falló" sobre un PR ya integrado hace que el
 	// usuario busque un estado del forge que no existe.
 	DeleteMsg string
+
+	// Base es la rama destino que se pidió y FromBase la que tenía el ítem. Los
+	// dos solo tienen sentido en ActionRetarget, y viajan juntos porque el aviso
+	// tiene que poder decir "main → release/2.0": un "retarget ok" a secas no dice
+	// qué ha pasado con el PR, que es justo lo que el usuario acaba de hacer.
+	//
+	// FromBase lo rellena quien tenía la lectura —la TUI, al confirmar— y no el
+	// adapter: el forge no mira la base antigua, solo escribe la nueva.
+	Base     string
+	FromBase string
 }
 
-// RunAction ejecuta una acción rápida de forma segura: relee el ítem, comprueba
-// que sigue accionable, ejecuta la acción y vuelve a releer el estado para
-// dejarlo consistente. Nunca devuelve error duro: clasifica el fallo en
-// conflicto (el ítem cambió), permiso o error genérico.
+// runOn es el camino único de toda acción sobre un ítem: relee, comprueba que
+// sigue accionable, ejecuta y relee otra vez para dejarlo consistente. Clasifica
+// el fallo en conflicto, permiso o error genérico, y nunca devuelve error duro.
 //
-// req solo aplica a ActionMerge; approve lo ignora. Se pasa siempre para que la
-// firma no dependa de la acción, que es lo que permite dispatchar con un switch.
-func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, req MergeRequest) Outcome {
-	out := Outcome{Kind: kind, ID: model.With(ref.Forge, ref.Host, ref.Project, number), Mode: req.Mode, DeleteBranch: req.DeleteBranch}
+// El ejecutor recibe la RELECTURA, no la copia que la TUI tenía en memoria: es la
+// lectura inmediatamente anterior a la acción y por tanto la que menos ventana
+// deja entre lo observado y lo aplicado. RunAction no comprueba el pin del merge
+// porque lo delega en el adapter, que es quien conoce el flag de cada CLI; aquí
+// solo se le pasa el commit.
+//
+// seed son los campos que la acción ya sabe de sí misma (modo, borrado de rama) y
+// que un guard temprano no debe perder: el Outcome de un "merge bloqueado" sigue
+// siendo un Outcome de merge. Kind e ID los pone runOn, que son los mismos para
+// todas.
+//
+// Devuelve también los warnings crudos de la acción porque un post-proceso los
+// necesita para no perder el motivo original: el borrado de la rama del merge
+// falla dentro del mismo comando que el merge, y su motivo no está en Msg.
+func runOn(seed Outcome, ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, exec func(cur model.Item) []model.Warning) (Outcome, []model.Warning) {
+	out := seed
+	out.Kind, out.ID = kind, model.With(ref.Forge, ref.Host, ref.Project, number)
 
 	cur, warns := a.ItemState(ctx, ref, number)
 	if stage := checkBeforeAction(cur, warns); stage != nil {
 		stage.Kind, stage.ID = kind, out.ID
-		return *stage
+		return *stage, nil
 	}
 	out.Item, out.HasItem = cur, true
 
-	var actionWarns []model.Warning
-	switch kind {
-	case ActionApprove:
-		actionWarns = a.Approve(ctx, ref, number)
-	case ActionMerge:
-		// El head SHA se toma de la RELECTURA que acaba de hacer esta misma
-		// llamada, no de la copia que la TUI tenía en memoria: es la lectura
-		// inmediatamente anterior al merge, y por tanto la que menos ventana
-		// deja entre el commit observado y el merge. RunAction no vuelve a
-		// comprobar el pin porque lo delega en el adapter, que es quien conoce
-		// el flag de cada CLI; aquí solo se le pasa el commit.
-		req.HeadSHA = cur.HeadSHA
-		actionWarns = a.Merge(ctx, ref, number, req)
-	}
+	actionWarns := exec(cur)
 	out.OK, out.Conflict, out.Perm, out.Msg = classifyAction(actionWarns)
 	// classifyAction ya lo separó de Perm y de Conflict con el motivo canónico;
 	// aquí solo se marca para que la TUI sepa con qué palabras presentarlo.
@@ -415,23 +455,81 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	// Relee el estado para dejar el ítem consistente tras la acción o el fallo.
 	if it, w := a.ItemState(ctx, ref, number); len(w) == 0 && it.Number != 0 {
 		out.Item, out.HasItem = it, true
-		// El borrado de la rama va en el MISMO comando que el merge, así que su
-		// fallo sale como fallo del comando entero aunque la integración ya
-		// esté hecha: sin push, con la rama protegida, o en un repo con merge
-		// queue (que rechaza `-d` antes de mergear). La relectura de arriba
-		// distingue los dos casos sin gastar una llamada más: si el ítem vuelve
-		// mergeado, el merge salió y lo que falló es el borrado.
-		if kind == ActionMerge && req.DeleteBranch && !out.OK && state.Derive(it) == state.StateMerged {
+	}
+	return out, actionWarns
+}
+
+// RunAction ejecuta approve o merge de forma segura.
+//
+// req solo aplica a ActionMerge; approve lo ignora. Se pasa siempre para que la
+// firma no dependa de la acción, que es lo que permite dispatchar con un switch.
+func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, req MergeRequest) Outcome {
+	out, actionWarns := runOn(
+		Outcome{Mode: req.Mode, DeleteBranch: req.DeleteBranch},
+		ctx, a, kind, ref, number,
+		func(cur model.Item) []model.Warning {
+			switch kind {
+			case ActionApprove:
+				return a.Approve(ctx, ref, number)
+			case ActionMerge:
+				req.HeadSHA = cur.HeadSHA
+				return a.Merge(ctx, ref, number, req)
+			}
+			return nil
+		},
+	)
+
+	// El borrado de la rama va en el MISMO comando que el merge, así que su fallo
+	// sale como fallo del comando entero aunque la integración ya esté hecha: sin
+	// push, con la rama protegida, o en un repo con merge queue (que rechaza `-d`
+	// antes de mergear). La relectura de runOn distingue los dos casos sin gastar
+	// una llamada más: si el ítem vuelve mergeado, el merge salió y lo que falló
+	// es el borrado.
+	if kind == ActionMerge && req.DeleteBranch && out.HasItem {
+		if !out.OK && state.Derive(out.Item) == state.StateMerged {
 			out.OK, out.Conflict, out.Perm, out.Msg = true, false, false, ""
 			out.DeleteMsg = firstMsg(actionWarns)
 		}
-		// Y al revés: un PR de fork NO tiene rama que borrar en el repo destino,
-		// y el forge no protesta —lo da por hecho y sale con éxito—, así que sin
-		// esto el aviso afirmaría un borrado que no ocurrió.
-		if kind == ActionMerge && req.DeleteBranch && out.OK && it.IsFork {
+		// Y al revés: un PR de fork NO tiene rama que borrar en el repo destino, y
+		// el forge no protesta —lo da por hecho y sale con éxito—, así que sin esto
+		// el aviso afirmaría un borrado que no ocurrió.
+		if out.OK && out.Item.IsFork {
 			out.DeleteMsg = "the branch lives in a fork"
 		}
 	}
+	return out
+}
+
+// RunRetarget cambia la rama destino del ítem.
+//
+// Comparte el camino de runOn con approve/merge —mismos guards, misma
+// clasificación, misma relectura— en vez de tener el suyo: son las tres acciones
+// que se ejecutan sobre un ítem abierto y por eso tienen exactamente los mismos
+// motivos para negarse. La única diferencia es qué se le pide al adapter, y eso
+// lo dice el nombre de la rama.
+//
+// No lleva pin de head SHA y no es un descuido: mover la base no integra commits
+// con la rama destino, solo cambia contra qué se comparan, así que lo que protege
+// el pin (integrar lo que nadie revisó) no puede pasar aquí. Lo que sí se relee es
+// el ítem, para que la vista enseñe la base nueva sin esperar al refresco.
+func RunRetarget(ctx context.Context, a Adapter, ref model.RepoRef, number int, branch string) Outcome {
+	if strings.TrimSpace(branch) == "" {
+		// Se corta antes de releer: sin rama no hay nada que enviar, y una
+		// relectura solo serviría para gastar una llamada y devolver un estado que
+		// no se va a tocar.
+		return Outcome{
+			Kind: ActionRetarget,
+			ID:   model.With(ref.Forge, ref.Host, ref.Project, number),
+			Perm: true,
+			Msg:  ErrMissingBaseBranch.Error(),
+			Item: model.Item{},
+		}
+	}
+	out, _ := runOn(
+		Outcome{Base: branch},
+		ctx, a, ActionRetarget, ref, number,
+		func(model.Item) []model.Warning { return a.Retarget(ctx, ref, number, branch) },
+	)
 	return out
 }
 

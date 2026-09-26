@@ -290,6 +290,11 @@ func DefaultKeybindings() Keybindings {
 		"section-next": "tab",
 		"open-browser": "o",
 		"prefix-mode":  "p",
+		// `retarget` es `e`, de "edit target branch", que es como se llama la acción
+		// en la documentación. `e` era la letra libre con el nombre más claro; las
+		// otras que se le ocurren (`b`, `t`) ya están ocupadas o se leen como otra
+		// cosa.
+		"retarget": "e",
 	}
 }
 
@@ -444,6 +449,16 @@ var hintOrder = []hint{
 	// "common"—, pero en cualquier ancho en el que quepan las acciones, cabe
 	// también el modo. Su etiqueta la completa la TUI (ver HintState).
 	{action: "prefix-mode", label: "prefix"},
+	// `retarget` va DETRÁS de `prefix-mode` y no junto a merge, que es donde lo
+	// querría por grouping. El motivo es el mismo que el de arriba aplicado al
+	// revés: el recorte a maxHintLines corta por la cola, así que una entrada
+	// añadida antes de `prefix-mode` hace que el nombre del modo sea lo primero
+	// que se pierda, y hay un test que vigila exactamente eso. Detrás, lo que se
+	// pierde primero es esto, y a ese ancho tampoco caben ya `move` ni `page`.
+	//
+	// La etiqueta es corta a propósito: "edit target branch" no cabe al lado de
+	// "mount review", y el nombre largo es el que lleva el título del popup.
+	{action: "retarget", label: "edit base"},
 	{key: "j/k", label: "move"},
 	{key: "pgup/dn", label: "page"},
 }
