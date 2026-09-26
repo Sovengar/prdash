@@ -21,6 +21,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// El popup cambia de sitio y de tamaño con la terminal. Con la imagen en
+		// la capa de gráficos hay que recolocarla —Herdr la coloca por celdas, no
+		// por Relative—; si no, se quedaría en el rectángulo viejo, que es donde
+		// estaba la caja antes del resize.
+		if m.sim.viaGraphics {
+			m.republishSimImage()
+		} else {
+			m.renderSimCells()
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -94,6 +103,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case mountMsg:
 		m.mountBusy = false
 		m.applyMount(msg.result, msg.err)
+		return m.withPump(nil)
+
+	case simMsg:
+		m.applySim(msg)
 		return m.withPump(nil)
 
 	case commentsTickMsg:
@@ -173,6 +186,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleMergeArmed(msg, key)
 	}
 
+	// El overlay de simulación captura el teclado entero mientras está abierto:
+	// es una pregunta con respuestas concretas y cualquier tecla que no sea una
+	// de ellas lo cierra, así que dejarla pasar a la vista dispararía acciones
+	// sobre un ítem que el usuario ya no está mirando.
+	if m.sim.state != simClosed {
+		return m.handleSimKey(msg, key)
+	}
+
 	switch key {
 	case "q", "ctrl+c":
 		m.cancel()
@@ -209,6 +230,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.armMerge()
 	case "mount-review":
 		return m.startMount()
+	case "simulate":
+		return m.openSimulator()
 	case "open-browser":
 		it, ok := m.selected()
 		if !ok || it.URL == "" {
@@ -560,6 +583,11 @@ func (m Model) View() tea.View {
 	// el interior de las cajas, así que no pisan ningún borde.
 	if toasts := m.toast.blocks(m.contentWidth()); len(toasts) > 0 {
 		v.text = overlayToasts(v.text, toasts, m.contentWidth(), v.rows)
+	}
+	// El popup va después de los toasts para quedar por encima de ellos: es la
+	// capa que el usuario acaba de abrir, y un aviso no puede taparla.
+	if box, ok := m.simOverlay(); ok {
+		v.text = overlayCentered(v.text, box, m.contentWidth())
 	}
 	out := tea.NewView(v.text)
 	out.AltScreen = true

@@ -9,6 +9,37 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **La simulación ocupaba un rincón del popup y salía deformada.** El ancho de las
+  celdas y el de la caja los decidía cada uno por su cuenta: las celdas se
+  calculaban para 96 columnas y la caja se dibujaba al ancho de la vista, así que
+  la imagen ocupaba el tercio izquierdo y el resto quedaba vacío —con un borde
+  vacío que parecía parte del render—. Ahora `simBox` es la única fuente de la
+  geometría: la caja se ajusta a lo que la imagen necesita, no al revés
+  (`TestTheImageFillsTheBox`).
+
+  Además, una celda de terminal es el doble de alta que de ancha, así que el alto
+  se paga a doble: una imagen 16:9 —la que produce git-sim— necesita 3,56 columnas
+  por línea, no 1,78. Sin ese factor el grafo se estiraba a lo ancho y los dos
+  commits de una fila parecían una tira de elipses. `sim.Fit` calcula el mayor
+  tamaño que cabe manteniendo el ratio.
+
+  Y el popup se dimensiona con la terminal en vez de con topes fijos: en una
+  pantalla de 240×70 pasa de 94×23 a 174×49 celdas —el triple de detalle—, que es
+  la diferencia entre un grafo ilegible y uno legible, sin dejar de ser un overlay:
+  se queda con el 75% del alto y deja fondo alrededor
+  (`TestThePopupGrowsWithTheTerminal`).
+
+  Un tercer bug en la misma línea: `simHeightShare = 3 / 4` como constante de Go
+  vale **0** (división entera en tiempo de compilación), así que el popup se
+  quedaba con su suelo de 6 filas por mucho espacio que hubiera. Ahora son
+  numerador y denominador.
+- **La flecha izquierda arrancaba el render.** Navegaba en un menú horizontal que
+  no existe —el popup ofrece una estrategia—, así que pulsarla después de `v`
+  lanzaba el render sin confirmar nada. Con una sola estrategia no hay nada que
+  recorrer: las flechas caen en el default y cierran el popup, como cualquier tecla
+  que no sea una elección. La navegación vuelve sola cuando haya una segunda
+  estrategia (`TestTheChooserNavigatesWhenThereIsSomethingToNavigate`).
+
 - **Un merge ya no se dispara por una tecla que no era el modo.** La segunda
   pulsación del merge, al no ser un modo, se re-despachaba como si nada. Eso
   convertía `m` seguido de `a` en un **approve** del PR —la tecla de al lado en
@@ -91,6 +122,79 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **`v` simula el merge del PR y lo enseña en un popup sobre el inbox.** Renderiza
+  con [git-sim](https://github.com/initialcommit/git-sim) cómo quedaría el
+  historial al integrar el PR y pinta la imagen resultante **encima** de la vista,
+  de modo que el fondo se sigue leyendo salvo donde tapa la caja. `enter`
+  renderiza, `esc` cierra, `o` abre la imagen en el visor.
+
+  No es un gate y conviene decirlo: git-sim **dibuja**, no ejecuta, y su veredicto
+  solo existe dentro de la imagen, así que no sirve para decidir si un merge
+  choca. Es un visualizador, y lo que aporta es entender *por qué* el historial
+  queda como queda.
+
+  Decisiones que no son obvias:
+
+  - **Todo el render ocurre en un clon temporal** de los refs del review
+    (`--shared`, con la rama base activa), no en el worktree del review. La razón
+    es dura: git-sim necesita un `HEAD` enganchado a una rama de verdad, y la única
+    forma de tener la base activa sin cambiar de rama el worktree que tiene
+    abierta la review es otro directorio. El clon se borra al terminar, así que no
+    deja refs, worktrees, ramas ni cambios sin commitear en el repo del usuario
+    (`TestSimulateLeavesNoTraceInTheLocalRepo`).
+  - **`git_sim_auto_open=false` en el entorno, no un flag.** git-sim termina
+    entregando la imagen al visor del escritorio y, sin display, esa llamada no
+    vuelve nunca: son 2 s con la variable puesta y un cuelgue sin ella. El flag no
+    tiene forma negativa en el CLI, pero su `Settings` lee las variables
+    `git_sim_*`, así que es ahí donde se apaga.
+  - **Nada de `--quiet`.** Imprescindible y contraintuitivo: git-sim imprime la
+    ruta de la imagen *solo* cuando no está en silencio, así que pedir las dos
+    cosas —que es lo razonable— deja la salida vacía y la simulación falla sin
+    explicación. Hay un test que lo fija (`TestArgsNeverAskForQuietAndThePath`).
+  - **La imagen se decodifica en Go** (`image/jpeg`) y se pinta con half-blocks
+    `▀` en truecolor, dos píxeles por celda, en vez de depender de `chafa` o del
+    `img2txt` del sistema: cero dependencias nuevas y el doble de resolución
+    vertical, que es lo que hace legible un grafo de commits.
+  - **Solo se ofrece `merge`.** git-sim 0.3.5 no sabe dibujar un `rebase`: con la
+    rama del PR ya basada en la base —el caso normal de una PR— responde
+    "Branch 'main' is already based on active branch 'feat'" con el mensaje
+    invertido, y con las ramas divergidas revienta con un `IndexError` de Python.
+    Verificado en las tres formas. Ofrecerlo sería una opción que solo puede
+    fallar; cuando upstream lo arregle, `simKinds` es lo único que hay que tocar.
+  - **Con el merge armado, `v` no abre nada**: desarma y se consume, igual que
+    cualquier otra tecla. Abrir un modal desde una pulsación a destiempo es la
+    misma trampa que el merge armado ya evita.
+  - Requiere `git-sim` en el PATH y el review montado (`r`); sin cualquiera de
+    los dos, la acción avisa y no hace nada.
+  - **La imagen va a la capa de gráficos del pane cuando Herdr la tiene.** Los
+    half-blocks tienen un techo que no se puede subir: un terminal es una rejilla de
+    celdas, así que una imagen de 1920 px en 84 columnas es una reducción de 23× y
+    cada píxel se convierte en un bloque de 23×23 celdas — los escalones que se veían
+    en las curvas de los commits—. No es un bug de tamaño: es la rejilla. La salida
+    es no usar la rejilla, y Herdr tiene una capa de gráficos por pane
+    (`terminal.kitty_graphics`, que el terminal exterior tiene que soportar —kitty y
+    sus derivados sí—). La imagen se publica en ella, ya ajustada a los píxeles del
+    rectángulo, y la pinta el terminal con su propio escalado. Los half-blocks se
+    quedan como camino de degradación: fuera de Herdr, con la capa apagada, o si
+    el pane no responde —y en ese caso vuelve a half-blocks en vez de dejar un
+    hueco—.
+
+  Lo que costó saber, y está en el código:
+  - La API de gráficos **solo existe por socket**: `herdr pane graphics` no es un
+    subcomando, así que el cliente de Herdr de prdash (que habla por CLI) no sirve;
+    hay un cliente JSON-RPC nuevo en `internal/herdr/graphics.go` con una conexión
+    por petición, porque el servidor la cierra tras cada respuesta.
+  - **La colocación va en celdas**, no en píxeles, y la comparte con el overlay. Por
+    eso el origen de la caja vive en `centeredOrigin`: si el marco y la imagen
+    calcularan su sitio por su cuenta, caerían en rectángulos distintos.
+  - **La celda no es 1×2.** Herdr la mide y en kitty con la fuente por defecto son
+    9×19 px. Suponerlo deformaba la imagen un 5% y, peor, hacía mandar casi el doble
+    de resolución de la que se ve. Ahora el tamaño en píxeles sale de la celda
+    medida.
+  - **La capa hay que quitarla al cerrar el popup**, y en un contexto propio: vive
+    por encima del contenido del pane, así que si se queda, tapa la TUI entera; y
+    si el popup se cierra al salir, el contexto de la app ya está cancelado.
+  - Cada resize recoloca la imagen, porque la colocación es en celdas.
 - **Los últimos 5 comentarios del PR/MR se ven en el detalle.** En una caja propia
   con su "Comments" en el borde, debajo de la ficha y con su autor. Se piden al
   forge al llegar el cursor al ítem y se cachean, así que navegar no vuelve a

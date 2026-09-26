@@ -328,7 +328,7 @@ func TestHints(t *testing.T) {
 	got := Defaults().Hints()
 	want := []string{
 		"q quit", "tab section", "r mount review",
-		"a approve", "m merge ×2", "o open", "R refresh", "j/k move", "pgup/dn page",
+		"a approve", "m merge ×2", "v simulate", "o open", "R refresh", "j/k move", "pgup/dn page",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("Hints() = %v, quiero %v", got, want)

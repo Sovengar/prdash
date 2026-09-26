@@ -286,6 +286,7 @@ func DefaultKeybindings() Keybindings {
 		"mount-review": "r",
 		"approve":      "a",
 		"merge":        "m",
+		"simulate":     "v",
 		"section-next": "tab",
 		"open-browser": "o",
 	}
@@ -432,6 +433,7 @@ var hintOrder = []hint{
 	{action: "mount-review", label: "mount review"},
 	{action: "approve", label: "approve"},
 	{action: "merge", label: "merge ×2"},
+	{action: "simulate", label: "simulate"},
 	{action: "open-browser", label: "open"},
 	{action: "refresh", label: "refresh"},
 	{key: "j/k", label: "move"},

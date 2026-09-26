@@ -66,10 +66,48 @@ prdash worktrees  # lista los worktrees de review propiedad de prdash
 
 Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
 `tab` sección, `r` montar review (el worktree siempre; el layout de 2 tabs
-requiere Herdr), `R` refrescar, `a` approve, `m` merge, `o` abrir en el
-navegador, `q` salir. Son configurables en `[keybindings]`. Con el merge armado,
+requiere Herdr), `R` refrescar, `a` approve, `m` merge, `v` simular, `o` abrir en
+el navegador, `q` salir. Son configurables en `[keybindings]`. Con el merge armado,
 `m`/`r`/`s` eligen estrategia y cualquier otra tecla cancela (ver
 [Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
+
+### Simulación (`v`)
+
+`v` abre un popup que renderiza con [git-sim](https://github.com/initialcommit/git-sim)
+cómo quedaría el historial al integrar el PR, y lo enseña **encima** del inbox: la
+vista de fondo se sigue viendo salvo donde tapa la caja. `enter` renderiza, `esc`
+cierra y `o` abre la imagen en el visor del sistema.
+
+No es un gate: git-sim dibuja, no ejecuta, y su veredicto solo existe dentro de la
+imagen. Es un visualizador. Para saber si un merge **choca**, `v` no sirve.
+
+Requisitos y límites:
+
+- Necesita `git-sim` en el PATH (con `manim`, `cv2` y Python). Si no está, la
+  acción avisa y no hace nada.
+- Necesita el review montado (`r`): los refs solo existen en local después del
+  `fetch`. Sin él, avisa.
+- Todo el render ocurre en un **clon temporal** de esos refs, con la rama base
+  activa, y se borra al terminar. No toca el worktree del review ni el clon del
+  usuario: no deja refs, worktrees, ramas ni cambios sin commitear.
+- Solo se ofrece `merge`. git-sim 0.3.5 no sabe dibujar un `rebase`: si la rama
+  del PR ya está basada en la base —el caso normal— responde con un mensaje
+  invertido, y si divergen revienta con un `IndexError`. Cuando el proyecto lo
+  arregle, la lista de estrategias de `internal/tui/sim.go` es lo único que hay
+  que tocar.
+- La caja se dimensiona a lo que la imagen necesita manteniendo su proporción, y se
+  queda con el 75% del alto de la terminal dejando fondo alrededor.
+- **Dentro de Herdr con `terminal.kitty_graphics` activo** (y un terminal exterior
+  que lo soporte, como kitty), la imagen se publica en la **capa de gráficos del
+  pane** y la pinta el terminal a resolución nativa. Es lo que quita el aspecto de
+  mosaico: los half-blocks están quantizados a la rejilla de celdas, así que una
+  imagen de 1920 px en 84 columnas salía con cada píxel convertido en un bloque de
+  23×23 celdas.
+- **Sin Herdr, o con la capa apagada o sin respuesta**, la imagen se pinta con
+  half-blocks en truecolor (dos píxeles por celda). Se ve pixelada —es el techo de
+  una rejilla de caracteres— pero es la degradación honesta. `o` la abre en el
+  visor en cualquier caso.
+- Las imágenes se conservan en `$XDG_CACHE_HOME/prdash/sim` (las 20 últimas).
 
 La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem
 seleccionado en el 40% inferior, que se mueve con el cursor. No hay una vista a
