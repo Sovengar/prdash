@@ -165,6 +165,11 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 		m.setNotice(string(out.Kind)+" disabled: "+out.Msg, levelWarn)
 	case out.Conflict:
 		m.setNotice("forge conflict: "+out.Msg, levelError)
+	case out.Unmergeable:
+		// El motivo ya viene traducido y dice qué hacer, así que la cabecera solo
+		// nombra la acción: "forge conflict" aquí sería mentir, porque un refresco
+		// no rebasa una rama.
+		m.setNotice(string(out.Kind)+" refused: "+out.Msg, levelError)
 	case out.OK:
 		// El borrado de la rama se avisa aunque el merge haya salido: el aviso
 		// tiene que decir las dos cosas, porque "merge ok" a secas deja en

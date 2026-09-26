@@ -308,6 +308,7 @@ que `merge` salía igual en los tres casos. Ahora:
 | Estado | Qué pasa |
 |---|---|
 | Borrador, ya mergeado, ya cerrado | **No arma.** Es una propiedad del forge: GitHub rechaza el merge de un PR en borrador, y ofrecerlo solo gasta una llamada para recibir un error. |
+| **Las ramas se pisan** | **Arma, y avisa** nombrando la rama: `merge acme/widget#6 with the branch conflicts with main · press the mode anyway…`. Es un rebase, y un rebase lo hace el usuario. |
 | CI en rojo | Arma, y la confirmación dice `merge acme/widget#7 with CI is failing (2 of 5) · press the mode anyway…` |
 | CI todavía corriendo | Arma, y avisa: mergear mientras el CI corre es la carrera que el pin del head no cierra, porque el CI puede pasar *después* del merge. |
 | Cambios pedidos | Arma, y avisa. |
@@ -322,6 +323,25 @@ del ítem, y por eso frena igual con la review aprobada o sin ella: `State` orde
 por atención al operador y un borrador aprobado sale como `approved`. La ficha lo
 dice en su propia fila `Draft` en vez de esconderlo dentro de `State`.
 
+El conflicto de ramas también se avisa antes, y por el mismo motivo: sale en la
+caja (`the branch conflicts with main`) y no como un rechazo de la CLI después de
+gastar la llamada. Los dos datos viajan en la consulta que ya se hacía del ítem
+(`mergeable` en GitHub, `detailedMergeStatus` en GitLab), así que no cuestan
+llamada, y donde el forge todavía no lo sabe —GitHub devuelve `UNKNOWN` mientras
+lo calcula— no se dice nada: un aviso sin dato es un aviso falso.
+
+Cuando el rechazo llega igualmente —porque el PR se empujó entre el refresco y la
+pulsación, o porque el dato no venía—, el aviso dice qué hacer y no promete un
+refresco que no arregla un rebase:
+
+| Situación | Aviso |
+|---|---|
+| El ítem cambió mientras lo mirabas (cerrado, mergeado) | `forge conflict: …` — un refresco lo resuelve |
+| Las ramas se pisan | `merge refused: the forge will not merge it as it is: rebase the branch onto the target and push` |
+
+Que sean dos mensajes y no uno es el punto: en el vocabulario de prdash un
+"conflicto" se arregla solo, y mezclarlo con el rechazo por ramas obligaba a
+prometer un refresco que no servía de nada.
 Elegir el modo **es** la confirmación: para eso hay que nombrar una estrategia, y
 quien la nombra después de leer que el CI está rojo ha decidido. No hace falta una
 tercera tecla.

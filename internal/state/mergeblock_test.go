@@ -76,6 +76,69 @@ func TestMergeBlockSeesTheDraftUnderAnyReviewDecision(t *testing.T) {
 	}
 }
 
+// TestMergeBlockWarnsAboutConflictingBranches: el conflicto de ramas se anuncia
+// y no se veta.
+//
+// Es la asimetría del gate deliberada: GitHub no va a integrar el PR mientras las
+// ramas se pisen, pero un rebase lo arregla en un comando y el gate no puede
+// saber si el usuario lo ha hecho ya. Vetarlo dejaría al PR sin salida desde
+// aquí; no decirlo gastaría una llamada entera en descubrirlo.
+func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
+	it := base()
+	it.TargetBranch = "main"
+	it.Mergeable = model.Mergeability{Known: true, Conflicted: true}
+
+	block := MergeBlock(it)
+	if !strings.Contains(block.Reason, "conflicts") {
+		t.Fatalf("Reason = %q, want que mencione el conflicto", block.Reason)
+	}
+	// El nombre de la rama delante dice qué hay que rebasar, y sin vetar: un
+	// rebase lo arregla, así que la segunda pulsación tiene que servir.
+	if !strings.Contains(block.Reason, "main") {
+		t.Errorf("Reason = %q, want que nombre la rama destino", block.Reason)
+	}
+	if block.Hard {
+		t.Error("Hard = true, want false: un rebase lo arregla y el veto no tiene salida")
+	}
+}
+
+// TestMergeBlockPrefersTheConflictOverTheCI: un PR que choca tampoco pasa el CI,
+// y decir "CI is failing" manda al operador a mirar el sitio equivocado. El
+// conflicto va primero porque es lo que hay que rehacer.
+func TestMergeBlockPrefersTheConflictOverTheCI(t *testing.T) {
+	it := base()
+	it.TargetBranch = "main"
+	it.Mergeable = model.Mergeability{Known: true, Conflicted: true}
+	it.Checks = model.Checks{State: model.ChecksFailing, Total: 4, Failing: 2}
+
+	if reason := MergeBlock(it).Reason; !strings.Contains(reason, "conflicts") {
+		t.Errorf("Reason = %q, want el conflicto antes que el CI", reason)
+	}
+}
+
+// TestMergeBlockStaysQuietWithoutTheData: lo que no se sabe no se anuncia. Un
+// aviso de conflicto que sale sin datos es un aviso falso, y un aviso falso que
+// se repite entrena a ignorar la caja.
+func TestMergeBlockStaysQuietWithoutTheData(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		m    model.Mergeability
+	}{
+		{"sin dato (GitHub UNKNOWN, la API de Todos)", model.Mergeability{}},
+		{"integrable", model.Mergeability{Known: true}},
+		{"integrable y sin conflicto", model.Mergeability{Known: true, Conflicted: false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := base()
+			it.TargetBranch = "main"
+			it.Mergeable = tc.m
+			if reason := MergeBlock(it).Reason; reason != "" {
+				t.Errorf("Reason = %q, want silencio: no hay conflicto que anunciar", reason)
+			}
+		})
+	}
+}
+
 // TestMergeBlockWarnsWithoutForbidding: el CI rojo, el CI corriendo y los cambios
 // pedidos son política, no propiedad del forge. Bloquearlos del todo convertiría
 // la herramienta en un muro —un check inestable dejaría el PR sin poder mergear

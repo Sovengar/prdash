@@ -353,9 +353,15 @@ type Outcome struct {
 	OK       bool      // la acción se aplicó
 	Conflict bool      // el ítem cambió (cerrado/mergeado/ausente): hay que refrescar
 	Perm     bool      // acción deshabilitada por permisos o por no soportado
-	Msg      string    // motivo para la UI
-	Item     model.Item
-	HasItem  bool // Item trae el estado releído
+	// Unmergeable dice que el forge no pudo crear el merge con las ramas como
+	// están. Viaja aparte de Conflict y de Perm porque no es lo mismo que
+	// ninguna: un conflicto de estado se resuelve refrescando y un permiso no
+	// tiene salida, mientras que aquí lo que hay que hacer es rebasar. La TUI lo
+	// necesita para no prometer un refresco que no arregla nada.
+	Unmergeable bool
+	Msg         string // motivo para la UI
+	Item        model.Item
+	HasItem     bool // Item trae el estado releído
 
 	// DeleteBranch es lo que se pidió en la Confirmación, para que el aviso
 	// pueda decir qué pasó con la rama en vez de callarse.
@@ -402,6 +408,9 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 		actionWarns = a.Merge(ctx, ref, number, req)
 	}
 	out.OK, out.Conflict, out.Perm, out.Msg = classifyAction(actionWarns)
+	// classifyAction ya lo separó de Perm y de Conflict con el motivo canónico;
+	// aquí solo se marca para que la TUI sepa con qué palabras presentarlo.
+	out.Unmergeable = hasKind(actionWarns, "unmergeable")
 
 	// Relee el estado para dejar el ítem consistente tras la acción o el fallo.
 	if it, w := a.ItemState(ctx, ref, number); len(w) == 0 && it.Number != 0 {
@@ -466,6 +475,14 @@ func classifyAction(warns []model.Warning) (ok, conflict, perm bool, msg string)
 		// clasifica como permiso para que la TUI la deje registrada y no
 		//Repita la llamada. El motivo es el canónico, no el stderr de la CLI.
 		return false, false, true, state.SelfReviewReason
+	case hasKind(warns, "unmergeable"):
+		// No es un conflicto en el sentido de "el ítem cambió": eso se resuelve
+		// solo y por eso avisa de refrescar. Aquí las ramas se pisan y no se
+		// arreglan solas, así que el motivo es el canónico —que dice lo que hay
+		// que hacer— en vez del inglés de la CLI. No es permiso tampoco: registrar
+		// el ítem como denegado lo dejaría sin merge para siempre, y un rebase lo
+		// arregla. Lo consume la TUI por su cuenta con Outcome.Unmergeable.
+		return false, false, false, state.UnmergeableReason
 	case hasKind(warns, "notfound"), hasKind(warns, "conflict"),
 		hasKind(warns, "ratelimit"), hasKind(warns, "network"), hasKind(warns, "timeout"):
 		return false, true, false, msg

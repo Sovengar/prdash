@@ -114,6 +114,11 @@ type ghPRNode struct {
 	// aun así lo da por hecho. Sin este campo el aviso de "rama borrada" sería
 	// mentira justo en los PRs que más se vigilan.
 	IsCrossRepository bool `json:"isCrossRepository"`
+	// Mergeable es el estado de mergeabilidad que GitHub calcula en segundo
+	// plano: MERGEABLE, CONFLICTING, o UNKNOWN mientras todavía no lo sabe. Es un
+	// campo del pull request, así que sale en la consulta que ya se hace y no
+	// cuesta llamada.
+	Mergeable string `json:"mergeable"`
 	// HeadRefOid es el commit de la rama origen. Es lo que permite pinear el
 	// merge a un commit concreto: sin él, la rama puede haberse movido desde la
 	// última lectura y el merge integraría commits que nadie revisó.
@@ -228,6 +233,7 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	it.Diff = diffFromGHNode(n)
 	it.HeadSHA = n.HeadRefOid
 	it.Merge = mergeRulesFromGHRepo(n.Repository)
+	it.Mergeable = mergeableFromGH(n.Mergeable)
 	it.UpdatedAt = parseTime(n.UpdatedAt)
 	return it
 }
@@ -247,6 +253,23 @@ func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 		MergeCommit: *r.MergeCommitAllowed,
 		Rebase:      *r.RebaseMergeAllowed,
 		Squash:      *r.SquashMergeAllowed,
+	}
+}
+
+// mergeableFromGH lee el estado de mergeabilidad de GitHub.
+//
+// UNKNOWN no es un "sí": es "todavía no lo sé", y GitHub lo devuelve siempre la
+// primera vez que se pregunta, mientras un job en segundo plano calcula la
+// respuesta. Traducirlo a integrable haría que el gate anunciara un conflicto que
+// no existe, así que Known=false es lo que sale, y un unknown no restringe.
+func mergeableFromGH(v string) model.Mergeability {
+	switch strings.ToUpper(strings.TrimSpace(v)) {
+	case "CONFLICTING":
+		return model.Mergeability{Known: true, Conflicted: true}
+	case "MERGEABLE":
+		return model.Mergeability{Known: true}
+	default: // "", UNKNOWN y cualquier valor que no conocemos
+		return model.Mergeability{}
 	}
 }
 
@@ -450,11 +473,18 @@ type glMR struct {
 	// Draft es la bandera de borrador del MR. Va separada de State porque State
 	// es el enum del forge ("opened") y no lo cubre: sin ella un MR en borrador
 	// era indistinguible de uno abierto.
-	Draft        bool   `json:"draft"`
-	SourceBranch string `json:"sourceBranch"`
-	TargetBranch string `json:"targetBranch"`
-	Approved     bool   `json:"approved"`
-	UpdatedAt    string `json:"updatedAt"`
+	Draft bool `json:"draft"`
+	// DetailedMergeStatus es el veredicto de mergeabilidad de GitLab. Se pide el
+	// detallado y no el `mergeStatus` porque el simple no distingue "choca" de
+	// "falta el pipeline": con el simple, un CI en rojo se anunciaría como
+	// conflicto de ramas, que sería una mentira. El coste es que GitLab lo calcula
+	// por MR en cada petición (su API REST de lista también lo devuelve), así que
+	// es un cálculo por ítem y no una llamada extra.
+	DetailedMergeStatus string `json:"detailedMergeStatus"`
+	SourceBranch        string `json:"sourceBranch"`
+	TargetBranch        string `json:"targetBranch"`
+	Approved            bool   `json:"approved"`
+	UpdatedAt           string `json:"updatedAt"`
 	// DiffHeadSha es el commit de la rama origen: lo que permite pinear el merge
 	// con `--sha`. Es puntero porque GitLab lo declara nullable y lo devuelve a
 	// null cuando el diff no está calculado; ausente y null significan lo mismo
@@ -583,6 +613,7 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	it.URL = mr.WebURL
 	it.State = mr.State
 	it.IsDraft = mr.Draft
+	it.Mergeable = mergeableFromGL(mr.DetailedMergeStatus)
 	it.ReviewDecision = glReviewDecision(mr)
 	it.Diff = diffFromGLMR(mr)
 	if mr.DiffHeadSha != nil {
@@ -604,6 +635,34 @@ func glMRSquash(mr glMR) (squashed bool, known bool) {
 		return false, false
 	}
 	return *mr.Squash, true
+}
+
+// mergeableFromGL lee el veredicto de mergeabilidad de GitLab.
+//
+// El enum ha cambiado de nombre con las versiones: `broken_status` en las
+// antiguas y `CONFLICT` en las nuevas (GitLab renombró el valor al hablar de
+// "conflict" y no de "broken"), y la API REST devuelve el valor en minúsculas
+// mientras GraphQL devuelve el nombre del enum. Se comparan en minúsculas y se
+// aceptan las dos formas, porque el coste de equivocarse es el habitual: un
+// conflicto que no existe es un aviso falso, y un aviso falso que se repite
+// entrena a ignorar la caja entera.
+//
+// `need_rebase` NO es un conflicto: la rama está detrás pero se puede integrar
+// sin tocar nada, así que se trata como integrable. Los estados que no son ni
+// conflicto ni integrable ("unchecked", "checking", y los bloqueos de
+// aprobación o pipeline) salen como conocidos y no conflitados, que es lo que
+// ya avisa el gate del CI por su cuenta.
+func mergeableFromGL(v string) model.Mergeability {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "conflict", "broken_status":
+		return model.Mergeability{Known: true, Conflicted: true}
+	case "":
+		// El campo no vino: la respuesta es de una forma que no lo trae (la API
+		// de Todos, un respaldo). No se sabe nada, y no saber no restringe.
+		return model.Mergeability{}
+	default:
+		return model.Mergeability{Known: true}
+	}
 }
 
 // diffFromGLMR suma el diffstat de un MR. GitLab entrega `diffStats` como una
@@ -641,15 +700,19 @@ func glReviewDecision(mr glMR) string {
 // ---- GitLab: REST merge_requests (BasicMergeRequest) ----
 
 type glBasicMR struct {
-	IID          flexInt `json:"iid"`
-	Title        string  `json:"title"`
-	WebURL       string  `json:"web_url"`
-	State        string  `json:"state"`
-	Draft        bool    `json:"draft"`
-	SourceBranch string  `json:"source_branch"`
-	TargetBranch string  `json:"target_branch"`
-	UpdatedAt    string  `json:"updated_at"`
-	Author       struct {
+	IID    flexInt `json:"iid"`
+	Title  string  `json:"title"`
+	WebURL string  `json:"web_url"`
+	State  string  `json:"state"`
+	Draft  bool    `json:"draft"`
+	// DetailedMergeStatus llega en la respuesta de la lista REST de MRs, así que
+	// leerlo no cuesta nada. El campo `merge_status` (deprecated) se ignora a
+	// propósito: no distingue un conflicto de un pipeline en rojo.
+	DetailedMergeStatus string `json:"detailed_merge_status"`
+	SourceBranch        string `json:"source_branch"`
+	TargetBranch        string `json:"target_branch"`
+	UpdatedAt           string `json:"updated_at"`
+	Author              struct {
 		Username string `json:"username"`
 	} `json:"author"`
 	References struct {
@@ -686,6 +749,7 @@ func ParseGLMRList(raw string) ([]model.Item, error) {
 		it.URL = mr.WebURL
 		it.State = mr.State
 		it.IsDraft = mr.Draft
+		it.Mergeable = mergeableFromGL(mr.DetailedMergeStatus)
 		it.UpdatedAt = parseTime(mr.UpdatedAt)
 		items = append(items, it)
 	}

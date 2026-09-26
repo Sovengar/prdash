@@ -1,0 +1,258 @@
+package parse
+
+import (
+	"strings"
+	"testing"
+
+	"prdash/internal/forge/model"
+	"prdash/internal/state"
+)
+
+// TestMergeableFromEveryPath comprueba que el aviso de "las ramas se pisan" sale
+// del dato REAL de cada forge, con la forma que cada uno lo devuelve, y no de un
+// valor inyectado a mano.
+//
+// Ese es justo el patrón que dejó muerto el gate de borradores: los tests se
+// inyectaban State="draft", que ningún forge emite, y la suite entera pasaba con
+// la funcionalidad rota. Aquí cada fixture es el JSON que devuelve el forge, así
+// que si un adapter deja de pedir el campo o de copiarlo, esto falla.
+//
+// Los caminos que NO traen el dato (el respaldo REST de GitHub y la API de
+// Todos de GitLab) se comprueban también, y por el otro lado: tienen que salir
+// sin Known y sin aviso, porque no saber no es lo mismo que saber que no.
+func TestMergeableFromEveryPath(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// wantKnown y wantConflicted son lo que el forge dice; wantBlocked es lo
+		// que el gate responde. Se comparan los tres porque son tres hechos
+		// distintos y el último es el que se ve.
+		wantKnown      bool
+		wantConflicted bool
+		wantBlocked    bool
+		got            func(t *testing.T) (model.Mergeability, state.Block)
+	}{
+		{
+			name:           "github graphql: CONFLICTING",
+			wantKnown:      true,
+			wantConflicted: true,
+			wantBlocked:    true,
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items := mustSearch(t, ghSearchConflictedFixture, 2)
+				return items[1].Mergeable, state.MergeBlock(items[1])
+			},
+		},
+		{
+			name:      "github graphql: MERGEABLE no avisa",
+			wantKnown: true,
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items := mustSearch(t, ghSearchMergeableFixture, 1)
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+		{
+			// UNKNOWN es "todavía no lo sé", no un "sí": sin Known y sin aviso,
+			// porque un aviso falso entrena a ignorar la caja entera.
+			name: "github graphql: UNKNOWN no avisa",
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items := mustSearch(t, ghSearchUnknownFixture, 1)
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+		{
+			name: "github rest: la búsqueda no trae el dato",
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items, err := ParseGHAuthored(ghAuthoredDraftFixture)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+		{
+			name:           "gitlab graphql: CONFLICT",
+			wantKnown:      true,
+			wantConflicted: true,
+			wantBlocked:    true,
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items, _, err := ParseGLGraphQL(glConflictFixture)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if len(items) != 1 {
+					t.Fatalf("items = %d, want 1", len(items))
+				}
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+		{
+			// La lista REST devuelve el valor en minúsculas (broken_status) y el
+			// enum de GraphQL el nombre en mayúsculas (CONFLICT): los dos tienen
+			// que acabar en el mismo veredicto.
+			name:           "gitlab rest: broken_status",
+			wantKnown:      true,
+			wantConflicted: true,
+			wantBlocked:    true,
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items, err := ParseGLMRList(glBasicConflictFixture)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if len(items) != 1 {
+					t.Fatalf("items = %d, want 1", len(items))
+				}
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+		{
+			// NEED_REBASE no es un conflicto: la rama está detrás pero se integra
+			// sin tocar nada, así que anunciarlo como conflicto sería una mentira
+			// que el usuario no puede actuar.
+			name:      "gitlab graphql: NEED_REBASE no es conflicto",
+			wantKnown: true,
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items, _, err := ParseGLGraphQL(glNeedRebaseFixture)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+		{
+			name: "gitlab todos: el target no trae el dato",
+			got: func(t *testing.T) (model.Mergeability, state.Block) {
+				items, _, err := ParseGLTodos(glTodosMRFixture)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				if len(items) != 1 {
+					t.Fatalf("items = %d, want 1", len(items))
+				}
+				return items[0].Mergeable, state.MergeBlock(items[0])
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, block := tc.got(t)
+			if m.Known != tc.wantKnown {
+				t.Errorf("Known = %v, want %v", m.Known, tc.wantKnown)
+			}
+			if m.Conflicted != tc.wantConflicted {
+				t.Errorf("Conflicted = %v, want %v", m.Conflicted, tc.wantConflicted)
+			}
+			if blocked := block.Reason != "" && strings.Contains(block.Reason, "conflicts"); blocked != tc.wantBlocked {
+				t.Errorf("el gate avisa del conflicto = %v (%q), want %v", blocked, block.Reason, tc.wantBlocked)
+			}
+		})
+	}
+}
+
+// mustSearch parsea la búsqueda de GitHub y devuelve los n primeros ítems.
+func mustSearch(t *testing.T, raw string, n int) []model.Item {
+	t.Helper()
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(items) < n {
+		t.Fatalf("items = %d, want al menos %d", len(items), n)
+	}
+	return items[:n]
+}
+
+const ghSearchConflictedFixture = `{
+  "data": {
+    "search": {
+      "pageInfo": {"hasNextPage": false, "endCursor": null},
+      "nodes": [
+        {"number": 3, "title": "ok", "url": "u3", "state": "OPEN", "isDraft": false,
+         "mergeable": "MERGEABLE", "reviewDecision": "APPROVED", "updatedAt": "2026-09-20T08:00:00Z",
+         "headRefName": "feat/ok", "baseRefName": "main", "headRefOid": "aaa111",
+         "repository": {"nameWithOwner": "acme/lib", "name": "lib", "owner": {"login": "acme"},
+                        "mergeCommitAllowed": true, "rebaseMergeAllowed": true, "squashMergeAllowed": true},
+         "author": {"login": "me"}},
+        {"number": 4, "title": "choca", "url": "u4", "state": "OPEN", "isDraft": false,
+         "mergeable": "CONFLICTING", "reviewDecision": "APPROVED", "updatedAt": "2026-09-20T08:00:00Z",
+         "headRefName": "feat/choca", "baseRefName": "main", "headRefOid": "bbb222",
+         "repository": {"nameWithOwner": "acme/lib", "name": "lib", "owner": {"login": "acme"},
+                        "mergeCommitAllowed": true, "rebaseMergeAllowed": true, "squashMergeAllowed": true},
+         "author": {"login": "me"}}
+      ]
+    }
+  }
+}`
+
+const ghSearchMergeableFixture = `{
+  "data": {
+    "search": {
+      "pageInfo": {"hasNextPage": false, "endCursor": null},
+      "nodes": [
+        {"number": 5, "title": "ok", "url": "u5", "state": "OPEN", "isDraft": false,
+         "mergeable": "MERGEABLE", "reviewDecision": "", "updatedAt": "2026-09-20T08:00:00Z",
+         "headRefName": "feat/ok", "baseRefName": "main", "headRefOid": "ccc333",
+         "repository": {"nameWithOwner": "acme/lib", "name": "lib", "owner": {"login": "acme"},
+                        "mergeCommitAllowed": true, "rebaseMergeAllowed": true, "squashMergeAllowed": true},
+         "author": {"login": "me"}}
+      ]
+    }
+  }
+}`
+
+const ghSearchUnknownFixture = `{
+  "data": {
+    "search": {
+      "pageInfo": {"hasNextPage": false, "endCursor": null},
+      "nodes": [
+        {"number": 6, "title": "calculando", "url": "u6", "state": "OPEN", "isDraft": false,
+         "mergeable": "UNKNOWN", "reviewDecision": "", "updatedAt": "2026-09-20T08:00:00Z",
+         "headRefName": "feat/nuevo", "baseRefName": "main", "headRefOid": "ddd444",
+         "repository": {"nameWithOwner": "acme/lib", "name": "lib", "owner": {"login": "acme"},
+                        "mergeCommitAllowed": true, "rebaseMergeAllowed": true, "squashMergeAllowed": true},
+         "author": {"login": "me"}}
+      ]
+    }
+  }
+}`
+
+const glConflictFixture = `{
+  "data": {
+    "currentUser": {
+      "authoredMergeRequests": {"pageInfo": {"hasNextPage": false, "endCursor": null},
+        "nodes": [
+        {"iid":"21","title":"choca","webUrl":"u21","state":"opened","draft":false,
+         "detailedMergeStatus":"CONFLICT","sourceBranch":"feat/choca","targetBranch":"main",
+         "approved":true,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},
+         "project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
+      ]}
+    }
+  }
+}`
+
+const glNeedRebaseFixture = `{
+  "data": {
+    "currentUser": {
+      "authoredMergeRequests": {"pageInfo": {"hasNextPage": false, "endCursor": null},
+        "nodes": [
+        {"iid":"22","title":"detras","webUrl":"u22","state":"opened","draft":false,
+         "detailedMergeStatus":"NEED_REBASE","sourceBranch":"feat/detras","targetBranch":"main",
+         "approved":true,"updatedAt":"2026-09-23T09:00:00Z","author":{"username":"me"},
+         "project":{"fullPath":"grp/proj","name":"proj","group":{"fullPath":"grp"}}}
+      ]}
+    }
+  }
+}`
+
+const glBasicConflictFixture = `[
+  {"iid":23,"title":"choca","web_url":"u23","state":"opened","draft":false,
+   "detailed_merge_status":"broken_status",
+   "source_branch":"feat/choca","target_branch":"main","updated_at":"2026-09-23T09:00:00Z",
+   "author":{"username":"me"},"references":{"full":"grp/proj!23","short":"!23"}}
+]`
+
+const glTodosMRFixture = `[
+  {"id":1,"action_name":"mentioned","target_type":"MergeRequest",
+   "target_url":"https://gitlab.example.com/grp/proj/-/merge_requests/24",
+   "updated_at":"2026-09-23T09:00:00Z",
+   "target":{"iid":24,"title":"mencionado","web_url":"u24","state":"opened",
+             "source_branch":"feat/x","target_branch":"main","author":{"username":"otro"},
+             "references":{"full":"grp/proj!24"}}}
+]`

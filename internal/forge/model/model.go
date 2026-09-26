@@ -124,6 +124,20 @@ func MergeRulesAll() MergeRules {
 	return MergeRules{Known: true, MergeCommit: true, Rebase: true, Squash: true}
 }
 
+// Mergeability resume si el forge puede integrar el ítem tal y como está, sin
+// que haya que resolver nada antes.
+//
+// Known separa "el forge dice que no" de "el forge todavía no lo sabe": GitHub
+// devuelve UNKNOWN y GitLab UNCHECKED mientras calculan la mergeabilidad en
+// segundo plano, y hay caminos (el respaldo REST de GitHub, la API de Todos de
+// GitLab) donde el dato no viaja. Un unknown no es un no, así que no
+// restringe: quien lo consume tiene que tratarlo como tal en vez de suponer que
+// todo se puede mergear.
+type Mergeability struct {
+	Known      bool
+	Conflicted bool
+}
+
 // RepoRef identifica un repositorio dentro de un forge y host concretos.
 type RepoRef struct {
 	Forge   string // "github" | "gitlab" | ...
@@ -187,7 +201,13 @@ type Item struct {
 	HeadSHA string
 	// Merge son las estrategias que el repositorio admite. Un repositorio que no
 	// publica el dato llega con Known=false, y eso no restringe nada.
-	Merge     MergeRules
+	Merge MergeRules
+	// Mergeable es si el forge puede integrar esto ahora mismo. Vive separado de
+	// Merge porque son preguntas distintas: MergeRules es lo que el repositorio
+	// PERMITE (y no lo publica GitLab), y esto es lo que el forge puede HACER con
+	// el ítem tal y como está. Un repositorio puede permitirte las tres
+	// estrategias y seguir sin poder integrarte el PR porque las ramas se pisan.
+	Mergeable Mergeability
 	UpdatedAt time.Time
 }
 

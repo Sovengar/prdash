@@ -309,8 +309,10 @@ func qualifierFor(q forge.Query) (string, bool) {
 // y no cuestan una llamada extra: el primero es lo que permite pinear el merge
 // a un commit concreto y los segundos filtran los modos por lo que el
 // repositorio admite. Un repositorio con squash desactivado no debe ofrecer
-// squash, y sin esto lo haría.
-const ghPRFields = `number title url state isDraft isCrossRepository reviewDecision updatedAt headRefName baseRefName ` +
+// squash, y sin esto lo haría. `mergeable` viene en la MISMA consulta por lo mismo:
+// es lo que permite avisar de que las ramas se pisan sin gastarse una llamada en
+// descubrirlo al mergear.
+const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName ` +
 	`headRefOid additions deletions changedFiles ` +
 	`author { login } repository { nameWithOwner name owner { login } ` +
 	`mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } ` +

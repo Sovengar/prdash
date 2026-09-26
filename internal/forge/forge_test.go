@@ -226,6 +226,65 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 	}
 }
 
+// TestRunActionUnmergeableIsNotAConflict: el rechazo por ramas que se pisan no
+// es un conflicto de estado, y confundirlos es lo que hacía que la TUI prometiese
+// un refresco que no arregla un rebase.
+//
+// Tiene que llegar con el motivo canónico —que dice lo que hay que hacer— y sin
+// registrarse como denegación: un rebase lo deja integrable, y marcar el ítem
+// como denegado lo dejaría sin merge para siempre.
+func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 7)
+	item.HeadSHA = "abc1234" // sin pin el merge no sale, y esto no es lo que se prueba
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 7): item},
+		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#7": {{
+			Forge: "github", Kind: "unmergeable",
+			Msg: "gh pr merge 7: × Pull request acme/widget#7 is not mergeable: the merge commit cannot be cleanly created. (exit 1)",
+		}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 7, forge.MergeRequest{Mode: forge.Squash})
+	if !out.Unmergeable {
+		t.Fatalf("Unmergeable = false, outcome = %+v", out)
+	}
+	if out.OK || out.Conflict {
+		t.Errorf("un rechazo por ramas no es un conflicto de estado: %+v", out)
+	}
+	if out.Perm {
+		t.Error("Perm = true: un rebase lo arregla, el ítem no queda denegado para siempre")
+	}
+	if out.Msg != state.UnmergeableReason {
+		t.Errorf("Msg = %q, want %q (no el stderr de la CLI)", out.Msg, state.UnmergeableReason)
+	}
+}
+
+// TestRunActionConflictStaysAConflict: el otro lado de la separación. Un ítem que
+// se mergeó mientras lo mirabas se resuelve solo con refrescar, así que sigue
+// siendo conflicto y no "no integrable".
+func TestRunActionConflictStaysAConflict(t *testing.T) {
+	item := mkItem("github", "github.com", "acme/widget", 8)
+	item.HeadSHA = "abc1234"
+	fake := &testutil.FakeAdapter{
+		ForgeName:  "github",
+		HostName:   "github.com",
+		ItemStates: map[string]model.Item{testutil.ItemKey("acme/widget", 8): item},
+		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#8": {{
+			Forge: "github", Kind: "conflict", Msg: "gh pr merge 8: Pull request is already merged (exit 1)",
+		}}},
+	}
+
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 8, forge.MergeRequest{Mode: forge.Squash})
+	if !out.Conflict {
+		t.Fatalf("Conflict = false, outcome = %+v", out)
+	}
+	if out.Unmergeable {
+		t.Error("Unmergeable = true: esto se resuelve refrescando")
+	}
+}
+
 func assertKind(t *testing.T, warns []model.Warning, kind string) {
 	t.Helper()
 	for _, w := range warns {

@@ -9,6 +9,34 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **La Confirmación de merge avisa de que las ramas se pisan, y el rechazo dice
+  rebase.** `mergeable` (GitHub) y `detailedMergeStatus` (GitLab) viajan en la
+  consulta que ya se hacía del ítem, así que **no cuestan llamada**: el aviso de
+  "choca con `main`" aparece en la caja antes de elegir la estrategia, en vez de
+  aparecer después como un rechazo de la CLI. Es un bloqueo **blando**, como el
+  CI rojo: arma igual y nombra la rama contra la que hay que rehacer, porque un
+  rebase lo arregla en un comando y vetar dejaría al PR sin salida desde aquí.
+  Donde el forge no dice nada (el `UNKNOWN` de GitHub mientras calcula, el
+  respaldo REST de GitHub, la API de Todos de GitLab) no se anuncia nada: un
+  aviso de conflicto sin dato es un aviso falso, y uno que se repite entrena a
+  ignorar la caja.
+
+  El rechazo cambia además de clasificación, y esto era un bug: el texto de un
+  rechazo de merge por ramas y el de "el ítem ya no está como estaba" comparten
+  la palabra *conflict* y son **opuestos**. Con el cubo único, `forge conflict`
+  prometía un refresco que no arregla un rebase —un aviso que no dice qué hacer,
+  que es la peor forma de equivocarse porque parece accionable—. Ahora el rechazo
+  por ramas se clasifica aparte, trae el motivo canónico (`rebase the branch onto
+  the target and push`) en vez del inglés de la CLI, **no** se registra como
+  denegación (un rebase lo deja integrable, y marcado como denegado el PR no
+  volvería a armar nunca) y sale como `merge refused: …`.
+
+  En GitLab se pide el `detailedMergeStatus` y no el `mergeStatus` porque el
+  simple no distingue un conflicto de un pipeline en rojo, y un CI en rojo ya lo
+  avisa el gate por su cuenta. El coste es que GitLab lo calcula por MR en cada
+  petición —su API REST de lista también lo devuelve—, así que es un cálculo por
+  ítem y no una llamada extra.
+
 - **El merge nombra si borra la rama, y `tab` lo decide.** La Confirmación de
   merge —la caja que sustituye a la barra de atajos con `m`— muestra ahora
   `delete branch: yes (tab)`, y `tab` conmuta el valor antes de la tecla que

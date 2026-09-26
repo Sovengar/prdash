@@ -346,17 +346,28 @@ func restEndpoint(resource string) string {
 //
 // `draft` viene en la misma consulta y no cuesta llamada. Sin él, `state` solo
 // decía "opened" y un MR en borrador era indistinguible de uno abierto: la
-// columna de estado lo teachaba como pendiente y el gate de merge no lo frenaba.
+// columna de estado lo pintaba como pendiente y el gate de merge no lo frenaba.
+//
+// `detailedMergeStatus` también, y por el mismo motivo: es lo que avisa de que el
+// MR choca con su base sin descubrirlo al mergear. Se pide el detallado y no el
+// `mergeStatus` porque el simple no distingue un conflicto de un pipeline en
+// rojo, y un CI en rojo ya lo avisa el gate por su cuenta. GitLab lo calcula por
+// MR en cada petición, así que es un cálculo por ítem y no una llamada extra.
 //
 // `diffHeadSha` y `squash` también salen en la misma consulta y no cuestan
 // llamada: el primero es lo que permite pinear el merge con `--sha` y el
-// segundo avisa de que el MR se aplana pase lo que pase. Lo que NO se pide son
-// las estrategias admitidas por el repositorio: `Project.mergeMethod` no existe
-// en el schema GraphQL de GitLab (comprobado contra la instancia), y leerlo por
-// REST costaría una llamada por repositorio. Por eso las reglas de merge
-// llegan sin conocer en GitLab, y sin conocer no restringen.
+// segundo avisa de que el MR se aplana pase lo que pase.
+//
+// Lo que NO se piden son las estrategias admitidas por el repositorio. No hay un
+// `Project.mergeMethod` en el schema (comprobado contra la instancia), pero sí
+// un `Project.mergeRequestsFfOnlyEnabled` que dice si el proyecto integra en modo
+// fast-forward, así que el dato de "este repo es ff-only" es gratis. Lo que no
+// hay es forma de saber qué estrategias admite el proyecto: GitLab decide el
+// método del merge simple con un enum de un solo valor, y la API REST lo da por
+// proyecto (una llamada por repositorio), no por MR. Por eso las reglas de
+// merge llegan sin conocer en GitLab, y sin conocer no restringen.
 const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt ` +
-	`diffHeadSha squash diffStats { additions deletions } ` +
+	`diffHeadSha squash detailedMergeStatus diffStats { additions deletions } ` +
 	`author { username } project { fullPath name group { fullPath } }`
 
 // glConn cierra una conexión GraphQL con paginación.

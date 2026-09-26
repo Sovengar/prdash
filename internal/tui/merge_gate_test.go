@@ -76,6 +76,97 @@ func TestMergeOnFailingCIStillArmsButSays(t *testing.T) {
 	}
 }
 
+// TestMergeOnConflictingBranchesStillArmsButSays: un PR cuyas ramas se pisan no
+// lo va a integrar el forge, pero un rebase lo arregla en un comando, así que el
+// bloqueo es blando: arma, y la Confirmación lo dice nombrando la rama destino,
+// que es lo que hay que rebasar.
+func TestMergeOnConflictingBranchesStillArmsButSays(t *testing.T) {
+	items := gatedItems(model.MergeRulesAll())
+	items[0].TargetBranch = "main"
+	items[0].Mergeable = model.Mergeability{Known: true, Conflicted: true}
+	f := newMergeFixture(t, items...)
+
+	m := press(t, f.m, "m")
+	if !m.mergeArmed {
+		t.Fatal("con las ramas en conflicto el merge debería armar: un rebase lo arregla")
+	}
+	view := stripANSI(m.View().Content)
+	if !strings.Contains(view, "conflicts with main") {
+		t.Errorf("la confirmación no dice contra qué choca:\n%s", view)
+	}
+	if !strings.Contains(view, "anyway") {
+		t.Errorf("la confirmación no dice que elegir el modo es seguir adelante:\n%s", view)
+	}
+}
+
+// TestMergeWithoutMergeabilityDataStaysQuiet: cuando el forge no dice (GitHub
+// UNKNOWN, el respaldo REST, la API de Todos de GitLab) la caja no enseña nada
+// del conflicto. Un aviso que sale sin dato es un aviso falso, y un aviso falso
+// que se repite entrena a ignorar la caja entera.
+func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		m    model.Mergeability
+	}{
+		{"sin dato", model.Mergeability{}},
+		{"integrable", model.Mergeability{Known: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			items := gatedItems(model.MergeRulesAll())
+			items[0].TargetBranch = "main"
+			items[0].Mergeable = tc.m
+			f := newMergeFixture(t, items...)
+
+			m := press(t, f.m, "m")
+			if !m.mergeArmed {
+				t.Fatal("el merge debería armar")
+			}
+			if view := stripANSI(m.View().Content); strings.Contains(view, "conflicts") {
+				t.Errorf("sin dato no debe anunciarse un conflicto:\n%s", view)
+			}
+		})
+	}
+}
+
+// TestMergeRefusedForConflictingBranchesSaysRebase: el aviso del rechazo tiene
+// que decir qué hacer, y no "forge conflict".
+//
+// "Conflict" en prdash significa que el ítem cambió mientras lo mirabas, que se
+// resuelve refrescando. Un rechazo por ramas que se pisan no se arregla con un
+// refresco: hay que rebasar. Prometer un refresco es un aviso que no dice qué
+// hacer, que es la peor forma de equivocarse porque parece accionable.
+func TestMergeRefusedForConflictingBranchesSaysRebase(t *testing.T) {
+	// Un solo ítem, para que no dependa de dónde caiga el cursor de la fixture.
+	// mkItem ya le pone head SHA, que es lo que hace que el merge llegue a salir.
+	it := mergeItems()[1]
+	f := newMergeFixture(t, it)
+	f.adp.ActionWarnings = map[string][]model.Warning{"merge:acme/widget#2": {{
+		Forge: "github", Kind: "unmergeable",
+		Msg: "gh pr merge 2: × Pull request acme/widget#2 is not mergeable: the merge commit cannot be cleanly created. (exit 1)",
+	}}}
+
+	m := press(t, f.m, "m")
+	m = press(t, m, "r")
+	out := waitOutcome(t, m)
+	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
+
+	notice := lastToast(m)
+	if !strings.Contains(notice, "refused") {
+		t.Errorf("el aviso debería decir que el forge lo rechazó, no que hubo un conflicto: %q", notice)
+	}
+	if strings.Contains(notice, "forge conflict") {
+		t.Errorf("un refresco no arregla un rebase: %q", notice)
+	}
+	if !strings.Contains(notice, "rebase") {
+		t.Errorf("el aviso debería decir qué hacer: %q", notice)
+	}
+	// Y no puede quedarse registrado como denegado: un rebase lo deja
+	// integrable, y marcado como denegado el PR no volvería a armar nunca.
+	if len(m.denied) != 0 {
+		t.Errorf("el ítem no debería quedar denegado para siempre: %+v", m.denied)
+	}
+}
+
 // TestMergeConfirmationOnlyOffersAllowedModes: un repositorio con squash
 // desactivado no debe ver `s` en la confirmación. La alternativa —ofrecerlo y
 // dejar que el forge lo rechace— es la que producía el error sin contexto.
