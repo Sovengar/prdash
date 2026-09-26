@@ -7,6 +7,34 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **El prefijo de ruta de la columna ITEM se puede elegir con `p`.** La ruta de
+  un ítem se pintaba siempre con el mismo reparto —el prefijo común de la sección
+  en su línea, el sufijo en la celda (ADR 0002/0004)— y no había manera de
+  elegir. Ahora `p` cicla tres modos, y la barra nombra el actual (`p prefix:
+  full`) para no contar pulsaciones:
+
+  - `common` (el de antes): línea de prefijo con el grupo común, celda con el
+    sufijo. Es el default, así que quien no pulse la tecla no ve nada nuevo.
+  - `full`: sin línea de prefijo y la referencia entera en la celda, para quien
+    lee la tabla fila a fila y quiere la referencia en la fila.
+  - `leaf`: sin línea de prefijo y solo la hoja del proyecto más el número, la
+    máxima densidad.
+
+  El modo es **global** (no por sección) y **no se persiste**: al reabrir vuelve
+  a `common`. La tecla `p` sí queda configurable por `[keybindings]`, por el
+  mecanismo genérico que ya existía para el resto de acciones. La columna ITEM se
+  vuelve a medir en cada modo con el mismo acotado, y en `full`/`leaf` la lista
+  recupera la línea que ocupaba el prefijo. Si la sección no tiene prefijo común,
+  `common` se ve exactamente como `full` (ADR 0005).
+
+  Dos límites, porque son reales: `leaf` **no desambigua** dos repos de grupos
+  distintos con la misma hoja (`acme/one#7` y `other/one#8` salen como `one#7` y
+  `one#8`) —su valor es la densidad, no la certeza— y el modo no sobrevive a la
+  ejecución siguiente. La ruta completa sigue en la ficha del ítem y en
+  `--print`, que **no cambia**.
+
 ### Changed
 
 - **El Inbox pinta una sola sección a la vez, con leyenda de conteos en el borde.**
@@ -15,7 +43,8 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   vacía). El título `Inbox` se sustituye por la leyenda `Mine (n) · Assigned (n) ·
   Mentioned (n)`, con la activa resaltada; en terminal estrecho el borde la trunca
   sin descuadrar la caja. Cada sección recuerda su cursor y su scroll, el prefijo
-  de ruta común (ADR 0002) se muestra en una línea fija de la activa, y `(empty)`,
+  de ruta común (ADR 0002) se muestra en una línea fija de la activa —hoy ese es
+  solo el modo por defecto, conmutable con `p`, ver más arriba—, y `(empty)`,
   `loading more…` y los avisos son los de la sección activa. `--print`, el formato
   de cache y la API de `[keybindings]` no cambian (ADR 0004).
 

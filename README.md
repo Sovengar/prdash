@@ -65,7 +65,8 @@ prdash worktrees  # lista los worktrees de review propiedad de prdash
 ```
 
 Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
-`tab` cambia de sección (Assigned → Mentioned → Mine), `r` montar review (el
+`tab` cambia de sección (Assigned → Mentioned → Mine), `p` modo de prefijo (ver
+[Prefijo de ruta](#prefijo-de-ruta-tres-modos-con-p)), `r` montar review (el
 worktree siempre; el layout de 2 tabs requiere Herdr), `R` refrescar, `a`
 approve, `m` merge, `v` simular, `o` abrir en el navegador, `q` salir. Son
 configurables en `[keybindings]`. Con el merge armado, `m`/`r`/`s` eligen
@@ -75,6 +76,30 @@ estrategia y cualquier otra tecla cancela (ver
 El Inbox pinta **una sola sección a la vez**: al abrir muestra **Assigned**, y el
 borde superior lleva la leyenda de conteos `Mine (n) · Assigned (n) · Mentioned
 (n)`, con la activa resaltada. Cada sección recuerda su cursor y su scroll.
+
+### Prefijo de ruta: tres modos con `p`
+
+La columna ITEM no siempre muestra la ruta igual. `p` cicla **tres modos**, y el
+nombre del modo sale en la barra de atajos (`p prefix: full`) para no tener que
+contar pulsaciones:
+
+| Modo | La línea de prefijo | La celda ITEM |
+|---|---|---|
+| `common` (al abrir) | con el prefijo común de la sección activa | solo el sufijo: `api-gateway#100` |
+| `full` | no se pinta | la ruta entera: `APPCITTI/vsocial/backend/api-gateway#100` |
+| `leaf` | no se pinta | solo la hoja: `api-gateway#100` |
+
+En `full` y `leaf` la lista recupera la línea que ocupaba el prefijo, y la
+columna ITEM se ajusta a lo que ahora muestra. Si la sección no tiene prefijo
+común (un solo ítem, o nada en común), `common` se ve igual que `full`: no inventa
+un prefijo ni repite la ruta.
+
+Dos avisos honestos: el modo **no se persiste** (al reabrir vuelve a `common`),
+aunque la tecla `p` sí es configurable por `[keybindings]`. Y `leaf` **no
+desambigua**: dos repos de grupos distintos con la misma hoja se ven iguales
+(`acme/one#7` y `other/one#8` → `one#7` y `one#8`). Para leer la ruta completa está
+la ficha del ítem y `--print`. La decisión y sus alternativas están en
+[ADR 0005](docs/adr/0005-selectable-prefix-mode.md).
 
 ### Simulación (`v`)
 
