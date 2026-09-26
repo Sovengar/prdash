@@ -34,6 +34,23 @@ func (s Section) String() string {
 	}
 }
 
+// Legend devuelve la etiqueta corta de la sección para la leyenda de conteos del
+// borde del inbox. Es distinta de String() a propósito: String() es el nombre
+// largo del modo de datos (--print), que no debe cambiar, y la leyenda necesita
+// una palabra por sección para caber en la línea del borde.
+func (s Section) Legend() string {
+	switch s {
+	case SectionAuthored:
+		return "Mine"
+	case SectionReview:
+		return "Assigned"
+	case SectionMentions:
+		return "Mentioned"
+	default:
+		return string(s)
+	}
+}
+
 // ReviewKind distingue, dentro de la sección de review, si el ítem llegó por
 // una petición de review o por una asignación.
 type ReviewKind string
