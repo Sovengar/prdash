@@ -101,16 +101,37 @@ type Adapter interface {
 	Comments(ctx context.Context, ref model.RepoRef, number int) (CommentPage, []model.Warning)
 	// Approve aprueba un ítem.
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
-	// Merge mergea un ítem con la estrategia indicada. El modo no es opcional:
-	// un merge sin estrategia nombrada es un prompt interactivo colgado.
-	//
-	// headSHA es el commit al que la rama origen apuntaba en la lectura del
+	// Merge mergea un ítem con lo que pide la MergeRequest dada.
+	Merge(ctx context.Context, ref model.RepoRef, number int, req MergeRequest) []model.Warning
+}
+
+// MergeRequest es lo que un merge necesita saber: con qué estrategia integrar,
+// a qué commit se pinea y si la rama origen se borra al integrar.
+//
+// Va en struct y no como parámetros sueltos porque son tres datos que solo
+// tienen sentido juntos —el pin sin modo no es un merge, y el borrado sin pin
+// sería un merge a ciegas— y porque el forgetting de un bool entre dos strings
+// es un fallo que compila.
+type MergeRequest struct {
+	// Mode es la estrategia de integración. No es opcional: un merge sin
+	// estrategia nombrada es un prompt interactivo colgado.
+	Mode MergeMode
+	// HeadSHA es el commit al que la rama origen apuntaba en la lectura del
 	// ítem, y el adapter DEBE pinear el merge a él. No es una cortesía: entre el
 	// refresco del inbox y la pulsación la rama puede haber avanzado, y sin el
 	// pin el merge integra commits que nadie revisó. Un headSHA vacío significa
 	// "el forge no lo reportó" y se traduce en un warning, nunca en un merge
 	// sin pin.
-	Merge(ctx context.Context, ref model.RepoRef, number int, mode MergeMode, headSHA string) []model.Warning
+	HeadSHA string
+	// DeleteBranch pide borrar la rama origen una vez integrado. Lo decide la
+	// Confirmación de merge de la TUI y no la config, porque es la segunda de las
+	// dos cosas que el usuario nombra en el gesto del merge.
+	//
+	// Es un efecto POSTERIOR a la integración y el adapter tiene que entenderlo
+	// así: el flag que lo pide también nombra la rama en GitHub, donde borrarla
+	// es parte del mismo comando. Si el borrado falla, el merge ya está hecho y
+	// el resultado NO es un merge fallido (ver Outcome.DeleteMsg).
+	DeleteBranch bool
 }
 
 // PageResult es una página emitida por Stream.
@@ -335,6 +356,18 @@ type Outcome struct {
 	Msg      string    // motivo para la UI
 	Item     model.Item
 	HasItem  bool // Item trae el estado releído
+
+	// DeleteBranch es lo que se pidió en la Confirmación, para que el aviso
+	// pueda decir qué pasó con la rama en vez de callarse.
+	DeleteBranch bool
+	// DeleteMsg es el motivo por el que la rama NO se borró en un merge que sí
+	// salió. Vacío = nada que avisar.
+	//
+	// Vive aparte de Msg porque el fallo del borrado no es el fallo del merge: el
+	// ítem está mergeado y volver a intentarlo no es lo que hay que hacer. Sin
+	// esta distinción, un "merge falló" sobre un PR ya integrado hace que el
+	// usuario busque un estado del forge que no existe.
+	DeleteMsg string
 }
 
 // RunAction ejecuta una acción rápida de forma segura: relee el ítem, comprueba
@@ -342,10 +375,10 @@ type Outcome struct {
 // dejarlo consistente. Nunca devuelve error duro: clasifica el fallo en
 // conflicto (el ítem cambió), permiso o error genérico.
 //
-// mode solo aplica a ActionMerge; approve lo ignora. Se pasa siempre para que la
+// req solo aplica a ActionMerge; approve lo ignora. Se pasa siempre para que la
 // firma no dependa de la acción, que es lo que permite dispatchar con un switch.
-func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, mode MergeMode) Outcome {
-	out := Outcome{Kind: kind, ID: model.With(ref.Forge, ref.Host, ref.Project, number), Mode: mode}
+func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, req MergeRequest) Outcome {
+	out := Outcome{Kind: kind, ID: model.With(ref.Forge, ref.Host, ref.Project, number), Mode: req.Mode, DeleteBranch: req.DeleteBranch}
 
 	cur, warns := a.ItemState(ctx, ref, number)
 	if stage := checkBeforeAction(cur, warns); stage != nil {
@@ -365,13 +398,30 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 		// deja entre el commit observado y el merge. RunAction no vuelve a
 		// comprobar el pin porque lo delega en el adapter, que es quien conoce
 		// el flag de cada CLI; aquí solo se le pasa el commit.
-		actionWarns = a.Merge(ctx, ref, number, mode, cur.HeadSHA)
+		req.HeadSHA = cur.HeadSHA
+		actionWarns = a.Merge(ctx, ref, number, req)
 	}
 	out.OK, out.Conflict, out.Perm, out.Msg = classifyAction(actionWarns)
 
 	// Relee el estado para dejar el ítem consistente tras la acción o el fallo.
 	if it, w := a.ItemState(ctx, ref, number); len(w) == 0 && it.Number != 0 {
 		out.Item, out.HasItem = it, true
+		// El borrado de la rama va en el MISMO comando que el merge, así que su
+		// fallo sale como fallo del comando entero aunque la integración ya
+		// esté hecha: sin push, con la rama protegida, o en un repo con merge
+		// queue (que rechaza `-d` antes de mergear). La relectura de arriba
+		// distingue los dos casos sin gastar una llamada más: si el ítem vuelve
+		// mergeado, el merge salió y lo que falló es el borrado.
+		if kind == ActionMerge && req.DeleteBranch && !out.OK && state.Derive(it) == state.StateMerged {
+			out.OK, out.Conflict, out.Perm, out.Msg = true, false, false, ""
+			out.DeleteMsg = firstMsg(actionWarns)
+		}
+		// Y al revés: un PR de fork NO tiene rama que borrar en el repo destino,
+		// y el forge no protesta —lo da por hecho y sale con éxito—, así que sin
+		// esto el aviso afirmaría un borrado que no ocurrió.
+		if kind == ActionMerge && req.DeleteBranch && out.OK && it.IsFork {
+			out.DeleteMsg = "the branch lives in a fork"
+		}
 	}
 	return out
 }

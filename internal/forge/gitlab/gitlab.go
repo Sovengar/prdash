@@ -188,17 +188,26 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 // pin, `glab` (y GitLab) integran el HEAD del momento, que puede haber avanzado
 // desde el refresco del inbox, y el merge se lleva commits que nadie revisó. Un
 // headSHA vacío se traduce en negarse, no en mergear sin pin.
-func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, mode forge.MergeMode, headSHA string) []model.Warning {
+func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	extra := []string{"--yes", "--auto-merge=false"}
-	if flag, ok := glabMergeFlag(mode); ok {
+	if flag, ok := glabMergeFlag(req.Mode); ok {
 		extra = append(extra, flag)
 	} else {
-		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(mode))}
+		return []model.Warning{a.warn("", "unsupported", forge.ErrUnknownMergeMode(req.Mode))}
 	}
-	if strings.TrimSpace(headSHA) == "" {
+	if strings.TrimSpace(req.HeadSHA) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
 	}
-	extra = append(extra, "--sha", headSHA)
+	extra = append(extra, "--sha", req.HeadSHA)
+	// El flag se llama `-d`/`--remove-source-branch` en glab, no
+	// `--delete-branch` como en gh: es el mismo efecto con otro nombre. Con `-R`
+	// la rama que borra es la del repo indicado, que es justo lo que se pide.
+	// El proyecto puede tener "delete source branch" activado por defecto; el
+	// flag lo fuerza para los merges que salen de aquí, y su ausencia lo deja
+	// como esté.
+	if req.DeleteBranch {
+		extra = append(extra, "--remove-source-branch")
+	}
 	return a.action(ctx, a.mrArgs("merge", number, ref.Project, extra...)...)
 }
 
@@ -337,7 +346,7 @@ func restEndpoint(resource string) string {
 //
 // `draft` viene en la misma consulta y no cuesta llamada. Sin él, `state` solo
 // decía "opened" y un MR en borrador era indistinguible de uno abierto: la
-// columna de estado lo pintaba como pendiente y el gate de merge no lo frenaba.
+// columna de estado lo teachaba como pendiente y el gate de merge no lo frenaba.
 //
 // `diffHeadSha` y `squash` también salen en la misma consulta y no cuestan
 // llamada: el primero es lo que permite pinear el merge con `--sha` y el

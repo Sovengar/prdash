@@ -66,7 +66,7 @@ func (a *Adapter) Approve(context.Context, model.RepoRef, int) []model.Warning {
 }
 
 // Merge responde "no soportado".
-func (a *Adapter) Merge(context.Context, model.RepoRef, int, forge.MergeMode, string) []model.Warning {
+func (a *Adapter) Merge(context.Context, model.RepoRef, int, forge.MergeRequest) []model.Warning {
 	return a.unsupported("")
 }
 

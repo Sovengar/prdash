@@ -167,7 +167,13 @@ type Item struct {
 	// cada adapter tradujera y a que la comprobación dependiera de que la
 	// traducción fuera exacta. Un PR en borrador llega con State="OPEN" y esta
 	// bandera a true, y quien decide qué etiquetas mostrar lo lee aquí.
-	IsDraft        bool
+	IsDraft bool
+	// IsFork dice que la rama origen del ítem vive en otro repositorio. En
+	// GitHub es `isCrossRepository`; los forges donde la rama siempre es del
+	// repo destino lo dejan en false. Importa por una cosa concreta: borrar la
+	// rama al mergear un PR de fork no borra nada, así que quien affirme lo
+	// contrario en un aviso está mintiendo.
+	IsFork         bool
 	ReviewDecision string // decisión de review del forge: APPROVED/…
 	Checks         Checks
 	Diff           DiffStat

@@ -108,6 +108,12 @@ type ghPRNode struct {
 	UpdatedAt      string `json:"updatedAt"`
 	HeadRefName    string `json:"headRefName"`
 	BaseRefName    string `json:"baseRefName"`
+	// IsCrossRepository dice que la rama origen vive en OTRO repositorio (un
+	// fork). No es un dato decorativo: quien mergea con `--delete-branch` sobre
+	// un PR de fork no borra nada, porque la rama no es del repo destino, y gh
+	// aun así lo da por hecho. Sin este campo el aviso de "rama borrada" sería
+	// mentira justo en los PRs que más se vigilan.
+	IsCrossRepository bool `json:"isCrossRepository"`
 	// HeadRefOid es el commit de la rama origen. Es lo que permite pinear el
 	// merge a un commit concreto: sin él, la rama puede haberse movido desde la
 	// última lectura y el merge integraría commits que nadie revisó.
@@ -216,6 +222,7 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	it.URL = n.URL
 	it.State = n.State
 	it.IsDraft = n.IsDraft
+	it.IsFork = n.IsCrossRepository
 	it.ReviewDecision = n.ReviewDecision
 	it.Checks = checksFromRollup(n)
 	it.Diff = diffFromGHNode(n)

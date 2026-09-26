@@ -9,6 +9,29 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **El merge nombra si borra la rama, y `tab` lo decide.** La Confirmación de
+  merge —la caja que sustituye a la barra de atajos con `m`— muestra ahora
+  `delete branch: yes (tab)`, y `tab` conmuta el valor antes de la tecla que
+  dispara. Fuera del merge armado no aparece: no es una decisión que se pueda
+  tomar en otro sitio. El default es **borrar** (`--delete-branch` en `gh`,
+  `--remove-source-branch` en `glab`), que es lo que los forges hacen por su
+  cuenta; `tab` lo apaga para el resto de la sesión y `tab` otra vez lo
+  devuelve. El valor es de sesión, no de ítem: la housekeeping no depende del PR
+  que tengas delante.
+
+  El borrado va en el **mismo comando** que el merge, así que su fallo sale como
+  fallo del comando entero aunque la integración ya esté hecha: sin push, con la
+  rama protegida, o contra un repo con merge queue —que rechaza `-d` antes de
+  mergear—. Por eso el resultado ya no se reporta como "merge falló" en ese
+  caso: la relectura que el merge ya hacía distingue "no se pudo mergear" de "se
+  mergeó y la rama no se borró", y el aviso queda
+  `merge (squash) ok · branch not deleted: <motivo>`. Un PR de fork tampoco
+  puede reportarse como rama borrada (`isCrossRepository`, que ya venía en la
+  misma consulta del ítem): no hay rama que borrar en el repo destino y el forge
+  no protesta. Lo que la llamada **no** toca es el repositorio local: con
+  `--repo`/`-R` la CLI solo borra la rama remota, así que los clones bare y los
+  worktrees de prdash quedan intactos.
+
 - **El prefijo de ruta de la columna ITEM se puede elegir con `p`.** La ruta de
   un ítem se pintaba siempre con el mismo reparto —el prefijo común de la sección
   en su línea, el sufijo en la celda (ADR 0002/0004)— y no había manera de
@@ -37,7 +60,6 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   `one#8`) —su valor es la densidad, no la certeza— y el modo no sobrevive a la
   ejecución siguiente. La ruta completa sigue en la ficha del ítem y en
   `--print`, que **no cambia**.
-
 ### Changed
 
 - **El Inbox pinta una sola sección a la vez, con leyenda de conteos en el borde.**
@@ -61,7 +83,7 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   borradores no ocurría nunca: prdash armaba el merge, gastaba la llamada
   completa y devolvía el rechazo del forge. Lo que lo sostenía era una suite que
   se inyectaba `State="draft"` a mano, es decir, probaba un valor que el producto
-  real nunca producía, y por eso la suite entera pasaba con la functionality
+  real nunca producía, y por eso la suite entera pasaba con la funcionalidad
   rota.
 
   Ahora el borrador es una propiedad del ítem (`Item.IsDraft`) y llega por los

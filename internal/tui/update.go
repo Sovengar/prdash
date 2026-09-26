@@ -166,7 +166,16 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 	case out.Conflict:
 		m.setNotice("forge conflict: "+out.Msg, levelError)
 	case out.OK:
-		m.setNotice(actionDoneNotice(out), levelOK)
+		// El borrado de la rama se avisa aunque el merge haya salido: el aviso
+		// tiene que decir las dos cosas, porque "merge ok" a secas deja en
+		// suspense si la rama que se pidió borrar sigue ahí.
+		notice := actionDoneNotice(out)
+		if out.DeleteMsg != "" {
+			notice += " · branch not deleted: " + out.DeleteMsg
+			m.setNotice(notice, levelWarn)
+			return
+		}
+		m.setNotice(notice, levelOK)
 	default:
 		m.setNotice("error: "+out.Msg, levelError)
 	}
@@ -228,7 +237,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "refresh":
 		return m.startRefresh()
 	case "approve":
-		return m, m.startAction(forge.ActionApprove, "")
+		return m, m.startAction(forge.ActionApprove, forge.MergeRequest{})
 	case "merge":
 		return m.armMerge()
 	case "mount-review":
@@ -290,6 +299,11 @@ func (m Model) armMerge() (tea.Model, tea.Cmd) {
 // por defecto, así que la Confirmación y la elección son el mismo gesto y no
 // existe un camino que mergee con una estrategia que el usuario no ha nombrado.
 //
+// `tab` es la excepción: no elige modo, conmuta si la rama se borra, y NO
+// desarma. Es la otra decisión que el merge nombra y, al igual que el modo, solo
+// se puede tomar aquí —donde la Confirmación la enseña— y antes de la tecla que
+// dispara. El valor es de sesión, así que se lee de m y no de un armed aparte.
+//
 // `esc` cancela. `q` y `ctrl+c` salen, como en el resto de la vista: cancelar
 // con `esc` y salir con `q` son dos intenciones distintas y colapsarlas en una
 // haría que `q` dejara de cerrar la TUI.
@@ -308,6 +322,12 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 		mode = forge.Rebase
 	case "s":
 		mode = forge.Squash
+	case "tab":
+		// `tab` con el merge armado es el toggle del borrado y no la sección
+		// siguiente: el estado armado se queda esperando la tecla del modo, que es
+		// lo único que puede dispararlo.
+		m.deleteBranch = !m.deleteBranch
+		return m, nil
 	case "esc":
 		m.disarmMerge()
 		m.setNotice("merge cancelled", levelInfo)
@@ -342,7 +362,7 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 		return m, nil
 	}
 	m.disarmMerge()
-	return m, m.startAction(forge.ActionMerge, mode)
+	return m, m.startAction(forge.ActionMerge, forge.MergeRequest{Mode: mode, DeleteBranch: m.deleteBranch})
 }
 
 // disarmMerge limpia el estado de armado.
@@ -409,26 +429,34 @@ func (m *Model) canAction(kind forge.ActionKind) (model.Item, forge.Adapter, boo
 }
 
 // actionDoneNotice confirma la acción. Merge dice con qué estrategia se
-// integró: es el dato que decide si el resultado es el que el usuario quería, y
-// sin él un "merge ok" no dice nada de qué se hizo.
+// integró y si la rama quedó borrada: es el dato que decide si el resultado es
+// el que el usuario quería, y sin él un "merge ok" no dice nada de qué se hizo.
+//
+// La rama se nombra solo cuando se pidió y el forge no se quejó, que es el
+// único caso en el que se puede afirmar que se borró: cuando el borrado falla lo
+// dice RunAction en DeleteMsg, y un PR de fork no lo borra nunca.
 func actionDoneNotice(out forge.Outcome) string {
 	if out.Kind == forge.ActionMerge {
-		return string(out.Kind) + " (" + out.Mode.Label() + ") ok"
+		notice := string(out.Kind) + " (" + out.Mode.Label() + ") ok"
+		if out.DeleteBranch {
+			notice += " · branch deleted"
+		}
+		return notice
 	}
 	return string(out.Kind) + " ok"
 }
 
 // startAction lanza una acción rápida sobre el ítem seleccionado tras los
-// guards de disponibilidad. mode solo viaja con ActionMerge: approve lo ignora,
-// y el aviso lo dice para que el resultado diga con qué estrategia se integró.
-func (m *Model) startAction(kind forge.ActionKind, mode forge.MergeMode) tea.Cmd {
+// guards de disponibilidad. req solo viaja con ActionMerge: approve lo ignora, y
+// el aviso lo dice para que el resultado diga con qué estrategia se integró.
+func (m *Model) startAction(kind forge.ActionKind, req forge.MergeRequest) tea.Cmd {
 	it, a, ok := m.canAction(kind)
 	if !ok {
 		return nil
 	}
 
 	m.actionBusy = true
-	m.setNotice(actionProgressNotice(kind, mode), levelInfo)
+	m.setNotice(actionProgressNotice(kind, req.Mode), levelInfo)
 
 	appCtx := m.ctx
 	events := m.events
@@ -437,7 +465,7 @@ func (m *Model) startAction(kind forge.ActionKind, mode forge.MergeMode) tea.Cmd
 	go func() {
 		ctx, cancel := context.WithTimeout(appCtx, actionTimeout)
 		defer cancel()
-		sendEvent(appCtx, events, actionMsg{cycle: cycle, outcome: forge.RunAction(ctx, a, kind, ref, number, mode)})
+		sendEvent(appCtx, events, actionMsg{cycle: cycle, outcome: forge.RunAction(ctx, a, kind, ref, number, req)})
 	}()
 	return nil
 }

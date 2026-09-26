@@ -240,6 +240,11 @@ func wrapHint(text string, width int, paint func(string) string) []string {
 // modo, así que no hay estrategia por defecto que se pueda ejecutar sin
 // nombrarla: las opciones se leen enteras en la caja.
 //
+// El borrado de la rama va en la misma caja porque es la misma decisión: se
+// nombra aquí, con `tab`, antes de la tecla que dispara. `delete: yes/no` es el
+// valor y `tab` es el gesto, y solo se ven con el merge armado: fuera de ahí el
+// borrado no es una decisión que se pueda tomar.
+//
 // Solo se listan los modos que el repositorio admite. GitHub publica sus tres
 // flags en la misma consulta del ítem, así que la lista es exacta; un repositorio
 // con el squash desactivado no ofrece squash y no gasta una llamada en un rechazo
@@ -260,13 +265,22 @@ func (m Model) mergeConfirmText() string {
 		// hacer, y ofrecer las teclas sería mentir sobre lo que va a pasar.
 		parts = append(parts, "the repository allows no merge strategy")
 	}
-	text := fmt.Sprintf("merge %s? press the mode: %s · esc cancel",
-		refLabel(it), strings.Join(parts, " · "))
+	head := "merge " + refLabel(it) + "? " + m.deleteLabel()
 	if reason := m.mergeBlockReason; reason != "" {
-		text = "merge " + refLabel(it) + " with " + reason +
+		return head + " with " + reason +
 			" · press the mode anyway: " + strings.Join(parts, " · ") + " · esc cancel"
 	}
-	return text
+	return head + " press the mode: " + strings.Join(parts, " · ") + " · esc cancel"
+}
+
+// deleteLabel describe el valor del toggle de borrado. `tab` va en las dos
+// formas porque es la tecla que lo cambia, y sin ella el valor parece un dato
+// fijo en vez de una decisión a la altura del merge.
+func (m Model) deleteLabel() string {
+	if m.deleteBranch {
+		return "delete branch: yes (tab)"
+	}
+	return "delete branch: no (tab)"
 }
 
 // modeKey es la tecla con la que se nombra un modo en la Confirmación. No sale de

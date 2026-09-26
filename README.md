@@ -72,8 +72,8 @@ Teclas por defecto: `j`/`k` mover, `pgup`/`pgdn` página, `home`/`end` extremos,
 worktree siempre; el layout de 2 tabs requiere Herdr), `R` refrescar, `a`
 approve, `m` merge, `v` simular, `o` abrir en el navegador, `q` salir. Son
 configurables en `[keybindings]`. Con el merge armado, `m`/`r`/`s` eligen
-estrategia y cualquier otra tecla cancela (ver
-[Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
+estrategia, `tab` conmuta si la rama se borra y cualquier otra tecla cancela
+(ver [Merge](#merge-pide-dos-teclas-y-una-de-ellas-es-el-modo)).
 
 El Inbox pinta **una sola sección a la vez**: al abrir muestra **Assigned**, y el
 borde superior lleva la leyenda de conteos `Mine (n) · Assigned (n) · Mentioned
@@ -231,6 +231,7 @@ tecla **es** la elección del modo, y no hay modo por defecto:
 | `r` | rebase |
 | `m` | merge commit |
 | `s` | squash |
+| `tab` | conmutar el borrado de la rama |
 | `esc` | cancelar |
 
 El motivo es que un merge reescribe historia y no se deshace con un comando, así
@@ -250,8 +251,49 @@ ofrecen las tres, porque no saber no es lo mismo que no permitir, y un filtro
 inventado dejaría al usuario sin salida legítima.
 
 Los avisos nombran el modo tanto al empezar (`merge (rebase) en curso…`) como al
-terminar (`merge (squash) ok`), porque sin eso un "merge ok" no dice qué se
-hizo.
+terminar (`merge (squash) ok · branch deleted`), porque sin eso un "merge ok" no
+dice qué se hizo.
+
+### El merge también nombra si borra la rama
+
+La segunda de las dos cosas que el merge decide es si la rama origen se borra al
+integrar. Vive en la misma Confirmación y se cambia con la misma tecla que ya
+tenía otro destino: `tab`. La caja lo enseña siempre que el merge está armado —
+`delete branch: yes (tab)`— y fuera de ahí no aparece, porque no es una decisión
+que se pueda tomar en otro sitio.
+
+**El default es borrar.** Es lo que hacen los forges por su cuenta y lo que
+espera quien limpia detrás de un PR merged; pedir un gesto extra para evitarlo es
+pedir confirmaciones de las que la gente se cansa. `tab` lo apaga para el resto
+de la sesión, y `tab` otra vez lo devuelve. El valor es de sesión, no de ítem:
+borrar la housekeeping no depende del PR que tengas delante.
+
+El aviso final dice qué pasó con la rama, y hay tres finales distintos porque
+son tres situaciones distintas:
+
+| Final | Aviso |
+|---|---|
+| Merge y borrado | `merge (squash) ok · branch deleted` |
+| Merge hecho, borrado rechazado por el forge | `merge (squash) ok · branch not deleted: <motivo>` |
+| PR de fork | `merge (squash) ok · branch not deleted: the branch lives in a fork` |
+
+El segundo es el que obliga a mirar dos veces. El borrado va en el **mismo
+comando** que el merge (`gh pr merge --delete-branch`,
+`glab mr merge --remove-source-branch`), así que si el forge lo rechaza la CLI
+sale con error aunque la integración ya esté hecha: sin push, con la rama
+protegida, o contra un repo con merge queue —que rechaza `-d` antes de
+mergear—. Reportarlo como "merge falló" haría que el usuario buscara un cambio
+de estado del forge que no ocurrió. La relectura que el merge ya hacía es la que
+distingue los casos: si el ítem vuelve mergeado, el merge salió y lo que falló
+fue el borrado.
+
+El tercero es un no-op del forge, no un fallo: un PR de fork no tiene rama que
+borrar en el repo destino, y `gh` lo da por hecho y sale con éxito. Sin decirlo,
+"branch deleted" sería mentira.
+
+Lo que **no** toca la llamada es el repositorio local: con `--repo` (GitHub) y
+`-R` (GitLab), la CLI solo borra la rama remota. Los clones bare y los worktrees
+que gestiona prdash quedan intactos.
 
 ### Lo que el merge comprueba antes de salir
 

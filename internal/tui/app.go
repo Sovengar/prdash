@@ -283,6 +283,14 @@ type Model struct {
 	// veto: es la línea que la confirmación enseña para que la segunda pulsación
 	// sea informada. Vacío = el merge no tiene nada que advertir.
 	mergeBlockReason string
+	// deleteBranch es la segunda de las dos cosas que el merge nombra: si la
+	// rama origen se borra al integrar. Es de sesión y no de ítem —una decisión
+	// sobre la housekeeping, no sobre el PR— y `tab` la conmuta con el merge
+	// armado, que es donde se ve. Arranca en true porque borrar la rama de un PR
+	// ya integrado es lo que se espera y lo que los forges hacen por su cuenta;
+	// quien necesite la rama (una release, un experimento) la apaga una vez y
+	// sigue.
+	deleteBranch bool
 
 	events  chan event
 	ctx     context.Context
@@ -331,6 +339,9 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		// asignado, y el resto queda a un `tab`.
 		activeSection: model.SectionReview,
 		pos:           map[model.Section]sectionPos{},
+		// El borrado de la rama se pide por defecto; se apaga con `tab` en la
+		// Confirmación de merge.
+		deleteBranch: true,
 	}
 	// Init arma el primer tick si el auto-refresco está habilitado.
 	m.tickPending = cfg.RefreshInterval > 0

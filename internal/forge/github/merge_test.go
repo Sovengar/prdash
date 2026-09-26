@@ -50,7 +50,7 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 			dir := t.TempDir()
 			bin, argsFile := recorder(t, dir, "gh")
 
-			warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, tc.mode, headSHA)
+			warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: tc.mode, HeadSHA: headSHA})
 			if len(warns) != 0 {
 				t.Fatalf("Merge = %+v, want sin warnings", warns)
 			}
@@ -71,7 +71,7 @@ func TestMergeRefusesUnknownMode(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")
 
-	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeMode("cherry-pick"), headSHA)
+	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.MergeMode("cherry-pick"), HeadSHA: headSHA})
 	if len(warns) == 0 {
 		t.Fatal("un modo desconocido debería reportar warning")
 	}
