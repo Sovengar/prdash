@@ -9,6 +9,37 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **La simulación ocupaba un rincón del popup y salía deformada.** El ancho de las
+  celdas y el de la caja los decidía cada uno por su cuenta: las celdas se
+  calculaban para 96 columnas y la caja se dibujaba al ancho de la vista, así que
+  la imagen ocupaba el tercio izquierdo y el resto quedaba vacío —con un borde
+  vacío que parecía parte del render—. Ahora `simBox` es la única fuente de la
+  geometría: la caja se ajusta a lo que la imagen necesita, no al revés
+  (`TestTheImageFillsTheBox`).
+
+  Además, una celda de terminal es el doble de alta que de ancha, así que el alto
+  se paga a doble: una imagen 16:9 —la que produce git-sim— necesita 3,56 columnas
+  por línea, no 1,78. Sin ese factor el grafo se estiraba a lo ancho y los dos
+  commits de una fila parecían una tira de elipses. `sim.Fit` calcula el mayor
+  tamaño que cabe manteniendo el ratio.
+
+  Y el popup se dimensiona con la terminal en vez de con topes fijos: en una
+  pantalla de 240×70 pasa de 94×23 a 174×49 celdas —el triple de detalle—, que es
+  la diferencia entre un grafo ilegible y uno legible, sin dejar de ser un overlay:
+  se queda con el 75% del alto y deja fondo alrededor
+  (`TestThePopupGrowsWithTheTerminal`).
+
+  Un tercer bug en la misma línea: `simHeightShare = 3 / 4` como constante de Go
+  vale **0** (división entera en tiempo de compilación), así que el popup se
+  quedaba con su suelo de 6 filas por mucho espacio que hubiera. Ahora son
+  numerador y denominador.
+- **La flecha izquierda arrancaba el render.** Navegaba en un menú horizontal que
+  no existe —el popup ofrece una estrategia—, así que pulsarla después de `v`
+  lanzaba el render sin confirmar nada. Con una sola estrategia no hay nada que
+  recorrer: las flechas caen en el default y cierran el popup, como cualquier tecla
+  que no sea una elección. La navegación vuelve sola cuando haya una segunda
+  estrategia (`TestTheChooserNavigatesWhenThereIsSomethingToNavigate`).
+
 - **Un merge ya no se dispara por una tecla que no era el modo.** La segunda
   pulsación del merge, al no ser un modo, se re-despachaba como si nada. Eso
   convertía `m` seguido de `a` en un **approve** del PR —la tecla de al lado en

@@ -238,6 +238,155 @@ func TestResultShowsTheImage(t *testing.T) {
 	}
 }
 
+// TestTheImageFillsTheBox: el ancho de las celdas y el de la caja tienen que ser
+// el mismo número. Cuando los decidía cada uno por su cuenta, las celdas se
+// calculaban a 94 columnas para una caja de 200 y la imagen ocupaba el tercio
+// izquierdo del popup, con un vacío a su derecha que parecía parte del render.
+func TestTheImageFillsTheBox(t *testing.T) {
+	path := writeJPEG(t)
+	f := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: path}}
+	m := simModel(t, f)
+	m = press(t, m, "v")
+	m = press(t, m, "enter")
+	m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: f.res})
+
+	boxW, boxH := m.simBox()
+	if m.sim.cellW != boxW-2 {
+		t.Errorf("celdas de %d columnas en una caja de %d: la imagen no llena la caja", m.sim.cellW, boxW)
+	}
+	if len(m.sim.cells) != boxH-simChrome {
+		t.Errorf("celdas en %d líneas para una caja de %d", len(m.sim.cells), boxH)
+	}
+	// Y ninguna de las dos puede exceder la terminal: un popup más ancho que la
+	// vista empuja la caja fuera de pantalla.
+	if boxW > m.contentWidth() {
+		t.Errorf("caja de %d columnas en una vista de %d", boxW, m.contentWidth())
+	}
+	if boxH > m.height {
+		t.Errorf("caja de %d líneas en una terminal de %d", boxH, m.height)
+	}
+}
+
+// TestThePopupGrowsWithTheTerminal: en una terminal grande el popup tiene que
+// aprovechar el sitio. Un tope fijo de 96 columnas dejaba un grafo de commits
+// diminuto en pantallas de 200, que es justo donde se viene a mirarlo.
+func TestThePopupGrowsWithTheTerminal(t *testing.T) {
+	path := writeJPEG(t)
+	f := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: path}}
+	m := simModel(t, f)
+	m = send(t, m, tea.WindowSizeMsg{Width: 240, Height: 70})
+	m = press(t, m, "v")
+	m = press(t, m, "enter")
+	m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: f.res})
+
+	wide, rows := m.simBox()
+	if wide < 100 {
+		t.Errorf("caja de %d columnas en una terminal de 240: no aprovecha el ancho", wide)
+	}
+	if rows < 20 {
+		t.Errorf("caja de %d líneas en una terminal de 70: no aprovecha el alto", rows)
+	}
+	// Y aun así deja fondo: si el popup ocupase la terminal entera, sería una
+	// pantalla aparte y no un overlay.
+	if rows >= m.height {
+		t.Errorf("la caja (%d) tapa la terminal entera (%d)", rows, m.height)
+	}
+	if wide >= m.contentWidth() {
+		t.Errorf("la caja (%d) ocupa la vista entera (%d)", wide, m.contentWidth())
+	}
+}
+
+// TestTheImageIsNotStretched: una celda es el doble de alta que de ancha, así que
+// dibujar una imagen 16:9 en un cuadrado de celdas la deformaría. El alto se paga
+// a doble y la caja crece en anchura en vez de encoger la imagen.
+func TestTheImageIsNotStretched(t *testing.T) {
+	// Un JPEG cuadrado no sirve aquí: hace falta uno 16:9 como el que produce
+	// git-sim (1920x1080).
+	img := image.NewRGBA(image.Rect(0, 0, 1920, 1080))
+	for y := range 1080 {
+		for x := range 1920 {
+			img.SetRGBA(x, y, color.RGBA{R: uint8(x % 256), G: uint8(y % 256), B: 90, A: 255})
+		}
+	}
+	big := filepath.Join(t.TempDir(), "wide.jpg")
+	f, err := os.Create(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := jpeg.Encode(f, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	sim1 := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: big}}
+	m := simModel(t, sim1)
+	m = send(t, m, tea.WindowSizeMsg{Width: 200, Height: 60})
+	m = press(t, m, "v")
+	m = press(t, m, "enter")
+	m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: sim1.res})
+
+	// 16:9 con celdas 1x2 son 3,56 columnas por fila: 40 filas piden ~142 columnas.
+	if ratio := float64(m.sim.cellW) / float64(m.sim.cellH); ratio < 3.0 || ratio > 4.1 {
+		t.Errorf("la imagen ocupa %d×%d celdas (ratio %.2f), want ~3,56: está deformada",
+			m.sim.cellW, m.sim.cellH, ratio)
+	}
+}
+
+// TestTheChooserNavigatesWhenThereIsSomethingToNavigate: con más de una estrategia
+// las flechas se mueven, y solo `enter` confirma. La condición está porque hoy solo
+// hay merge, pero el recorrido de un menú con una opción no es un menú: una flecha
+// que no mueve nada no puede quedarse sin hacer nada.
+func TestTheChooserNavigatesWhenThereIsSomethingToNavigate(t *testing.T) {
+	restore := simKinds
+	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase}
+	t.Cleanup(func() { simKinds = restore })
+
+	f := &fakeSimulator{available: true}
+	m := simModel(t, f)
+	m = press(t, m, "v")
+
+	m = press(t, m, "j")
+	if m.sim.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1", m.sim.cursor)
+	}
+	if len(f.kinds) != 0 {
+		t.Fatalf("una flecha confirmó el render: %v", f.kinds)
+	}
+	m = press(t, m, "j")
+	if m.sim.cursor != 0 {
+		t.Errorf("cursor = %d, want 0 al dar la vuelta", m.sim.cursor)
+	}
+	m = press(t, m, "k")
+	if m.sim.cursor != 1 {
+		t.Errorf("cursor = %d, want 1 al llegar por arriba", m.sim.cursor)
+	}
+	m = press(t, m, "enter")
+	if m.sim.kind != sim.KindRebase {
+		t.Errorf("kind = %q, want la opción elegida (rebase)", m.sim.kind)
+	}
+}
+
+// TestLeftArrowDoesNotStartTheRender: la flecha izquierda movía el cursor en un
+// menú horizontal, pero en un popup de una sola opción no navega a nada y
+// arrancaba el render. Es la clase de tecla que solo puede significar "salir de
+// aquí", no "confirmar".
+func TestLeftArrowDoesNotStartTheRender(t *testing.T) {
+	f := &fakeSimulator{available: true}
+	m := simModel(t, f)
+	m = press(t, m, "v")
+
+	for _, key := range []string{"left", "right", "up", "down", "h", "l"} {
+		m = press(t, m, "v")
+		m = press(t, m, key)
+		if m.sim.state != simClosed {
+			t.Errorf("la tecla %q dejó el popup en %v; cualquier flecha debe cerrarlo", key, m.sim.state)
+		}
+		if len(f.kinds) != 0 {
+			t.Fatalf("la tecla %q lanzó un render: %v", key, f.kinds)
+		}
+	}
+}
+
 // TestStaleResultIsDiscarded: un render que llega tarde, con el popup ya cerrado,
 // no puede resucitarlo ni saltar a la pantalla de arriba.
 func TestStaleResultIsDiscarded(t *testing.T) {

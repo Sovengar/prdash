@@ -64,6 +64,41 @@ func Cells(img image.Image, w, h int) []string {
 	return lines
 }
 
+// Fit calcula de cuántas columnas y líneas se puede dibujar la imagen sin
+// deformarla dentro de un área de maxCols × maxRows celdas, y devuelve el mayor
+// tamaño que cabe.
+//
+// Una celda de terminal es aproximadamente el doble de alta que de ancha, así que
+// el alto se paga a doble: una imagen 16:9 necesita 3,56 columnas por línea, no
+// 1,78. Sin ese factor, un grafo de commits se estiraría a lo ancho y los dos
+// commits de una fila se verían como una tira de elipses en vez de dos círculos.
+//
+// Se usa el mayor tamaño que cabe en lugar de rellenar el área: una celda vacía a
+// un lado de la imagen es dueño del borde del popup, que es donde se lee que la
+// imagen termina.
+func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
+	if img == nil || maxCols <= 0 || maxRows <= 0 {
+		return max(maxCols, 0), max(maxRows, 0)
+	}
+	b := img.Bounds()
+	if b.Dx() <= 0 || b.Dy() <= 0 {
+		return maxCols, maxRows
+	}
+
+	// cols por línea, con celdas 1×2.
+	perRow := float64(2*b.Dx()) / float64(b.Dy())
+	if perRow <= 0 {
+		return maxCols, maxRows
+	}
+
+	if float64(maxRows)*perRow <= float64(maxCols) {
+		// El alto manda: se usan todas las líneas disponibles.
+		return max(int(float64(maxRows)*perRow), 1), maxRows
+	}
+	// La anchura manda: se llena de alto lo que la imagen permita.
+	return maxCols, max(int(float64(maxCols)/perRow), 1)
+}
+
 // rgba normaliza a *image.RGBA para poder leer píxeles por índice. Una imagen
 // vacía (bounds de tamaño cero) no tiene nada que dibujar.
 func rgba(img image.Image) *image.RGBA {

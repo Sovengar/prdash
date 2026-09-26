@@ -28,17 +28,28 @@ const simTimeout = 90 * time.Second
 
 // Geometría del popup.
 const (
-	// simBoxMaxWidth es el ancho máximo del popup: más ancho que esto y la
-	// imagen se ve más grande que el hueco que hay en la terminal.
-	simBoxMaxWidth = 96
-	// simBoxMaxRows acota el alto para que el popup no se coma el inbox entero.
-	simBoxMaxRows = 26
-	// simChooserWidth es el ancho del selector: dos opciones y una ayuda, sin
-	// más.
+	// simChooserWidth es el ancho del selector: la estrategia, su flujo y la
+	// ayuda. Ancho de más solo añade aire.
 	simChooserWidth = 64
 	// simChrome son las líneas del popup que no son imagen: borde de arriba,
 	// borde de abajo y la de ayuda.
 	simChrome = 3
+	// simHeightNum y simHeightDen son la fracción de la altura de la terminal que
+	// el popup se queda, como numerador y denominador y no como una división: en
+	// una constante de Go 3/4 vale 0, y el popup se quedaba con el suelo de filas.
+	// No es el 100% porque un overlay que tapa la vista entera deja de ser un
+	// overlay: perder el inbox justo cuando se está mirando una simulación es
+	// perder el contexto de lo que se está mirando.
+	simHeightNum = 3
+	simHeightDen = 4
+	// simMargin son las filas que el popup deja libres arriba y abajo, y
+	// simSideMargin las columnas de los lados. El fondo se ve justo en eso.
+	simMargin     = 2
+	simSideMargin = 4
+	// simMinCols y simMinRows son el suelo del popup, para que en una terminal
+	// diminuta salga algo en vez de una caja de tres caracteres.
+	simMinCols = 20
+	simMinRows = 6
 )
 
 // simState es la fase del overlay.
@@ -133,6 +144,26 @@ func (m Model) openSimulator() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// moveSimCursor mueve el cursor del selector y dice si la tecla era de
+// navegación. Solo navega cuando hay algo que recorrer: con una sola estrategia no
+// hay menú, y una flecha que no mueve nada tiene que caer en el default —que
+// cierra— en vez de quedarse swallowed sin hacer nada. La condición es explícita
+// para que añadir una segunda estrategia no deje las flechas muertas.
+func (m *Model) moveSimCursor(key string) bool {
+	if len(simKinds) < 2 {
+		return false
+	}
+	switch key {
+	case "up", "k":
+		m.sim.cursor = (m.sim.cursor - 1 + len(simKinds)) % len(simKinds)
+	case "down", "j", "right", "tab":
+		m.sim.cursor = (m.sim.cursor + 1) % len(simKinds)
+	default:
+		return false
+	}
+	return true
+}
+
 // closeSim cierra el overlay e invalida el render en vuelo: su resultado se
 // descarta, aunque la imagen se haya quedado en el caché.
 func (m *Model) closeSim() {
@@ -167,16 +198,14 @@ func (m Model) handleSimKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd
 
 	switch m.sim.state {
 	case simChoosing:
-		switch key {
-		case "up", "k":
-			m.sim.cursor = (m.sim.cursor - 1 + len(simKinds)) % len(simKinds)
-		case "down", "j", "right", "tab":
-			m.sim.cursor = (m.sim.cursor + 1) % len(simKinds)
-		case "enter", "left":
-			return m, m.startSim(simKinds[m.sim.cursor])
-		default:
-			m.closeSim()
+		if m.moveSimCursor(key) {
+			return m, nil
 		}
+		if key == "enter" {
+			return m, m.startSim(simKinds[m.sim.cursor])
+		}
+		// Cualquier otra tecla cierra el popup sin más.
+		m.closeSim()
 		return m, nil
 
 	default:
@@ -231,32 +260,51 @@ func (m *Model) applySim(msg simMsg) {
 	m.sim.state = simShowing
 	m.sim.image = msg.res.Path
 	m.sim.img = img
-	m.renderSimCells(m.simBoxWidth(), m.simBoxHeight())
+	m.renderSimCells()
 }
 
-// simBoxWidth es el ancho exterior del popup, acotado al de la vista.
-func (m Model) simBoxWidth() int {
-	if m.sim.state == simChoosing {
-		return min(m.contentWidth(), simChooserWidth)
+// simBox es la geometría del popup: sus dimensiones exteriores. Es la única
+// fuente, y las celdas de la imagen se derivan de aquí.
+//
+// Que sea una sola fuente no es PURITANISMO: cuando el ancho de la caja y el de
+// las celdas los decidía cada uno por su cuenta, la imagen se dibujaba a 94
+// columnas dentro de una caja de 200 y ocupaba el tercio izquierdo del popup, con
+// un borde vacío a su derecha que parecía parte de la imagen.
+func (m Model) simBox() (w, h int) {
+	switch m.sim.state {
+	case simChoosing:
+		// El selector no enseña imagen: es una caja estrecha con tres líneas.
+		return min(m.contentWidth(), simChooserWidth), simChrome + 2
+	case simRendering:
+		return min(m.contentWidth(), simChooserWidth), simChrome + 2
 	}
-	return min(m.contentWidth(), simBoxMaxWidth)
+
+	// La imagen manda: la caja se ajusta a lo que la imagen necesita, no al revés.
+	cols, rows := sim.Fit(m.sim.img, m.simMaxCols(), m.simMaxRows())
+	return cols + 2, rows + simChrome
 }
 
-// simBoxHeight es el alto exterior del popup: deja un margen de filas para que
-// se vea que hay algo detrás, que es media razón del overlay.
-func (m Model) simBoxHeight() int {
-	rows := min(m.height-2, simBoxMaxRows)
-	if rows < simChrome+1 {
-		rows = simChrome + 1
+// simMaxCols son las columnas que el popup puede usar, dejando fondo a los lados.
+func (m Model) simMaxCols() int {
+	return max(simMinCols, m.contentWidth()-simSideMargin)
+}
+
+// simMaxRows son las líneas que el popup puede usar, dejando fondo arriba y abajo.
+func (m Model) simMaxRows() int {
+	free := m.height - 2*simMargin
+	return max(simMinRows, free*simHeightNum/simHeightDen)
+}
+
+// renderSimCells (re)dibuja la imagen a la geometría del popup. Se llama al llegar
+// el resultado y en cada resize, que es lo único que cambia el tamaño disponible.
+func (m *Model) renderSimCells() {
+	if m.sim.state != simShowing || m.sim.img == nil {
+		m.sim.cells, m.sim.cellW, m.sim.cellH = nil, 0, 0
+		return
 	}
-	return rows
-}
-
-// renderSimCells (re)dibuja la imagen a la geometría del popup. Se llama al
-// llegar el resultado y en cada resize, que es lo único que cambia el ancho útil.
-func (m *Model) renderSimCells(boxW, boxH int) {
-	w, h := boxW-2, boxH-simChrome
-	if m.sim.state != simShowing || w <= 0 || h <= 0 || m.sim.img == nil {
+	cols, rows := m.simBox()
+	w, h := cols-2, rows-simChrome
+	if w <= 0 || h <= 0 {
 		m.sim.cells, m.sim.cellW, m.sim.cellH = nil, 0, 0
 		return
 	}
@@ -268,15 +316,17 @@ func (m *Model) renderSimCells(boxW, boxH int) {
 }
 
 // simOverlay compone la caja del popup. Devuelve false si no hay nada que pintar,
-// que es el caso normal.
-func (m Model) simOverlay(width int) (string, bool) {
+// que es el caso normal. La anchura con la que se centra el overlay es la de la
+// vista, no la de la caja: son cosas distintas y confundirlas es lo que dejaba la
+// imagen en un rincón.
+func (m Model) simOverlay() (string, bool) {
 	switch m.sim.state {
 	case simChoosing:
-		return m.simChooserBox(width), true
+		return m.simChooserBox(), true
 	case simRendering:
-		return m.simBusyBox(width), true
+		return m.simBusyBox(), true
 	case simShowing:
-		return m.simImageBox(width), true
+		return m.simImageBox(), true
 	default:
 		return "", false
 	}
@@ -288,7 +338,8 @@ func (m Model) simOverlay(width int) (string, bool) {
 // dejar rastro. Con una sola estrategia disponible el popup no pregunta, sino
 // confirma: enseñar qué se va a simular antes de gastar el render es justo lo
 // que hace útil un popup de dos segundos.
-func (m Model) simChooserBox(width int) string {
+func (m Model) simChooserBox() string {
+	width, _ := m.simBox()
 	it := m.sim.item
 	branch := strings.TrimSpace(it.SourceBranch)
 	if branch == "" {
@@ -317,14 +368,16 @@ func (m Model) simChooserBox(width int) string {
 // forma honesta, que es "un momento". Solo se ve unos segundos y por eso no
 // necesita un cronómetro: untruecer un progreso que no se puede medir es peor que
 // no medirlo.
-func (m Model) simBusyBox(width int) string {
+func (m Model) simBusyBox() string {
+	width, _ := m.simBox()
 	body := m.spinner.View() + styleInfo.Render(" rendering "+string(m.sim.kind)+"…")
 	body += "\n" + styleDim.Render("this takes a couple of seconds · esc close")
 	return borderedBox(" simulate: "+string(m.sim.kind), body, width)
 }
 
 // simImageBox es la fase final: la imagen del render, con su pie de ayuda.
-func (m Model) simImageBox(width int) string {
+func (m Model) simImageBox() string {
+	width, _ := m.simBox()
 	body := make([]string, 0, len(m.sim.cells)+2)
 	body = append(body, m.sim.cells...)
 	body = append(body, styleDim.Render("esc close · o open image"))

@@ -96,8 +96,11 @@ Requisitos y límites:
   arregle, la lista de estrategias de `internal/tui/sim.go` es lo único que hay
   que tocar.
 - La imagen se decodifica con `image/jpeg` y se pinta en la terminal con
-  half-blocks en truecolor, dos píxeles por celda. En un terminal de 256 colores
-  se verá como bloques de color plano; la imagen de verdad está en `o`.
+  half-blocks en truecolor, dos píxeles por celda. La caja se dimensiona a lo que
+  la imagen necesita manteniendo su proporción —una celda es el doble de alta que
+  de ancha, así que una imagen 16:9 pide 3,56 columnas por línea— y se queda con
+  el 75% del alto de la terminal, dejando fondo alrededor. En un terminal de 256
+  colores se verá como bloques de color plano; la imagen de verdad está en `o`.
 - Las imágenes se conservan en `$XDG_CACHE_HOME/prdash/sim` (las 20 últimas).
 
 La pantalla se parte en dos: la lista con scroll arriba y el detalle del ítem

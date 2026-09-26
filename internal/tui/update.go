@@ -23,7 +23,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		// El popup se redibuja al tamaño nuevo: la imagen se reescala a la
 		// geometría que le toca, que es lo único que depende del terminal.
-		m.renderSimCells(m.simBoxWidth(), m.simBoxHeight())
+		m.renderSimCells()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -580,7 +580,7 @@ func (m Model) View() tea.View {
 	}
 	// El popup va después de los toasts para quedar por encima de ellos: es la
 	// capa que el usuario acaba de abrir, y un aviso no puede taparla.
-	if box, ok := m.simOverlay(m.contentWidth()); ok {
+	if box, ok := m.simOverlay(); ok {
 		v.text = overlayCentered(v.text, box, m.contentWidth())
 	}
 	out := tea.NewView(v.text)
