@@ -187,6 +187,8 @@ make fmt     # formatea
 make print   # comprueba el pipeline sin TUI
 ```
 
+
+PR de prueba 9/10: nota de humo para practicar el ciclo de resolucion de PRs.
 Diseño: `docs/planning/archive/0001-mvp/` (plan, comportamiento esperado,
 contexto, resumen de cierre);
 decisiones permanentes en `docs/adr/`; contrato de integración con Herdr en
