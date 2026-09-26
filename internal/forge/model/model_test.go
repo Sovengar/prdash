@@ -29,3 +29,25 @@ func TestNewItemSyncsForgeAndHost(t *testing.T) {
 		t.Fatalf("item = %+v", it)
 	}
 }
+
+// TestSectionLegendKeepsStringIntact fija las dos etiquetas de una sección:
+// Legend() es la corta de la leyenda del borde y String() el nombre largo del
+// modo de datos, que no puede cambiar porque lo usa --print.
+func TestSectionLegendKeepsStringIntact(t *testing.T) {
+	for _, tc := range []struct {
+		s      Section
+		legend string
+		str    string
+	}{
+		{SectionAuthored, "Mine", "Created by me"},
+		{SectionReview, "Assigned", "Review / assigned"},
+		{SectionMentions, "Mentioned", "Mentions"},
+	} {
+		if got := tc.s.Legend(); got != tc.legend {
+			t.Errorf("%q: Legend() = %q, want %q", tc.s, got, tc.legend)
+		}
+		if got := tc.s.String(); got != tc.str {
+			t.Errorf("%q: String() = %q, want %q (no debe cambiar)", tc.s, got, tc.str)
+		}
+	}
+}
