@@ -66,17 +66,26 @@ func Cells(img image.Image, w, h int) []string {
 
 // Fit calcula de cuántas columnas y líneas se puede dibujar la imagen sin
 // deformarla dentro de un área de maxCols × maxRows celdas, y devuelve el mayor
-// tamaño que cabe.
+// tamaño que cabe. Asume celdas 1×2; para el ratio real del terminal está
+// FitCells.
+func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
+	return FitCells(img, 1, 2, maxCols, maxRows)
+}
+
+// FitCells es Fit con la relación de aspecto real de la celda, que es lo que
+// decide cuántas columnas por línea necesita la imagen. No es 2:1 sino lo que
+// mida el terminal —en kitty con la fuente por defecto son 9×19 px— y suponerlo
+// introduce un error de un 5% en el tamaño, que es justo el tipo de error que hace
+// que algo "casi cuadre".
 //
-// Una celda de terminal es aproximadamente el doble de alta que de ancha, así que
-// el alto se paga a doble: una imagen 16:9 necesita 3,56 columnas por línea, no
-// 1,78. Sin ese factor, un grafo de commits se estiraría a lo ancho y los dos
+// El alto se paga a double: una imagen 16:9 con celdas 1×2 necesita 3,56 columnas
+// por línea, no 1,78. Sin el factor, un grafo se estiraría a lo ancho y los dos
 // commits de una fila se verían como una tira de elipses en vez de dos círculos.
 //
 // Se usa el mayor tamaño que cabe en lugar de rellenar el área: una celda vacía a
-// un lado de la imagen es dueño del borde del popup, que es donde se lee que la
-// imagen termina.
-func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
+// un lado de la imagen es del borde del popup, que es donde se lee que la imagen
+// termina.
+func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows int) {
 	if img == nil || maxCols <= 0 || maxRows <= 0 {
 		return max(maxCols, 0), max(maxRows, 0)
 	}
@@ -84,9 +93,17 @@ func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
 	if b.Dx() <= 0 || b.Dy() <= 0 {
 		return maxCols, maxRows
 	}
+	if cellW <= 0 {
+		cellW = 1
+	}
+	if cellH <= 0 {
+		cellH = 2
+	}
 
-	// cols por línea, con celdas 1×2.
-	perRow := float64(2*b.Dx()) / float64(b.Dy())
+	// cols por línea: la imagen es imgW/imgH de ancha, y una celda es cellH/cellW
+	// de alta, así que cada fila de celdas "consume" imgW/imgH * cellH/cellW
+	// columnas.
+	perRow := float64(b.Dx()) / float64(b.Dy()) * float64(cellH) / float64(cellW)
 	if perRow <= 0 {
 		return maxCols, maxRows
 	}
@@ -97,6 +114,19 @@ func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
 	}
 	// La anchura manda: se llena de alto lo que la imagen permita.
 	return maxCols, max(int(float64(maxCols)/perRow), 1)
+}
+
+// Resize devuelve la imagen ajustada a w × h píxeles por promedio de caja, en
+// RGBA. Es el mismo reescalado que usan las celdas del half-block, expuesto para
+// el camino de la capa de gráficos: mandar la imagen a Herdr sin ajustarla sería
+// mandar 1920×1080 para pintar un rectángulo de 800 px y wasting 5× el ancho de
+// banda base64.
+func Resize(img image.Image, w, h int) *image.RGBA {
+	src := rgba(img)
+	if src == nil || w <= 0 || h <= 0 {
+		return nil
+	}
+	return shrink(src, w, h)
 }
 
 // rgba normaliza a *image.RGBA para poder leer píxeles por índice. Una imagen

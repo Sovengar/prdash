@@ -33,8 +33,7 @@ func overlayCentered(content, box string, width int) string {
 	}
 	bh := len(block)
 
-	y := max(0, (len(lines)-bh)/2)
-	x := max(0, (width-ansi.StringWidth(block[0]))/2)
+	x, y := centeredOrigin(width, len(lines), ansi.StringWidth(block[0]), bh)
 
 	for j := range bh {
 		i := y + j
@@ -47,4 +46,20 @@ func overlayCentered(content, box string, width int) string {
 		lines[i] = ansi.Truncate(line, x, "") + cell + ansi.TruncateLeft(line, x+cw, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// centeredOrigin es la esquina superior izquierda de una caja de boxW × boxH
+// centrada en un área de width × height.
+//
+// Vive aparte porque dos cosas la necesitan y tienen que coincidir: el overlay que
+// recorta la vista y la capa de gráficos que coloca la imagen. Si cada una calculara
+// su sitio, el marco y la imagen caerían en rectángulos distintos —y solo se vería
+// cuando coinciden, que es lo peor que puede pasarle a un error de posición—.
+func centeredOrigin(width, height, boxW, boxH int) (x, y int) {
+	x = max(0, (width-boxW)/2)
+	y = max(0, (height-boxH)/2)
+	if y+boxH > height {
+		y = max(0, height-boxH)
+	}
+	return x, y
 }

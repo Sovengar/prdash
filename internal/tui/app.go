@@ -243,6 +243,9 @@ type Model struct {
 
 	// simulator renderiza simulaciones de merge/rebase; nil = sin git-sim.
 	simulator Simulator
+	// graphics publica la imagen del popup en la capa de gráficos del pane;
+	// nil = sin Herdr, y la imagen se pinta con half-blocks.
+	graphics Graphics
 	// sim es el estado del overlay de simulación y simSeq el número de la
 	// petición en vuelo, que es lo que invalida un render tardío.
 	sim    simPanel

@@ -21,9 +21,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// El popup se redibuja al tamaño nuevo: la imagen se reescala a la
-		// geometría que le toca, que es lo único que depende del terminal.
-		m.renderSimCells()
+		// El popup cambia de sitio y de tamaño con la terminal. Con la imagen en
+		// la capa de gráficos hay que recolocarla —Herdr la coloca por celdas, no
+		// por Relative—; si no, se quedaría en el rectángulo viejo, que es donde
+		// estaba la caja antes del resize.
+		if m.sim.viaGraphics {
+			m.republishSimImage()
+		} else {
+			m.renderSimCells()
+		}
 		return m, nil
 
 	case spinner.TickMsg:

@@ -166,6 +166,35 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
     misma trampa que el merge armado ya evita.
   - Requiere `git-sim` en el PATH y el review montado (`r`); sin cualquiera de
     los dos, la acción avisa y no hace nada.
+  - **La imagen va a la capa de gráficos del pane cuando Herdr la tiene.** Los
+    half-blocks tienen un techo que no se puede subir: un terminal es una rejilla de
+    celdas, así que una imagen de 1920 px en 84 columnas es una reducción de 23× y
+    cada píxel se convierte en un bloque de 23×23 celdas — los escalones que se veían
+    en las curvas de los commits—. No es un bug de tamaño: es la rejilla. La salida
+    es no usar la rejilla, y Herdr tiene una capa de gráficos por pane
+    (`terminal.kitty_graphics`, que el terminal exterior tiene que soportar —kitty y
+    sus derivados sí—). La imagen se publica en ella, ya ajustada a los píxeles del
+    rectángulo, y la pinta el terminal con su propio escalado. Los half-blocks se
+    quedan como camino de degradación: fuera de Herdr, con la capa apagada, o si
+    el pane no responde —y en ese caso vuelve a half-blocks en vez de dejar un
+    hueco—.
+
+  Lo que costó saber, y está en el código:
+  - La API de gráficos **solo existe por socket**: `herdr pane graphics` no es un
+    subcomando, así que el cliente de Herdr de prdash (que habla por CLI) no sirve;
+    hay un cliente JSON-RPC nuevo en `internal/herdr/graphics.go` con una conexión
+    por petición, porque el servidor la cierra tras cada respuesta.
+  - **La colocación va en celdas**, no en píxeles, y la comparte con el overlay. Por
+    eso el origen de la caja vive en `centeredOrigin`: si el marco y la imagen
+    calcularan su sitio por su cuenta, caerían en rectángulos distintos.
+  - **La celda no es 1×2.** Herdr la mide y en kitty con la fuente por defecto son
+    9×19 px. Suponerlo deformaba la imagen un 5% y, peor, hacía mandar casi el doble
+    de resolución de la que se ve. Ahora el tamaño en píxeles sale de la celda
+    medida.
+  - **La capa hay que quitarla al cerrar el popup**, y en un contexto propio: vive
+    por encima del contenido del pane, así que si se queda, tapa la TUI entera; y
+    si el popup se cierra al salir, el contexto de la app ya está cancelado.
+  - Cada resize recoloca la imagen, porque la colocación es en celdas.
 - **Los últimos 5 comentarios del PR/MR se ven en el detalle.** En una caja propia
   con su "Comments" en el borde, debajo de la ficha y con su autor. Se piden al
   forge al llegar el cursor al ítem y se cachean, así que navegar no vuelve a

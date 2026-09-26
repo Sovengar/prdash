@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"prdash/internal/forge/model"
+	"prdash/internal/herdr"
 	"prdash/internal/sim"
 	"prdash/internal/tui/bordered"
 )
@@ -25,6 +26,11 @@ import (
 // simTimeout acota la simulación completa. El runner tiene el suyo propio y más
 // corto; este es la red que cubre también preparar el directorio de trabajo.
 const simTimeout = 90 * time.Second
+
+// simLayer es la capa donde se publica la imagen. Vive en el herdr porque la capa
+// es un recurso del pane, pero el nombre lo elige prdash y lo borra al cerrar el
+// popup, para no tocar nada que no sea suyo.
+const simLayer = herdr.GraphicsLayer
 
 // Geometría del popup.
 const (
@@ -90,6 +96,15 @@ type simPanel struct {
 	cellW int
 	cellH int
 	image string
+	// viaGraphics dice que la imagen está publicada en la capa del pane y que por
+	// eso el popup no la pinta con celdas. La capa vive por encima del contenido
+	// del pane: si el popup se cierra y no se quita, la imagen se queda encima de
+	// la TUI.
+	viaGraphics bool
+	// cellW_px y cellH_px son los píxeles de una celda, medidos por Herdr. Cero =
+	// no se sabe, y entonces se supone 1×2.
+	cellW_px int
+	cellH_px int
 }
 
 // Simulator renderiza simulaciones. Es un puerto opcional: sin él la acción
@@ -97,6 +112,29 @@ type simPanel struct {
 type Simulator interface {
 	Available() bool
 	Simulate(ctx context.Context, it model.Item, kind sim.Kind) (sim.Result, error)
+}
+
+// Graphics publica la imagen en la capa gráfica del pane, que es lo que la pinta a
+// resolución nativa en vez de a una celda por píxel de la imagen.
+//
+// Es un puerto opcional y el que decide la calidad: sin él, la imagen se dibuja con
+// half-blocks, que se ve pixelado porque cuantiza a la rejilla de celdas (con una
+// imagen de 1920 px en 84 columnas, cada bloque son 23×23 celdas). Con él, la escala
+// la hace el terminal y se ve como una imagen.
+type Graphics interface {
+	// Available informa si la capa es un camino posible ahora mismo.
+	Available() bool
+	// CellSize son los píxeles de una celda del pane, que es lo que permite no
+	// deformar la imagen y no mandar más resolución de la que se ve. (0, 0) si no
+	// se sabe.
+	CellSize(ctx context.Context) (cellW, cellH int)
+	// SetImage publica la imagen en la capa, colocada en un rectángulo de celdas
+	// del viewport del pane. La colocación es el tipo de Herdr porque es su
+	// concepto: el pane es una rejilla y la imagen se coloca en celdas, no en
+	// píxeles.
+	SetImage(ctx context.Context, layer string, img image.Image, p herdr.Placement) error
+	// Clear quita la capa.
+	Clear(ctx context.Context, layer string) error
 }
 
 // simMsg entrega el resultado de una simulación. seq identifica la petición:
@@ -112,6 +150,10 @@ type simMsg struct {
 // SetSimulator inyecta el simulador. nil lo deshabilita: la acción informa
 // entonces que hace falta git-sim.
 func (m *Model) SetSimulator(s Simulator) { m.simulator = s }
+
+// SetGraphics inyecta la capa de gráficos del pane. nil deja el popup en
+// half-blocks, que es el camino de fuera de Herdr.
+func (m *Model) SetGraphics(g Graphics) { m.graphics = g }
 
 // openSimulator abre el selector sobre el ítem seleccionado. Los guards son los
 // mismos que los del resto de acciones: la simulación necesita un ítem y una
@@ -165,10 +207,28 @@ func (m *Model) moveSimCursor(key string) bool {
 }
 
 // closeSim cierra el overlay e invalida el render en vuelo: su resultado se
-// descarta, aunque la imagen se haya quedado en el caché.
+// descarta, aunque la imagen se haya quedado en el caché. Si había una imagen
+// publicada en la capa del pane, la quita: la capa vive por encima del contenido
+// del pane, así que quedarse ahí taparía la TUI entera.
 func (m *Model) closeSim() {
 	m.simSeq++
+	m.releaseSimLayer()
 	m.sim = simPanel{}
+}
+
+// releaseSimLayer quita la imagen de la capa de gráficos si se publicó. Va en
+// segundo plano y con un contexto propio: si el popup se cierra al salir de la TUI,
+// el contexto de la app ya está cancelado y la imagen se quedaría pegada.
+func (m *Model) releaseSimLayer() {
+	if !m.sim.viaGraphics || m.graphics == nil {
+		return
+	}
+	g := m.graphics
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = g.Clear(ctx, simLayer)
+	}()
 }
 
 // handleSimKey atiende el popup mientras está abierto. `q` y `ctrl+c` salen, como
@@ -260,7 +320,67 @@ func (m *Model) applySim(msg simMsg) {
 	m.sim.state = simShowing
 	m.sim.image = msg.res.Path
 	m.sim.img = img
-	m.renderSimCells()
+	if !m.publishSimImage(img) {
+		m.renderSimCells()
+	}
+}
+
+// publishSimImage intenta publicar la imagen en la capa de gráficos del pane y dice
+// si lo consiguió. Si no, el popup la pintará con half-blocks.
+//
+// La imagen se reescala al tamaño en píxeles del rectángulo antes de mandarla: el
+// terminal la va a dibujar a ese tamaño, así que mandar los 1920 px originales solo
+// añade bytes en base64 sin ganar un detalle que se pueda ver. Y se ajusta al alto
+// real de la celda, que no es 2× el ancho sino lo que mida el terminal.
+func (m *Model) publishSimImage(img image.Image) bool {
+	if m.graphics == nil || !m.graphics.Available() {
+		return false
+	}
+	cols, rows := m.simBox()
+	col, row := m.simBoxOrigin(cols, rows)
+	innerCols, innerRows := cols-2, rows-simChrome
+	if innerCols <= 0 || innerRows <= 0 {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cellW, cellH := m.graphics.CellSize(ctx)
+	if cellW <= 0 || cellH <= 0 {
+		cellW, cellH = 1, 2
+	}
+	m.sim.cellW_px, m.sim.cellH_px = cellW, cellH
+	// El tamaño en píxeles del rectángulo, con la celda medida. Mandar la imagen
+	// original aquí solo añadiría bytes: el terminal la va a dibujar a este tamaño.
+	resized := sim.Resize(img, innerCols*cellW, innerRows*cellH)
+	if resized == nil {
+		return false
+	}
+	if err := m.graphics.SetImage(ctx, simLayer, resized, herdr.Placement{
+		Col: col + 1, Row: row + 1, Cols: innerCols, Rows: innerRows,
+	}); err != nil {
+		return false
+	}
+	m.sim.viaGraphics = true
+	m.sim.cells, m.sim.cellW, m.sim.cellH = nil, 0, 0
+	return true
+}
+
+// republishSimImage vuelve a publicar la imagen en la capa con la geometría
+// actual. Se llama en cada resize: la colocación va en celdas, así que cambia con
+// el tamaño de la terminal igual que el marco.
+func (m *Model) republishSimImage() {
+	img := m.sim.img
+	if img == nil {
+		return
+	}
+	m.sim.viaGraphics = false
+	if !m.publishSimImage(img) {
+		// Si la capa deja de estar disponible (pane oculto, Herdr que no
+		// responde), se vuelve a half-blocks en vez de dejar un hueco.
+		m.renderSimCells()
+	}
 }
 
 // simBox es la geometría del popup: sus dimensiones exteriores. Es la única
@@ -280,8 +400,27 @@ func (m Model) simBox() (w, h int) {
 	}
 
 	// La imagen manda: la caja se ajusta a lo que la imagen necesita, no al revés.
-	cols, rows := sim.Fit(m.sim.img, m.simMaxCols(), m.simMaxRows())
+	cellW, cellH := m.cellSize()
+	cols, rows := sim.FitCells(m.sim.img, cellW, cellH, m.simMaxCols(), m.simMaxRows())
 	return cols + 2, rows + simChrome
+}
+
+// cellSize son los píxeles de una celda. Herdr los mide (en kitty con la fuente por
+// defecto son 9×19, no 2×1) y usarlos hace dos cosas a la vez: que la imagen no se
+// deforme y que no se mande más resolución de la que se ve. Sin Herdr se supone 1×2,
+// que es lo que hacen casi todos los terminales.
+func (m Model) cellSize() (w, h int) {
+	if m.sim.cellW_px > 0 && m.sim.cellH_px > 0 {
+		return m.sim.cellW_px, m.sim.cellH_px
+	}
+	return 1, 2
+}
+
+// simBoxOrigin es la esquina del popup en la vista, en celdas. Lo comparte con el
+// overlay: es lo que permite que la imagen en la capa de gráficos caiga justo en el
+// hueco del marco.
+func (m Model) simBoxOrigin(cols, rows int) (col, row int) {
+	return centeredOrigin(m.contentWidth(), m.height, cols, rows)
 }
 
 // simMaxCols son las columnas que el popup puede usar, dejando fondo a los lados.
@@ -298,7 +437,9 @@ func (m Model) simMaxRows() int {
 // renderSimCells (re)dibuja la imagen a la geometría del popup. Se llama al llegar
 // el resultado y en cada resize, que es lo único que cambia el tamaño disponible.
 func (m *Model) renderSimCells() {
-	if m.sim.state != simShowing || m.sim.img == nil {
+	if m.sim.state != simShowing || m.sim.img == nil || m.sim.viaGraphics {
+		// Con la imagen en la capa de gráficos no hay celdas que pintar: el popup
+		// solo dibuja el marco y Herdr pone la imagen encima.
 		m.sim.cells, m.sim.cellW, m.sim.cellH = nil, 0, 0
 		return
 	}
@@ -376,10 +517,17 @@ func (m Model) simBusyBox() string {
 }
 
 // simImageBox es la fase final: la imagen del render, con su pie de ayuda.
+//
+// Con la imagen en la capa de gráficos, el interior va vacío de propósito: la
+// imagen la pinta Herdr por encima. Rellenarlo con celdas sería mandar por el
+// terminal lo que ya está en pantalla y encima lo taparía dos veces.
 func (m Model) simImageBox() string {
-	width, _ := m.simBox()
-	body := make([]string, 0, len(m.sim.cells)+2)
+	width, height := m.simBox()
+	body := make([]string, 0, height)
 	body = append(body, m.sim.cells...)
+	for len(body) < height-simChrome-1 {
+		body = append(body, "")
+	}
 	body = append(body, styleDim.Render("esc close · o open image"))
 	return borderedBox(" simulate: "+string(m.sim.kind)+" "+refLabel(m.sim.item), strings.Join(body, "\n"), width)
 }
