@@ -80,15 +80,20 @@ var (
 	styleDiffUnknown = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// borderColor es el color del borde de las cajas: gris muy tenue, para que
-	// la estructura se lea sin competir con el contenido.
+	// la estructura se lea sin competir con el contenido. Lo usan todas, incluida
+	// la de comentarios, que va anidada dentro del panel de detalle: esa se
+	// distingue por el sangrado, no por un tono distinto. Un tono más claro del
+	// mismo gris la separaba del panel, pero salía amarillento en las paletas
+	// cálidas, y lo que hacía falta era que no compartiera columnas con el borde
+	// de fuera, no que se viera distinto.
 	borderColor = lipgloss.Color("238")
 
-	// commentBorderColor es el del borde de la caja de comentarios, que va anidada
-	// dentro del panel de detalle. Un tono por encima del de las cajas de la
-	// pantalla: si fuera el mismo, los dos bordes se fundirían en una sola línea y
-	// el anidamiento dejaría de leerse. Sigue siendo un gris para no competir con el
-	// texto, que es lo que manda en la caja.
-	commentBorderColor = lipgloss.Color("240")
+	// styleBorder es borderColor como estilo, para poder repintar un tramo suelto
+	// de una línea de borde. Hace falta al escribir sobre ella: un estilo de
+	// lipgloss se cierra con `\x1b[0m`, y ese reset no restaura lo que había
+	// antes, así que lo que venga después queda con el color de primer plano del
+	// terminal en vez de con el del borde.
+	styleBorder = lipgloss.NewStyle().Foreground(borderColor)
 )
 
 // styleForState elige el estilo de la columna de estado.

@@ -100,11 +100,14 @@ Lo que se enseña, y por qué:
 
 - **Los últimos, no los primeros.** El final de la conversación es donde está lo
   último que se dijo del PR y el estado actual de la discusión. Van del más antiguo
-  de esos al más nuevo, que es como se lee una discusión. Si hay más de los que
-  caben, la caja lo dice en el borde de abajo (`5 of 23`) porque es lo que indica
-  que conviene abrir el PR.
+  de esos al más nuevo, que es como se lee una discusión. El borde de abajo de la caja
+  lleva el recuento (`3 of 3`, `5 of 23`): el total es lo que indica que conviene
+  abrir el PR, y el número de los que se ven también cuenta, porque el tamaño de la
+  conversación es parte del estado del PR.
 - **Una caja, no campos más.** La conversación no es un dato del PR sino lo que la
-  gente dijo de él, y un borde lo dice sin explicarlo. Sin comentarios —y también
+  gente dijo de él, y un borde lo dice sin explicarlo. Va sangrada una columna a cada
+  lado y con el mismo gris de borde que el resto de las cajas: el sangrado es lo que
+  dice que está anidada en el panel. Sin comentarios —y también
   sin que el forge haya respondido todavía— no hay caja: se queda la línea de
   campo de siempre, porque una caja alrededor de la palabra "none" no separa nada y
   aparecería y desaparecería en cada movimiento del cursor.

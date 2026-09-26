@@ -19,14 +19,22 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   no se distingue de "este PR no tiene comentarios".
   - Se enseña el **final** de la conversación: los últimos 5, en orden
     cronológico y del más antiguo de esos al más nuevo, que es como se lee una
-    discusión. Es donde está lo último que se dijo del PR. Si hay más de los que
-    caben, la etiqueta lo dice (`5 of 23`), que es lo que indica que conviene abrir
-    el PR.
+    discusión. Es donde está lo último que se dijo del PR. El recuento va en el
+    borde de abajo de la caja y dice siempre los dos números (`3 of 3`, `5 of 23`):
+    el segundo es lo que indica que conviene abrir el PR, y el primero también
+    informa con todo a la vista, porque el tamaño de la conversación es parte del
+    estado del PR —3 comentarios o 30 no es el mismo PR—. Antes solo salía cuando
+    faltaba algo, y ese filtro venía justificado por su coste de una fila, que se
+    fue con el recuento al borde.
   - Van en una **caja redondeada con "Comments" en el borde**, no como campos más de
     la ficha: la conversación no es un dato del PR sino lo que la gente dijo de él, y
-    un borde lo dice sin tener que explicarlo. El borde es un gris un tono por encima
-    del de las cajas de la pantalla, o los dos bordes se fundirían en una sola línea
-    y el anidamiento dejaría de leerse.
+    un borde lo dice sin tener que explicarlo. La caja va **sangrada una columna a
+    cada lado** y con **el mismo gris de borde que el resto** de las cajas. El
+    sangrado es lo que hace legible el anidamiento: pegada al borde del panel, sus
+    verticales se solapan con las de fuera y cada fila sale `││`, y con el mismo color
+    los dos bordes se leerían como un trazo gordo. Para separarlos hubo un tiempo un
+    gris un tono más claro, pero en las paletas cálidas ese tono sale amarillento, y
+    era un problema de color tapando uno de forma.
   - **Sin comentarios no hay caja.** Una caja alrededor de la palabra "none" no
     separa nada, y como es el estado de todos los PRs sin conversación, un borde
     apareciendo y desapareciendo en cada movimiento del cursor sería ruido. Se queda
@@ -37,12 +45,14 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
     y tres filas libres, la caja cabría para un comentario y perdería los otros dos;
     ver uno y perder dos es peor que no ver ninguno, porque un recorte de la caja no
     parece un recorte: parece que el PR solo tiene ese comentario.
-  - El recuento (`5 of 23`) va **embebido en el borde de abajo, a la derecha**, y no
+  - El recuento va **embebido en el borde de abajo, a la derecha**, y no
     como una fila suelta del cuerpo. El cuerpo de la caja son las filas que dijo la
     gente, y una de recuento es una que no es de nadie; en el borde, además, es
     gratis, así que ya no es lo primero que se cae cuando el panel va justo, que era
-    su destino. Con la forma larga (`· open the PR to read the rest`) solo si cabe
-    entera: recortada a media frase diría menos que la corta.
+    su destino. El borde llega hasta la esquina y no se apoya en ella, o la línea de
+    abajo se leería como partida. La coletilla (`· open the PR to read the rest`) solo
+    sale si hay comentarios fuera y si cabe entera: recortada a media frase diría
+    menos que la corta.
   - Las **notas de sistema de GitLab se descartan** ("assigned to @x", "added 3
     commits"): no son conversación sino historial de acciones del MR, y llenaban las
     cinco filas con ruido que ya está en otra parte de la ficha. Por eso se piden

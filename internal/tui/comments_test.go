@@ -4,6 +4,7 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -237,6 +238,120 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 			t.Errorf("dentro de la caja no debería repetirse la etiqueta:\n%s", stripANSI(rows[i]))
 		}
 	}
+}
+
+// TestBoxIsInsetSoNestingReadsByShape: la caja de comentarios va sangrada una columna
+// a cada lado, y con eso el anidamiento se lee por la forma. Pegada al borde del
+// panel, sus verticales se solapan con las de fuera y cada fila sale `││`; y como
+// las dos llevan el mismo color, los dos bordes se leerían como un trazo gordo. Un
+// tono de gris más claro los separaba, pero salía amarillento en las paletas
+// cálidas: era un problema de color tapando uno de forma.
+func TestBoxIsInsetSoNestingReadsByShape(t *testing.T) {
+	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
+
+	top := rowWithCommentBox(rows)
+	if top < 0 {
+		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
+	}
+	for i := top; i < len(rows); i++ {
+		plain := stripANSI(rows[i])
+		r := []rune(plain)
+		if strings.ContainsRune("│╭╰", r[0]) {
+			t.Errorf("línea %d: la caja no puede apoyarse en el borde izquierdo del panel:\n%q", i, plain)
+		}
+		if last := r[len(r)-1]; strings.ContainsRune("│╮╯", last) {
+			t.Errorf("línea %d: la caja no puede apoyarse en el borde derecho del panel:\n%q", i, plain)
+		}
+		if !strings.HasPrefix(plain, " │") && !strings.HasPrefix(plain, " ╭") && !strings.HasPrefix(plain, " ╰") {
+			break // el anidamiento se acaba aquí: lo que viene son avisos o relleno
+		}
+	}
+}
+
+// TestCommentBoxSharesTheBorderColor: la caja de comentarios se pinta con el mismo
+// color de borde que las demás cajas de la pantalla. Antes llevaba un tono más claro
+// para desdoblar el anidamiento, y en paletas cálidas ese tono sale amarillento; con
+// el sangrado ya no hace falta. Un borde de otro color se nota, y no es algo que se
+// pueda dejar "porque así se veía antes".
+func TestCommentBoxSharesTheBorderColor(t *testing.T) {
+	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	// El panel de detalle con su caja, que es donde está el borde de referencia: el
+	// detalle son filas de contenido, la caja la pone la sección. Sin quitar los
+	// escapes, que es justo lo que se quiere comparar.
+	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
+	top := rowWithCommentBox(rows)
+	if top < 0 {
+		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
+	}
+	// La primera fila es el borde de arriba del panel de detalle: la referencia de "el
+	// color del resto".
+	panel, box := ansiColors(rows[0]), ansiColors(rows[top])
+	if panel != box {
+		t.Errorf("la caja de comentarios se pinta con %q y el panel con %q, y deben ser el mismo",
+			box, panel)
+	}
+	if box == "" {
+		t.Error("ninguna de las dos líneas lleva color: el test no estaría comprobando nada")
+	}
+}
+
+// ansiColors son los códigos de color de una línea, en orden y sin repetir. Es lo
+// que responde a "con qué paleta se pinta esto" sin mirar a qué se aplica cada uno.
+func ansiColors(line string) string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range regexp.MustCompile(`\x1b\[[0-9;]*m`).FindAllString(line, -1) {
+		if !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// TestEveryBorderGlyphIsPainted: todo glifo de borde va pintado con el color del
+// borde. Lo que rompía la raya que cierra la línea de abajo al escribir la leyenda
+// encima es que el estilo del recuento se cierra con `\x1b[0m`, y ese reset no
+// restaura lo anterior: se lleva por delante el gris del borde y lo que va detrás
+// queda con el color de primer plano del terminal, que en muchas paletas es un
+// blanco amarillento. Con esta comprobación, un tramo de borde sin pintar sale aquí en
+// vez de en la captura del usuario.
+func TestEveryBorderGlyphIsPainted(t *testing.T) {
+	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 3)
+	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
+	for i, l := range rows {
+		if bad := unpaintedBorderGlyphs(l); bad != "" {
+			t.Errorf("línea %d: estos glifos de borde salen sin pintar, con el color por defecto del terminal: %q\n%q",
+				i, bad, stripANSI(l))
+		}
+	}
+}
+
+// unpaintedBorderGlyphs son los glifos de borde de una línea que quedan con el color
+// de primer plano del terminal, es decir, en un tramo que va tras un reset y antes de
+// que otro estilo lo repinte. Los glifos son multibyte, así que la línea se parte en
+// tramos de escapes y de texto y se mira el texto rune a rune.
+func unpaintedBorderGlyphs(line string) string {
+	const glyphs = "─│╭╮╰╯"
+	seg := regexp.MustCompile(`\x1b\[[0-9;]*m|[^\x1b]+`)
+	var out []rune
+	styled, seen := false, false
+	for _, s := range seg.FindAllString(line, -1) {
+		if s[0] == '\x1b' {
+			styled = s != "\x1b[m" && s != "\x1b[0m"
+			seen = true
+			continue
+		}
+		if seen && !styled {
+			for _, r := range s {
+				if strings.ContainsRune(glyphs, r) {
+					out = append(out, r)
+				}
+			}
+		}
+	}
+	return string(out)
 }
 
 // TestNoBoxWhenThereAreNoComments: sin conversación no hay caja. Una caja alrededor
@@ -656,14 +771,20 @@ func TestCountLivesInTheBorder(t *testing.T) {
 	}
 }
 
-// TestCommentsCountOnlyWhenItMatters: con todo a la vista solo queda la cifra. La
-// forma "de N" es la que avisa de que hay conversación fuera del panel, y sin ella
-// no hay nada que avisar.
-func TestCommentsCountOnlyWhenItMatters(t *testing.T) {
+// TestCountAlwaysSaysHowManyOfHowMany: la leyenda dice los dos números siempre, también
+// con toda la conversación a la vista. "3 de 3" informa igual que "5 of 23": dice que
+// no queda nada fuera, y el tamaño de la conversación es parte del estado del PR. La
+// frase que antes solo salía al haber más estaba justificada por su coste de una fila,
+// y ese coste se fue con ella al borde.
+func TestCountAlwaysSaysHowManyOfHowMany(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "one"), conv("bob", "two")}, 2)
 	detail := detailText(t, m)
-	if strings.Contains(detail, "of 2") {
-		t.Errorf("no hay nada que avisar si se ve todo:\n%s", detail)
+	if !strings.Contains(detail, "2 of 2") {
+		t.Errorf("con todo a la vista el recuento también dice el total:\n%s", detail)
+	}
+	// Y sin la coletilla: no hay nada escondido que ir a abrir.
+	if strings.Contains(detail, commentHint) {
+		t.Errorf("sin comentarios fuera no hay nada que abrir:\n%s", detail)
 	}
 	if !hasCommentBox(detail) {
 		t.Errorf("la caja de comentarios debería salir:\n%s", detail)
