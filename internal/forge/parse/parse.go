@@ -215,6 +215,7 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	it.TargetBranch = n.BaseRefName
 	it.URL = n.URL
 	it.State = n.State
+	it.IsDraft = n.IsDraft
 	it.ReviewDecision = n.ReviewDecision
 	it.Checks = checksFromRollup(n)
 	it.Diff = diffFromGHNode(n)
@@ -372,6 +373,7 @@ func ParseGHAuthored(raw string) ([]model.Item, error) {
 		it.Author = n.User.Login
 		it.URL = n.HTMLURL
 		it.State = n.State
+		it.IsDraft = n.Draft
 		if n.PullRequest != nil {
 			it.SourceBranch = n.PullRequest.Head.Ref
 			it.TargetBranch = n.PullRequest.Base.Ref
@@ -434,14 +436,18 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 // ---- GitLab: GraphQL (currentUser / project) ----
 
 type glMR struct {
-	IID          flexInt `json:"iid"`
-	Title        string  `json:"title"`
-	WebURL       string  `json:"webUrl"`
-	State        string  `json:"state"`
-	SourceBranch string  `json:"sourceBranch"`
-	TargetBranch string  `json:"targetBranch"`
-	Approved     bool    `json:"approved"`
-	UpdatedAt    string  `json:"updatedAt"`
+	IID    flexInt `json:"iid"`
+	Title  string  `json:"title"`
+	WebURL string  `json:"webUrl"`
+	State  string  `json:"state"`
+	// Draft es la bandera de borrador del MR. Va separada de State porque State
+	// es el enum del forge ("opened") y no lo cubre: sin ella un MR en borrador
+	// era indistinguible de uno abierto.
+	Draft        bool   `json:"draft"`
+	SourceBranch string `json:"sourceBranch"`
+	TargetBranch string `json:"targetBranch"`
+	Approved     bool   `json:"approved"`
+	UpdatedAt    string `json:"updatedAt"`
 	// DiffHeadSha es el commit de la rama origen: lo que permite pinear el merge
 	// con `--sha`. Es puntero porque GitLab lo declara nullable y lo devuelve a
 	// null cuando el diff no está calculado; ausente y null significan lo mismo
@@ -569,6 +575,7 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	it.TargetBranch = mr.TargetBranch
 	it.URL = mr.WebURL
 	it.State = mr.State
+	it.IsDraft = mr.Draft
 	it.ReviewDecision = glReviewDecision(mr)
 	it.Diff = diffFromGLMR(mr)
 	if mr.DiffHeadSha != nil {
@@ -631,6 +638,7 @@ type glBasicMR struct {
 	Title        string  `json:"title"`
 	WebURL       string  `json:"web_url"`
 	State        string  `json:"state"`
+	Draft        bool    `json:"draft"`
 	SourceBranch string  `json:"source_branch"`
 	TargetBranch string  `json:"target_branch"`
 	UpdatedAt    string  `json:"updated_at"`
@@ -670,6 +678,7 @@ func ParseGLMRList(raw string) ([]model.Item, error) {
 		it.TargetBranch = mr.TargetBranch
 		it.URL = mr.WebURL
 		it.State = mr.State
+		it.IsDraft = mr.Draft
 		it.UpdatedAt = parseTime(mr.UpdatedAt)
 		items = append(items, it)
 	}

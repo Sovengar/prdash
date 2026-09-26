@@ -57,7 +57,9 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 		{"Author", orDash(it.Author)},
 		{"Source", orDash(it.SourceBranch)},
 		{"Target", orDash(it.TargetBranch)},
-		{"Number", fmt.Sprintf("#%d", it.Number)},
+		// No hay campo Number porque refLabel ya termina en "#42": una fila
+		// entera de la rejilla para repetir el número que está a tres columnas de
+		// ahí. Ese hueco lo ocupa Draft, que sí aporta un dato que no estaba.
 	}
 	// El orden de los campos de estado no es neutro: la rejilla los empareja por
 	// posición, así que el último par es la última fila, que es lo único que sobrevive
@@ -66,6 +68,12 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	// deja de responder a la pregunta para la que está.
 	status := []detailField{
 		{"State", state.Derive(it).String()},
+		// Draft va al lado de State y no dentro de él porque son preguntas
+		// distintas. State es prioridad de atención —"este PR tiene cambios
+		// pedidos"—, y por su precedencia un borrador aprobado sale como
+		// "approved": el hecho de que sea borrador se pierde. Draft es el dato
+		// que reporta el forge, y contesta a la pregunta que State no contesta.
+		{"Draft", yesNo(it.IsDraft)},
 		{"Checks", checksDetail(it.Checks)},
 		{"Diff", diffDetail(it.Diff)},
 		{"Updated", relativeTime(it.UpdatedAt)},
@@ -100,7 +108,7 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	// El salto del cuarto al quinto candidato se lleva tres cosas a la vez
 	// (comentarios, hueco y fila del URL) porque entre ellas no hay ningún tamaño
 	// intermedio: quitar solo el URL deja la misma altura, y quitar solo el Diff
-	// también, porque la rejilla pasa de 12 a 11 campos y ambas caben en 6 filas.
+	// también, porque la rejilla pasa de 13 a 12 campos y ambas caben en 6 filas.
 	withGap := []string{title, ""}
 	noGap := []string{title}
 	layouts := [][]string{
@@ -323,4 +331,14 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// yesNo renderiza un booleano que el forge sí reportó. No usa orDash porque un
+// false aquí no es un dato ausente: es la respuesta, y "no" dice lo que "-" no
+// diría.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }

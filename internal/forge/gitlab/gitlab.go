@@ -335,6 +335,10 @@ func restEndpoint(resource string) string {
 // parseo tiene que sumarla. Pide el conteo de ficheros como la longitud de la
 // lista porque el schema no expone un `changedFiles` equivalente.
 //
+// `draft` viene en la misma consulta y no cuesta llamada. Sin él, `state` solo
+// decía "opened" y un MR en borrador era indistinguible de uno abierto: la
+// columna de estado lo pintaba como pendiente y el gate de merge no lo frenaba.
+//
 // `diffHeadSha` y `squash` también salen en la misma consulta y no cuestan
 // llamada: el primero es lo que permite pinear el merge con `--sha` y el
 // segundo avisa de que el MR se aplana pase lo que pase. Lo que NO se pide son
@@ -342,7 +346,7 @@ func restEndpoint(resource string) string {
 // en el schema GraphQL de GitLab (comprobado contra la instancia), y leerlo por
 // REST costaría una llamada por repositorio. Por eso las reglas de merge
 // llegan sin conocer en GitLab, y sin conocer no restringen.
-const mrFields = `iid title webUrl state sourceBranch targetBranch approved updatedAt ` +
+const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt ` +
 	`diffHeadSha squash diffStats { additions deletions } ` +
 	`author { username } project { fullPath name group { fullPath } }`
 

@@ -53,6 +53,28 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **El gate de merge no veía los PR/MR en borrador.** `isDraft`/`draft` se pedía
+  en la consulta del ítem desde el principio y se descartaba sin mirar, así que
+  ningún ítem llegaba marcado como borrador. `MergeBlock` solo comparaba
+  `State == "draft"`, un valor que ningún forge emite —GitHub devuelve `OPEN` y
+  GitLab `opened`—, de modo que el bloqueo que el README prometía para los
+  borradores no ocurría nunca: prdash armaba el merge, gastaba la llamada
+  completa y devolvía el rechazo del forge. Lo que lo sostenía era una suite que
+  se inyectaba `State="draft"` a mano, es decir, probaba un valor que el producto
+  real nunca producía, y por eso la suite entera pasaba con la functionality
+  rota.
+
+  Ahora el borrador es una propiedad del ítem (`Item.IsDraft`) y llega por los
+  cuatro caminos de parseo —GraphQL y REST de GitHub, GraphQL y lista REST de
+  GitLab—, con tests que usan JSON con la forma que devuelve cada forge de verdad.
+  El gate la consulta sin importar la decisión de review: un borrador aprobado
+  salía como `approved` y el borrador se perdía de vista justo en el ítem que más
+  se vigila. La ficha enseña `Draft: yes/no` al lado de `State`, porque son
+  preguntas distintas —`State` es prioridad de atención, el borrador es un dato
+  del forge— y ese hueco lo ocupa la fila `Number`, que solo repetía el número
+  que `refLabel` ya enseña tres columnas más allá. En GitLab, `draft` viene en la
+  misma consulta que el resto y no cuesta llamada.
+
 - **La simulación ocupaba un rincón del popup y salía deformada.** El ancho de las
   celdas y el de la caja los decidía cada uno por su cuenta: las celdas se
   calculaban para 96 columnas y la caja se dibujaba al ancho de la vista, así que

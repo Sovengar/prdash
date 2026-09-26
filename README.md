@@ -275,6 +275,11 @@ dejaría el PR sin poder mergear nunca—, y no hacer nada los haría invisibles
 gate que avisa siempre entrena a ignorar el aviso, así que en un ítem sano no sale
 ninguno.
 
+El borrador se mira como lo que es —una propiedad del forge— y no como un estado
+del ítem, y por eso frena igual con la review aprobada o sin ella: `State` ordena
+por atención al operador y un borrador aprobado sale como `approved`. La ficha lo
+dice en su propia fila `Draft` en vez de esconderlo dentro de `State`.
+
 Elegir el modo **es** la confirmación: para eso hay que nombrar una estrategia, y
 quien la nombra después de leer que el CI está rojo ha decidido. No hace falta una
 tercera tecla.

@@ -29,7 +29,7 @@ func TestMergeBlockRefusesWhatTheForgeRefuses(t *testing.T) {
 		mutate func(*model.Item)
 		want   string
 	}{
-		{"draft", func(it *model.Item) { it.State = "draft" }, "draft"},
+		{"draft", func(it *model.Item) { it.IsDraft = true }, "draft"},
 		{"merged", func(it *model.Item) { it.State = "merged" }, "merged"},
 		{"closed", func(it *model.Item) { it.State = "closed" }, "closed"},
 	} {
@@ -45,6 +45,32 @@ func TestMergeBlockRefusesWhatTheForgeRefuses(t *testing.T) {
 			}
 			if !strings.Contains(block.Reason, tc.want) {
 				t.Errorf("Reason = %q, want que mencione %q", block.Reason, tc.want)
+			}
+		})
+	}
+}
+
+// TestMergeBlockSeesTheDraftUnderAnyReviewDecision: el caso que el gate no veía
+// cuando leía el borrador en el estado crudo.
+//
+// base() viene aprobado, así que añadirle IsDraft deja un ítem que Derive
+// clasifica como approved y cuyo borrador desaparece de la columna de estado.
+// MergeBlock tiene que seguir frenando el merge, porque la pregunta que hace no
+// es a quién mira el operador primero sino si el forge va a integrar esto, y
+// GitHub rechaza el borrador antes de mirar la review que sea.
+func TestMergeBlockSeesTheDraftUnderAnyReviewDecision(t *testing.T) {
+	for _, decision := range []string{"", "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"} {
+		t.Run("review="+decision, func(t *testing.T) {
+			it := base()
+			it.ReviewDecision = decision
+			it.IsDraft = true
+
+			block := MergeBlock(it)
+			if !strings.Contains(block.Reason, "draft") {
+				t.Errorf("MergeBlock = %q, want que mencione el borrador", block.Reason)
+			}
+			if !block.Hard {
+				t.Error("Hard = false, want true: el borrador no se fuerza")
 			}
 		})
 	}

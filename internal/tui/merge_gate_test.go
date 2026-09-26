@@ -28,7 +28,7 @@ func gatedItems(rules model.MergeRules) []model.Item {
 // gasta una llamada y teaches al operador que la confirmación no significa nada.
 func TestMergeBlockedOnADraftNoArms(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
-	items[0].State = "draft"
+	items[0].IsDraft = true
 	f := newMergeFixture(t, items...)
 
 	m := press(t, f.m, "m")

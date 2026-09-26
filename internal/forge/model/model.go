@@ -149,18 +149,25 @@ func With(forge, host, project string, number int) ID {
 
 // Item es un PR/MR normalizado, listo para pintar, deduplicar y ordenar.
 type Item struct {
-	Section        Section
-	Forge          string
-	Host           string
-	Ref            RepoRef
-	Number         int
-	Title          string
-	Author         string
-	ReviewKind     ReviewKind
-	SourceBranch   string
-	TargetBranch   string
-	URL            string
-	State          string // estado crudo del forge: open/merged/closed…
+	Section      Section
+	Forge        string
+	Host         string
+	Ref          RepoRef
+	Number       int
+	Title        string
+	Author       string
+	ReviewKind   ReviewKind
+	SourceBranch string
+	TargetBranch string
+	URL          string
+	State        string // estado crudo del forge: open/merged/closed…
+	// IsDraft dice que el forge marco el ítem como borrador. Es un campo aparte
+	// y no un valor de State a propósito: State es el enum del forge (OPEN en
+	// GitHub, opened en GitLab) y meter ahí un "draft" derivado obligaba a que
+	// cada adapter tradujera y a que la comprobación dependiera de que la
+	// traducción fuera exacta. Un PR en borrador llega con State="OPEN" y esta
+	// bandera a true, y quien decide qué etiquetas mostrar lo lee aquí.
+	IsDraft        bool
 	ReviewDecision string // decisión de review del forge: APPROVED/…
 	Checks         Checks
 	Diff           DiffStat

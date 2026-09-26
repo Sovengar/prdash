@@ -104,7 +104,7 @@ func Derive(it model.Item) State {
 		return StateApproved
 	}
 
-	if it.State == "draft" {
+	if it.IsDraft {
 		return StateDraft
 	}
 	return StatePending
@@ -160,17 +160,18 @@ type Block struct {
 // carrera que el pin del head SHA no cierra, porque el CI puede pasar después del
 // merge.
 func MergeBlock(it model.Item) Block {
-	// Borrador, mergeado y cerrado se miran en el estado CRUDO y no en Derive, y
-	// no es un detalle: Derive ordena por atención al operador, así que un ítem
-	// en borrador que además está aprobado devuelve StateApproved y el borrador
-	// se pierde. Aquí la pregunta es otra —¿puede este forge integrar esto?—, y la
-	// respuesta no depende de la decisión de review.
+	// Borrador, mergeado y cerrado se miran en la propiedad del ítem y no en
+	// Derive, y no es un detalle: Derive ordena por atención al operador, así que
+	// un ítem en borrador que además está aprobado devuelve StateApproved y el
+	// borrador se pierde. Aquí la pregunta es otra —¿puede este forge integrar
+	// esto?—, y la respuesta no depende de la decisión de review.
 	switch normalize(it.State) {
 	case "merged":
 		return Block{Reason: "item is already merged", Hard: true}
 	case "closed":
 		return Block{Reason: "item is already closed", Hard: true}
-	case "draft":
+	}
+	if it.IsDraft {
 		// GitHub rechaza el merge de un PR en borrador antes de mirar nada más,
 		// así que ofrecerlo sería gastar una llamada para recibir un error que no
 		// depende de la estrategia.
