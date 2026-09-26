@@ -37,9 +37,12 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
     y tres filas libres, la caja cabría para un comentario y perdería los otros dos;
     ver uno y perder dos es peor que no ver ninguno, porque un recorte de la caja no
     parece un recorte: parece que el PR solo tiene ese comentario.
-  - El recuento (`5 of 23`) es lo **primero que se cae** cuando el panel va justo,
-    antes que un comentario: entre sus dos bordes y él, un panel de 18 filas solo deja
-    sitio para cuatro de los cinco. Y es lo que menos dice de lo que dijo la gente.
+  - El recuento (`5 of 23`) va **embebido en el borde de abajo, a la derecha**, y no
+    como una fila suelta del cuerpo. El cuerpo de la caja son las filas que dijo la
+    gente, y una de recuento es una que no es de nadie; en el borde, además, es
+    gratis, así que ya no es lo primero que se cae cuando el panel va justo, que era
+    su destino. Con la forma larga (`· open the PR to read the rest`) solo si cabe
+    entera: recortada a media frase diría menos que la corta.
   - Las **notas de sistema de GitLab se descartan** ("assigned to @x", "added 3
     commits"): no son conversación sino historial de acciones del MR, y llenaban las
     cinco filas con ruido que ya está en otra parte de la ficha. Por eso se piden

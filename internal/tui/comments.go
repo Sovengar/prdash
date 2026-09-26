@@ -9,6 +9,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -203,16 +204,11 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		total += need[i]
 	}
 
-	// El recuento es la primera línea del cuerpo y lo primero que se cae si el
-	// presupuesto va justo: entre sus dos bordes y él, un panel de 18 filas solo
-	// deja sitio para cuatro de los cinco comentarios. Y es lo que menos dice de
-	// lo que dijo la gente —eso está en las líneas de al lado—, el recuento solo
-	// añade que hay más conversación fuera del panel.
-	showCount := budget >= 1+len(shown)
+	// El recuento NO va en el cuerpo: vive en el borde de abajo, a la derecha (ver
+	// commentLegend). Aquí cada fila es una fila de lo que dijo la gente, y una de
+	// recuento es una que no es de nadie; y en el borde no cuesta alto, así que no
+	// es lo primero que se cae cuando el panel va justo, que era su destino.
 	body := make([]string, 0, budget)
-	if showCount {
-		body = append(body, commentIndent+styleCount.Render(commentCount(len(shown), st.total)))
-	}
 
 	// Si caben enteros, cada uno toma lo que necesita. Es lo que evita que un
 	// comentario de seis párrafos se quede en "the timeout is 30x too high…" al lado
@@ -221,10 +217,9 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	// Y si no caben, a todos se les da una fila —para que los cinco estén presentes,
 	// que es lo pedido— y el sobrante va a quién más tiene que perder. Es preferible
 	// a darle el panel al primero, que se comería los cinco.
-	forRows := budget - len(body)
 	rows := need
-	if total > forRows {
-		rows = allocate(need, forRows)
+	if total > budget {
+		rows = allocate(need, budget)
 	}
 
 	for i, c := range shown {
@@ -238,11 +233,12 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		}
 		body = append(body, lines...)
 	}
-	return commentBox(body, inner)
+	return commentBox(body, commentLegend(len(shown), st.total, inner), inner)
 }
 
-// commentChrome son las filas que cuesta la caja: borde de arriba y de abajo. El
-// título va embebido en la de arriba, así que no gasta una más.
+// commentChrome son las filas que cuesta la caja: borde de arriba y de abajo. Los
+// dos títulos van embebidos en ellas —el "Comments" arriba y el recuento abajo—, así
+// que ninguno gasta una más.
 const commentChrome = 2
 
 // commentBoxBorder son las columnas que se come la caja: un borde a cada lado.
@@ -253,11 +249,23 @@ const commentBoxBorder = 2
 const commentTitle = "Comments"
 
 // commentBox envuelve el bloque de comentarios en una caja redondeada titulada y
-// devuelve sus líneas sueltas. El ancho es el interior del panel de detalle, para
-// que la caja quede dentro y no se pase del borde de la de fuera.
-func commentBox(body []string, width int) []string {
-	text := bordered.RenderWithTitle(
-		bordered.Rounded(), commentBorderColor, " "+commentTitle+" ",
+// con el recuento en el borde de abajo, y devuelve sus líneas sueltas. El ancho es
+// el interior del panel de detalle, para que la caja quede dentro y no se pase del
+// borde de la de fuera.
+func commentBox(body []string, legend string, width int) []string {
+	border := bordered.Rounded()
+	// La leyenda no se apoya en la esquina: entre ella y la esquina se queda una raya
+	// del propio borde. Sin ella, un "3" suelto con un hueco a cada lado hace que la
+	// línea de abajo se lea como partida —no como un borde con algo escrito dentro—,
+	// que es justo lo que se pierde al escribir en un borde.
+	//
+	// Y la raya va FUERA del estilo del recuento: dentro heredaría su gris y el
+	// tramo que cierra la línea se vería de otro color que la línea que cierra, que
+	// es la forma más obvia de delatar el truco.
+	legend = " " + legend + " " + border.Bottom
+	text := bordered.RenderWithTitles(
+		border, commentBorderColor, " "+commentTitle+" ", bordered.AlignLeft,
+		legend, bordered.AlignRight,
 		strings.Join(body, "\n"), width,
 	)
 	return strings.Split(text, "\n")
@@ -304,12 +312,46 @@ func allocate(need []int, budget int) []int {
 
 // commentCount describe cuántos comentarios se ven de los que hay. El "5 de 23"
 // es lo que dice que la ficha se está perdiendo conversación, que es el momento de
-// abrir el PR. Con todos a la vista no hay nada que avisar y no se cuenta.
+// abrir el PR. Con todos a la vista no hay nada que avisar y solo queda la cifra.
 func commentCount(shown, total int) string {
 	if total > shown {
-		return fmt.Sprintf("%d of %d (open the PR to read the rest)", shown, total)
+		return fmt.Sprintf("%d of %d", shown, total)
 	}
-	return fmt.Sprintf("%d", shown)
+	return strconv.Itoa(shown)
+}
+
+// commentHint es lo que hace accionable el recuento: no dice solo que hay más
+// conversación, dice dónde está. Va separada porque en un panel estrecho no cabe y
+// entonces se cae ella y no los números.
+const commentHint = " · open the PR to read the rest"
+
+// legendGap son las columnas que la leyenda deja sin usar junto a la esquina: el
+// hueco de texto a cada lado más la raya del propio borde que cierra la línea
+// (ver commentBox). Sin eso el "3" se apoya en la esquina y la línea de abajo parece
+// partida en vez de un borde con algo escrito dentro.
+const legendGap = 3
+
+// commentLegend compone el texto del recuento que va embebido en el borde de abajo,
+// a la derecha, que es donde va: el cuerpo de la caja son las filas que dijo la
+// gente, y una fila de recuento es una que no es de nadie. En el borde además es
+// gratis, así que no es lo primero que se cae cuando el panel va justo.
+//
+// Solo dice "de N" cuando hay más comentarios de los que caben, que es lo único que
+// la frase tiene que anunciar: con todo a la vista, la cifra ya está contando la
+// conversación entera y un "3 de 3" no informa de nada.
+//
+// Lo que le cabe es el interior del borde menos las dos esquinas y el hueco que
+// commentBox deja alrededor. La forma larga solo se usa si cabe entera: recortada a
+// media frase ("5 of 23 · open the PR to read…") dice menos que la corta, que sigue
+// siendo un "5 of 23" y además se lee como texto estropeado en vez de como el final
+// de una frase.
+func commentLegend(shown, total, width int) string {
+	legend := commentCount(shown, total)
+	if room := width - commentBoxBorder - legendGap; total > shown &&
+		utf8.RuneCountInString(legend+commentHint) <= room {
+		legend += commentHint
+	}
+	return styleCount.Render(legend)
 }
 
 // commentBody compone un comentario en como mucho `lines` filas: el autor en la

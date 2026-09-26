@@ -600,22 +600,23 @@ func TestCommentsAnnounceThereAreMore(t *testing.T) {
 	}
 }
 
-// TestCountIsFirstToGoWhenSpaceIsTight: la línea del recuento es lo primero que se
-// cae cuando el panel va justo, antes que un comentario. Es lo que menos dice: lo que
-// dijo la gente está en las líneas de al lado, y el recuento solo añade que hay más
-// conversación fuera del panel.
-func TestCountIsFirstToGoWhenSpaceIsTight(t *testing.T) {
+// TestCountLivesInTheBorder: el recuento va embebido en el borde de abajo, a la
+// derecha, y no como una fila suelta del cuerpo. No solo se lee mejor —el cuerpo son
+// las filas que dijo la gente, y una de recuento es una que no es de nadie— sino que
+// además sale gratis: en el borde no hay presupuesto que repartir, así que con el
+// panel justo ya no es lo primero que se cae.
+func TestCountLivesInTheBorder(t *testing.T) {
 	list := []model.Comment{
 		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
 		conv("dave", "four"), conv("erin", "five"),
 	}
 	m := modelWithComments(t, 45, list, 23)
 	it := mustSelected(t, m)
-	// El aviso del forge mete las dos filas que aprietan el panel (blanco + texto).
-	// Es el aviso que la ficha sigue pintando: el veto de aprobar lo propio ya no
-	// ocupa filas, así que hay que apretar por la vía que queda. No hace falta
-	// mandarla después de la página porque modelWithComments ya la envió, y
-	// applyPage borraría el denied del ítem.
+	// El aviso del forge aprieta el panel (blanco + texto) para comprobar lo de que
+	// el recuento ya no depende del presupuesto. Es el aviso que la ficha sigue
+	// pintando: el veto de aprobar lo propio ya no ocupa filas, así que hay que
+	// apretar por la vía que queda. No hace falta mandarla después de la página
+	// porque modelWithComments ya la envió, y applyPage borraría el denied del ítem.
 	m.denied[it.ID()] = "the forge refused the action"
 	m = withConversation(t, m, it, forge.CommentPage{Comments: list, Total: 23})
 
@@ -623,19 +624,41 @@ func TestCountIsFirstToGoWhenSpaceIsTight(t *testing.T) {
 	if !hasCommentBox(detail) {
 		t.Fatalf("la caja debería salir:\n%s", detail)
 	}
-	if strings.Contains(detail, "5 of 23") {
-		t.Errorf("con el panel justo el recuento es lo que tiene que caer, no un comentario:\n%s", detail)
+	rows := strings.Split(detail, "\n")
+	bottom := -1
+	for i, l := range rows {
+		if strings.HasPrefix(strings.TrimSpace(l), "╰") {
+			bottom = i
+			break
+		}
 	}
-	// Los cinco siguen estando: es el recorte del recuento, no el de un comentario.
+	if bottom < 0 {
+		t.Fatalf("la caja no se cierra por abajo:\n%s", detail)
+	}
+	row := rows[bottom]
+	if !strings.HasSuffix(strings.TrimSpace(row), "╯") {
+		t.Fatalf("el recuento debería ir en el borde de abajo de la caja:\n%s", detail)
+	}
+	// Y el borde tiene que llegar a la esquina: si entre el recuento y la esquina
+	// solo hay huecos, la línea de abajo se lee como partida en vez de como un borde
+	// con algo escrito dentro, que es lo que se pierde al escribir sobre un borde.
+	if !strings.HasSuffix(strings.TrimRight(row, " ╯"), "─") {
+		t.Errorf("el borde debería seguir después del recuento, no dejarlo suelto:\n%s", row)
+	}
+	if !strings.Contains(row, "5 of 23") {
+		t.Errorf("el borde de abajo debería llevar el recuento, no el cuerpo:\n%s", row)
+	}
+	// Con el panel justo el recuento no puede caerse, y los cinco tampoco.
 	for _, want := range []string{"alice:", "bob:", "carol:", "dave:", "erin:"} {
 		if !strings.Contains(detail, want) {
-			t.Errorf("no debería caerse %q para que quepa el recuento:\n%s", want, detail)
+			t.Errorf("no debería caerse %q:\n%s", want, detail)
 		}
 	}
 }
 
-// TestCommentsCountOnlyWhenItMatters: con todo a la vista no hay nada que avisar
-// y el recuento solo sería ruido.
+// TestCommentsCountOnlyWhenItMatters: con todo a la vista solo queda la cifra. La
+// forma "de N" es la que avisa de que hay conversación fuera del panel, y sin ella
+// no hay nada que avisar.
 func TestCommentsCountOnlyWhenItMatters(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "one"), conv("bob", "two")}, 2)
 	detail := detailText(t, m)
