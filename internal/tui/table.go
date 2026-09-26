@@ -111,7 +111,7 @@ func headerLine(l refLayout, innerWidth int) string {
 // itemCells compone las celdas de un ítem. `viewer` es el login del usuario en
 // ese forge: lo necesita la columna ROLE para marcar los ítems propios. `sec` es
 // la sección a la que pertenece: de ella sale el prefijo de ruta que la celda de
-// ITEM no repite.
+// ITEM no repite, y con él el modo decide qué parte de la referencia se pinta.
 func itemCells(it model.Item, sec model.Section, viewer string, l refLayout) []cell {
 	refW := l.cols[colRefIdx].width
 	// Cada celda se recorta a textWidth, no a su ancho: es lo que deja el hueco
@@ -119,7 +119,7 @@ func itemCells(it model.Item, sec model.Section, viewer string, l refLayout) []c
 	// estrategia de recorte (ITEM por la cola, el resto por la cabeza).
 	return []cell{
 		{text: truncate(forgeBadge(it), textWidth(l.cols[colForgeIdx].width)), style: styleForge, width: l.cols[colForgeIdx].width},
-		{text: truncateTail(refSuffix(it, l.prefixOf(sec)), textWidth(refW)), style: styleRef, width: refW},
+		{text: truncateTail(refCellText(it, l.mode, l.prefixOf(sec)), textWidth(refW)), style: styleRef, width: refW},
 		{text: truncate(it.Title, textWidth(l.cols[colTitleIdx].width)), style: styleTitle, width: l.cols[colTitleIdx].width},
 		{text: truncate(roleText(it, viewer), textWidth(l.cols[colRoleIdx].width)), style: styleRole, width: l.cols[colRoleIdx].width},
 		{text: truncate(state.Derive(it).String(), textWidth(l.cols[colStateIdx].width)), style: styleForState(state.Derive(it)), width: l.cols[colStateIdx].width},

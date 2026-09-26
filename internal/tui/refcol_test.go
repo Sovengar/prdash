@@ -99,7 +99,7 @@ func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
 	// incluye el hueco de separación, así que es el sufijo más un rune.
 	lay := newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems("g/one", "g/two")...),
-	})
+	}, prefixCommon)
 	if got, want := lay.cols[colRefIdx].width, len("one#100")+1; got != want {
 		t.Errorf("ancho de ITEM = %d, want %d (el sufijo más largo + hueco)", got, want)
 	}
@@ -116,13 +116,13 @@ func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
 			"g/un-servicio-con-nombre-larguísimo",
 			"g/otro-servicio-con-nombre-larguísimo",
 		)...),
-	})
+	}, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthCap {
 		t.Errorf("ancho de ITEM = %d, want el tope %d", got, itemWidthCap)
 	}
 
 	// Sin ítems: el mínimo, para que "ITEM" no se solape con la columna vecina.
-	lay = newRefLayout(nil)
+	lay = newRefLayout(nil, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthMin {
 		t.Errorf("ancho de ITEM sin ítems = %d, want %d", got, itemWidthMin)
 	}
@@ -136,7 +136,7 @@ func TestItemCellsConservanElNumeroAlRecortar(t *testing.T) {
 		"APPCITTI/vsocial/backend/un-servicio-con-nombre-larguísimo",
 		"APPCITTI/vsocial/backend/otro-servicio-con-nombre-larguísimo",
 	)
-	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)})
+	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixCommon)
 	ref := itemCells(items[0], model.SectionReview, "yo", lay)[colRefIdx].text
 
 	if !strings.HasSuffix(ref, "#100") {
@@ -246,9 +246,9 @@ func containsSubstring(lines []string, s string) bool {
 	return false
 }
 
-// TestRefColInvariantes sobre rutas aleatorias: la celda es exactamente el
-// recorte del sufijo que le toca, nunca queda vacía, conserva el "#número" y el
-// ancho se queda dentro de los límites.
+// TestRefColInvariantes sobre rutas aleatorias y en los tres modos: la celda es
+// exactamente el recorte de la etiqueta que le toca, nunca queda vacía, conserva
+// la cola que identifica el ítem y el ancho se queda dentro de los límites.
 func TestRefColInvariantes(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	seg := func() string {
@@ -277,42 +277,62 @@ func TestRefColInvariantes(t *testing.T) {
 			}
 		}
 
-		lay := newRefLayout(sections)
-		w := lay.cols[colRefIdx].width
-		if w < itemWidthMin || w > itemWidthCap {
-			t.Fatalf("round %d: ancho de ITEM = %d, fuera de [%d, %d]", round, w, itemWidthMin, itemWidthCap)
-		}
-		for _, sec := range sections {
-			prefix := lay.prefixOf(sec.Kind)
-			for _, it := range sec.Items {
-				full := refLabel(it)
-				want := full
-				if prefix != "" {
-					want = strings.TrimPrefix(full, prefix+"/")
-					if want == full {
-						t.Fatalf("round %d: el prefijo %q no aplica a %q", round, prefix, full)
+		// Los invariantes se comprueban en los TRES modos, no solo en common: el
+		// recorte por la cola tiene que proteger el número igual de la
+		// referencia completa que de la hoja, y el ancho se acota igual. common es
+		// el único que puede declarar prefijo, así que fuera de él la celda
+		// tiene que salir igual a la etiqueta del modo.
+		for _, mode := range []prefixMode{prefixCommon, prefixFull, prefixLeaf} {
+			lay := newRefLayout(sections, mode)
+			w := lay.cols[colRefIdx].width
+			if w < itemWidthMin || w > itemWidthCap {
+				t.Fatalf("round %d en %v: ancho de ITEM = %d, fuera de [%d, %d]", round, mode, w, itemWidthMin, itemWidthCap)
+			}
+			if mode != prefixCommon {
+				for _, sec := range sections {
+					if p := lay.prefixOf(sec.Kind); p != "" {
+						t.Fatalf("round %d en %v: la sección %v declara prefijo %q, want vacío", round, mode, sec.Kind, p)
 					}
 				}
-				cell := itemCells(it, sec.Kind, "yo", lay)[colRefIdx].text
-				if cell == "" {
-					t.Fatalf("round %d: celda vacía para %q", round, full)
-				}
-				// El presupuesto de texto es el ancho de la ranura menos el hueco
-				// de separación: el sufijo más largo tiene que caber entero.
-				cut := truncateTail(want, textWidth(w))
-				if want == cut {
-					if cell != want {
-						t.Fatalf("round %d: celda %q, want %q", round, cell, want)
+			}
+			for _, sec := range sections {
+				prefix := lay.prefixOf(sec.Kind)
+				for _, it := range sec.Items {
+					full := refLabel(it)
+					want := refCellText(it, mode, prefix)
+					if want == "" {
+						t.Fatalf("round %d en %v: etiqueta vacía para %q", round, mode, full)
 					}
-					continue
-				}
-				// Recortada: la cola (hoja y número) tiene que salir intacta.
-				if !strings.HasPrefix(cell, "…") {
-					t.Fatalf("round %d: celda recortada %q, want el prefijo %q", round, cell, "…")
-				}
-				tail := want[max(0, len(want)-(textWidth(w)-1)):]
-				if !strings.HasSuffix(cell, tail) {
-					t.Fatalf("round %d: celda %q pierde la cola %q de %q", round, cell, tail, want)
+					// common con prefijo declarado: la celda y la cabecera tienen
+					// que recomponer la referencia completa.
+					if prefix != "" {
+						if recon := strings.TrimPrefix(full, prefix+"/"); recon == full {
+							t.Fatalf("round %d en %v: el prefijo %q no aplica a %q", round, mode, prefix, full)
+						} else if recon != want {
+							t.Fatalf("round %d en %v: celda %q, want el sufijo %q de %q", round, mode, want, recon, full)
+						}
+					}
+					cell := itemCells(it, sec.Kind, "yo", lay)[colRefIdx].text
+					if cell == "" {
+						t.Fatalf("round %d en %v: celda vacía para %q", round, mode, full)
+					}
+					// El presupuesto de texto es el ancho de la ranura menos el hueco
+					// de separación: la etiqueta más larga tiene que caber entero.
+					cut := truncateTail(want, textWidth(w))
+					if want == cut {
+						if cell != want {
+							t.Fatalf("round %d en %v: celda %q, want %q", round, mode, cell, want)
+						}
+						continue
+					}
+					// Recortada: la cola (hoja y número) tiene que salir intacta.
+					if !strings.HasPrefix(cell, "…") {
+						t.Fatalf("round %d en %v: celda recortada %q, want el prefijo %q", round, mode, cell, "…")
+					}
+					tail := want[max(0, len(want)-(textWidth(w)-1)):]
+					if !strings.HasSuffix(cell, tail) {
+						t.Fatalf("round %d en %v: celda %q pierde la cola %q de %q", round, mode, cell, tail, want)
+					}
 				}
 			}
 		}

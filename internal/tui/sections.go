@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"prdash/internal/config"
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/tui/bordered"
@@ -210,7 +211,15 @@ func (m Model) hintLines() []string {
 	if m.mergeArmed {
 		return wrapHint(m.mergeConfirmText(), m.contentWidth(), func(s string) string { return styleWarn.Render(s) })
 	}
-	return wrapHint(strings.Join(m.cfg.Hints(), hintSep), m.contentWidth(), func(s string) string { return styleHint.Render(s) })
+	return wrapHint(strings.Join(m.cfg.Hints(m.dynamicHints()), hintSep), m.contentWidth(), func(s string) string { return styleHint.Render(s) })
+}
+
+// dynamicHints son los fragmentos de etiqueta de la barra que dependen del estado
+// de la vista. Hoy solo hay uno: el modo de prefijo activo, que es lo único que
+// la config no puede deducir sola —no ve la TUI— y sin lo cual el hint prometería
+// una tecla sin decir en qué de los tres estados deja la columna ITEM.
+func (m Model) dynamicHints() config.HintState {
+	return config.HintState{"prefix-mode": m.prefixMode.String()}
 }
 
 // wrapHint parte el texto a lo ancho y lo viste línea a línea, para que el color
