@@ -37,12 +37,14 @@ func (m *Model) listLines(inner int) []listLine {
 	// Un solo layout para la activa: si cada línea midiera ITEM por su cuenta,
 	// la tabla bailaría al escribir encima. Solo se dimensiona la sección que se
 	// pinta, así no se gasta ancho en sufijos de secciones que no se ven.
-	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: items}})
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: items}}, m.prefixMode)
 
 	// El prefijo de ruta común va en una línea fija al inicio del cuerpo, no en
 	// cada fila: es lo que deja hueco a la columna ITEM para el sufijo sin
-	// truncar. Sin prefijo común (un solo ítem, o sin nada en común) la línea no
-	// se pinta y cada celda ITEM lleva la ruta completa recortada por la cola.
+	// truncar. Solo el modo common declara prefijo, así que en full y leaf esta
+	// línea no se pinta y la lista recupera su alto; y sin prefijo común (un solo
+	// ítem, o sin nada en común) tampoco se pinta, quedando la celda ITEM con la
+	// ruta completa recortada por la cola.
 	if prefix := lay.prefixOf(m.activeSection); prefix != "" {
 		lines = append(lines, listLine{text: "  " + styleDim.Render("· "+prefix+"/"), row: -1})
 	}

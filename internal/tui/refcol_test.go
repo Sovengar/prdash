@@ -99,7 +99,7 @@ func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
 	// incluye el hueco de separación, así que es el sufijo más un rune.
 	lay := newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems("g/one", "g/two")...),
-	})
+	}, prefixCommon)
 	if got, want := lay.cols[colRefIdx].width, len("one#100")+1; got != want {
 		t.Errorf("ancho de ITEM = %d, want %d (el sufijo más largo + hueco)", got, want)
 	}
@@ -116,13 +116,13 @@ func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
 			"g/un-servicio-con-nombre-larguísimo",
 			"g/otro-servicio-con-nombre-larguísimo",
 		)...),
-	})
+	}, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthCap {
 		t.Errorf("ancho de ITEM = %d, want el tope %d", got, itemWidthCap)
 	}
 
 	// Sin ítems: el mínimo, para que "ITEM" no se solape con la columna vecina.
-	lay = newRefLayout(nil)
+	lay = newRefLayout(nil, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthMin {
 		t.Errorf("ancho de ITEM sin ítems = %d, want %d", got, itemWidthMin)
 	}
@@ -136,7 +136,7 @@ func TestItemCellsConservanElNumeroAlRecortar(t *testing.T) {
 		"APPCITTI/vsocial/backend/un-servicio-con-nombre-larguísimo",
 		"APPCITTI/vsocial/backend/otro-servicio-con-nombre-larguísimo",
 	)
-	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)})
+	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixCommon)
 	ref := itemCells(items[0], model.SectionReview, "yo", lay)[colRefIdx].text
 
 	if !strings.HasSuffix(ref, "#100") {
@@ -277,7 +277,7 @@ func TestRefColInvariantes(t *testing.T) {
 			}
 		}
 
-		lay := newRefLayout(sections)
+		lay := newRefLayout(sections, prefixCommon)
 		w := lay.cols[colRefIdx].width
 		if w < itemWidthMin || w > itemWidthCap {
 			t.Fatalf("round %d: ancho de ITEM = %d, fuera de [%d, %d]", round, w, itemWidthMin, itemWidthCap)

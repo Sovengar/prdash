@@ -203,6 +203,11 @@ type Model struct {
 	// pos recuerda el cursor y el scroll de cada sección para restaurarlos al
 	// volver a ella. Los de la sección activa son los campos cursor/scroll.
 	pos map[model.Section]sectionPos
+	// prefixMode es qué parte de la ruta de proyecto ve la columna ITEM. Es
+	// global, no por sección: la barra lo nombra una vez y aplica a la que esté
+	// pintada. Vive solo en memoria —no se persiste— así que al reabrir el
+	// programa vuelve a common, que es el comportamiento heredado.
+	prefixMode prefixMode
 
 	cursor int
 	// scroll es la primera línea visible de la lista. No lo reajusta la vista

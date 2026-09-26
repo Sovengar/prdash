@@ -222,6 +222,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "section-next":
 		m.cycleSection()
 		return m, nil
+	case "prefix-mode":
+		m.cyclePrefixMode()
+		return m, nil
 	case "refresh":
 		return m.startRefresh()
 	case "approve":
@@ -244,6 +247,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// cyclePrefixMode avanza el modo de prefijo global. No mueve el cursor, pero sí
+// cambia lo que mide la columna ITEM y, en full y leaf, quita la línea de
+// prefijo: sin resincronizar el scroll, una lista desplazada dejaría el cursor
+// fuera de la ventana justo al cambiar de modo. Es el mismo motivo por el que
+// goTop lleva su propio scroll.
+func (m *Model) cyclePrefixMode() {
+	m.prefixMode = m.prefixMode.next()
+	m.syncScroll()
 }
 
 // armMerge es la primera pulsación de merge: no ejecuta nada, solo deja la vista

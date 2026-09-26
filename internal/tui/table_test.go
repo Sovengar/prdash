@@ -25,7 +25,7 @@ func TestRenderCellsPadsBeforeStyle(t *testing.T) {
 		{text: "ab", style: styleForge, width: 5},
 		{text: "x", style: styleRef, width: 3},
 	}
-	out := stripANSI(renderCells(cells, newRefLayout(nil), 100))
+	out := stripANSI(renderCells(cells, newRefLayout(nil, prefixCommon), 100))
 	if !strings.HasPrefix(out, "ab   x  ") {
 		t.Errorf("renderCells = %q", out)
 	}
@@ -42,7 +42,7 @@ func TestNingunaCeldaLlenaSuColumna(t *testing.T) {
 	it := mkItem("github", "github.com", "APPCITTI/vsocial/backend/mobile-frontend",
 		strings.Repeat("t", colTitle+5), 1198, "")
 	it.ReviewKind = model.ReviewRequested // sin esto roleText devuelve "-"
-	lay := newRefLayout([]inbox.Section{section(model.SectionReview, mkItems("APPCITTI/vsocial/backend/mobile-frontend")...)})
+	lay := newRefLayout([]inbox.Section{section(model.SectionReview, mkItems("APPCITTI/vsocial/backend/mobile-frontend")...)}, prefixCommon)
 	cells := itemCells(it, model.SectionReview, "yo", lay)
 
 	// El texto CRUDO de ROLE tiene que caber con su hueco ("review req" = 10 en
@@ -78,7 +78,7 @@ func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 		mkItem("github", "github.com", "APPCITTI/vsocial/backend/mobile-frontend", "movil", 1198, ""),
 	}, false))
 
-	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}})
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, prefixCommon)
 	inner := m.contentWidth() - 2
 	var row string
 	for _, l := range m.listLines(m.contentWidth()) {
@@ -292,7 +292,7 @@ func TestDiffColumnAppearsOnlyOnWideTerminals(t *testing.T) {
 		m := newTestModel(t, ghAdapter())
 		m.width, m.height = width, 40
 		m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{item}, false))
-		lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}})
+		lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, prefixCommon)
 		header = stripANSI(headerLine(lay, m.contentWidth()-2))
 		for _, l := range m.listLines(m.contentWidth()) {
 			if line := stripANSI(l.text); strings.Contains(line, "vsocial-api-actuacions#1015") {
