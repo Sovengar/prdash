@@ -289,6 +289,7 @@ func DefaultKeybindings() Keybindings {
 		"simulate":     "v",
 		"section-next": "tab",
 		"open-browser": "o",
+		"prefix-mode":  "p",
 	}
 }
 
@@ -436,24 +437,49 @@ var hintOrder = []hint{
 	{action: "simulate", label: "simulate"},
 	{action: "open-browser", label: "open"},
 	{action: "refresh", label: "refresh"},
+	// `prefix-mode` va aquí y no al final porque el recorte a maxHintLines corta
+	// por la cola: al final se perdería primero, justo en el terminal estrecho
+	// donde más hace falta saber en qué modo está la columna ITEM. Su etiqueta
+	// la completa la TUI con el modo actual (ver HintState).
+	{action: "prefix-mode", label: "prefix"},
 	{key: "j/k", label: "move"},
 	{key: "pgup/dn", label: "page"},
 }
 
+// HintState son los fragmentos de etiqueta que la config no puede deducir por sí
+// sola porque dependen del estado de la vista. Se indexan por acción: la config
+// sabe qué etiqueta tiene cada acción y cómo se une el fragmento, y quien pinta
+// es quien tiene el estado y lo pasa.
+//
+// Existe porque el hint de `prefix-mode` tiene que decir en qué modo está la
+// columna ITEM, y eso solo lo sabe la TUI. La alternativa —un marcador en la
+// etiqueta que la TUI sustituya— dejaría la barra vista desde la config con un
+// marcador crudo y difumiría que hintOrder es la fuente única de la barra.
+type HintState map[string]string
+
 // Hints devuelve la barra de atajos como partes ya resueltas y en orden, cada
 // una "tecla etiqueta". Devuelve partes y no líneas porque el reparto en
 // líneas depende del ancho del terminal, que es del layout y no de la config.
-func (c Config) Hints() []string {
+//
+// `state` es opcional: nil da la barra sin estado dinámico, que es la de las
+// teclas fijas y de las acciones cuya etiqueta no depende de la vista. Se pide
+// explícitamente y no por variádico para que ningún llamador declare sin pensar
+// que la barra tiene una dependencia de estado.
+func (c Config) Hints(state HintState) []string {
 	out := make([]string, 0, len(hintOrder))
 	for _, h := range hintOrder {
 		key := h.key
+		label := h.label
 		if h.action != "" {
 			key = c.KeyFor(h.action)
+			if dyn, ok := state[h.action]; ok && dyn != "" {
+				label += ": " + dyn
+			}
 		}
 		if key == "" {
 			continue
 		}
-		out = append(out, key+" "+h.label)
+		out = append(out, key+" "+label)
 	}
 	return out
 }

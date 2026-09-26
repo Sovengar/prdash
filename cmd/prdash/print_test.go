@@ -154,3 +154,57 @@ func captureStdout(t *testing.T, fn func()) string {
 	_ = r.Close()
 	return string(data)
 }
+
+// TestRunPrintNoAplicaElModoDePrefijo fija la independencia de --print respecto
+// al modo de prefijo de la TUI. Son dos salidas distintas por diseño: la TUI
+// reparte la ruta entre una línea y las celdas porque el ancho es el recurso
+// escaso, y --print no tiene columna ni terminal, así que imprime la referencia
+// entera siempre.
+//
+// El fixture usa una ruta de subgrupo larga —la que en la TUI se recortaría por
+// la cola y pondría el grupo en la línea de prefijo— para que un acoplamiento
+// accidental se notara: si --print heredara el modo, saldría "…" o una línea
+// "· APPCITTI/vsocial/".
+func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
+	const (
+		largo  = "APPCITTI/vsocial/backend/api-gateway"
+		corto  = "APPCITTI/vsocial/backend/web-app"
+		numUno = 100
+	)
+	items := []model.Item{}
+	for i, project := range []string{largo, corto} {
+		it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: project}, numUno+i)
+		it.Title = "T"
+		items = append(items, it)
+	}
+	fake := &testutil.FakeAdapter{
+		ForgeName: "gitlab",
+		HostName:  "gitlab.example.com",
+		Pages: map[testutil.FakeKey][]forge.Page{
+			{Section: model.SectionReview, Kind: model.ReviewRequested}: {{Items: items}},
+		},
+	}
+
+	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
+
+	// La ruta completa, sin recortar y sin línea de prefijo.
+	for _, want := range []string{
+		largo + "#100",
+		corto + "#101",
+		"Review / assigned",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("la salida no contiene %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "…") {
+		t.Errorf("--print recortó una referencia, y no debe: la TUI es la que recorta:\n%s", out)
+	}
+	// La línea de prefijo atenuada de la TUI no existe aquí: --print no compone
+	// ninguna lista ni declara ningún prefijo común.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimLeft(line, " "), "· ") {
+			t.Errorf("--print pintó una línea de prefijo: %q", line)
+		}
+	}
+}

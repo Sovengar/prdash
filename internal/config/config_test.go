@@ -325,13 +325,45 @@ func TestEditorToolAndOverride(t *testing.T) {
 }
 
 func TestHints(t *testing.T) {
-	got := Defaults().Hints()
+	got := Defaults().Hints(nil)
 	want := []string{
 		"q quit", "tab section", "r mount review",
-		"a approve", "m merge ×2", "v simulate", "o open", "R refresh", "j/k move", "pgup/dn page",
+		"a approve", "m merge ×2", "v simulate", "o open", "R refresh",
+		"p prefix", "j/k move", "pgup/dn page",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("Hints() = %v, quiero %v", got, want)
+	}
+}
+
+// TestHintsConEstadoDinamico fija la costura por la que la barra nombra el modo
+// de prefijo actual. Sin estado, la entrada sale como cualquier otra ("p
+// prefix"); con estado, la etiqueta lo nombra. El fragmento lo pone quien tiene
+// el estado —la TUI— pero lo une y decide el formato la config, que es quien
+// sabe qué etiqueta tiene cada acción.
+func TestHintsConEstadoDinamico(t *testing.T) {
+	cfg := Defaults()
+	bar := strings.Join(cfg.Hints(HintState{"prefix-mode": "full"}), " ")
+	if !strings.Contains(bar, "p prefix: full") {
+		t.Errorf("la barra no nombra el modo actual: %v", cfg.Hints(HintState{"prefix-mode": "full"}))
+	}
+
+	// Un fragmento de una acción que no está en la barra no puede inventar una
+	// entrada nueva: hintOrder sigue siendo la única fuente de la lista.
+	bar = strings.Join(cfg.Hints(HintState{"no-existe": "algo"}), " ")
+	if strings.Contains(bar, "algo") {
+		t.Errorf("un estado de una acción ausente añadió una entrada: %v", cfg.Hints(HintState{"no-existe": "algo"}))
+	}
+
+	// El rebind y el estado se combinan: la tecla sale de [keybindings] y el
+	// nombre del modo, del estado de la vista.
+	cfg.Keybindings["prefix-mode"] = "P"
+	bar = strings.Join(cfg.Hints(HintState{"prefix-mode": "leaf"}), " ")
+	if !strings.Contains(bar, "P prefix: leaf") {
+		t.Errorf("el rebind no se combinó con el estado: %v", cfg.Hints(HintState{"prefix-mode": "leaf"}))
+	}
+	if strings.Contains(bar, "p prefix") {
+		t.Errorf("la barra sigue mostrando la tecla anterior: %v", cfg.Hints(HintState{"prefix-mode": "leaf"}))
 	}
 }
 
@@ -340,7 +372,7 @@ func TestHints(t *testing.T) {
 // decir la verdad sobre qué teclas existen y nadie se entera hasta que alguien
 // prueba la tecla y no pasa nada.
 func TestHintsCubrenTodosLosKeybindings(t *testing.T) {
-	bar := strings.Join(Defaults().Hints(), " ")
+	bar := strings.Join(Defaults().Hints(nil), " ")
 	for action, key := range DefaultKeybindings() {
 		if !strings.Contains(bar, key+" ") {
 			t.Errorf("la acción %q (tecla %q) no sale en la barra de hints", action, key)
@@ -354,18 +386,18 @@ func TestHintsSiguenElRebind(t *testing.T) {
 	cfg := Defaults()
 	cfg.Keybindings["open-browser"] = "b"
 	cfg.Keybindings["mount-review"] = "v"
-	bar := strings.Join(cfg.Hints(), " ")
+	bar := strings.Join(cfg.Hints(nil), " ")
 	if !strings.Contains(bar, "b open") || !strings.Contains(bar, "v mount review") {
-		t.Errorf("el rebind no llegó a la barra: %v", cfg.Hints())
+		t.Errorf("el rebind no llegó a la barra: %v", cfg.Hints(nil))
 	}
 	if strings.Contains(bar, "o open") || strings.Contains(bar, "m mount review") {
-		t.Errorf("la barra sigue mostrando la tecla anterior: %v", cfg.Hints())
+		t.Errorf("la barra sigue mostrando la tecla anterior: %v", cfg.Hints(nil))
 	}
 }
 
 func TestDefaultKeybindingsCoverActions(t *testing.T) {
 	kb := DefaultKeybindings()
-	for _, action := range []string{"quit", "refresh", "mount-review", "approve", "merge", "section-next", "open-browser"} {
+	for _, action := range []string{"quit", "refresh", "mount-review", "approve", "merge", "section-next", "open-browser", "prefix-mode"} {
 		if kb[action] == "" {
 			t.Errorf("falta keybinding %q", action)
 		}
