@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -32,11 +33,44 @@ func runWorktrees(pr worktree.Provisioner, args []string) int {
 	case "list":
 		return listWorktrees(pr)
 	case "remove":
-		return removeWorktrees(pr, args[1:])
+		orphans, dryRun, paths, err := parseRemoveArgs(args[1:])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %v\n", err)
+			return 2
+		}
+		return removeWorktrees(pr, orphans, dryRun, paths)
 	default:
 		fmt.Fprintf(os.Stderr, "prdash worktrees: unknown subcommand %q (list|remove)\n", sub)
 		return 2
 	}
+}
+
+// parseRemoveArgs interpreta los argumentos de `remove` sin tocar os.Args, de modo
+// que sea testeable aislado. Los dos modos —rutas explícitas y `--orphans`— son
+// excluyentes; `--dry-run` solo acompaña a `--orphans`. Cualquier uso inválido es
+// un error de uso (el llamador lo traduce a exit 2).
+func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err error) {
+	for _, arg := range args {
+		switch {
+		case arg == "--orphans":
+			orphans = true
+		case arg == "--dry-run":
+			dryRun = true
+		case strings.HasPrefix(arg, "-"):
+			return false, false, nil, fmt.Errorf("unknown flag %q", arg)
+		default:
+			paths = append(paths, arg)
+		}
+	}
+	switch {
+	case orphans && len(paths) > 0:
+		return false, false, nil, fmt.Errorf("the two modes cannot be mixed: pass paths or --orphans, not both")
+	case dryRun && !orphans:
+		return false, false, nil, fmt.Errorf("--dry-run requires --orphans")
+	case !orphans && len(paths) == 0:
+		return false, false, nil, fmt.Errorf("missing at least one path to remove")
+	}
+	return orphans, dryRun, paths, nil
 }
 
 // listWorktrees imprime los worktrees propios, marcando los huérfanos.
@@ -69,16 +103,16 @@ func listWorktrees(pr worktree.Provisioner) int {
 	return 0
 }
 
-// removeWorktrees borra las rutas pedidas explícitamente. Cualquier ruta que no
-// sea un worktree propio, o que no exista, se rechaza sin tocarla.
-func removeWorktrees(pr worktree.Provisioner, paths []string) int {
-	if len(paths) == 0 {
-		fmt.Fprintln(os.Stderr, "prdash worktrees remove: missing at least one path to remove")
-		return 2
-	}
-
+// removeWorktrees borra las rutas pedidas explícitamente o, con `--orphans`, el
+// lote que el propio Audit marca como huérfano. Cualquier ruta que no sea un
+// worktree propio, o que no exista, se rechaza sin tocarla.
+func removeWorktrees(pr worktree.Provisioner, orphans, dryRun bool, paths []string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), worktreeTimeout)
 	defer cancel()
+
+	if orphans {
+		return removeOrphans(pr, ctx, dryRun)
+	}
 
 	code := 0
 	for _, raw := range paths {
@@ -94,6 +128,37 @@ func removeWorktrees(pr worktree.Provisioner, paths []string) int {
 			continue
 		}
 		fmt.Printf("worktree removed: %s\n", path)
+	}
+	return code
+}
+
+// removeOrphans borra en lote los worktrees que Audit marca como huérfanos, y
+// solo esos. Cero huérfanos es el caso feliz (exit 0): informa y no toca nada.
+// Con dryRun imprime el lote exacto por el mismo camino de código y no borra.
+func removeOrphans(pr worktree.Provisioner, ctx context.Context, dryRun bool) int {
+	var orphans []worktree.Entry
+	for _, e := range pr.Audit(ctx) {
+		if e.Orphan {
+			orphans = append(orphans, e)
+		}
+	}
+	if len(orphans) == 0 {
+		fmt.Println("no orphaned prdash worktrees")
+		return 0
+	}
+
+	code := 0
+	for _, e := range orphans {
+		if dryRun {
+			fmt.Printf("would remove: %s\n", e.Path)
+			continue
+		}
+		if err := pr.Remove(ctx, e.Path); err != nil {
+			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %v\n", err)
+			code = 1
+			continue
+		}
+		fmt.Printf("worktree removed: %s\n", e.Path)
 	}
 	return code
 }

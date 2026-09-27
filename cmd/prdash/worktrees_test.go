@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,57 @@ func worktreeFixture(t *testing.T) (base, owned, foreign string) {
 	t.Helper()
 	_, base, owned, foreign = worktreeRepoFixture(t)
 	return base, owned, foreign
+}
+
+// worktreeOrphanFixture crea una raíz con dos worktrees propios huérfanos (su
+// repo de origen se borra), un worktree propio sano y uno ajeno.
+func worktreeOrphanFixture(t *testing.T) (base string, orphans []string, healthy, foreign string) {
+	t.Helper()
+	base = t.TempDir()
+
+	repoOrphans := filepath.Join(t.TempDir(), "repo-huérfanos")
+	testutil.InitRepo(t, repoOrphans)
+	testutil.CommitFile(t, repoOrphans, "base.txt", "base", "base")
+	testutil.RunGit(t, repoOrphans, "branch", "uno")
+	testutil.RunGit(t, repoOrphans, "branch", "dos")
+	o1 := filepath.Join(base, "prdash-pr-1")
+	o2 := filepath.Join(base, "prdash-pr-2")
+	testutil.RunGit(t, repoOrphans, "worktree", "add", "--quiet", o1, "uno")
+	testutil.RunGit(t, repoOrphans, "worktree", "add", "--quiet", o2, "dos")
+
+	repoHealthy := filepath.Join(t.TempDir(), "repo-sano")
+	testutil.InitRepo(t, repoHealthy)
+	testutil.CommitFile(t, repoHealthy, "base.txt", "base", "base")
+	testutil.RunGit(t, repoHealthy, "branch", "sana")
+	testutil.RunGit(t, repoHealthy, "branch", "ajena")
+	healthy = filepath.Join(base, "prdash-pr-3")
+	foreign = filepath.Join(base, "otra-herramienta")
+	testutil.RunGit(t, repoHealthy, "worktree", "add", "--quiet", healthy, "sana")
+	testutil.RunGit(t, repoHealthy, "worktree", "add", "--quiet", foreign, "ajena")
+
+	// El repo de los dos primeros desaparece: sus checkouts quedan huérfanos.
+	if err := os.RemoveAll(repoOrphans); err != nil {
+		t.Fatal(err)
+	}
+	return base, []string{o1, o2}, healthy, foreign
+}
+
+// captureStderr ejecuta fn capturando lo que escriba en stderr.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	fn()
+	_ = w.Close()
+	os.Stderr = old
+
+	data, _ := io.ReadAll(r)
+	_ = r.Close()
+	return string(data)
 }
 
 // TestRunWorktreesListsOnlyOwned comprueba que el listado muestra los worktrees
@@ -130,5 +182,167 @@ func TestRunWorktreesUsageErrors(t *testing.T) {
 	}
 	if code := runWorktrees(pr, []string{"remove"}); code != 2 {
 		t.Fatalf("remove sin rutas debería salir con 2, got %d", code)
+	}
+}
+
+// TestRunWorktreesRemoveNonexistentRefused: una ruta inexistente se rechaza sin
+// tocar nada ni crear worktrees.
+func TestRunWorktreesRemoveNonexistentRefused(t *testing.T) {
+	base, owned, foreign := worktreeFixture(t)
+	pr := worktree.NewGitDirect(base)
+	missing := filepath.Join(base, "prdash-pr-404")
+
+	var code int
+	stderr := captureStderr(t, func() {
+		captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", missing}) })
+	})
+	if code != 1 {
+		t.Fatalf("código de salida = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "not a prdash worktree") {
+		t.Errorf("stderr = %q, want el rechazo de la ruta", stderr)
+	}
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Errorf("no debería crearse la ruta inexistente: %v", err)
+	}
+	if !worktree.Exists(owned) || !worktree.Exists(foreign) {
+		t.Error("un rechazo no debería tocar worktrees existentes")
+	}
+}
+
+// TestRunWorktreesRemoveOrphans borra en lote todos los huérfanos propios y solo
+// esos: el sano y el ajeno quedan intactos.
+func TestRunWorktreesRemoveOrphans(t *testing.T) {
+	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	out := captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", "--orphans"}) })
+	if code != 0 {
+		t.Fatalf("código de salida = %d, out=%q", code, out)
+	}
+	for _, o := range orphans {
+		if worktree.Exists(o) {
+			t.Errorf("el huérfano %s debería haberse borrado", o)
+		}
+		if !strings.Contains(out, o) {
+			t.Errorf("la salida no nombra el huérfano %s:\n%s", o, out)
+		}
+	}
+	if !worktree.Exists(healthy) {
+		t.Error("el worktree propio sano no debería borrarse")
+	}
+	if !worktree.Exists(foreign) {
+		t.Error("el worktree ajeno no debería tocarse")
+	}
+}
+
+// TestRunWorktreesRemoveOrphansDryRun imprime el lote exacto y no borra nada.
+func TestRunWorktreesRemoveOrphansDryRun(t *testing.T) {
+	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	out := captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", "--orphans", "--dry-run"}) })
+	if code != 0 {
+		t.Fatalf("código de salida = %d, out=%q", code, out)
+	}
+	for _, o := range orphans {
+		if !strings.Contains(out, o) {
+			t.Errorf("--dry-run debería imprimir %s:\n%s", o, out)
+		}
+		if !worktree.Exists(o) {
+			t.Errorf("--dry-run no debería borrar %s", o)
+		}
+	}
+	if !worktree.Exists(healthy) || !worktree.Exists(foreign) {
+		t.Error("--dry-run no debería tocar ni el sano ni el ajeno")
+	}
+}
+
+// TestRunWorktreesRemoveOrphansNoneIsSuccess fija que cero huérfanos es el caso
+// feliz, no un error, y que no escribe nada en stderr.
+func TestRunWorktreesRemoveOrphansNoneIsSuccess(t *testing.T) {
+	base, _, _ := worktreeFixture(t) // sano + ajeno, sin huérfanos
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	var out, errOut string
+	out = captureStdout(t, func() {
+		errOut = captureStderr(t, func() { code = runWorktrees(pr, []string{"remove", "--orphans"}) })
+	})
+	if code != 0 {
+		t.Fatalf("cero huérfanos debería salir con 0, got %d", code)
+	}
+	if !strings.Contains(out, "no orphan") {
+		t.Errorf("debería informar de que no hay huérfanos:\n%s", out)
+	}
+	if errOut != "" {
+		t.Errorf("stderr = %q, want vacío", errOut)
+	}
+}
+
+// TestRunWorktreesRemoveOrphansDryRunNoneIsSuccess cubre el mismo caso feliz con
+// --dry-run.
+func TestRunWorktreesRemoveOrphansDryRunNoneIsSuccess(t *testing.T) {
+	base, _, _ := worktreeFixture(t)
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	var out, errOut string
+	out = captureStdout(t, func() {
+		errOut = captureStderr(t, func() {
+			code = runWorktrees(pr, []string{"remove", "--orphans", "--dry-run"})
+		})
+	})
+	if code != 0 {
+		t.Fatalf("cero huérfanos con --dry-run debería salir con 0, got %d", code)
+	}
+	if strings.Contains(out, base) {
+		t.Errorf("no debería imprimir ninguna ruta de huérfano:\n%s", out)
+	}
+	if errOut != "" {
+		t.Errorf("stderr = %q, want vacío", errOut)
+	}
+}
+
+// TestRunWorktreesRemoveOrphansUsageErrors cubre los usos inválidos: exit 2 por
+// stderr y cero borrados.
+func TestRunWorktreesRemoveOrphansUsageErrors(t *testing.T) {
+	base, orphans, healthy, _ := worktreeOrphanFixture(t)
+	pr := worktree.NewGitDirect(base)
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"orphans y rutas", []string{"remove", "--orphans", healthy}, "cannot be mixed"},
+		{"dry-run sin orphans", []string{"remove", "--dry-run"}, "--orphans"},
+		{"flag desconocido", []string{"remove", "--bogus"}, "unknown flag"},
+		{"sin rutas ni orphans", []string{"remove"}, "path"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var code int
+			var stderr string
+			captureStdout(t, func() {
+				stderr = captureStderr(t, func() { code = runWorktrees(pr, tc.args) })
+			})
+			if code != 2 {
+				t.Fatalf("código de salida = %d, want 2", code)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want que mencione %q", stderr, tc.want)
+			}
+			for _, o := range orphans {
+				if !worktree.Exists(o) {
+					t.Errorf("un uso inválido no debería borrar %s", o)
+				}
+			}
+			if !worktree.Exists(healthy) {
+				t.Error("un uso inválido no debería borrar el worktree sano")
+			}
+		})
 	}
 }
