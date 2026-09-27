@@ -129,7 +129,7 @@ func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Resul
 	if err != nil {
 		return Result{}, fmt.Errorf("prepare the simulation directory: %w", err)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 
 	workdir, spec, err := s.stage(ctx, place, kind, base, tmp)
 	if err != nil {
@@ -242,7 +242,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	tmp := dst + ".part"
 	out, err := os.Create(tmp)
@@ -250,12 +250,12 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		os.Remove(tmp)
+		_ = out.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return err
 	}
 	return os.Rename(tmp, dst)

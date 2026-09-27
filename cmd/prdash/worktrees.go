@@ -91,13 +91,13 @@ func listWorktrees(pr worktree.Provisioner) int {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "WORKTREE\tRAMA\tESTADO\tRUTA")
+	_, _ = fmt.Fprintln(w, "WORKTREE\tRAMA\tESTADO\tRUTA")
 	for _, e := range entries {
 		state := "ok"
 		if e.Orphan {
 			state = "orphaned"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Label, e.Branch, state, e.Path)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Label, e.Branch, state, e.Path)
 	}
 	_ = w.Flush()
 

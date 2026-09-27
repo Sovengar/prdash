@@ -90,10 +90,6 @@ const (
 type retargetPanel struct {
 	state retargetState
 	item  model.Item
-	// seq identifica el pedido de ramas en vuelo: uno que llega tarde, con el popup
-	// ya cerrado o reabrito para otro ítem, se descarta en vez de pintar las ramas
-	// de un repositorio que no es el que se está mirando.
-	seq int
 	// all son las ramas del repositorio ya ordenadas; view son las que casan con
 	// el filtro; win es la primera fila visible de la lista.
 	all    []string

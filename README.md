@@ -576,11 +576,20 @@ hay link handlers; para el segundo, salta al pane de prdash y pulsa `r`.
 
 ## Desarrollo
 
+`make check` es el equivalente local del gate de CI (jobs Build/Lint/Test):
+
 ```sh
-make test    # go build ./... && go vet ./... && gofmt check && go test -race ./...
+make check   # build + lint + test (nunca instala)
+make test    # go build ./... && go vet ./... && gofmt check && go test -race -count=1 ./...
+make lint    # go vet + gofmt + golangci-lint v2.13.2 (pineado, vía go run)
 make fmt     # formatea
 make print   # comprueba el pipeline sin TUI
 ```
+
+CI: `.github/workflows/ci.yml` corre en cada PR, en push a `main` y a mano
+(Build, Lint y Test con resumen de cobertura);
+`.github/workflows/mutation.yml` corre en cada PR y a mano (mutation testing
+con gremlins, gate bloqueante sobre los mutantes Supervivientes del diff).
 
 Diseño: `docs/planning/archive/0001-mvp/` (plan, comportamiento esperado,
 contexto, resumen de cierre);

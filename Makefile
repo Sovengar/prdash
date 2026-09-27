@@ -5,11 +5,14 @@ BINARY  := prdash
 PKG     := ./cmd/prdash
 BINDIR  ?= $(HOME)/.local/bin
 CONFDIR ?= $(HOME)/.config/prdash
+# Misma versión que usan dbx/gitdash/tsk/vroom; se ejecuta con `go run`, sin
+# binario global. Sin .golangci.yml, golangci-lint aplica su set por defecto.
+GOLANGCI_LINT_VERSION := v2.13.2
 MUTATE_BASE ?= main
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path mutate mutate-diff
+.PHONY: help build install uninstall run print test fmt fmt-check vet lint check tidy clean config config-path mutate mutate-diff
 
 help: ## Muestra las tareas disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -39,14 +42,25 @@ test: ## Runner completo: build + vet + gofmt + test con -race
 	@fmt_out=$$(gofmt -l $$(git ls-files '*.go')); if [ -n "$$fmt_out" ]; then \
 		echo "gofmt pendiente en:"; echo "$$fmt_out"; exit 1; \
 	fi
-	go test -race ./...
+	go test -race -count=1 ./...
 
 fmt: ## Formatea el código
 	gofmt -w .
 
+fmt-check: ## Verifica formato gofmt sin modificar (falla si hay pendientes)
+	@out="$$(gofmt -l $$(git ls-files '*.go'))"; \
+	if [ -n "$$out" ]; then echo "gofmt pendiente en:"; echo "$$out"; exit 1; fi
+
 vet: ## Analiza el código
 	go vet ./...
 
+lint: vet fmt-check ## go vet + gofmt + golangci-lint (versión pineada, siempre vía go run)
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+
+# Gate local equivalente a CI: build + lint + test. `install` (que copia a
+# ~/.local/bin) queda fuera a propósito; `make install` es un paso aparte.
+check: build lint test
+	@echo "check OK"
 
 tidy: ## Sincroniza go.mod/go.sum
 	go mod tidy

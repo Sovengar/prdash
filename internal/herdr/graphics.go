@@ -220,7 +220,7 @@ func (g *Graphics) call(ctx context.Context, method string, params map[string]an
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrNoGraphics, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	req := map[string]any{
 		"jsonrpc": "2.0",

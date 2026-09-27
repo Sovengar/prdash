@@ -48,7 +48,7 @@ func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	for _, sec := range box.Sections {
-		fmt.Fprintf(w, "%s (%d)\n", sec.Kind.String(), len(sec.Items))
+		_, _ = fmt.Fprintf(w, "%s (%d)\n", sec.Kind.String(), len(sec.Items))
 		for _, it := range sec.Items {
 			// El diffstat va con los números sin compactar: aquí lo lee un
 			// script, no un ojo, y abrevia un recuento solo estorbaría.
@@ -59,7 +59,7 @@ func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
 					line += "\treview:" + wt.Path
 				}
 			}
-			fmt.Fprintln(w, line)
+			_, _ = fmt.Fprintln(w, line)
 		}
 	}
 	_ = w.Flush()

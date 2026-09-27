@@ -11,7 +11,9 @@ name: Mutation
 # .mutation-allowlist the Mutation job is SKIPPED (visibly not-a-pass) instead of
 # reporting green while measuring nothing. Consequence: a skipped job is a skipped
 # check, so `Mutation` must NOT be marked as a required status check in branch
-# protection - same deadlock class as path filters.
+# protection - same deadlock class as path filters. This repo IS calibrated (the
+# allowlist is committed), so the skip branch does not trigger today; the rule
+# only matters if the allowlist is ever removed.
 on:
   pull_request:
   workflow_dispatch:

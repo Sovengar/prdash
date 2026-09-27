@@ -19,9 +19,7 @@ import (
 type fakeSocket struct {
 	// response es lo que se contesta tras leer la petición.
 	response string
-	// wantMethod y wantParams son lo que se espera recibir.
-	wantMethod  string
-	wantPane    string
+	// lastRequest es la petición ya leída, para poder afirmar sobre ella.
 	lastRequest map[string]any
 	served      int
 	// fail hace que la escritura falle, para probar el camino de error.
@@ -34,7 +32,7 @@ func (f *fakeSocket) dial(_ context.Context, _, _ string) (net.Conn, error) {
 	}
 	client, server := net.Pipe()
 	go func() {
-		defer server.Close()
+		defer func() { _ = server.Close() }()
 		line, err := bufio.NewReader(server).ReadBytes('\n')
 		if err != nil {
 			return

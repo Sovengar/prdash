@@ -27,6 +27,8 @@ pero **sin implementar** — ver `docs/planning/archive/0001-mvp/f3-milestone.md
 make build         # compila en ./bin/prdash
 make install       # instala en ~/.local/bin/prdash
 make test          # gate completo: go build + go vet + gofmt + go test -race
+make lint          # go vet + gofmt + golangci-lint v2.13.2 (pineado, vía go run)
+make check         # build + lint + test: el gate local equivalente a ci.yml
 make run           # abre la TUI con go run
 make print         # modo --print, sin TUI (para comprobar el pipeline)
 make mutate-diff   # mutation testing acotado al diff vs main (advisory)
@@ -52,6 +54,26 @@ mientras el proceso sigue corriendo con su copia en memoria.
 
 ## CI
 
+Dos workflows, el mismo esqueleto que dbx/gitdash/tsk/vroom: sin `paths`, permisos
+mínimos, `concurrency` con cancelación fuera de `main`, `ubuntu-24.04` y actions
+pineadas por SHA.
+
+`.github/workflows/ci.yml` — **Build / Lint / Test**. Corre en cada
+`pull_request`, en push a `main` y a mano (`workflow_dispatch`).
+
+- **Build**: `go build ./...` + `go vet ./...` (5 min).
+- **Lint**: `make lint` = `vet` + `fmt-check` (gofmt) + golangci-lint **v2.13.2**
+  pineado en el Makefile, ejecutado con `go run` (sin binario global). No hay
+  `.golangci.yml`, así que aplica el set por defecto (errcheck, govet,
+  ineffassign, staticcheck, unused). El `Makefile` entra en la clave de caché de
+  módulos para que bumpear la versión no reutilice módulos viejos.
+- **Test**: `go test -race -count=1 -covermode=atomic -coverprofile=coverage.out
+  ./...` más un resumen de cobertura por paquete en el step summary. La suite es
+  autocontenida (fixtures git en `t.TempDir()` vía `internal/testutil`, adapters
+  falsos), así que no necesita `gh`/`glab`/`herdr`/`git-sim` en el PATH.
+- `-count=1` desactiva la caché de tests: con la caché de build restaurada, un
+  `ok` cacheado nunca puede hacer pasar un fallo.
+
 `.github/workflows/mutation.yml` — **mutation testing** con gremlins. Corre en
 cada `pull_request` y a mano (`workflow_dispatch`). No en push a `main`.
 
@@ -67,14 +89,18 @@ cada `pull_request` y a mano (`workflow_dispatch`). No en push a `main`.
   comentario explicando por qué.
 - **Degradaciones a conocer**: si no hay `report.json` (timeout o crash de
   gremlins) el gate **pasa** — un crash nunca se lee como fallo. Y si
-  `.mutation-allowlist` **no existe**, el gate solo informa y no bloquea
-  (no está calibrado). Ojo: gremlins no reporta los mutantes TIMED OUT en
+  `.mutation-allowlist` **no existe**, el job `Mutation` entero se **SKIPEA**
+  (visible como not-a-pass) y no bloquea: sin allowlist el gate no está
+  calibrado y no mide nada. Ojo: gremlins no reporta los mutantes TIMED OUT en
   `report.json` y la eficacia los excluye.
 - Sube `report.json` como artefacto (14 días).
+- Consecuencia de lo anterior: un job skippeado es un check skippeado, así que
+  `Mutation` **no** debe marcarse como required status check (misma clase de
+  deadlock que los `paths`).
 
-`make test` (build + vet + gofmt + `go test -race`) sigue siendo el gate local y
-es más rápido: **corrélo antes de abrir el PR**, porque el workflow solo mide
-mutación.
+`make check` (build + lint + test) es el gate local equivalente a `ci.yml`, y
+`make test` (build + vet + gofmt + `go test -race`) el más rápido: **corrélo
+antes de abrir el PR**, porque `mutation.yml` solo mide mutación.
 
 ## Arquitectura
 

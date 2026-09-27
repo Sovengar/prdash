@@ -629,14 +629,6 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	return it
 }
 
-// glMRSquash informa si el MR se aplana al integrarlo, o si no se pudo saber.
-func glMRSquash(mr glMR) (squashed bool, known bool) {
-	if mr.Squash == nil {
-		return false, false
-	}
-	return *mr.Squash, true
-}
-
 // mergeableFromGL lee el veredicto de mergeabilidad de GitLab.
 //
 // El enum ha cambiado de nombre con las versiones: `broken_status` en las

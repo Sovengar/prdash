@@ -75,7 +75,7 @@ func writeJPEG(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if err := jpeg.Encode(f, img, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestTheImageIsNotStretched(t *testing.T) {
 	if err := jpeg.Encode(f, img, nil); err != nil {
 		t.Fatal(err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	sim1 := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: big}}
 	m := simModel(t, sim1)

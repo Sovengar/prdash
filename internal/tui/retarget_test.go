@@ -45,19 +45,6 @@ func openRetargetFixture(t *testing.T, branches ...string) (Model, *testutil.Fak
 	return press(t, m, "e"), a
 }
 
-// loadBranches entrega el listado como si lo devolviera el forge. Se hace a mano
-// en vez de esperar al goroutine porque los tests de la TUI no deben depender de
-// un temporizador: lo que se prueba aquí es la reacción al mensaje, no la
-// carrera.
-func loadBranches(t *testing.T, m Model, a *testutil.FakeAdapter, branches []string) Model {
-	t.Helper()
-	if branches == nil {
-		branches = a.BranchLists["acme/widget"]
-	}
-	it, _ := m.selected()
-	return send(t, m, branchesMsg{seq: m.branchSeq, key: keyOf(it), names: branches})
-}
-
 // pressFilter escribe un filtro letra a letra, como lo haría el terminal. Importa
 // que pase por msg.Text: el popup no lee Key.String() para el texto que se
 // escribe, y un test que mandara solo el Code probaría un camino que el decoder

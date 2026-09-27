@@ -24,7 +24,7 @@ func Load(path string) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	img, _, err := image.Decode(f)
 	if err != nil {
 		return nil, fmt.Errorf("decode %s: %w", path, err)
