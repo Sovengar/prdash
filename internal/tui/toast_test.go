@@ -354,3 +354,54 @@ func TestToastBorderMatchesLevel(t *testing.T) {
 		}
 	}
 }
+
+// TestToastReplaceFindsAnOlderToast: replace debe encontrar el objetivo aunque no
+// sea el aviso más nuevo. En producción el aviso del merge puede dejar de ser el
+// último índice si otra cosa avisa entre el merge y la limpieza; el escaneo hacia
+// atrás tiene que llegar hasta él y sustituirlo en su sitio, sin tocar el resto y
+// reiniciando su TTL.
+func TestToastReplaceFindsAnOlderToast(t *testing.T) {
+	m, now := toastTestModel(t)
+	m.toast.show("merge ok", toastSuccess)
+	m.toast.show("an action is running", toastInfo) // más nuevo: el merge no es el último
+
+	*now = now.Add(time.Second)
+	m.toast.replace("merge ok", "merge ok · worktree removed", toastSuccess)
+
+	got := m.toast.texts()
+	if len(got) != 2 {
+		t.Fatalf("texts = %q, quiero 2 (el viejo sustituido, el nuevo intacto)", got)
+	}
+	if got[0] != "merge ok · worktree removed" {
+		t.Errorf("el aviso viejo debería sustituirse en su sitio: %q", got)
+	}
+	if got[1] != "an action is running" {
+		t.Errorf("el aviso más nuevo no debería tocarse: %q", got)
+	}
+	if !m.toast.toasts[0].created.Equal(*now) {
+		t.Errorf("el TTL del aviso sustituido debería reiniciarse: created=%v, now=%v", m.toast.toasts[0].created, *now)
+	}
+}
+
+// TestToastReplaceAppendsWhenTheTargetIsGone: si el aviso objetivo ya no está
+// vivo (caducó y el tick lo podó), replace apila uno nuevo en vez de quedarse sin
+// hacer nada. Es el fallback del camino de sustitución.
+func TestToastReplaceAppendsWhenTheTargetIsGone(t *testing.T) {
+	m, now := toastTestModel(t)
+	m.toast.show("merge ok", toastSuccess)
+
+	// Pasa el TTL: el aviso del merge caduca y el tick lo poda. Llega después otro
+	// aviso, así que la pila no queda vacía pero ya no contiene el objetivo.
+	*now = now.Add(toastDuration + time.Second)
+	m.toast.update()
+	m.toast.show("refreshed", toastInfo)
+	if got := m.toast.texts(); len(got) != 1 || got[0] != "refreshed" {
+		t.Fatalf("preparación: texts = %q, quiero solo el aviso nuevo", got)
+	}
+
+	m.toast.replace("merge ok", "merge ok · worktree removed", toastSuccess)
+	got := m.toast.texts()
+	if len(got) != 2 || got[0] != "refreshed" || got[1] != "merge ok · worktree removed" {
+		t.Fatalf("texts = %q, quiero el aviso nuevo apilado al final", got)
+	}
+}

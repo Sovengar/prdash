@@ -1042,6 +1042,15 @@ func toastForLevel(level noticeLevel) (toastLevel, bool) {
 	}
 }
 
+// setNoticeReplacing compone sobre un aviso vigente: si el aviso con el texto
+// prev sigue vivo, lo actualiza con el nuevo texto y nivel en vez de apilar una
+// segunda copia que repetiría los hechos que prev ya contaba.
+func (m *Model) setNoticeReplacing(prev, text string, level noticeLevel) {
+	if lvl, ok := toastForLevel(level); ok {
+		m.toast.replace(prev, text, lvl)
+	}
+}
+
 // setNotice lanza el aviso como toast: se dibuja encima de la vista y caduca
 // solo, en vez de ocupar la cabecera hasta que lo sustituya otro evento.
 func (m *Model) setNotice(text string, level noticeLevel) {

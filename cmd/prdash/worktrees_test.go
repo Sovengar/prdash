@@ -304,6 +304,89 @@ func TestRunWorktreesRemoveOrphansMalformedGitDoesNotBreakBatch(t *testing.T) {
 	}
 }
 
+// TestRunWorktreesRemoveTwoExplicitPaths cubre el borrado explícito de varias
+// rutas propias en una sola invocación, dejando intacto lo ajeno.
+func TestRunWorktreesRemoveTwoExplicitPaths(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	testutil.InitRepo(t, repo)
+	testutil.CommitFile(t, repo, "base.txt", "base", "base")
+	testutil.RunGit(t, repo, "branch", "uno")
+	testutil.RunGit(t, repo, "branch", "dos")
+	testutil.RunGit(t, repo, "branch", "ajena")
+
+	base := t.TempDir()
+	owned1 := filepath.Join(base, "prdash-pr-1")
+	owned2 := filepath.Join(base, "prdash-pr-2")
+	foreign := filepath.Join(base, "otra-herramienta")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", owned1, "uno")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", owned2, "dos")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "ajena")
+
+	pr := worktree.NewGitDirect(base)
+	var code int
+	out := captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", owned1, owned2}) })
+	if code != 0 {
+		t.Fatalf("código de salida = %d, out=%q", code, out)
+	}
+	if worktree.Exists(owned1) || worktree.Exists(owned2) {
+		t.Error("las dos rutas propias deberían haberse borrado")
+	}
+	if !worktree.Exists(foreign) {
+		t.Error("el worktree ajeno no debería tocarse")
+	}
+}
+
+// TestRunWorktreesRemoveOrphansDryRunExcludesOthers fija que el lote impreso por
+// --dry-run no incluye ni el worktree sano ni el ajeno.
+func TestRunWorktreesRemoveOrphansDryRunExcludesOthers(t *testing.T) {
+	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	out := captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", "--orphans", "--dry-run"}) })
+	if code != 0 {
+		t.Fatalf("código de salida = %d, out=%q", code, out)
+	}
+	for _, o := range orphans {
+		if !strings.Contains(out, o) {
+			t.Errorf("el lote debería incluir %s:\n%s", o, out)
+		}
+	}
+	if strings.Contains(out, healthy) {
+		t.Errorf("el lote no debería incluir el worktree sano %s:\n%s", healthy, out)
+	}
+	if strings.Contains(out, foreign) {
+		t.Errorf("el lote no debería incluir el worktree ajeno %s:\n%s", foreign, out)
+	}
+}
+
+// TestRunWorktreesRemoveMalformedGitOrphanByPath cubre por ruta explícita, a
+// nivel CLI, el escenario L8: un huérfano con .git irresoluble se borra sin tocar
+// los demás.
+func TestRunWorktreesRemoveMalformedGitOrphanByPath(t *testing.T) {
+	base, orphans, healthy, _ := worktreeOrphanFixture(t)
+	malformed := orphans[0]
+	if err := os.WriteFile(filepath.Join(malformed, ".git"), []byte("garbage\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	out := captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", malformed}) })
+	if code != 0 {
+		t.Fatalf("borrar por ruta un huérfano con .git irresoluble debería funcionar: code=%d\n%s", code, out)
+	}
+	if worktree.Exists(malformed) {
+		t.Error("el huérfano nombrado debería haberse borrado")
+	}
+	if !worktree.Exists(orphans[1]) {
+		t.Error("el otro huérfano no debería tocarse al borrar una sola ruta")
+	}
+	if !worktree.Exists(healthy) {
+		t.Error("el worktree sano no debería tocarse")
+	}
+}
+
 // TestRunWorktreesRemoveOrphans borra en lote todos los huérfanos propios y solo
 // esos: el sano y el ajeno quedan intactos.
 func TestRunWorktreesRemoveOrphans(t *testing.T) {

@@ -506,7 +506,9 @@ que borra **solo** lo que `list` marca como `orphaned`; con cero huérfanos
 informa y sale con 0. `--dry-run` imprime el lote exacto por el mismo camino de
 código, sin borrar nada, para poder ver la operación irreversible antes de
 ejecutarla. `--orphans` es **excluyente** con las rutas explícitas: mezclar los
-dos modos es un error de uso.
+dos modos es un error de uso. Un huérfano cuyo `.git` ni siquiera declare un
+gitdir (enlace corrupto o truncado) también se limpia, por ruta o en lote: no hay
+repo que resolver y solo queda borrar su checkout.
 
 La única limpieza implícita es al **mergear desde prdash**: cuando un `merge`
 lanzado desde la app termina bien, se borra el worktree de ese ítem **solo si

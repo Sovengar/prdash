@@ -88,8 +88,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return updated, cmd
 
 	case actionMsg:
-		m.applyAction(msg.outcome, msg.cycle)
-		return m.withPump(nil)
+		cmd := m.applyAction(msg.outcome, msg.cycle)
+		return m.withPump(cmd)
 
 	case notifyMsg:
 		m.setNotice(msg.text, msg.level)
@@ -107,8 +107,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.withPump(nil)
 
 	case reviewCleanupMsg:
+		// Lo produce reviewCleanupCmd, no el canal de eventos: no consume un
+		// lector, así que no se rearma ninguno (armarlo filtraría una goroutine
+		// por merge). Es el mismo patrón que notifyMsg.
 		m.applyReviewCleanup(msg)
-		return m.withPump(nil)
+		return m, nil
 
 	case simMsg:
 		m.applySim(msg)
@@ -149,14 +152,16 @@ func (m *Model) releaseReader() {
 }
 
 // applyAction vuelca el resultado de una acción en el estado: refresca el ítem,
-// registra la denegación por permisos o avisa del conflicto.
+// registra la denegación por permisos o avisa del conflicto. Devuelve el comando
+// de limpieza cuando la acción lo dispara (un merge OK con removedor inyectado) y
+// nil en cualquier otro caso.
 //
 // Política de ciclo: el `Item` releído es el estado más reciente que existe del
 // forge (se lee DESPUÉS de la acción), así que se aplica siempre, aunque el
 // ciclo de refresco haya avanzado. Descartarlo revertiría el ítem a un estado
 // anterior. El ciclo se registra por ítem para que una página capturada antes
 // de la acción no lo pise (ver reconcileFirstPage).
-func (m *Model) applyAction(out forge.Outcome, cycle int) {
+func (m *Model) applyAction(out forge.Outcome, cycle int) tea.Cmd {
 	m.actionBusy = false
 	if out.HasItem {
 		m.actionCycle[out.Item.ID()] = cycle
@@ -196,38 +201,55 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 			level = levelWarn
 		}
 		m.setNotice(notice, level)
-		// Solo un merge que salió bien dispara la limpieza del worktree. Su
-		// resultado llega en segundo plano compuesto sobre este aviso base.
-		if out.Kind == forge.ActionMerge {
-			m.launchReviewCleanup(out.Item, notice, level)
+		// Solo un merge que salió bien dispara la limpieza del worktree. El aviso
+		// base se captura ahora y viaja en el comando, para recomponer sobre él.
+		if triggersReviewCleanup(out) {
+			return m.reviewCleanupCmd(out.Item, notice, level)
 		}
 	default:
 		m.setNotice("error: "+out.Msg, levelError)
 	}
+	return nil
 }
 
-// launchReviewCleanup arranca el auto-borrado del worktree del ítem mergeado en
-// segundo plano: el handler de Update no puede bloquearse con un subproceso de
-// git. Sin removedor inyectado no hay auto-borrado y el merge sigue igual. El
-// aviso base se captura ahora y viaja con el mensaje, para recomponer sobre él en
-// vez de pisar los hechos que el merge ya traía.
-func (m *Model) launchReviewCleanup(it model.Item, base string, level noticeLevel) {
+// triggersReviewCleanup dice si un resultado de acción dispara el auto-borrado
+// del worktree: solo un merge que salió bien. Es el gatillo, aislado para poder
+// fijarlo con un test determinista.
+func triggersReviewCleanup(out forge.Outcome) bool {
+	return out.Kind == forge.ActionMerge && out.OK
+}
+
+// reviewCleanupCmd construye el comando que borra el worktree del ítem mergeado:
+// Bubbletea lo ejecuta en segundo plano, así que el handler de Update no se
+// bloquea con un subproceso de git. Sin removedor inyectado devuelve nil (no hay
+// auto-borrado y el merge sigue igual). El resultado llega como reviewCleanupMsg
+// con el aviso base ya capturado, para recomponer sobre él en vez de pisar los
+// hechos que el merge traía.
+func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) tea.Cmd {
 	if m.reviewRemover == nil {
-		return
+		return nil
 	}
-	appCtx, events, remover := m.ctx, m.events, m.reviewRemover
-	go func() {
+	appCtx, remover := m.ctx, m.reviewRemover
+	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(appCtx, reviewCleanupTimeout)
 		defer cancel()
 		removed, reason, err := remover.RemoveReview(ctx, it)
-		sendEvent(appCtx, events, reviewCleanupMsg{base: base, level: level, removed: removed, reason: reason, err: err})
-	}()
+		return reviewCleanupMsg{base: base, level: level, removed: removed, reason: reason, err: err}
+	}
 }
 
 // applyReviewCleanup vuelca el resultado del auto-borrado sustituyendo el aviso
-// por la composición de este con los hechos del merge.
+// por la composición de este con los hechos del merge. Un no-op (sin review
+// montado o con la ruta ya ausente) no re-emite nada: el aviso del merge sigue
+// siendo el mismo y apilarlo otra vez solo lo duplicaría.
 func (m *Model) applyReviewCleanup(msg reviewCleanupMsg) {
-	m.setNotice(reviewCleanupNotice(msg.base, msg.level, msg.removed, msg.reason, msg.err))
+	if !msg.removed && msg.reason == "" && msg.err == nil {
+		return
+	}
+	text, level := reviewCleanupNotice(msg.base, msg.level, msg.removed, msg.reason, msg.err)
+	// Se ACTUALIZA el aviso del merge en vez de apilar otro: el texto del merge
+	// no debe salir dos veces.
+	m.setNoticeReplacing(msg.base, text, level)
 }
 
 // reviewCleanupNotice compone el aviso final del merge con su limpieza. Nunca

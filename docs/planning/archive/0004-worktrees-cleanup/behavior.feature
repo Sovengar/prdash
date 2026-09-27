@@ -134,6 +134,20 @@ Feature: Limpieza de worktrees de review en prdash
     And el worktree ajeno sigue intacto
     And un rechazo (ruta ajena o inexistente) no toca nada y sale con 1
 
+  @cli @worktrees @limpieza
+  Scenario: un huérfano con un enlace .git irresoluble se borra por ruta explícita
+    Given un worktree propio cuyo fichero .git no declara un gitdir y cuyo repo de origen ya no existe
+    When ejecuto "prdash worktrees remove <su-ruta>"
+    Then lo borra igualmente: no hay repo que resolver y solo queda borrar su checkout
+    And el comando termina con código de salida 0
+
+  @cli @worktrees @orphans @limpieza
+  Scenario: un huérfano con .git irresoluble no tumba el lote de --orphans
+    Given la raíz tiene un huérfano con el .git irresoluble y otro huérfano con el .git bien formado
+    When ejecuto "prdash worktrees remove --orphans"
+    Then borra los dos huérfanos
+    And el comando termina con código de salida 0
+
   @cli @worktrees @uso
   Scenario: remove sin rutas ni --orphans sigue siendo error de uso
     When ejecuto "prdash worktrees remove"
