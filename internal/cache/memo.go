@@ -119,6 +119,15 @@ func (s *Store) SetReview(key string, rec ReviewRecord) {
 	s.saveLocked()
 }
 
+// DeleteReview olvida el review activo de una clave de ítem. Se usa cuando su
+// worktree ya no existe, para que ActiveReview deje de reportarlo.
+func (s *Store) DeleteReview(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.memo.Reviews, key)
+	s.saveLocked()
+}
+
 func (s *Store) saveLocked() {
 	if s.path == "" {
 		return

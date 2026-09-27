@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -350,15 +351,24 @@ func TestMountPassesNativeContainerToLayout(t *testing.T) {
 	}
 }
 
-// fakeProvisioner devuelve un worktree fijo (contenedor nativo simulado).
-type fakeProvisioner struct{ wt worktree.Worktree }
+// fakeProvisioner devuelve un worktree fijo (contenedor nativo simulado) y
+// permite simular el candado "solo si limpio" del auto-borrado.
+type fakeProvisioner struct {
+	wt worktree.Worktree
+
+	removeIfCleanRemoved bool
+	removeIfCleanReason  string
+	removeIfCleanErr     error
+	removeIfCleanID      string
+}
 
 func (f *fakeProvisioner) Create(context.Context, worktree.Spec) (worktree.Worktree, error) {
 	return f.wt, nil
 }
 func (f *fakeProvisioner) Remove(context.Context, string) error { return nil }
-func (f *fakeProvisioner) RemoveIfClean(context.Context, string) (bool, string, error) {
-	return false, "", nil
+func (f *fakeProvisioner) RemoveIfClean(_ context.Context, id string) (bool, string, error) {
+	f.removeIfCleanID = id
+	return f.removeIfCleanRemoved, f.removeIfCleanReason, f.removeIfCleanErr
 }
 func (f *fakeProvisioner) List(context.Context) []worktree.Worktree { return nil }
 func (f *fakeProvisioner) Audit(context.Context) []worktree.Entry   { return nil }
@@ -398,4 +408,80 @@ func leftoverTemps(dir string) int {
 		return nil
 	})
 	return n
+}
+
+// mountReview monta el review del ítem de número dado y devuelve el harness.
+func mountReview(t *testing.T, number int) (*harness, model.Item) {
+	t.Helper()
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, number, "contenido")
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	it := item(h.ref, number)
+	if _, err := h.ex.Mount(context.Background(), it); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	return h, it
+}
+
+// TestRemoveReviewRemovesCleanAndForgets cubre el caso feliz de B en el executor:
+// con review activo, delega en RemoveIfClean y solo entonces olvida el registro.
+func TestRemoveReviewRemovesCleanAndForgets(t *testing.T) {
+	h, it := mountReview(t, 5)
+	fake := &fakeProvisioner{removeIfCleanRemoved: true}
+	h.ex.Worktrees = fake
+
+	removed, reason, err := h.ex.RemoveReview(context.Background(), it)
+	if err != nil || !removed || reason != "" {
+		t.Fatalf("RemoveReview = (%v, %q, %v), quiero borrado sin motivo", removed, reason, err)
+	}
+	if want := h.resolver.WorktreePath(it.Ref, it.Number); fake.removeIfCleanID != want {
+		t.Fatalf("RemoveIfClean recibió %q, quiero %q", fake.removeIfCleanID, want)
+	}
+	if _, ok := h.ex.ActiveReview(it); ok {
+		t.Fatal("un borrado real debería olvidar el registro del review")
+	}
+}
+
+// TestRemoveReviewKeepsAndDoesNotForget: si el worktree se conserva, el registro
+// sigue vivo (la ruta sigue existiendo).
+func TestRemoveReviewKeepsAndDoesNotForget(t *testing.T) {
+	h, it := mountReview(t, 5)
+	h.ex.Worktrees = &fakeProvisioner{removeIfCleanReason: worktree.KeptUncommitted}
+
+	removed, reason, err := h.ex.RemoveReview(context.Background(), it)
+	if err != nil || removed || reason != worktree.KeptUncommitted {
+		t.Fatalf("RemoveReview = (%v, %q, %v), quiero conservado por sucio", removed, reason, err)
+	}
+	if _, ok := h.ex.ActiveReview(it); !ok {
+		t.Fatal("conservar el worktree no debe olvidar el registro")
+	}
+}
+
+// TestRemoveReviewWithoutActiveReviewIsNoop: sin review montado no se toca el
+// provisioner y no hay error.
+func TestRemoveReviewWithoutActiveReviewIsNoop(t *testing.T) {
+	origin, repo := baseFixture(t)
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	fake := &fakeProvisioner{removeIfCleanRemoved: true}
+	h.ex.Worktrees = fake
+
+	removed, reason, err := h.ex.RemoveReview(context.Background(), item(h.ref, 5))
+	if err != nil || removed || reason != "" {
+		t.Fatalf("RemoveReview = (%v, %q, %v), quiero no-op", removed, reason, err)
+	}
+	if fake.removeIfCleanID != "" {
+		t.Fatal("sin review montado no debería llamarse al provisioner")
+	}
+}
+
+// TestRemoveReviewPropagatesError: un fallo del provisioner no se disfraza de
+// borrado.
+func TestRemoveReviewPropagatesError(t *testing.T) {
+	h, it := mountReview(t, 5)
+	h.ex.Worktrees = &fakeProvisioner{removeIfCleanErr: errors.New("boom")}
+
+	removed, _, err := h.ex.RemoveReview(context.Background(), it)
+	if err == nil || removed {
+		t.Fatalf("RemoveReview = (%v, _, %v), quiero error propagado", removed, err)
+	}
 }

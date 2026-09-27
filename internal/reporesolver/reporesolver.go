@@ -214,6 +214,14 @@ func (r *Resolver) ActiveReview(id model.ID) (cache.ReviewRecord, bool) {
 	return r.store.Review(itemKey(id))
 }
 
+// ForgetReview olvida el review activo de un ítem. Se llama cuando su worktree
+// se ha borrado de verdad: dejarlo apuntando a un checkout inexistente haría que
+// ActiveReview mintiera para siempre.
+func (r *Resolver) ForgetReview(it model.Item) error {
+	r.store.DeleteReview(itemKey(it.ID()))
+	return nil
+}
+
 // WorktreePath devuelve la ruta destino del worktree de un ítem. Es la única
 // fuente de rutas de worktree: el módulo worktree nunca las construye.
 func (r *Resolver) WorktreePath(ref model.RepoRef, number int) string {

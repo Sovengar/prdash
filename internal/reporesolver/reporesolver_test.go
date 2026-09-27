@@ -373,6 +373,27 @@ func TestRecordReviewPersists(t *testing.T) {
 	}
 }
 
+// TestForgetReviewRemovesRecord cubre el olvido del review activo cuando su
+// worktree se borra: ActiveReview deja de reportarlo y el olvido persiste.
+func TestForgetReviewRemovesRecord(t *testing.T) {
+	memoPath := filepath.Join(t.TempDir(), "memo.json")
+	r := New(Options{MemoPath: memoPath})
+	it := model.NewItem(ghRef(), 7)
+	if err := r.RecordReview(it, cache.ReviewRecord{Worktree: "/w", Label: "prdash-pr-7"}); err != nil {
+		t.Fatalf("RecordReview: %v", err)
+	}
+	if err := r.ForgetReview(it); err != nil {
+		t.Fatalf("ForgetReview: %v", err)
+	}
+	if _, ok := r.ActiveReview(it.ID()); ok {
+		t.Fatal("ActiveReview no debería reportar un review olvidado")
+	}
+	r2 := New(Options{MemoPath: memoPath})
+	if _, ok := r2.ActiveReview(it.ID()); ok {
+		t.Fatal("el olvido debería persistir en la memoria")
+	}
+}
+
 func glob(t *testing.T, dir, pattern string) []string {
 	t.Helper()
 	var out []string
