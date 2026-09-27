@@ -10,13 +10,28 @@ import (
 
 // RunGit ejecuta git en dir y devuelve stdout recortado, fallando el test ante
 // error. Es la base de los fixtures de repos reales (sin red).
+//
+// La identidad va en el env, no solo en la config local del fixture: un clon NO
+// hereda `user.name`/`user.email` de su repo de origen (viven en la config local
+// de ese repo), así que un `commit` dentro de un clon se queda sin autor y
+// depende de la config global de la máquina. Con identidad global (máquina de
+// desarrollo) el test pasa y en un runner sin git config falla con "Author
+// identity unknown": el mismo gap de entorno que ya se llevó por delante, pero
+// dentro de la suite.
 func RunGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"LC_ALL=C",
+		"GIT_AUTHOR_NAME=prdash tests",
+		"GIT_AUTHOR_EMAIL=test@prdash.local",
+		"GIT_COMMITTER_NAME=prdash tests",
+		"GIT_COMMITTER_EMAIL=test@prdash.local",
+	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v en %s: %v\n%s", args, dir, err, out)
