@@ -350,23 +350,28 @@ func mergeOutcome(t *testing.T, remover ReviewRemover) (Model, forge.Outcome) {
 	return m, waitOutcome(t, m)
 }
 
-// mergeAndApply hace lo mismo y además vuelca el resultado como si llegara del
-// canal de eventos.
-func mergeAndApply(t *testing.T, remover ReviewRemover) Model {
+// applyMerge dispara un merge rebase y devuelve el modelo con el resultado ya
+// volcado junto al comando de limpieza que el update devuelve (nil si el merge no
+// lo dispara). Volcar el resultado es síncrono, así que los tests no dependen de
+// goroutines ni de sleeps.
+func applyMerge(t *testing.T, remover ReviewRemover) (Model, tea.Cmd) {
 	t.Helper()
 	m, out := mergeOutcome(t, remover)
-	return send(t, m, actionMsg{cycle: m.cycle, outcome: out})
+	return m, m.applyAction(out, m.cycle)
 }
 
-// cleanupMsg lee el reviewCleanupMsg que dispara el merge OK y lo aplica.
-func cleanupMsg(t *testing.T, m Model) reviewCleanupMsg {
+// runCleanup ejecuta el comando de limpieza y vuelca su mensaje. Devuelve false
+// si el merge no disparó limpieza (no había comando).
+func runCleanup(t *testing.T, m Model, cmd tea.Cmd) (Model, bool) {
 	t.Helper()
-	ev := waitMount(t, m)
-	msg, ok := ev.(reviewCleanupMsg)
-	if !ok {
-		t.Fatalf("evento %T, want reviewCleanupMsg", ev)
+	if cmd == nil {
+		return m, false
 	}
-	return msg
+	msg, ok := cmd().(reviewCleanupMsg)
+	if !ok {
+		t.Fatalf("el comando de limpieza devolvió %T, want reviewCleanupMsg", cmd())
+	}
+	return send(t, m, msg), true
 }
 
 // TestMergeOKRemovesCleanWorktree cubre el caso feliz: el merge OK borra el
@@ -374,8 +379,11 @@ func cleanupMsg(t *testing.T, m Model) reviewCleanupMsg {
 func TestMergeOKRemovesCleanWorktree(t *testing.T) {
 	remover := &fakeRemover{removed: true}
 	m, out := mergeOutcome(t, remover)
-	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
-	m = send(t, m, cleanupMsg(t, m))
+	cmd := m.applyAction(out, m.cycle)
+	if cmd == nil {
+		t.Fatal("un merge OK debería devolver el comando de limpieza")
+	}
+	m, _ = runCleanup(t, m, cmd)
 
 	if remover.calls != 1 || remover.got.ID() != out.Item.ID() {
 		t.Fatalf("remover calls=%d item=%v, quiero el ítem mergeado %v", remover.calls, remover.got.ID(), out.Item.ID())
@@ -389,8 +397,8 @@ func TestMergeOKRemovesCleanWorktree(t *testing.T) {
 // TestMergeOKKeepsDirtyWorktree fija el texto exacto del caso sucio.
 func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
 	remover := &fakeRemover{reason: worktree.KeptUncommitted}
-	m := mergeAndApply(t, remover)
-	m = send(t, m, cleanupMsg(t, m))
+	m, cmd := applyMerge(t, remover)
+	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "merged, but the worktree has uncommitted changes — kept") {
 		t.Errorf("aviso = %q, want el texto exacto del caso sucio", lastToast(m))
@@ -401,8 +409,8 @@ func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
 // estado, se conserva y el aviso lo dice.
 func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
 	remover := &fakeRemover{reason: worktree.KeptUnreadable}
-	m := mergeAndApply(t, remover)
-	m = send(t, m, cleanupMsg(t, m))
+	m, cmd := applyMerge(t, remover)
+	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "could not read the worktree status") {
 		t.Errorf("aviso = %q, want que diga que no se pudo comprobar el estado", lastToast(m))
@@ -413,8 +421,11 @@ func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
 // igual y no aparece ningún aviso de limpieza.
 func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
 	remover := &fakeRemover{} // (false, "", nil): no hay review montado
-	m := mergeAndApply(t, remover)
-	m = send(t, m, cleanupMsg(t, m))
+	m, cmd := applyMerge(t, remover)
+	if cmd == nil {
+		t.Fatal("con removedor inyectado un merge OK debería devolver comando")
+	}
+	m, _ = runCleanup(t, m, cmd)
 
 	toast := lastToast(m)
 	if strings.Contains(toast, "worktree") || strings.Contains(toast, "could not") {
@@ -425,12 +436,74 @@ func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
 	}
 }
 
+// TestMergeCleanupNoopDoesNotDuplicateToast cubre que un no-op (sin review
+// montado) no re-emita el aviso del merge: los avisos vivos quedan como estaban,
+// sin apilar una copia idéntica.
+func TestMergeCleanupNoopDoesNotDuplicateToast(t *testing.T) {
+	remover := &fakeRemover{} // (false, "", nil)
+	m, cmd := applyMerge(t, remover)
+	before := len(toastTexts(m))
+	m, _ = runCleanup(t, m, cmd)
+	if got := len(toastTexts(m)); got != before {
+		t.Fatalf("avisos vivos = %d tras el no-op, quiero %d (sin duplicar): %q", got, before, toastTexts(m))
+	}
+}
+
+// TestReviewCleanupMsgDoesNotArmChannelReader: reviewCleanupMsg lo produce un
+// Cmd (no el canal de eventos), así que su case no debe rearmar un lector. Con
+// withPump devolvería un cmd de armReader —una goroutine lectora filtrada por
+// cada merge OK con removedor— y este test fallaría.
+func TestReviewCleanupMsgDoesNotArmChannelReader(t *testing.T) {
+	remover := &fakeRemover{removed: true}
+	m, cmd := applyMerge(t, remover)
+	msg, ok := cmd().(reviewCleanupMsg)
+	if !ok {
+		t.Fatalf("el comando de limpieza devolvió %T, want reviewCleanupMsg", cmd())
+	}
+
+	updated, follow := m.Update(msg)
+	if follow != nil {
+		t.Fatalf("un mensaje Cmd-delivered no debe devolver un cmd (withPump armaría un lector de más): %T", follow)
+	}
+	if got := updated.(Model).readers; got != 1 {
+		t.Fatalf("readers = %d, quiero 1", got)
+	}
+}
+
+// TestMergeCleanupRemovedDoesNotDuplicateToast: en el caso borrado la limpieza
+// actualiza el aviso del merge con el hecho nuevo en vez de apilar un segundo
+// aviso que repite su texto. Debe quedar un único aviso con los dos hechos.
+func TestMergeCleanupRemovedDoesNotDuplicateToast(t *testing.T) {
+	remover := &fakeRemover{removed: true}
+	m, out := mergeOutcome(t, remover)
+	cmd := m.applyAction(out, m.cycle)
+	m, _ = runCleanup(t, m, cmd)
+
+	base := actionDoneNotice(out)
+	texts := toastTexts(m)
+	stale, removed := 0, 0
+	for _, txt := range texts {
+		if txt == base {
+			stale++
+		}
+		if strings.Contains(txt, "worktree removed") {
+			removed++
+		}
+	}
+	if stale != 0 {
+		t.Fatalf("quedó una copia sin actualizar del aviso del merge: %q", texts)
+	}
+	if removed != 1 {
+		t.Fatalf("quiero un único aviso con 'worktree removed': %q", texts)
+	}
+}
+
 // TestMergeOKCleanupErrorIsWarn: un fallo de borrado no convierte el merge en
 // error: el merge sí salió, así que se avisa como una advertencia.
 func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
 	remover := &fakeRemover{err: errors.New("boom")}
-	m := mergeAndApply(t, remover)
-	m = send(t, m, cleanupMsg(t, m))
+	m, cmd := applyMerge(t, remover)
+	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "could not remove the worktree: boom") {
 		t.Errorf("aviso = %q, want el motivo del fallo de borrado", lastToast(m))
@@ -443,8 +516,8 @@ func TestMergeCleanupComposesWithBranchNotDeleted(t *testing.T) {
 	remover := &fakeRemover{reason: worktree.KeptUncommitted}
 	m, out := mergeOutcome(t, remover)
 	out.DeleteMsg = "the protected branch was kept"
-	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
-	m = send(t, m, cleanupMsg(t, m))
+	cmd := m.applyAction(out, m.cycle)
+	m, _ = runCleanup(t, m, cmd)
 
 	toast := lastToast(m)
 	for _, want := range []string{"ok", "branch not deleted", "uncommitted changes — kept"} {
@@ -492,8 +565,8 @@ func TestMergeCleanupRemovedKeepsWarnLevel(t *testing.T) {
 	remover := &fakeRemover{removed: true}
 	m, out := mergeOutcome(t, remover)
 	out.DeleteMsg = "the protected branch was kept"
-	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
-	m = send(t, m, cleanupMsg(t, m))
+	cmd := m.applyAction(out, m.cycle)
+	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "worktree removed") {
 		t.Fatalf("aviso = %q, quiero que diga que se borró", lastToast(m))
@@ -503,8 +576,36 @@ func TestMergeCleanupRemovedKeepsWarnLevel(t *testing.T) {
 	}
 }
 
+// TestTriggersReviewCleanup fija el gatillo de forma determinista: solo un merge
+// OK lo dispara.
+func TestTriggersReviewCleanup(t *testing.T) {
+	yes := []forge.Outcome{
+		{Kind: forge.ActionMerge, OK: true},
+	}
+	no := []forge.Outcome{
+		{Kind: forge.ActionMerge, OK: false},
+		{Kind: forge.ActionApprove, OK: true},
+		{Kind: forge.ActionRetarget, OK: true},
+		{Kind: forge.ActionMerge, Conflict: true},
+		{Kind: forge.ActionMerge, Unmergeable: true},
+		{Kind: forge.ActionMerge, Perm: true},
+	}
+	for _, out := range yes {
+		if !triggersReviewCleanup(out) {
+			t.Errorf("un merge OK debería disparar la limpieza: %+v", out)
+		}
+	}
+	for _, out := range no {
+		if triggersReviewCleanup(out) {
+			t.Errorf("no debería disparar la limpieza: %+v", out)
+		}
+	}
+}
+
 // TestCleanupDoesNotTriggerOnOtherOutcomes cubre los negativos: aprobar, cambiar
-// la base y un merge que no sale bien no disparan ningún borrado.
+// la base y un merge que no sale bien no disparan ningún borrado. Se asertan
+// sobre el comando devuelto (nil) además del contador del remover, así que no
+// dependen de que una goroutine llegue a arrancar.
 func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -523,7 +624,9 @@ func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 			remover := &fakeRemover{removed: true}
 			m := f.m
 			m.SetReviewRemover(remover)
-			send(t, m, actionMsg{cycle: m.cycle, outcome: tc.out})
+			if cmd := m.applyAction(tc.out, m.cycle); cmd != nil {
+				t.Fatalf("no debería devolver comando de limpieza para %s", tc.name)
+			}
 			if remover.calls != 0 {
 				t.Errorf("remover llamado %d veces, want 0", remover.calls)
 			}
@@ -532,9 +635,12 @@ func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 }
 
 // TestMergeOKWithoutRemoverStillWorks cubre la degradación: sin removedor
-// inyectado el merge funciona igual y no auto-borra.
+// inyectado el merge funciona igual, no auto-borra y no devuelve comando.
 func TestMergeOKWithoutRemoverStillWorks(t *testing.T) {
-	m := mergeAndApply(t, nil)
+	m, cmd := applyMerge(t, nil)
+	if cmd != nil {
+		t.Fatal("sin removedor no debería haber comando de limpieza")
+	}
 	if !strings.Contains(lastToast(m), "ok") {
 		t.Fatalf("aviso = %q", lastToast(m))
 	}

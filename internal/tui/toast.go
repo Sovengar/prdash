@@ -68,6 +68,22 @@ func (t *toastManager) showFor(message string, level toastLevel, d time.Duration
 	t.toasts = append(t.toasts, toast{message: message, level: level, created: t.now(), duration: d})
 }
 
+// replace sustituye el aviso vigente cuyo texto es prev por uno nuevo, con su TTL
+// reiniciado. Si no lo encuentra —ya caducó o lo sustituyó otro— apila el nuevo.
+// Es lo que permite componer sobre un aviso sin duplicar su texto.
+func (t *toastManager) replace(prev, message string, level toastLevel) {
+	if message == "" {
+		return
+	}
+	for i := len(t.toasts) - 1; i >= 0; i-- {
+		if t.toasts[i].message == prev {
+			t.toasts[i] = toast{message: message, level: level, created: t.now(), duration: toastDuration}
+			return
+		}
+	}
+	t.show(message, level)
+}
+
 // update poda los avisos caducados. Es lo que llama el tick.
 func (t *toastManager) update() {
 	now := t.now()

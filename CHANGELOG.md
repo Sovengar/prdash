@@ -13,7 +13,9 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   Borra **solo** lo que `prdash worktrees list` marca como `orphaned` (su repo de
   origen ya no es accesible) y es excluyente con las rutas explícitas. Cero
   huérfanos es el caso feliz (exit 0). `--orphans --dry-run` imprime el lote
-  exacto que se borraría, por el mismo camino de código, sin tocar nada.
+  exacto que se borraría, por el mismo camino de código, sin tocar nada. Un
+  huérfano cuyo enlace `.git` ni siquiera declare un gitdir también se limpia, por
+  ruta o en lote, sin tumbar el resto.
 
 - **El worktree de un PR mergeado desde prdash se borra solo si está limpio.** Si
   el checkout tiene cambios sin commitear —incluidos archivos nuevos sin
@@ -22,7 +24,8 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
   se conserva, con otro aviso (`worktree kept: could not read the worktree
   status`): ante la duda nunca se borra. Es la única limpieza implícita de prdash;
   aprobar, cambiar la base, un merge que no sale bien y cerrar la app siguen sin
-  borrar nada.
+  borrar nada. El razonamiento completo, y por qué cambia la cláusula de
+  conservación total, en [ADR 0007](docs/adr/0007-worktree-cleanup-on-merge.md).
 
 - **`e` cambia la rama destino del PR/MR, con un buscador de las ramas del
   repositorio.** `e` abre un popup con las ramas que pide al forge, escribibles
