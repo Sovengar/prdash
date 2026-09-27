@@ -39,13 +39,29 @@ type Worktree struct {
 	RootPaneID  string
 }
 
+// Motivos por los que RemoveIfClean conserva un worktree. Son la respuesta de
+// "no lo borré, y por esto": un worktree sucio o un estado ilegible no son un
+// error de la operación, son la razón por la que no se borra.
+const (
+	// KeptUncommitted marca un checkout con cambios sin commitear (incluidos
+	// archivos sin trackear).
+	KeptUncommitted = "the worktree has uncommitted changes"
+	// KeptUnreadable marca un worktree cuyo estado de git no se pudo comprobar.
+	KeptUnreadable = "could not read the worktree status"
+)
+
 // Provisioner es el puerto de provisión de worktrees.
 type Provisioner interface {
 	// Create provisiona el worktree del spec. Si ya existe uno en el destino
 	// sobre la misma rama, lo reutiliza sin duplicar.
 	Create(ctx context.Context, spec Spec) (Worktree, error)
-	// Remove quita el worktree identificado por id (su ruta).
+	// Remove quita el worktree identificado por id (su ruta). Borra aunque haya
+	// cambios sin commitear: es la vía de las rutas explícitas.
 	Remove(ctx context.Context, id string) error
+	// RemoveIfClean quita el worktree de id solo si está limpio. Con cambios sin
+	// commitear (incluidos sin trackear) o con el estado de git ilegible lo
+	// conserva y devuelve el motivo. Una ruta ausente es un no-op sin error.
+	RemoveIfClean(ctx context.Context, id string) (removed bool, reason string, err error)
 	// List devuelve los worktrees bajo la raíz con ownership prdash.
 	List(ctx context.Context) []Worktree
 	// Audit lista los worktrees con ownership prdash y marca los huérfanos.
@@ -140,6 +156,54 @@ func (g *GitDirect) removablePath(id string) error {
 		}
 	}
 	return nil
+}
+
+// shouldRemove comprueba, sin borrar, si el worktree puede quitarse con el
+// candado "solo si limpio". Aplica los mismos guardas que Remove; una ruta
+// ausente no es un error (no hay nada que quitar), un checkout sucio se
+// conserva con su motivo y un estado ilegible también, por fail-safe.
+func (g *GitDirect) shouldRemove(ctx context.Context, id string) (ok bool, reason string, err error) {
+	if err := g.removablePath(id); err != nil {
+		return false, "", err
+	}
+	if !Exists(id) {
+		return false, "", nil
+	}
+	dirty, err := g.dirty(ctx, id)
+	if err != nil {
+		// No se pudo leer el estado: ante la duda, no se borra y no es un fallo
+		// de la operación, es la razón por la que se conserva.
+		return false, KeptUnreadable, nil
+	}
+	if dirty {
+		return false, KeptUncommitted, nil
+	}
+	return true, "", nil
+}
+
+// RemoveIfClean quita el worktree de id solo si está limpio. Es la vía del
+// auto-borrado tras un merge: a diferencia de Remove, no destruye trabajo sin
+// commitear y ante un estado ilegible conserva.
+func (g *GitDirect) RemoveIfClean(ctx context.Context, id string) (bool, string, error) {
+	ok, reason, err := g.shouldRemove(ctx, id)
+	if err != nil || !ok {
+		return false, reason, err
+	}
+	if err := g.Remove(ctx, id); err != nil {
+		return false, "", err
+	}
+	return true, "", nil
+}
+
+// dirty informa si el árbol de trabajo tiene cambios sin commitear. Usa
+// `status --porcelain` y no `diff --quiet`: un archivo nuevo sin trackear es
+// trabajo sin commitear y `diff` lo ignora.
+func (g *GitDirect) dirty(ctx context.Context, id string) (bool, error) {
+	out, err := g.git.Run(ctx, id, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
 
 // List escanea la raíz y devuelve los worktrees con ownership prdash,
