@@ -150,3 +150,148 @@ func TestCreateFailureLeavesNoPartialDir(t *testing.T) {
 		t.Fatalf("no debería quedar un worktree a medias: %v", err)
 	}
 }
+
+// newCleanWorktree crea un worktree limpio bajo una raíz propia y devuelve la
+// raíz, la ruta del checkout y el repo de origen (para poder ensuciarlo).
+func newCleanWorktree(t *testing.T) (base, dest, repo string) {
+	t.Helper()
+	repo = newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+	base = t.TempDir()
+	dest = filepath.Join(base, "prdash-pr-1")
+	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
+		t.Fatalf("preparar worktree limpio: %v", err)
+	}
+	return base, dest, repo
+}
+
+// TestRemoveIfCleanRemovesCleanWorktree cubre el caso feliz de B: un worktree sin
+// cambios se borra.
+func TestRemoveIfCleanRemovesCleanWorktree(t *testing.T) {
+	base, dest, _ := newCleanWorktree(t)
+	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
+	if err != nil {
+		t.Fatalf("RemoveIfClean: %v", err)
+	}
+	if !removed || reason != "" {
+		t.Fatalf("removed=%v reason=%q, quiero borrado y sin motivo", removed, reason)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatalf("el worktree limpio debería haberse borrado: %v", err)
+	}
+}
+
+// TestRemoveIfCleanKeepsDirtyWorktree cubre el candado "solo si limpio": con
+// cambios sin commitear se conserva y se explica.
+func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
+	base, dest, _ := newCleanWorktree(t)
+	if err := os.WriteFile(filepath.Join(dest, "base.txt"), []byte("editado"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
+	if err != nil {
+		t.Fatalf("RemoveIfClean: %v", err)
+	}
+	if removed || reason != KeptUncommitted {
+		t.Fatalf("removed=%v reason=%q, quiero conservado por sucio", removed, reason)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("el worktree sucio no debería tocarse: %v", err)
+	}
+}
+
+// TestRemoveIfCleanKeepsUntrackedWorktree fija que un archivo nuevo sin trackear
+// también cuenta como sucio: `git diff --quiet` lo ignora, `status --porcelain`
+// no.
+func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
+	base, dest, _ := newCleanWorktree(t)
+	if err := os.WriteFile(filepath.Join(dest, "nuevo.txt"), []byte("sin trackear"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
+	if err != nil {
+		t.Fatalf("RemoveIfClean: %v", err)
+	}
+	if removed || reason != KeptUncommitted {
+		t.Fatalf("removed=%v reason=%q, quiero conservado por untracked", removed, reason)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("el worktree con untracked no debería tocarse: %v", err)
+	}
+}
+
+// TestRemoveIfCleanKeepsOnUnreadableStatus cubre el fail-safe: si no se puede
+// leer el estado de git, se conserva en vez de borrar.
+func TestRemoveIfCleanKeepsOnUnreadableStatus(t *testing.T) {
+	base, dest, _ := newCleanWorktree(t)
+	// El enlace .git apunta a un gitdir inexistente: el fichero sigue siendo un
+	// worktree enlazado, pero `git status` no puede leerlo.
+	if err := os.WriteFile(filepath.Join(dest, ".git"), []byte("gitdir: /nonexistent/prdash-gitdir\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
+	if err != nil {
+		t.Fatalf("RemoveIfClean: %v", err)
+	}
+	if removed || reason != KeptUnreadable {
+		t.Fatalf("removed=%v reason=%q, quiero conservado por estado ilegible", removed, reason)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("el worktree con estado ilegible no debería tocarse: %v", err)
+	}
+}
+
+// TestRemoveIfCleanAbsentPathIsNoop cubre "si el worktree ya no está en disco, es
+// un no-op sin error": es lo que hace idempotente a B.
+func TestRemoveIfCleanAbsentPathIsNoop(t *testing.T) {
+	base := t.TempDir()
+	dest := filepath.Join(base, "prdash-pr-1")
+	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
+	if err != nil || removed || reason != "" {
+		t.Fatalf("removed=%v reason=%q err=%v, quiero no-op sin error", removed, reason, err)
+	}
+}
+
+// TestRemoveIfCleanRefusesForeign usa los mismos guardas que Remove: un worktree
+// ajeno nunca se borra, ni siquiera si está limpio.
+func TestRemoveIfCleanRefusesForeign(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+	base := t.TempDir()
+	foreign := filepath.Join(base, "otra-herramienta")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "feature")
+
+	removed, _, err := NewGitDirect(base).RemoveIfClean(context.Background(), foreign)
+	if err == nil {
+		t.Fatal("no debería aceptar borrar un worktree ajeno")
+	}
+	if removed {
+		t.Fatal("removed debería ser false")
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatalf("el worktree ajeno no debería tocarse: %v", err)
+	}
+}
+
+// TestRemoveIfCleanRefusesPathOutsideBase comprueba que el guarda de raíz sigue
+// vigente en el camino de B.
+func TestRemoveIfCleanRefusesPathOutsideBase(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+	outside := filepath.Join(t.TempDir(), "prdash-pr-1")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", outside, "feature")
+
+	removed, _, err := NewGitDirect(t.TempDir()).RemoveIfClean(context.Background(), outside)
+	if err == nil {
+		t.Fatal("no debería aceptar borrar fuera de la raíz gestionada")
+	}
+	if removed {
+		t.Fatal("removed debería ser false")
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+	}
+}

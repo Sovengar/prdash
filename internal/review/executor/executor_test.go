@@ -356,7 +356,10 @@ type fakeProvisioner struct{ wt worktree.Worktree }
 func (f *fakeProvisioner) Create(context.Context, worktree.Spec) (worktree.Worktree, error) {
 	return f.wt, nil
 }
-func (f *fakeProvisioner) Remove(context.Context, string) error     { return nil }
+func (f *fakeProvisioner) Remove(context.Context, string) error { return nil }
+func (f *fakeProvisioner) RemoveIfClean(context.Context, string) (bool, string, error) {
+	return false, "", nil
+}
 func (f *fakeProvisioner) List(context.Context) []worktree.Worktree { return nil }
 func (f *fakeProvisioner) Audit(context.Context) []worktree.Entry   { return nil }
 

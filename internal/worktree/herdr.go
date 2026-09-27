@@ -187,6 +187,22 @@ func (h *HerdrNative) Remove(ctx context.Context, id string) error {
 	return h.scan.Remove(ctx, id)
 }
 
+// RemoveIfClean reproduce el candado "solo si limpio" resolviendo el estado con
+// el escaneo de git real (los worktrees nativos también lo son) y delegando el
+// borrado en el nativo, para no dejar el workspace huérfano. Comparte con
+// GitDirect el mismo `shouldRemove`: los guardas no se relajan por correr dentro
+// de Herdr.
+func (h *HerdrNative) RemoveIfClean(ctx context.Context, id string) (bool, string, error) {
+	ok, reason, err := h.scan.shouldRemove(ctx, id)
+	if err != nil || !ok {
+		return false, reason, err
+	}
+	if err := h.Remove(ctx, id); err != nil {
+		return false, "", err
+	}
+	return true, "", nil
+}
+
 // List delega en el escaneo de worktrees enlazados bajo la raíz. Los worktrees
 // nativos también son worktrees de git reales, así que el listado es el mismo.
 func (h *HerdrNative) List(ctx context.Context) []Worktree { return h.scan.List(ctx) }
