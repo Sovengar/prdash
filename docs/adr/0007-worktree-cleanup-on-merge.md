@@ -55,6 +55,9 @@ Dos hechos verificados condicionan la decisión:
 5. **Los guardas no se relajan.** Toda vía de limpieza pasa por `worktree.Owned`
    (label o nombre con prefijo `prdash-`) **y** por vivir bajo la raíz gestionada.
    Un worktree ajeno es intocable por ruta explícita, por `--orphans` y por B.
+   Esa guarda la aplican por igual git directo y la provisión nativa de Herdr
+   **antes** de delegar en su borrado: la vía nativa no puede saltarse el
+   ownership ni la raíz.
 6. **`--dry-run` para `--orphans`.** `Audit` marca huérfano ante **cualquier**
    error de `os.Stat`, no solo "no existe", así que un gitdir temporalmente
    inaccesible podría marcar sano a huérfano. No se cambia `Audit`: se ofrece

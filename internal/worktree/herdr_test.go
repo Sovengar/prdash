@@ -323,6 +323,57 @@ func TestHerdrNativeRemoveUsesWorkspace(t *testing.T) {
 	}
 }
 
+// TestHerdrNativeRemoveRefusesPathOutsideBase blinda la guarda de raíz gestionada
+// en el camino nativo: antes delegaba en el cliente sin comprobarla, así que una
+// ruta propia fuera de la raíz se podía borrar bajo Herdr.
+func TestHerdrNativeRemoveRefusesPathOutsideBase(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+	outside := filepath.Join(t.TempDir(), "prdash-pr-1")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", outside, "feature")
+
+	runner := &fakeRunner{
+		available:  true,
+		listResult: []herdr.WorktreeInfo{{Path: outside, OpenWorkspaceID: "w99"}},
+	}
+	h := NewHerdrNative(runner, t.TempDir()) // raíz gestionada distinta
+	if err := h.Remove(context.Background(), outside); err == nil {
+		t.Fatal("no debería borrar fuera de la raíz gestionada")
+	}
+	if len(runner.removeCalls) != 0 {
+		t.Fatalf("no debería llamar al cliente nativo: %v", runner.removeCalls)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+	}
+}
+
+// TestHerdrNativeRemoveIfCleanRefusesPathOutsideBase extiende la misma guarda al
+// candado "solo si limpio": la ruta fuera de la raíz se rechaza sin consultar el
+// estado ni llamar al cliente nativo.
+func TestHerdrNativeRemoveIfCleanRefusesPathOutsideBase(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+	outside := filepath.Join(t.TempDir(), "prdash-pr-1")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", outside, "feature")
+
+	runner := &fakeRunner{
+		available:  true,
+		listResult: []herdr.WorktreeInfo{{Path: outside, OpenWorkspaceID: "w99"}},
+	}
+	h := NewHerdrNative(runner, t.TempDir())
+	removed, _, err := h.RemoveIfClean(context.Background(), outside)
+	if err == nil || removed {
+		t.Fatalf("RemoveIfClean = (%v, _, %v), quiero rechazo", removed, err)
+	}
+	if len(runner.removeCalls) != 0 {
+		t.Fatalf("no debería llamar al cliente nativo: %v", runner.removeCalls)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+	}
+}
+
 // TestHerdrNativeReuseRejectsBranchMismatch comprueba que reutilizar un
 // checkout con otra rama falla con un error claro, igual que git directo.
 func TestHerdrNativeReuseRejectsBranchMismatch(t *testing.T) {

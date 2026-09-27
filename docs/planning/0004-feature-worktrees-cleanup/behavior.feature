@@ -236,6 +236,13 @@ Feature: Limpieza de worktrees de review en prdash
     Then ninguno de los dos se borra
     And solo puede borrarse lo propio que además vive dentro de la raíz gestionada
 
+  @cli @worktrees @seguridad
+  Scenario: la guarda de raíz gestionada aplica en las dos provisiones
+    Given un worktree propio situado fuera de la raíz gestionada
+    When intento borrarlo por ruta explícita, con git directo o con la provisión nativa de Herdr
+    Then no se borra
+    And el rechazo es un error y no toca nada, ni con el borrado nativo
+
   @cli @tui @seguridad
   Scenario: una ruta inexistente se rechaza sin tocar nada
     When pido borrar una ruta que no existe, por cualquier vía
