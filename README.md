@@ -527,7 +527,8 @@ editor = "nvim ."   # por si no usas el `vi` → `nvim .` de tu shell
 ```
 
 Funciona igual con la provisión nativa de Herdr (dentro de Herdr) y con git
-directo (fuera).
+directo (fuera): los guardas de ownership y de raíz gestionada se aplican en
+ambas vías, así que una ruta propia fuera de la raíz se rechaza sin tocar nada.
 
 ## Dentro de Herdr
 

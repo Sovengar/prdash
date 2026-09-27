@@ -171,7 +171,15 @@ func (h *HerdrNative) attach(ctx context.Context, wt *Worktree, spec Spec) error
 
 // Remove quita el worktree nativo (y su workspace) si puede resolver el
 // workspace a partir de la ruta; si no, cae al borrado con git directo.
+//
+// Antes de delegar en el cliente nativo aplica la MISMA guarda de ownership y de
+// raíz gestionada que GitDirect.Remove: sin ella, una ruta propia fuera de la
+// raíz se borraba bajo Herdr sin pasar por `removablePath`. El rechazo es un
+// error, no un borrado, igual que en git directo.
 func (h *HerdrNative) Remove(ctx context.Context, id string) error {
+	if err := h.scan.removablePath(id); err != nil {
+		return err
+	}
 	if repo := mainRepoOf(id); repo != "" {
 		if infos, err := h.client.WorktreeList(ctx, repo); err == nil {
 			for _, info := range infos {
