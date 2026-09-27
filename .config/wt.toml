@@ -1,0 +1,41 @@
+# Worktrunk — configuración de PROYECTO para prdash
+#
+# Este fichero se versiona: es lo que hereda el equipo. Los hooks de proyecto se
+# AÑADEN a los de ~/.config/worktrunk/config.toml, y se ejecutan con los globales
+# primero. Los escalares (worktree-path) sí se sustituyen.
+#
+# prdash es Go, no Node. Nada de pnpm aquí: la ceremony es mod download, build
+# cache y gofmt. La ruta de los worktrees la pone el global (`<repo>/.worktrees/`).
+
+
+# Al crear el worktree, antes de nada: resolver el módulo. La caché de módulos de
+# Go es global (~go/pkg/mod), así que esto solo descarga lo que falte. Corre
+# bloqueante pero es instantáneo si ya está descargado.
+[pre-start]
+deps = "go mod download"
+
+# También al crear el worktree, pero en BACKGROUND (no bloquea).
+# La caché de compilación de Go es global, pero el primer build de un worktree
+# nuevo compila el repo entero desde cero. Calentarla aquí es lo que hace que el
+# primer `make test` del worktree tarde segundos en vez de medio minuto.
+[post-start]
+warm = "go build ./..."
+
+
+# Antes del squash commit, en wt merge. Barato y bloqueante: el formateo es
+# justo lo que más falla en un PR de Go, y el repo lo exige en `make test`.
+[pre-commit]
+fmt = 'test -z "$(gofmt -l $(git ls-files "*.go"))" || { echo "gofmt pendiente en:"; gofmt -l $(git ls-files "*.go"); exit 1; }'
+vet = "go vet ./..."
+
+# Tras el rebase, antes de mergear. Puerta de compilación: barata y atrapa el
+# error que más cuesta (no compila). La suite completa (`make test`, con -race)
+# se deja a mano: no bloquea el flujo diario.
+[pre-merge]
+build = "go build ./..."
+
+# En la rama destino, tras mergear. `make install` deja el binario al día en
+# ~/.local/bin, que es justo "installing updated binaries" del doc de wt. Sin
+# esto, el `prdash` del PATH se queda en la versión anterior a cada merge.
+[post-merge]
+install = "make install"
