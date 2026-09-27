@@ -8,7 +8,7 @@ CONFDIR ?= $(HOME)/.config/prdash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path
+.PHONY: help build install uninstall run print test fmt vet tidy clean config config-path mutate mutate-diff
 
 help: ## Muestra las tareas disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -49,6 +49,12 @@ vet: ## Analiza el código
 
 tidy: ## Sincroniza go.mod/go.sum
 	go mod tidy
+
+mutate: ## Mutation testing (gremlins) on the whole module — advisory, never blocks CI
+	go tool gremlins unleash --workers 4 --timeout-coefficient 3 --output report.json
+
+mutate-diff: ## Mutation testing (gremlins) restricted to the diff vs main — advisory
+	go tool gremlins unleash --diff main --workers 4 --timeout-coefficient 3 --output report.json
 
 clean: ## Borra los artefactos de compilación
 	rm -rf bin

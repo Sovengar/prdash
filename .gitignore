@@ -6,3 +6,7 @@ bin/
 # el .gitignore y sí desciende: por eso `make test` formatea con
 # `git ls-files '*.go'` y no con `gofmt -l .`.
 .worktrees/
+
+# Mutation testing (gremlins)
+report.json
+.gremlins*
