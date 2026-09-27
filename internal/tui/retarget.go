@@ -134,6 +134,20 @@ type ReviewLookup interface {
 	ActiveReview(it model.Item) (worktree.Worktree, bool)
 }
 
+// ReviewRemover borra el worktree del review activo de un ítem, solo si está
+// limpio. Es un puerto opcional y separado de ReviewLookup: una capacidad que
+// BORRA no puede heredar el contrato "solo lectura y degradable" de un lookup, y
+// su ausencia debe ser explícita ("sin remover no hay auto-borrado, y el merge
+// sigue igual"). reason explica por qué se conservó el worktree; err reserva el
+// fallo de la operación.
+type ReviewRemover interface {
+	RemoveReview(ctx context.Context, it model.Item) (removed bool, reason string, err error)
+}
+
+// SetReviewRemover inyecta el removedor de reviews. nil lo deshabilita: el merge
+// funciona igual y solo deja de auto-borrar el worktree.
+func (m *Model) SetReviewRemover(r ReviewRemover) { m.reviewRemover = r }
+
 // branchesMsg entrega el listado de ramas de un repositorio. errMsg lleva el
 // motivo de un listado que no llegó; err queda para un fallo que no venga ya
 // traducido en un warning del forge.

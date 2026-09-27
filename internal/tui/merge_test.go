@@ -5,6 +5,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
 	"prdash/internal/testutil"
+	"prdash/internal/worktree"
 )
 
 // mergeFixture es un modelo con un ítem seleccionable, accionable y releíble por
@@ -312,5 +315,212 @@ func TestMergeNoticeNamesTheMode(t *testing.T) {
 
 	if !strings.Contains(lastToast(m), "rebase") {
 		t.Errorf("el aviso final debería nombrar el modo, aviso = %q", lastToast(m))
+	}
+}
+
+// ═══════════════ B — auto-borrado del worktree tras mergear ═══════════════
+
+// fakeRemover simula el auto-borrado del worktree del review. Registra el ítem
+// con el que se le pidió y devuelve un resultado fijo.
+type fakeRemover struct {
+	removed bool
+	reason  string
+	err     error
+	got     model.Item
+	calls   int
+}
+
+func (f *fakeRemover) RemoveReview(_ context.Context, it model.Item) (bool, string, error) {
+	f.got = it
+	f.calls++
+	return f.removed, f.reason, f.err
+}
+
+// mergeOutcome arma un merge rebase desde la TUI, lo dispara y devuelve el modelo
+// (con el remover inyectado) junto al resultado del forge, sin aplicarlo.
+func mergeOutcome(t *testing.T, remover ReviewRemover) (Model, forge.Outcome) {
+	t.Helper()
+	f := newMergeFixture(t, mergeItems()...)
+	m := f.m
+	if remover != nil {
+		m.SetReviewRemover(remover)
+	}
+	m = press(t, m, "m")
+	m = press(t, m, "r")
+	return m, waitOutcome(t, m)
+}
+
+// mergeAndApply hace lo mismo y además vuelca el resultado como si llegara del
+// canal de eventos.
+func mergeAndApply(t *testing.T, remover ReviewRemover) Model {
+	t.Helper()
+	m, out := mergeOutcome(t, remover)
+	return send(t, m, actionMsg{cycle: m.cycle, outcome: out})
+}
+
+// cleanupMsg lee el reviewCleanupMsg que dispara el merge OK y lo aplica.
+func cleanupMsg(t *testing.T, m Model) reviewCleanupMsg {
+	t.Helper()
+	ev := waitMount(t, m)
+	msg, ok := ev.(reviewCleanupMsg)
+	if !ok {
+		t.Fatalf("evento %T, want reviewCleanupMsg", ev)
+	}
+	return msg
+}
+
+// TestMergeOKRemovesCleanWorktree cubre el caso feliz: el merge OK borra el
+// worktree del ítem seleccionado y el aviso dice las dos cosas.
+func TestMergeOKRemovesCleanWorktree(t *testing.T) {
+	remover := &fakeRemover{removed: true}
+	m, out := mergeOutcome(t, remover)
+	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
+	m = send(t, m, cleanupMsg(t, m))
+
+	if remover.calls != 1 || remover.got.ID() != out.Item.ID() {
+		t.Fatalf("remover calls=%d item=%v, quiero el ítem mergeado %v", remover.calls, remover.got.ID(), out.Item.ID())
+	}
+	toast := lastToast(m)
+	if !strings.Contains(toast, "worktree removed") || !strings.Contains(toast, "ok") {
+		t.Errorf("aviso = %q, want merge ok + worktree removed", toast)
+	}
+}
+
+// TestMergeOKKeepsDirtyWorktree fija el texto exacto del caso sucio.
+func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
+	remover := &fakeRemover{reason: worktree.KeptUncommitted}
+	m := mergeAndApply(t, remover)
+	m = send(t, m, cleanupMsg(t, m))
+
+	if !strings.Contains(lastToast(m), "merged, but the worktree has uncommitted changes — kept") {
+		t.Errorf("aviso = %q, want el texto exacto del caso sucio", lastToast(m))
+	}
+}
+
+// TestMergeOKKeepsUnreadableWorktree cubre el fail-safe: si no se pudo leer el
+// estado, se conserva y el aviso lo dice.
+func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
+	remover := &fakeRemover{reason: worktree.KeptUnreadable}
+	m := mergeAndApply(t, remover)
+	m = send(t, m, cleanupMsg(t, m))
+
+	if !strings.Contains(lastToast(m), "could not read the worktree status") {
+		t.Errorf("aviso = %q, want que diga que no se pudo comprobar el estado", lastToast(m))
+	}
+}
+
+// TestMergeOKWithoutReviewReportsNoError: sin review montado el merge termina
+// igual y no aparece ningún aviso de limpieza.
+func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
+	remover := &fakeRemover{} // (false, "", nil): no hay review montado
+	m := mergeAndApply(t, remover)
+	m = send(t, m, cleanupMsg(t, m))
+
+	toast := lastToast(m)
+	if strings.Contains(toast, "worktree") || strings.Contains(toast, "could not") {
+		t.Errorf("aviso = %q, sin review no debería haber aviso de limpieza", toast)
+	}
+	if !strings.Contains(toast, "ok") {
+		t.Errorf("aviso = %q, el merge debería seguir diciendo que salió bien", toast)
+	}
+}
+
+// TestMergeOKCleanupErrorIsWarn: un fallo de borrado no convierte el merge en
+// error: el merge sí salió, así que se avisa como una advertencia.
+func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
+	remover := &fakeRemover{err: errors.New("boom")}
+	m := mergeAndApply(t, remover)
+	m = send(t, m, cleanupMsg(t, m))
+
+	if !strings.Contains(lastToast(m), "could not remove the worktree: boom") {
+		t.Errorf("aviso = %q, want el motivo del fallo de borrado", lastToast(m))
+	}
+}
+
+// TestMergeCleanupComposesWithBranchNotDeleted: el aviso del borrado no pisa el
+// hecho de que la rama no se borró; los dos conviven.
+func TestMergeCleanupComposesWithBranchNotDeleted(t *testing.T) {
+	remover := &fakeRemover{reason: worktree.KeptUncommitted}
+	m, out := mergeOutcome(t, remover)
+	out.DeleteMsg = "the protected branch was kept"
+	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
+	m = send(t, m, cleanupMsg(t, m))
+
+	toast := lastToast(m)
+	for _, want := range []string{"ok", "branch not deleted", "uncommitted changes — kept"} {
+		if !strings.Contains(toast, want) {
+			t.Errorf("aviso = %q, falta %q", toast, want)
+		}
+	}
+}
+
+// TestCleanupDoesNotTriggerOnOtherOutcomes cubre los negativos: aprobar, cambiar
+// la base y un merge que no sale bien no disparan ningún borrado.
+func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
+	cases := []struct {
+		name string
+		out  forge.Outcome
+	}{
+		{"approve", forge.Outcome{Kind: forge.ActionApprove, OK: true}},
+		{"retarget", forge.Outcome{Kind: forge.ActionRetarget, OK: true, Base: "main"}},
+		{"merge falla", forge.Outcome{Kind: forge.ActionMerge, OK: false, Msg: "boom"}},
+		{"conflicto", forge.Outcome{Kind: forge.ActionMerge, Conflict: true, Msg: "changed"}},
+		{"no mergeable", forge.Outcome{Kind: forge.ActionMerge, Unmergeable: true, Msg: "rebase"}},
+		{"permiso", forge.Outcome{Kind: forge.ActionMerge, Perm: true, Msg: "no"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newMergeFixture(t, mergeItems()...)
+			remover := &fakeRemover{removed: true}
+			m := f.m
+			m.SetReviewRemover(remover)
+			send(t, m, actionMsg{cycle: m.cycle, outcome: tc.out})
+			if remover.calls != 0 {
+				t.Errorf("remover llamado %d veces, want 0", remover.calls)
+			}
+		})
+	}
+}
+
+// TestMergeOKWithoutRemoverStillWorks cubre la degradación: sin removedor
+// inyectado el merge funciona igual y no auto-borra.
+func TestMergeOKWithoutRemoverStillWorks(t *testing.T) {
+	m := mergeAndApply(t, nil)
+	if !strings.Contains(lastToast(m), "ok") {
+		t.Fatalf("aviso = %q", lastToast(m))
+	}
+}
+
+// TestQuitDoesNotRemoveWorktrees cubre el invariante duro: cerrar la app nunca
+// ejecuta un borrado.
+func TestQuitDoesNotRemoveWorktrees(t *testing.T) {
+	f := newMergeFixture(t, mergeItems()...)
+	remover := &fakeRemover{removed: true}
+	m := f.m
+	m.SetReviewRemover(remover)
+
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if out == nil {
+		t.Fatal("q debería seguir cerrando la TUI")
+	}
+	if remover.calls != 0 {
+		t.Errorf("cerrar la app no debe borrar nada (llamadas=%d)", remover.calls)
+	}
+}
+
+// TestRefreshMergedItemDoesNotTriggerCleanup: un PR mergeado que se ve al
+// refrescar (fuera de prdash) no dispara la limpieza.
+func TestRefreshMergedItemDoesNotTriggerCleanup(t *testing.T) {
+	f := newMergeFixture(t, mergeItems()...)
+	remover := &fakeRemover{removed: true}
+	m := f.m
+	m.SetReviewRemover(remover)
+
+	merged := f.items[0]
+	merged.State = "MERGED"
+	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{merged}, false))
+
+	if remover.calls != 0 {
+		t.Errorf("un refresco no debe disparar la limpieza (llamadas=%d)", remover.calls)
 	}
 }

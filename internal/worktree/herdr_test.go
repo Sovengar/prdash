@@ -3,6 +3,7 @@ package worktree
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ type fakeRunner struct {
 	createCalls  []herdr.WorktreeSpec
 	listResult   []herdr.WorktreeInfo
 	removeCalls  []string
+	removeErr    error
 	workspace    herdr.WorkspaceInfo
 	workspaceErr error
 	wsCalls      []herdr.WorkspaceSpec
@@ -44,7 +46,7 @@ func (f *fakeRunner) WorktreeList(context.Context, string) ([]herdr.WorktreeInfo
 
 func (f *fakeRunner) WorktreeRemove(_ context.Context, workspaceID string, _ bool) error {
 	f.removeCalls = append(f.removeCalls, workspaceID)
-	return nil
+	return f.removeErr
 }
 
 func (f *fakeRunner) WorkspaceCreate(_ context.Context, spec herdr.WorkspaceSpec) (herdr.WorkspaceInfo, error) {
@@ -345,5 +347,81 @@ func TestHerdrNativeCreateIncompleteSpecErrors(t *testing.T) {
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	if _, err := h.Create(context.Background(), Spec{Repo: "x"}); err == nil {
 		t.Fatal("spec incompleto debería fallar")
+	}
+}
+
+// herdrCleanWorktree crea un worktree limpio bajo una raíz propia y devuelve la
+// raíz y su ruta. Los tests del candado nativo lo ensucian o lo dejan limpio.
+func herdrCleanWorktree(t *testing.T) (base, dest string) {
+	t.Helper()
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+	base = t.TempDir()
+	dest = filepath.Join(base, "prdash-pr-1")
+	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
+		t.Fatalf("preparar worktree: %v", err)
+	}
+	return base, dest
+}
+
+// TestHerdrNativeRemoveIfCleanDeletesViaNativeWorkspace cubre el caso feliz del
+// candado nativo: un checkout limpio se borra por su workspace, no por git
+// directo, para no dejar el workspace de Herdr huérfano.
+func TestHerdrNativeRemoveIfCleanDeletesViaNativeWorkspace(t *testing.T) {
+	base, dest := herdrCleanWorktree(t)
+	runner := &fakeRunner{
+		available:  true,
+		listResult: []herdr.WorktreeInfo{{Path: dest, OpenWorkspaceID: "w21"}},
+	}
+
+	removed, reason, err := NewHerdrNative(runner, base).RemoveIfClean(context.Background(), dest)
+	if err != nil || !removed || reason != "" {
+		t.Fatalf("RemoveIfClean = (%v, %q, %v), quiero borrado limpio", removed, reason, err)
+	}
+	if len(runner.removeCalls) != 1 || runner.removeCalls[0] != "w21" {
+		t.Fatalf("removeCalls = %v, quiero el borrado nativo del workspace", runner.removeCalls)
+	}
+}
+
+// TestHerdrNativeRemoveIfCleanKeepsDirty: el candado se delega en shouldRemove,
+// así que un checkout sucio se conserva SIN llamar al borrado nativo.
+func TestHerdrNativeRemoveIfCleanKeepsDirty(t *testing.T) {
+	base, dest := herdrCleanWorktree(t)
+	if err := os.WriteFile(filepath.Join(dest, "dirty.txt"), []byte("sin commitear"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{
+		available:  true,
+		listResult: []herdr.WorktreeInfo{{Path: dest, OpenWorkspaceID: "w21"}},
+	}
+
+	removed, reason, err := NewHerdrNative(runner, base).RemoveIfClean(context.Background(), dest)
+	if err != nil || removed || reason != KeptUncommitted {
+		t.Fatalf("RemoveIfClean = (%v, %q, %v), quiero conservado por sucio", removed, reason, err)
+	}
+	if len(runner.removeCalls) != 0 {
+		t.Fatalf("un checkout sucio no debería llamar al borrado nativo: %v", runner.removeCalls)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("el worktree sucio no debería tocarse: %v", err)
+	}
+}
+
+// TestHerdrNativeRemoveIfCleanPropagatesRemoveError: si el borrado nativo falla,
+// el error se propaga y no se reporta como borrado.
+func TestHerdrNativeRemoveIfCleanPropagatesRemoveError(t *testing.T) {
+	base, dest := herdrCleanWorktree(t)
+	runner := &fakeRunner{
+		available:  true,
+		listResult: []herdr.WorktreeInfo{{Path: dest, OpenWorkspaceID: "w21"}},
+		removeErr:  errors.New("workspace busy"),
+	}
+
+	removed, _, err := NewHerdrNative(runner, base).RemoveIfClean(context.Background(), dest)
+	if err == nil || removed {
+		t.Fatalf("RemoveIfClean = (%v, _, %v), quiero error propagado", removed, err)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("un fallo de borrado no debería tocar el checkout: %v", err)
 	}
 }

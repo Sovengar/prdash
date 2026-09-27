@@ -62,6 +62,9 @@ func main() {
 	// de base deja desfasado un worktree ya montado. Se inyecta el mismo executor:
 	// el sitio que sabe qué review está vivo es el que los montó.
 	model.SetReviewLookup(ex)
+	// El auto-borrado del worktree tras un merge lo expone el mismo executor, que
+	// ya tiene el provisioner. Sin él, el merge funciona igual y no borra nada.
+	model.SetReviewRemover(ex)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "prdash:", err)
 		os.Exit(1)

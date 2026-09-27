@@ -9,6 +9,19 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **`prdash worktrees remove --orphans` limpia en lote los worktrees huérfanos.**
+  Borra **solo** lo que `prdash worktrees list` marca como `orphaned` (su repo de
+  origen ya no es accesible) y es excluyente con las rutas explícitas. Cero
+  huérfanos es el caso feliz (exit 0). `--orphans --dry-run` imprime el lote
+  exacto que se borraría, por el mismo camino de código, sin tocar nada.
+
+- **El worktree de un PR mergeado desde prdash se borra solo si está limpio.** Si
+  el checkout tiene cambios sin commitear —incluidos archivos nuevos sin
+  trackear— o su estado de git no se puede comprobar, se conserva y el aviso lo
+  dice (`merged, but the worktree has uncommitted changes — kept`). Es la única
+  limpieza implícita de prdash; aprobar, cambiar la base, un merge que no sale
+  bien y cerrar la app siguen sin borrar nada.
+
 - **`e` cambia la rama destino del PR/MR, con un buscador de las ramas del
   repositorio.** `e` abre un popup con las ramas que pide al forge, escribibles
   para filtrarlas, y la elección pasa por una confirmación que dice las dos ramas
