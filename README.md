@@ -511,10 +511,12 @@ dos modos es un error de uso.
 La única limpieza implícita es al **mergear desde prdash**: cuando un `merge`
 lanzado desde la app termina bien, se borra el worktree de ese ítem **solo si
 está limpio**. Si tiene cambios sin commitear (incluidos archivos nuevos sin
-trackear) o no se puede comprobar su estado, se **conserva** y el aviso lo dice
-(`merged, but the worktree has uncommitted changes — kept`). Ningún otro camino
-—approve, retarget, un merge que no sale bien, el refresco que ve un PR mergeado
-fuera de prdash, cerrar la app— borra nada.
+trackear) se **conserva** y el aviso lo dice (`merged, but the worktree has
+uncommitted changes — kept`). Si su estado de git no se puede comprobar, también
+se **conserva**, con otro aviso (`worktree kept: could not read the worktree
+status`). Ante la duda, nunca se borra. Ningún otro camino —approve, retarget, un
+merge que no sale bien, el refresco que ve un PR mergeado fuera de prdash, cerrar
+la app— borra nada.
 
 El editor es el único que se ajusta mejor con `[tools].editor`, que es un atajo
 para su base sin override:

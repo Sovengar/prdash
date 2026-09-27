@@ -454,6 +454,55 @@ func TestMergeCleanupComposesWithBranchNotDeleted(t *testing.T) {
 	}
 }
 
+// TestReviewCleanupNoticeLevels fija el nivel del aviso compuesto: cubrir el
+// texto no basta, porque un borrado sobre un merge que ya avisaba (rama no
+// borrada) debe conservar el warning en vez de rebajarlo a OK.
+func TestReviewCleanupNoticeLevels(t *testing.T) {
+	const base = "merge (squash) ok · branch not deleted: protected"
+	cases := []struct {
+		name      string
+		baseLevel noticeLevel
+		removed   bool
+		reason    string
+		err       error
+		wantLevel noticeLevel
+	}{
+		{"borrado sobre base OK", levelOK, true, "", nil, levelOK},
+		{"borrado sobre base warn", levelWarn, true, "", nil, levelWarn},
+		{"conservado por sucio", levelOK, false, worktree.KeptUncommitted, nil, levelWarn},
+		{"conservado por ilegible", levelOK, false, worktree.KeptUnreadable, nil, levelWarn},
+		{"fallo de borrado", levelOK, false, "", errors.New("boom"), levelWarn},
+		{"sin review montado", levelOK, false, "", nil, levelOK},
+		{"sin review sobre base warn", levelWarn, false, "", nil, levelWarn},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, level := reviewCleanupNotice(base, tc.baseLevel, tc.removed, tc.reason, tc.err)
+			if level != tc.wantLevel {
+				t.Fatalf("nivel = %d, quiero %d", level, tc.wantLevel)
+			}
+		})
+	}
+}
+
+// TestMergeCleanupRemovedKeepsWarnLevel comprueba de punta a punta que el aviso
+// final de un borrado sobre un merge ya advertido (rama no borrada) sigue siendo
+// warning: el nivel forma parte del hecho, no solo el texto.
+func TestMergeCleanupRemovedKeepsWarnLevel(t *testing.T) {
+	remover := &fakeRemover{removed: true}
+	m, out := mergeOutcome(t, remover)
+	out.DeleteMsg = "the protected branch was kept"
+	m = send(t, m, actionMsg{cycle: m.cycle, outcome: out})
+	m = send(t, m, cleanupMsg(t, m))
+
+	if !strings.Contains(lastToast(m), "worktree removed") {
+		t.Fatalf("aviso = %q, quiero que diga que se borró", lastToast(m))
+	}
+	if got := lastToastLevel(m); got != toastWarning {
+		t.Fatalf("nivel = %d, quiero warning: la rama no se borró", got)
+	}
+}
+
 // TestCleanupDoesNotTriggerOnOtherOutcomes cubre los negativos: aprobar, cambiar
 // la base y un merge que no sale bien no disparan ningún borrado.
 func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {

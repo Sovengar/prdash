@@ -171,3 +171,45 @@ func TestAuditSkipsNonWorktreeDirs(t *testing.T) {
 		t.Fatalf("un directorio sin worktree no debería listarse: %+v", got)
 	}
 }
+
+// TestRemoveOrphanWithoutGitDirDeletesCheckout cubre el huérfano cuyo `.git`
+// existe pero no declara un gitdir (corrupto o truncado): Audit lo marca huérfano
+// y no hay repo que resolver, así que borrar el checkout es lo único que queda.
+func TestRemoveOrphanWithoutGitDirDeletesCheckout(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+
+	base := t.TempDir()
+	dest := filepath.Join(base, "prdash-pr-1")
+	g := NewGitDirect(base)
+	if _, err := g.Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
+		t.Fatalf("preparar worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, ".git"), []byte("garbage\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := g.Remove(context.Background(), dest); err != nil {
+		t.Fatalf("Remove de huérfano sin gitdir: %v", err)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatalf("el checkout debería haberse borrado: %v", err)
+	}
+}
+
+// TestRemoveRefusesNonLinkedDir blinda el guarda del caso anterior: un directorio
+// con nombre prdash que no es un worktree enlazado no se borra.
+func TestRemoveRefusesNonLinkedDir(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "prdash-not-a-worktree")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewGitDirect(base).Remove(context.Background(), dir); err == nil {
+		t.Fatal("un directorio que no es worktree enlazado no debería borrarse")
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("el directorio no debería tocarse: %v", err)
+	}
+}

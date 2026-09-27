@@ -118,6 +118,14 @@ Feature: Limpieza de worktrees de review en prdash
     And explica por stderr que el flag no se reconoce
     And el comando termina con código de salida 2
 
+  @cli @worktrees @uso
+  Scenario: un token con guion inicial es un flag, nunca una ruta
+    Given un worktree propio sano
+    When ejecuto "prdash worktrees remove --orphan"
+    Then no borra nada
+    And explica por stderr que no reconoce el flag
+    And el comando termina con código de salida 2
+
   @cli @worktrees
   Scenario: remove con rutas explícitas sigue comportándose como antes
     Given un worktree propio sano y un worktree ajeno

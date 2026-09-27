@@ -127,7 +127,17 @@ func (g *GitDirect) Remove(ctx context.Context, id string) error {
 	}
 	repo := mainRepoOf(id)
 	if repo == "" {
-		return fmt.Errorf("worktree: could not locate the repo for %s", id)
+		// Un worktree enlazado cuyo .git no declara un gitdir (corrupto o
+		// truncado) no tiene repo con el que podar: es un huérfano y solo queda
+		// borrar el checkout. Cualquier otra cosa no es un worktree enlazado y
+		// se rechaza, para no borrar un directorio que no lo es.
+		if !isLinkedWorktree(id) {
+			return fmt.Errorf("worktree: could not locate the repo for %s", id)
+		}
+		if err := os.RemoveAll(id); err != nil {
+			return fmt.Errorf("remove the worktree checkout %s: %w", id, err)
+		}
+		return nil
 	}
 	if _, err := g.git.Run(ctx, repo, "worktree", "remove", "--force", id); err == nil {
 		return nil

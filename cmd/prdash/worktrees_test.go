@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"prdash/internal/testutil"
 	"prdash/internal/worktree"
@@ -86,6 +88,69 @@ func captureStderr(t *testing.T, fn func()) string {
 	data, _ := io.ReadAll(r)
 	_ = r.Close()
 	return string(data)
+}
+
+// fakeProvisioner es un Provisioner en memoria para los tests que necesitan
+// simular lentitud de un borrado sin tocar git.
+type fakeProvisioner struct {
+	entries []worktree.Entry
+	delays  map[string]time.Duration
+	removed []string
+}
+
+func (f *fakeProvisioner) Create(context.Context, worktree.Spec) (worktree.Worktree, error) {
+	return worktree.Worktree{}, nil
+}
+func (f *fakeProvisioner) RemoveIfClean(context.Context, string) (bool, string, error) {
+	return false, "", nil
+}
+func (f *fakeProvisioner) List(context.Context) []worktree.Worktree { return nil }
+func (f *fakeProvisioner) Audit(context.Context) []worktree.Entry   { return f.entries }
+func (f *fakeProvisioner) Remove(ctx context.Context, id string) error {
+	if d := f.delays[id]; d > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(d):
+		}
+	}
+	f.removed = append(f.removed, id)
+	return nil
+}
+
+// TestRunWorktreesRemoveOrphansPerItemBudget fija que cada borrado del lote tiene
+// su propio presupuesto: un ítem lento que agota el suyo no arrastra a los demás
+// ni produce un borrado parcial por un plazo global compartido.
+func TestRunWorktreesRemoveOrphansPerItemBudget(t *testing.T) {
+	const (
+		slow = "/base/prdash-pr-1"
+		fast = "/base/prdash-pr-2"
+	)
+	pr := &fakeProvisioner{
+		entries: []worktree.Entry{
+			{Worktree: worktree.Worktree{Path: slow}, Orphan: true},
+			{Worktree: worktree.Worktree{Path: fast}, Orphan: true},
+		},
+		delays: map[string]time.Duration{slow: 200 * time.Millisecond},
+	}
+
+	var code int
+	var stderr string
+	captureStdout(t, func() {
+		stderr = captureStderr(t, func() {
+			code = removeWorktreesWithin(pr, true, false, nil, 40*time.Millisecond)
+		})
+	})
+
+	if code != 1 {
+		t.Fatalf("un ítem que agota su presupuesto debería marcar fallo, code=%d", code)
+	}
+	if !strings.Contains(stderr, slow) {
+		t.Errorf("stderr = %q, quiero que nombre el ítem que agotó su presupuesto", stderr)
+	}
+	if len(pr.removed) != 1 || pr.removed[0] != fast {
+		t.Fatalf("removed = %v, quiero que el segundo ítem se borre pese al primero", pr.removed)
+	}
 }
 
 // TestRunWorktreesListsOnlyOwned comprueba que el listado muestra los worktrees
@@ -210,6 +275,35 @@ func TestRunWorktreesRemoveNonexistentRefused(t *testing.T) {
 	}
 }
 
+// TestRunWorktreesRemoveOrphansMalformedGitDoesNotBreakBatch cubre el huérfano
+// cuyo `.git` no declara un gitdir: Audit lo marca huérfano pero no hay repo que
+// resolver. No debe tumbar el lote: se borra su checkout y el resto sigue.
+func TestRunWorktreesRemoveOrphansMalformedGitDoesNotBreakBatch(t *testing.T) {
+	base, orphans, healthy, _ := worktreeOrphanFixture(t)
+	malformed := orphans[0]
+	if err := os.WriteFile(filepath.Join(malformed, ".git"), []byte("garbage\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pr := worktree.NewGitDirect(base)
+
+	var code int
+	out := captureStdout(t, func() { code = runWorktrees(pr, []string{"remove", "--orphans"}) })
+	if code != 0 {
+		t.Fatalf("un huérfano con .git irresoluble no debería hacer fallar el lote: code=%d\n%s", code, out)
+	}
+	for _, o := range orphans {
+		if worktree.Exists(o) {
+			t.Errorf("%s debería haberse borrado", o)
+		}
+		if !strings.Contains(out, o) {
+			t.Errorf("la salida no nombra %s:\n%s", o, out)
+		}
+	}
+	if !worktree.Exists(healthy) {
+		t.Error("el worktree sano no debería tocarse")
+	}
+}
+
 // TestRunWorktreesRemoveOrphans borra en lote todos los huérfanos propios y solo
 // esos: el sano y el ajeno quedan intactos.
 func TestRunWorktreesRemoveOrphans(t *testing.T) {
@@ -320,6 +414,8 @@ func TestRunWorktreesRemoveOrphansUsageErrors(t *testing.T) {
 		{"orphans y rutas", []string{"remove", "--orphans", healthy}, "cannot be mixed"},
 		{"dry-run sin orphans", []string{"remove", "--dry-run"}, "--orphans"},
 		{"flag desconocido", []string{"remove", "--bogus"}, "unknown flag"},
+		{"typo de orphans", []string{"remove", "--orphan"}, "unknown flag"},
+		{"ruta con guion inicial", []string{"remove", "-prdash-pr-1"}, "unknown flag"},
 		{"sin rutas ni orphans", []string{"remove"}, "path"},
 	}
 	for _, tc := range cases {
