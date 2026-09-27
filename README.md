@@ -490,14 +490,31 @@ Los panes reciben `PRDASH_BASE` con la rama destino del ítem, además de
 ### Gestión de worktrees (`prdash worktrees`)
 
 Los worktrees de review se identifican por su nombre/label `prdash-…`: prdash
-**nunca** lista ni borra worktrees ajenos. Se conservan al cerrar la app (no hay
-borrado implícito).
+**nunca** lista ni borra worktrees ajenos. Cerrar la app no borra nada: no hay
+borrado implícito al salir.
 
 ```sh
-prdash worktrees                 # lista propia (ruta, rama, estado); marca huérfanos
-prdash worktrees list            # idem, explícito
-prdash worktrees remove <ruta>   # borra SOLO lo pedido y solo si es de prdash
+prdash worktrees                     # lista propia (ruta, rama, estado); marca huérfanos
+prdash worktrees list                # idem, explícito
+prdash worktrees remove <ruta>…      # borra SOLO lo pedido y solo si es de prdash
+prdash worktrees remove --orphans    # borra en lote solo los huérfanos que marca `list`
+prdash worktrees remove --orphans --dry-run   # imprime el lote exacto y no borra
 ```
+
+`--orphans` reusa la misma fuente de verdad que `list` (el propio `Audit`), así
+que borra **solo** lo que `list` marca como `orphaned`; con cero huérfanos
+informa y sale con 0. `--dry-run` imprime el lote exacto por el mismo camino de
+código, sin borrar nada, para poder ver la operación irreversible antes de
+ejecutarla. `--orphans` es **excluyente** con las rutas explícitas: mezclar los
+dos modos es un error de uso.
+
+La única limpieza implícita es al **mergear desde prdash**: cuando un `merge`
+lanzado desde la app termina bien, se borra el worktree de ese ítem **solo si
+está limpio**. Si tiene cambios sin commitear (incluidos archivos nuevos sin
+trackear) o no se puede comprobar su estado, se **conserva** y el aviso lo dice
+(`merged, but the worktree has uncommitted changes — kept`). Ningún otro camino
+—approve, retarget, un merge que no sale bien, el refresco que ve un PR mergeado
+fuera de prdash, cerrar la app— borra nada.
 
 El editor es el único que se ajusta mejor con `[tools].editor`, que es un atajo
 para su base sin override:

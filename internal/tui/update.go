@@ -14,6 +14,7 @@ import (
 	"prdash/internal/forge/model"
 	"prdash/internal/review/executor"
 	"prdash/internal/state"
+	"prdash/internal/worktree"
 )
 
 // Update procesa mensajes: eventos de los forges, teclas, tick y resize.
@@ -105,6 +106,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyMount(msg.result, msg.err)
 		return m.withPump(nil)
 
+	case reviewCleanupMsg:
+		m.applyReviewCleanup(msg)
+		return m.withPump(nil)
+
 	case simMsg:
 		m.applySim(msg)
 		return m.withPump(nil)
@@ -179,23 +184,81 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) {
 		// tiene que decir las dos cosas, porque "merge ok" a secas deja en
 		// suspense si la rama que se pidió borrar sigue ahí.
 		notice := actionDoneNotice(out)
+		level := levelOK
 		if out.DeleteMsg != "" {
 			notice += " · branch not deleted: " + out.DeleteMsg
-			m.setNotice(notice, levelWarn)
-			return
-		}
-		// Y lo mismo con el review montado: cambiar la base no lo toca, así que
-		// sigue ahí con la que tenía el ítem. Se avisa y no se arregla porque el
-		// worktree es del usuario.
-		if stale := m.staleReviewNotice(out.Item); stale != "" && out.Kind == forge.ActionRetarget {
+			level = levelWarn
+		} else if stale := m.staleReviewNotice(out.Item); stale != "" && out.Kind == forge.ActionRetarget {
+			// Y lo mismo con el review montado: cambiar la base no lo toca, así
+			// que sigue ahí con la que tenía el ítem. Se avisa y no se arregla
+			// porque el worktree es del usuario.
 			notice += " · " + stale
-			m.setNotice(notice, levelWarn)
-			return
+			level = levelWarn
 		}
-		m.setNotice(notice, levelOK)
+		m.setNotice(notice, level)
+		// Solo un merge que salió bien dispara la limpieza del worktree. Su
+		// resultado llega en segundo plano compuesto sobre este aviso base.
+		if out.Kind == forge.ActionMerge {
+			m.launchReviewCleanup(out.Item, notice, level)
+		}
 	default:
 		m.setNotice("error: "+out.Msg, levelError)
 	}
+}
+
+// launchReviewCleanup arranca el auto-borrado del worktree del ítem mergeado en
+// segundo plano: el handler de Update no puede bloquearse con un subproceso de
+// git. Sin removedor inyectado no hay auto-borrado y el merge sigue igual. El
+// aviso base se captura ahora y viaja con el mensaje, para recomponer sobre él en
+// vez de pisar los hechos que el merge ya traía.
+func (m *Model) launchReviewCleanup(it model.Item, base string, level noticeLevel) {
+	if m.reviewRemover == nil {
+		return
+	}
+	appCtx, events, remover := m.ctx, m.events, m.reviewRemover
+	go func() {
+		ctx, cancel := context.WithTimeout(appCtx, reviewCleanupTimeout)
+		defer cancel()
+		removed, reason, err := remover.RemoveReview(ctx, it)
+		sendEvent(appCtx, events, reviewCleanupMsg{base: base, level: level, removed: removed, reason: reason, err: err})
+	}()
+}
+
+// applyReviewCleanup vuelca el resultado del auto-borrado sustituyendo el aviso
+// por la composición de este con los hechos del merge.
+func (m *Model) applyReviewCleanup(msg reviewCleanupMsg) {
+	m.setNotice(reviewCleanupNotice(msg.base, msg.level, msg.removed, msg.reason, msg.err))
+}
+
+// reviewCleanupNotice compone el aviso final del merge con su limpieza. Nunca
+// suprime los hechos del merge: los prefija con el desenlace del worktree. Sin
+// review montado (o con la ruta ya ausente) el aviso del merge se queda tal cual.
+func reviewCleanupNotice(base string, baseLevel noticeLevel, removed bool, reason string, err error) (string, noticeLevel) {
+	switch {
+	case err != nil:
+		// El merge sí salió: un fallo al borrar el worktree es una advertencia,
+		// no un error de la acción.
+		return base + " · could not remove the worktree: " + err.Error(), levelWarn
+	case removed:
+		level := levelOK
+		if baseLevel == levelWarn {
+			level = levelWarn
+		}
+		return base + " · worktree removed", level
+	case reason != "":
+		return base + " · " + keptReviewNotice(reason), levelWarn
+	default:
+		return base, baseLevel
+	}
+}
+
+// keptReviewNotice traduce el motivo de conservación al texto del aviso. El caso
+// sucio tiene su frase exacta; el resto usa un prefijo uniforme.
+func keptReviewNotice(reason string) string {
+	if reason == worktree.KeptUncommitted {
+		return "merged, but the worktree has uncommitted changes — kept"
+	}
+	return "worktree kept: " + reason
 }
 
 // handleKey enruta las teclas: navegación y acciones configurables. No hay vista

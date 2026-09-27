@@ -80,6 +80,19 @@ type mountMsg struct {
 	err    error
 }
 
+// reviewCleanupMsg entrega el resultado del auto-borrado del worktree tras un
+// merge OK. `base` es el aviso del merge capturado al disparar: el resultado de
+// la limpieza se compone sobre ese texto, no sobre el aviso vigente, para no
+// pisar los hechos que el merge ya traía (modo, rama no borrada). `removed` y
+// `reason` vienen de RemoveIfClean y `err` de un fallo del borrado.
+type reviewCleanupMsg struct {
+	base    string
+	level   noticeLevel
+	removed bool
+	reason  string
+	err     error
+}
+
 // commentsTickMsg dispara la comprobación de si el ítem bajo el cursor tiene ya
 // su conversación. Es un reloj, no un lector del canal, así que no altera el
 // invariante del único lector.
@@ -108,6 +121,10 @@ const mountTimeout = 5 * time.Minute
 
 // actionTimeout es el límite de una acción approve/merge (incluye releer).
 const actionTimeout = 60 * time.Second
+
+// reviewCleanupTimeout acota el borrado del worktree tras un merge (subproceso de
+// git). Es corto porque no debe dejar el evento colgado si el checkout no responde.
+const reviewCleanupTimeout = 30 * time.Second
 
 // commentsTimeout acota la consulta de la conversación de un ítem. Es una
 // lectura de un solo PR, así que si tarda más que esto el problema es el forge y
@@ -287,6 +304,11 @@ type Model struct {
 	// de que su worktree se quedó con la base anterior. nil = no hay con quién
 	// preguntarlo, y el aviso se pierde.
 	reviewLookup ReviewLookup
+	// reviewRemover borra el worktree del review activo de un ítem si está
+	// limpio. nil = sin auto-borrado: el merge funciona igual y el worktree se
+	// conserva. Es un puerto distinto de reviewLookup porque una capacidad que
+	// borra no puede heredar el contrato "solo lectura y degradable".
+	reviewRemover ReviewRemover
 
 	// mergeArmed es la primera pulsación de merge: espera la segunda, que es la
 	// que elige el modo y ejecuta. mergeArmedID fija el ítem que se armó, porque
