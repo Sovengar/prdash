@@ -30,6 +30,9 @@ type Resolver interface {
 	Remember(ref model.RepoRef, path string)
 	RecordReview(it model.Item, rec cache.ReviewRecord) error
 	ActiveReview(id model.ID) (cache.ReviewRecord, bool)
+	// ForgetReview olvida el review activo de un ítem. Se llama solo cuando su
+	// worktree se ha borrado de verdad.
+	ForgetReview(it model.Item) error
 }
 
 // HerdrPort es el puerto de montaje del layout dentro de Herdr. La
@@ -137,6 +140,29 @@ func (e *Executor) ActiveReview(it model.Item) (worktree.Worktree, bool) {
 		Branch: rec.Branch,
 		Repo:   rec.Repo,
 	}, true
+}
+
+// RemoveReview quita el worktree del review activo de un ítem, solo si está
+// limpio (candado RemoveIfClean). Es la capacidad de borrado que la TUI no tiene
+// hoy: sin review montado, o con la ruta ya ausente, es un no-op sin error. Solo
+// olvida el registro del review cuando de verdad se ha borrado, para no dejar un
+// registro apuntando a un checkout inexistente.
+func (e *Executor) RemoveReview(ctx context.Context, it model.Item) (bool, string, error) {
+	rec, ok := e.Resolver.ActiveReview(it.ID())
+	if !ok || rec.Worktree == "" {
+		return false, "", nil
+	}
+	removed, reason, err := e.Worktrees.RemoveIfClean(ctx, rec.Worktree)
+	if err != nil {
+		return false, reason, err
+	}
+	if !removed {
+		return false, reason, nil
+	}
+	// El worktree ya no está: el olvido del registro es best-effort porque no
+	// convierte un borrado correcto en un error, y el store en proceso no falla.
+	_ = e.Resolver.ForgetReview(it)
+	return true, "", nil
 }
 
 // resolveRepo devuelve la ruta del repo local, clonándolo en bare si no existe.
