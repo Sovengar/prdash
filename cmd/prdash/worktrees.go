@@ -49,6 +49,12 @@ func runWorktrees(pr worktree.Provisioner, args []string) int {
 // que sea testeable aislado. Los dos modos —rutas explícitas y `--orphans`— son
 // excluyentes; `--dry-run` solo acompaña a `--orphans`. Cualquier uso inválido es
 // un error de uso (el llamador lo traduce a exit 2).
+//
+// Todo token que empieza por `-` se trata como flag: las rutas que gestiona
+// prdash son absolutas, así que un guion inicial nunca es una ruta legítima y
+// rechazarlo evita que una errata de `--orphans`/`--dry-run` (p. ej. `--orphan`)
+// se cuele como si fuera un path. Es una decisión, no un olvido: no hay forma de
+// borrar una ruta que empiece por `-`.
 func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err error) {
 	for _, arg := range args {
 		switch {
@@ -107,11 +113,18 @@ func listWorktrees(pr worktree.Provisioner) int {
 // lote que el propio Audit marca como huérfano. Cualquier ruta que no sea un
 // worktree propio, o que no exista, se rechaza sin tocarla.
 func removeWorktrees(pr worktree.Provisioner, orphans, dryRun bool, paths []string) int {
-	ctx, cancel := context.WithTimeout(context.Background(), worktreeTimeout)
-	defer cancel()
+	return removeWorktreesWithin(pr, orphans, dryRun, paths, worktreeTimeout)
+}
 
+// removeWorktreesWithin es removeWorktrees con un presupuesto por ítem inyectable:
+// es el seam que deja a los tests acotar el plazo sin esperar el de producción.
+//
+// Cada borrado —y el Audit del lote— recibe su propio presupuesto en vez de
+// compartir uno global: un ítem lento que agota el suyo no puede consumir el
+// tiempo de los siguientes ni dejar un borrado parcial por timeout.
+func removeWorktreesWithin(pr worktree.Provisioner, orphans, dryRun bool, paths []string, budget time.Duration) int {
 	if orphans {
-		return removeOrphans(pr, ctx, dryRun)
+		return removeOrphans(pr, dryRun, budget)
 	}
 
 	code := 0
@@ -122,8 +135,8 @@ func removeWorktrees(pr worktree.Provisioner, orphans, dryRun bool, paths []stri
 			code = 1
 			continue
 		}
-		if err := pr.Remove(ctx, path); err != nil {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %v\n", err)
+		if err := removeOne(pr, path, budget); err != nil {
+			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s: %v\n", path, err)
 			code = 1
 			continue
 		}
@@ -135,9 +148,13 @@ func removeWorktrees(pr worktree.Provisioner, orphans, dryRun bool, paths []stri
 // removeOrphans borra en lote los worktrees que Audit marca como huérfanos, y
 // solo esos. Cero huérfanos es el caso feliz (exit 0): informa y no toca nada.
 // Con dryRun imprime el lote exacto por el mismo camino de código y no borra.
-func removeOrphans(pr worktree.Provisioner, ctx context.Context, dryRun bool) int {
+func removeOrphans(pr worktree.Provisioner, dryRun bool, budget time.Duration) int {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	entries := pr.Audit(ctx)
+	cancel()
+
 	var orphans []worktree.Entry
-	for _, e := range pr.Audit(ctx) {
+	for _, e := range entries {
 		if e.Orphan {
 			orphans = append(orphans, e)
 		}
@@ -153,12 +170,20 @@ func removeOrphans(pr worktree.Provisioner, ctx context.Context, dryRun bool) in
 			fmt.Printf("would remove: %s\n", e.Path)
 			continue
 		}
-		if err := pr.Remove(ctx, e.Path); err != nil {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %v\n", err)
+		if err := removeOne(pr, e.Path, budget); err != nil {
+			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s: %v\n", e.Path, err)
 			code = 1
 			continue
 		}
 		fmt.Printf("worktree removed: %s\n", e.Path)
 	}
 	return code
+}
+
+// removeOne borra un solo worktree con su propio presupuesto, para que el tiempo
+// de un ítem del lote no se descuente del de los demás.
+func removeOne(pr worktree.Provisioner, path string, budget time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	return pr.Remove(ctx, path)
 }

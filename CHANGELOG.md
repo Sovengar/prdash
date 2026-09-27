@@ -17,10 +17,12 @@ versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
 
 - **El worktree de un PR mergeado desde prdash se borra solo si está limpio.** Si
   el checkout tiene cambios sin commitear —incluidos archivos nuevos sin
-  trackear— o su estado de git no se puede comprobar, se conserva y el aviso lo
-  dice (`merged, but the worktree has uncommitted changes — kept`). Es la única
-  limpieza implícita de prdash; aprobar, cambiar la base, un merge que no sale
-  bien y cerrar la app siguen sin borrar nada.
+  trackear— se conserva y el aviso lo dice (`merged, but the worktree has
+  uncommitted changes — kept`). Si su estado de git no se puede comprobar, también
+  se conserva, con otro aviso (`worktree kept: could not read the worktree
+  status`): ante la duda nunca se borra. Es la única limpieza implícita de prdash;
+  aprobar, cambiar la base, un merge que no sale bien y cerrar la app siguen sin
+  borrar nada.
 
 - **`e` cambia la rama destino del PR/MR, con un buscador de las ramas del
   repositorio.** `e` abre un popup con las ramas que pide al forge, escribibles

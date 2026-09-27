@@ -116,6 +116,15 @@ func toastTexts(m Model) []string { return m.toast.texts() }
 // lastToast es el mensaje del último aviso lanzado.
 func lastToast(m Model) string { return m.toast.last() }
 
+// lastToastLevel es el nivel del último aviso lanzado, para poder asertar la
+// gravedad (no solo el texto) de un aviso compuesto.
+func lastToastLevel(m Model) toastLevel {
+	if len(m.toast.toasts) == 0 {
+		return toastInfo
+	}
+	return m.toast.toasts[len(m.toast.toasts)-1].level
+}
+
 // assertToast falla si ningún aviso vivo contiene want.
 func assertToast(t *testing.T, m Model, want string) {
 	t.Helper()
