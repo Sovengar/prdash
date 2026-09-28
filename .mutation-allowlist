@@ -7,13 +7,20 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Seeded from a full-module `go tool gremlins unleash` run: 1169 killed, 286
-# unique survivors, 77.78% test efficacy. Almost all of them live in the TUI
-# render path (comments, sim, list, toast, detail), in pixel conversion
-# (internal/sim/pixels.go) and in Herdr's client/graphics glue: mutations of code
-# whose only observable effect is a colour, a rune, a width or a log line, which
-# the suite does not assert on today. They are accepted as known debt, not as
-# proof that nothing is wrong.
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 235
+# unique survivors, down from 286. The campaign that got it there covered the
+# pure logic: forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan,
+# tui/list, tui/table, tui/overlay and the git test helpers. What is left is
+# mostly the TUI render path (comments, sim, toast, retarget, detail), pixel
+# conversion (internal/sim/pixels.go) and Herdr's client/graphics glue: mutations
+# of code whose only observable effect is a colour, a rune, a width or a log
+# line, which the suite does not assert on today. They are accepted as known
+# debt, not as proof that nothing is wrong.
+#
+# Every entry below the marked groups was re-checked by hand against its source:
+# either the mutant is provably equivalent (the group headers say why, case by
+# case) or it is a real gap in the render path. An entry that cannot be justified
+# that way should not be here.
 #
 # Consequence to keep in mind: an entry here silences that line FOREVER, so a
 # real regression hiding in a listed line will not be reported. If one of these
@@ -23,7 +30,7 @@
 # Entries are keyed by LINE NUMBER, so inserting code above an entry shifts it
 # and will surface a new red on purpose: re-verify the gap and update this file,
 # do not regenerate it wholesale (that would silently re-hide real gaps).
-ARITHMETIC_BASE internal/forge/tool/tool.go:132
+
 ARITHMETIC_BASE internal/herdr/client.go:278
 ARITHMETIC_BASE internal/sim/pixels.go:106
 ARITHMETIC_BASE internal/sim/pixels.go:153
@@ -52,17 +59,14 @@ ARITHMETIC_BASE internal/tui/detail.go:325
 ARITHMETIC_BASE internal/tui/detail.go:93
 ARITHMETIC_BASE internal/tui/layout.go:85
 ARITHMETIC_BASE internal/tui/layout.go:91
-ARITHMETIC_BASE internal/tui/list.go:120
+# 35 capacidad del slice `+4` -> `+5`. make() no cambia la longitud
+# observada, solo reserva memoria; no hay forma de assertarlo sin medir la
+# reserva, que no es comportamiento. NO MATABLE.
 ARITHMETIC_BASE internal/tui/list.go:35
-ARITHMETIC_BASE internal/tui/list.go:49
-ARITHMETIC_BASE internal/tui/list.go:53
-ARITHMETIC_BASE internal/tui/list.go:58
-ARITHMETIC_BASE internal/tui/list.go:60
-ARITHMETIC_BASE internal/tui/list.go:63
-ARITHMETIC_BASE internal/tui/list.go:69
-ARITHMETIC_BASE internal/tui/list.go:82
-ARITHMETIC_BASE internal/tui/list.go:94
-ARITHMETIC_BASE internal/tui/overlay.go:61
+# 63 `y+boxH > height`. Con `>=` se asigna y = max(0, height-boxH), que ya
+# es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
+# el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
+ARITHMETIC_BASE internal/tui/overlay.go:63
 ARITHMETIC_BASE internal/tui/retarget.go:340
 ARITHMETIC_BASE internal/tui/retarget.go:498
 ARITHMETIC_BASE internal/tui/retarget.go:512
@@ -86,15 +90,16 @@ ARITHMETIC_BASE internal/tui/toast.go:248
 ARITHMETIC_BASE internal/tui/toast.go:253
 ARITHMETIC_BASE internal/tui/toast.go:255
 ARITHMETIC_BASE internal/tui/toast.go:270
-CONDITIONALS_BOUNDARY internal/config/config.go:516
 CONDITIONALS_BOUNDARY internal/forge/github/github.go:435
 CONDITIONALS_BOUNDARY internal/forge/gitlab/gitlab.go:335
+# 595 `i >= 0` sobre el fullPath. Con i == 0 (ruta que empieza por '/') la
+# rama da owner[:0] == "" y la rama negativa tambien ponia "": ningun test
+# puede distinguirlas. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:595
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:833
+# 854 `i >= 0` tras strings.Trim(path, "/"). El trim se come los barras
+# iniciales, asi que i == 0 es inalcanzable y la rama negativa nunca entra.
+# EQUIVALENTE por inalcanzabilidad.
 CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:854
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:862
-CONDITIONALS_BOUNDARY internal/forge/tool/tool.go:301
-CONDITIONALS_BOUNDARY internal/forge/tool/tool.go:61
 CONDITIONALS_BOUNDARY internal/herdr/client.go:277
 CONDITIONALS_BOUNDARY internal/herdr/client.go:319
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:146
@@ -103,8 +108,13 @@ CONDITIONALS_BOUNDARY internal/herdr/graphics.go:43
 CONDITIONALS_BOUNDARY internal/herdr/herdr.go:41
 CONDITIONALS_BOUNDARY internal/herdr/herdr.go:43
 CONDITIONALS_BOUNDARY internal/herdr/parse.go:271
+# 139 `si > sj` -> `>=`. La comparacion solo se evalua cuando el `if`
+# anterior ya dijo `si != sj`, y ahi `>` y `>=` son lo mismo.
+# EQUIVALENTE por construccion.
 CONDITIONALS_BOUNDARY internal/inbox/inbox.go:139
-CONDITIONALS_BOUNDARY internal/inbox/inbox.go:144
+# 80 `rank(kind) < rank(prev)` -> `<=`. Solo difiere con ranks IGUALES, y
+# ranks iguales son la misma seccion, donde reasignar best[id] = kind es
+# idempotente. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/inbox/inbox.go:80
 CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:331
 CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:338
@@ -117,8 +127,6 @@ CONDITIONALS_BOUNDARY internal/sim/pixels.go:93
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:96
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:99
 CONDITIONALS_BOUNDARY internal/sim/service.go:285
-CONDITIONALS_BOUNDARY internal/state/state.go:232
-CONDITIONALS_BOUNDARY internal/state/state.go:272
 CONDITIONALS_BOUNDARY internal/tui/app.go:1000
 CONDITIONALS_BOUNDARY internal/tui/app.go:386
 CONDITIONALS_BOUNDARY internal/tui/app.go:545
@@ -142,12 +150,13 @@ CONDITIONALS_BOUNDARY internal/tui/layout.go:85
 CONDITIONALS_BOUNDARY internal/tui/layout.go:88
 CONDITIONALS_BOUNDARY internal/tui/layout.go:91
 CONDITIONALS_BOUNDARY internal/tui/layout.go:94
-CONDITIONALS_BOUNDARY internal/tui/list.go:105
-CONDITIONALS_BOUNDARY internal/tui/list.go:117
-CONDITIONALS_BOUNDARY internal/tui/list.go:89
+# 29 `len(block) > len(lines)` -> `>=`. Con la caja midiendo justo lo que
+# la vista, el recorte block[:len(lines)] es una identidad. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:40
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:61
+# 63 `y+boxH > height`. Con `>=` se asigna y = max(0, height-boxH), que ya
+# es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
+# el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
+CONDITIONALS_BOUNDARY internal/tui/overlay.go:63
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:181
 CONDITIONALS_BOUNDARY internal/tui/retarget.go:253
@@ -163,9 +172,9 @@ CONDITIONALS_BOUNDARY internal/tui/sim.go:413
 CONDITIONALS_BOUNDARY internal/tui/sim.go:448
 CONDITIONALS_BOUNDARY internal/tui/sim.go:528
 CONDITIONALS_BOUNDARY internal/tui/sim.go:547
+# 365 `n >= w` -> `>` en pad. Con n == w el relleno son cero espacios y
+# `s + ""` == s. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
-CONDITIONALS_BOUNDARY internal/tui/table.go:373
-CONDITIONALS_BOUNDARY internal/tui/table.go:376
 CONDITIONALS_BOUNDARY internal/tui/toast.go:133
 CONDITIONALS_BOUNDARY internal/tui/toast.go:209
 CONDITIONALS_BOUNDARY internal/tui/toast.go:219
@@ -177,12 +186,6 @@ CONDITIONALS_BOUNDARY internal/tui/update.go:711
 CONDITIONALS_BOUNDARY internal/tui/update.go:728
 CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
 CONDITIONALS_BOUNDARY internal/worktree/herdr.go:151
-CONDITIONALS_NEGATION internal/config/config.go:229
-CONDITIONALS_NEGATION internal/config/config.go:232
-CONDITIONALS_NEGATION internal/config/config.go:235
-CONDITIONALS_NEGATION internal/config/config.go:259
-CONDITIONALS_NEGATION internal/config/config.go:516
-CONDITIONALS_NEGATION internal/config/config.go:550
 CONDITIONALS_NEGATION internal/forge/bitbucket/bitbucket.go:26
 CONDITIONALS_NEGATION internal/forge/forge.go:250
 CONDITIONALS_NEGATION internal/forge/github/github.go:112
@@ -196,13 +199,6 @@ CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:257
 CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:335
 CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:342
 CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:378
-CONDITIONALS_NEGATION internal/forge/parse/branches.go:56
-CONDITIONALS_NEGATION internal/forge/parse/parse.go:333
-CONDITIONALS_NEGATION internal/forge/parse/parse.go:43
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:160
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:161
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:61
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:74
 CONDITIONALS_NEGATION internal/herdr/client.go:128
 CONDITIONALS_NEGATION internal/herdr/client.go:130
 CONDITIONALS_NEGATION internal/herdr/client.go:205
@@ -220,15 +216,11 @@ CONDITIONALS_NEGATION internal/herdr/herdr.go:173
 CONDITIONALS_NEGATION internal/herdr/layout.go:155
 CONDITIONALS_NEGATION internal/herdr/layout.go:165
 CONDITIONALS_NEGATION internal/herdr/layout.go:88
-CONDITIONALS_NEGATION internal/inbox/inbox.go:144
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:100
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:145
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:263
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:99
 CONDITIONALS_NEGATION internal/review/executor/executor.go:187
-CONDITIONALS_NEGATION internal/review/plan/plan.go:155
-CONDITIONALS_NEGATION internal/review/plan/plan.go:282
-CONDITIONALS_NEGATION internal/review/plan/plan.go:288
 CONDITIONALS_NEGATION internal/sim/pixels.go:96
 CONDITIONALS_NEGATION internal/sim/pixels.go:99
 CONDITIONALS_NEGATION internal/tui/app.go:1000
@@ -250,7 +242,6 @@ CONDITIONALS_NEGATION internal/tui/detail.go:182
 CONDITIONALS_NEGATION internal/tui/detail.go:266
 CONDITIONALS_NEGATION internal/tui/detail.go:281
 CONDITIONALS_NEGATION internal/tui/detail.go:285
-CONDITIONALS_NEGATION internal/tui/list.go:60
 CONDITIONALS_NEGATION internal/tui/retarget.go:261
 CONDITIONALS_NEGATION internal/tui/retarget.go:679
 CONDITIONALS_NEGATION internal/tui/sections.go:188
@@ -286,15 +277,6 @@ INVERT_NEGATIVES internal/tui/detail.go:210
 INVERT_NEGATIVES internal/tui/detail.go:216
 INVERT_NEGATIVES internal/tui/detail.go:234
 INVERT_NEGATIVES internal/tui/detail.go:93
-INVERT_NEGATIVES internal/tui/list.go:120
-INVERT_NEGATIVES internal/tui/list.go:49
-INVERT_NEGATIVES internal/tui/list.go:53
-INVERT_NEGATIVES internal/tui/list.go:58
-INVERT_NEGATIVES internal/tui/list.go:60
-INVERT_NEGATIVES internal/tui/list.go:63
-INVERT_NEGATIVES internal/tui/list.go:69
-INVERT_NEGATIVES internal/tui/list.go:82
-INVERT_NEGATIVES internal/tui/list.go:94
 INVERT_NEGATIVES internal/tui/retarget.go:340
 INVERT_NEGATIVES internal/tui/retarget.go:498
 INVERT_NEGATIVES internal/tui/retarget.go:512
