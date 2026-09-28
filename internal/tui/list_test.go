@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"prdash/internal/forge/model"
+	"prdash/internal/inbox"
 	"prdash/internal/testutil"
 )
 
@@ -605,6 +606,150 @@ func TestOverlayCenteredRecortaLaCajaQueNoCabe(t *testing.T) {
 	linea := strings.Split(got, "\n")[0]
 	if linea != "012345aaaa" {
 		t.Errorf("línea = %q, want \"012345aaaa\" (caja recortada al ancho, fondo detrás)", linea)
+	}
+}
+
+// TestLaFilaPintaLasCeldasQueCabenEsas: el `inner-2` que listLines pasa a
+// renderItem es la misma decisión que el del header, y por eso el `fitColumns` de
+// los dos tiene que dar el mismo número. Header y filas comparten layout a
+// propósito, para que escribir encima no mueva una columna.
+//
+// Si a la fila se le pasara un ancho mayor, metería una celda más que el header no
+// tiene: una columna que aparece en los datos y no en sus títulos, es decir la
+// tabla deja de leerse. El ancho de la fila no lo delata —las celdas se reparten
+// por su propio ancho, no rellenan el hueco—, así que se afirma el número de
+// celdas, que es lo que cambia.
+func TestLaFilaPintaLasCeldasQueCabenEsas(t *testing.T) {
+	m := longModel(t, 3)
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
+
+	for width := 20; width <= 140; width++ {
+		m.width = width
+		inner := m.contentWidth()
+		want := fitColumns(lay, inner-2)
+		// El ancho de las celdas más el prefijo de dos columnas ("  " o "▸ "),
+		// que es lo que listLines descuenta del ancho útil.
+		wantW := 2
+		for _, c := range lay.cols[:want] {
+			wantW += c.width
+		}
+
+		for _, l := range m.listLines(inner) {
+			if l.row < 0 {
+				continue
+			}
+			if got := ansi.StringWidth(stripANSI(l.text)); got != wantW {
+				t.Fatalf("ancho %d: la fila %d mide %d columnas, want %d (las de %d celdas que caben)",
+					width, l.row, got, wantW, want)
+			}
+		}
+	}
+}
+
+// TestElHeaderMuestraLasColumnasQueCabenEsas: el `inner-2` que listLines pasa al
+// header es la decisión más silenciosa de la lista, porque no se nota en el ancho
+// —el header se recorta por la derecha con TrimRight y siempre queda más corto que
+// las filas— sino en QUÉ columnas aparecen.
+//
+// El 2 del resta es el prefijo "  " de la línea, así que el header se mide contra
+// el ancho útil. Pasarle un ancho distinto metería o sacaría una columna, y una
+// columna de más o de menos cambia la lectura de la tabla entera. Por eso el test
+// no compara anchos sino el conjunto de títulos: las que caben tienen que estar y
+// la primera que no cabe tiene que faltar.
+func TestElHeaderMuestraLasColumnasQueCabenEsas(t *testing.T) {
+	m := longModel(t, 6)
+	// Se barre el ancho para cruzar todas las fronteras de columnas.
+	for width := 20; width <= 140; width += 2 {
+		m.width = width
+		inner := m.contentWidth()
+		lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
+		want := fitColumns(lay, inner-2)
+
+		lines := m.listLines(inner)
+		hi := -1
+		for i, l := range lines {
+			if l.row == 0 {
+				hi = i
+			}
+		}
+		if hi < 1 {
+			t.Fatalf("ancho %d: no encuentro la primera fila en %d líneas", width, len(lines))
+		}
+		header := stripANSI(lines[hi-1].text)
+
+		for i := range want {
+			if !strings.Contains(header, lay.cols[i].title) {
+				t.Fatalf("ancho %d: faltan las %d primeras columnas en el header, que dice %q", width, want, header)
+			}
+		}
+		if want < len(lay.cols) && strings.Contains(header, lay.cols[want].title) {
+			t.Fatalf("ancho %d: la columna %d (%q) no cabe y no debería estar en el header: %q",
+				width, want, lay.cols[want].title, header)
+		}
+	}
+}
+
+// TestFitColumnsDejaSiempreForge: con un ancho ridículo sigue entrando la columna
+// de FORGE, y con un ancho enorme entran todas. El mínimo de una columna es lo que
+// hace que la lista siga diciendo de qué forge es cada ítem, que es justo lo que
+// no puede faltar cuando no hay sitio.
+func TestFitColumnsDejaSiempreForge(t *testing.T) {
+	m := longModel(t, 3)
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
+	total := len(lay.cols)
+	if total < 2 {
+		t.Fatalf("la layout necesita al menos FORGE y otra columna, tiene %d", total)
+	}
+
+	// Ancho de sobra: todas.
+	if got := fitColumns(lay, 100_000); got != total {
+		t.Errorf("con ancho de sobra caben %d columnas, dio %d", total, got)
+	}
+	// Cada frontera: con el ancho justo caben k, y con una columna menos caben
+	// k-1. Es el borde de la condición, y el que decide si la última columna
+	// aparece o desaparece.
+	usado := 0
+	for k := 1; k <= total; k++ {
+		borde := usado + lay.cols[k-1].width
+		if got := fitColumns(lay, borde); got != k {
+			t.Errorf("con el ancho justo de %d columnas caben %d, dio %d", k, k, got)
+		}
+		if k > 1 {
+			if got := fitColumns(lay, borde-1); got != k-1 {
+				t.Errorf("con el ancho de %d columnas caben %d y con %d caben %d, dio %d", k, k, k-1, k-1, got)
+			}
+		}
+		usado = borde
+	}
+	// Por debajo de una sola columna, la de FORGE sigue ahí. Nunca 0: una lista
+	// sin columnas no dice de qué forge es nada.
+	for _, w := range []int{0, 1, -5, -100} {
+		if got := fitColumns(lay, w); got != 1 {
+			t.Errorf("fitColumns(%d) = %d, want 1 (FORGE siempre entra)", w, got)
+		}
+	}
+}
+
+// TestElMarcadorDelCursorVaEnSuFila: la fila del cursor se marca, y SOLO esa. Un
+// `==` invertido pondría la marca en las filas equivocadas, que es peor que no
+// marcar nada: el usuario haría clic mental sobre un ítem que no es el suyo.
+func TestElMarcadorDelCursorVaEnSuFila(t *testing.T) {
+	m := longModel(t, 4)
+	lines := m.listLines(m.contentWidth())
+
+	for cursor := range 4 {
+		m.cursor = cursor
+		lines = m.listLines(m.contentWidth())
+		for _, l := range lines {
+			if l.row < 0 {
+				continue
+			}
+			plano := stripANSI(l.text)
+			marcado := strings.Contains(plano, "▸")
+			if want := l.row == cursor; marcado != want {
+				t.Errorf("fila %d con cursor en %d: marcada=%v, want %v (%q)", l.row, cursor, marcado, want, plano)
+			}
+		}
 	}
 }
 
