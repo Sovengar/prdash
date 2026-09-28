@@ -735,11 +735,10 @@ func TestFitColumnsDejaSiempreForge(t *testing.T) {
 // marcar nada: el usuario haría clic mental sobre un ítem que no es el suyo.
 func TestElMarcadorDelCursorVaEnSuFila(t *testing.T) {
 	m := longModel(t, 4)
-	lines := m.listLines(m.contentWidth())
 
 	for cursor := range 4 {
 		m.cursor = cursor
-		lines = m.listLines(m.contentWidth())
+		lines := m.listLines(m.contentWidth())
 		for _, l := range lines {
 			if l.row < 0 {
 				continue
