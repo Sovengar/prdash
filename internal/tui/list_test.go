@@ -199,6 +199,279 @@ func TestPageKeysMoveOneWindow(t *testing.T) {
 	}
 }
 
+// TestScrollForAcomodaLaVentanaAlCursor cubre la aritmética del auto-scroll como
+// función pura, donde los bordes sí importan y a través del modelo se pierden.
+//
+// Los tres casos son los que se rompen si la condición se invierte o el borde
+// se mueve: la fila que cabe justo en la ventana no debe desplazar (si
+// desplazara, la lista saltaría una línea antes de tiempo), la primera que se
+// sale SÍ debe, y la última tiene que quedar pegada al borde inferior, no una
+// más allá.
+func TestScrollForAcomodaLaVentanaAlCursor(t *testing.T) {
+	cases := []struct {
+		name                         string
+		current, target, total, view int
+		want                         int
+	}{
+		{"el cursor ya se ve", 0, 3, 60, 10, 0},
+		{"la última fila de la ventana cabe", 0, 9, 60, 10, 0},
+		{"una por encima de la ventana sí desplaza", 0, 10, 60, 10, 1},
+		{"el cursor está por encima", 5, 1, 60, 10, 1},
+		{"el cursor es la primera línea", 5, 0, 60, 10, 0},
+		// 60 líneas en una ventana de 10: la última fila es la 59, así que el
+		// desplazamiento tiene que ser 59-10+1 = 50, y el recorte final lo
+		// confirma (50+10 == 60, el contenido entero).
+		{"la última fila se pega al borde", 0, 59, 60, 10, 50},
+		{"el contenido cabe entero", 0, 5, 8, 10, 0},
+		{"sin fila que seguir deja el scroll", 7, -1, 60, 10, 7},
+		{"target negativo no arrastra el scroll a cero", 0, -1, 60, 10, 0},
+		{"la ventana se acota al contenido", 40, 40, 12, 10, 2},
+		{"una ventana mayor que el contenido deja arriba", 0, 0, 4, 10, 0},
+		{"el scroll nunca queda negativo", -5, 0, 60, 10, 0},
+		{"el scroll nunca se pasa del final", 99, 59, 60, 10, 50},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := scrollFor(c.current, c.target, c.total, c.view); got != c.want {
+				t.Errorf("scrollFor(%d, %d, %d, %d) = %d, want %d",
+					c.current, c.target, c.total, c.view, got, c.want)
+			}
+		})
+	}
+}
+
+// TestCursorLineLocalizaLaFilaDelCursor: cursorLine devuelve el índice de la
+// línea que corresponde a la fila del cursor, no el número de la fila. Se
+// diferencia porque por encima de las filas hay líneas fijas (prefijo, avisos,
+// header) y porque los avisos y el indicador de paginación llevan row: -1 y no
+// deben confundirse con la fila 0.
+func TestCursorLineLocalizaLaFilaDelCursor(t *testing.T) {
+	lines := []listLine{
+		{text: "prefijo", row: -1},
+		{text: "aviso", row: -1},
+		{text: "header", row: -1},
+		{text: "fila 0", row: 0},
+		{text: "fila 1", row: 1},
+		{text: "loading more", row: -1},
+	}
+	// cursor 0 tiene que dar la fila 0, no la línea de prefijo: es justo el caso
+	// donde el row: -1 de las líneas fijas puede confundirse con la primera fila.
+	cases := map[int]int{0: 3, 1: 4, 2: -1, 99: -1}
+	for cursor, want := range cases {
+		if got := cursorLine(lines, cursor); got != want {
+			t.Errorf("cursorLine(cursor=%d) = %d, want %d", cursor, got, want)
+		}
+	}
+	// Y una lista sin filas de ítem no puede dar ninguna: el cursor no está.
+	// Una lista de cromo puro (todo row: -1) es el caso real de una sección sin
+	// ítems pero con avisos.
+	if got := cursorLine([]listLine{{text: "vacío", row: -1}}, 0); got != -1 {
+		t.Errorf("cursorLine sobre una lista sin filas = %d, want -1", got)
+	}
+	if got := cursorLine(nil, 0); got != -1 {
+		t.Errorf("cursorLine(nil, 0) = %d, want -1", got)
+	}
+}
+
+// TestVisibleListAcotaLaVentana al contenido: sin esto, un scroll desfasado por
+// un refresco podría cortaría en blanco o se saldría del final. Con view <= 0 o
+// sin líneas no hay nada que ver y se devuelve nil en vez de un tramo vacío.
+func TestVisibleListAcotaLaVentanaAlContenido(t *testing.T) {
+	lines := make([]listLine, 10)
+	for i := range lines {
+		lines[i] = listLine{row: i}
+	}
+
+	// Recorte normal: view líneas desde scroll.
+	got := visibleList(lines, 3, 4)
+	if len(got) != 4 || got[0].row != 3 || got[3].row != 6 {
+		t.Errorf("visibleList(3, 4) = %d líneas empezando en %d", len(got), got[0].row)
+	}
+	// Un scroll que se pasa del final se recorta hacia atrás para llenar la
+	// ventana: con 10 líneas y scroll 99, la ventana son las 6 últimas, no un
+	// tramo de 2 al final. Un recorte de 2 dejaría medio panel en negro.
+	got = visibleList(lines, 99, 4)
+	if len(got) != 4 || got[0].row != 6 {
+		t.Errorf("visibleList(99, 4) = %d líneas empezando en %d, want 4 desde 6", len(got), got[0].row)
+	}
+	// El recorte de la ventana es el único que puede devolver menos de `view`
+	// líneas, y ocurre cuando el contenido no da para una ventana entera desde
+	// el principio: 6 líneas en una ventana de 8 son 6, no 8.
+	seis := lines[:6]
+	got = visibleList(seis, 0, 8)
+	if len(got) != 6 || got[0].row != 0 {
+		t.Errorf("visibleList(6 líneas, view 8) = %d líneas, want 6 desde 0", len(got))
+	}
+	// Y la ventana se acota sin comerse una línea de más del contenido: desde 3
+	// con view 3 sobre 6 líneas salen las 3 últimas, no 4.
+	got = visibleList(seis, 3, 3)
+	if len(got) != 3 || got[0].row != 3 {
+		t.Errorf("visibleList(6 líneas, 3, 3) = %d líneas desde %d, want 3 desde 3", len(got), got[0].row)
+	}
+	// Un scroll desfasado se acota por los dos lados en vez de romper.
+	got = visibleList(lines, -5, 3)
+	if len(got) != 3 || got[0].row != 0 {
+		t.Errorf("visibleList(-5, 3) = %d líneas empezando en %d, want 3 desde 0", len(got), got[0].row)
+	}
+	got = visibleList(lines, 99, 3)
+	if len(got) != 3 || got[0].row != 7 {
+		t.Errorf("visibleList(99, 3) = %d líneas empezando en %d, want 3 desde 7", len(got), got[0].row)
+	}
+	// Sin ventana o sin contenido no hay vista.
+	if visibleList(lines, 0, 0) != nil || visibleList(nil, 0, 5) != nil {
+		t.Error("sin ventana o sin líneas visibleList debería devolver nil")
+	}
+}
+
+// TestListLinesComponeElCuerpoEnOrden fija la composición exacta del cuerpo, que
+// es un contrato y no un detalle: las filas se numeran con `row` para que el
+// cursor y el scroll las encuentren, y el desplazamiento de la lista depende de
+// que `row` coincida con la posición real. Si un append metiera una fila con el
+// `row` equivocado, el cursor apuntaría a otra fila y el scroll llevaría la
+// ventana a un sitio que no corresponde.
+//
+// Se afirma también qué líneas fijas hay por encima y por debajo de las filas
+// (prefijo, avisos, header, "loading more…"), porque son las que llevan row: -1
+// y las que se intercalan sin romper la numeración.
+func TestListLinesComponeElCuerpoEnOrden(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
+		mkItem("github", "github.com", "acme/widget", "Uno", 1, ""),
+		mkItem("github", "github.com", "acme/widget", "Dos", 2, ""),
+	}, false))
+
+	lines := m.listLines(m.contentWidth())
+	var rows []int
+	for _, l := range lines {
+		rows = append(rows, l.row)
+	}
+	// Los dos ítems comparten el proyecto, así que hay prefijo: prefijo + header
+	// + las dos filas. Lo que importa es que las filas empiecen en row 0 y sigan
+	// la numeración: el prefijo y el header son cromo con row -1.
+	want := []int{-1, -1, 0, 1}
+	if len(rows) != len(want) {
+		t.Fatalf("líneas = %v, want %v", rows, want)
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Fatalf("rows = %v, want %v (la fila %d debe ser row %d)", rows, want, i, want[i])
+		}
+	}
+
+	// La fila del cursor se localiza por row, y solo esa lleva el marcador.
+	i0 := cursorLine(lines, 0)
+	if i0 < 0 || lines[i0].row != 0 {
+		t.Fatalf("cursorLine(0) = %d", i0)
+	}
+	conCursor := stripANSI(lines[i0].text)
+	sinCursor := stripANSI(lines[cursorLine(lines, 1)].text)
+	if conCursor == sinCursor {
+		t.Errorf("la fila del cursor no se distingue de la otra:\n%s", conCursor)
+	}
+
+	// Con "loading more…" la línea de paginación va al final, con row: -1 para
+	// que ni el cursor ni el scroll la confundan con un ítem. Sale de la misma
+	// página con more=true, no de una segunda: el indicador describe la lista que
+	// se está pintando.
+	m2 := newTestModel(t, ghAdapter())
+	m2 = send(t, m2, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
+		mkItem("github", "github.com", "acme/widget", "Uno", 1, ""),
+	}, true))
+	lines = m2.listLines(m2.contentWidth())
+	last := lines[len(lines)-1]
+	if last.row != -1 || !strings.Contains(stripANSI(last.text), "loading more") {
+		t.Errorf("la última línea = %+v, want el indicador de paginación con row -1", last)
+	}
+}
+
+// TestListLinesVaciaPintaElEstadoVacio: una sección sin ítems y sin avisos no
+// pinta filas ni header, sino el estado vacío. Si se quitara ese caso, la lista
+// saldría en blanco sin explicación, que es indistinguible de un bug de pintado.
+func TestListLinesVaciaPintaElEstadoVacio(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, nil, false))
+
+	lines := m.listLines(m.contentWidth())
+	if len(lines) != 1 {
+		t.Fatalf("líneas = %d (%v), want solo la del estado vacío", len(lines), lines)
+	}
+	if lines[0].row != -1 || !strings.Contains(stripANSI(lines[0].text), "(empty)") {
+		t.Errorf("línea = %+v, want el estado vacío con row -1", lines[0])
+	}
+	// Y con avisos, el aviso sustituye al estado vacío: hay algo que explicar, y
+	// un "(empty)" al lado de un "⚠" sería una contradicción en pantalla. El
+	// texto sale de problemText, que para un warning de red da la etiqueta corta
+	// y no el Msg crudo.
+	m = send(t, m, pageMsg{
+		cycle:    1,
+		key:      streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested},
+		warnings: []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "network", Msg: "dial tcp: timeout"}},
+	})
+	lines = m.listLines(m.contentWidth())
+	joined := ""
+	for _, l := range lines {
+		joined += stripANSI(l.text)
+	}
+	if !strings.Contains(joined, "github: could not be queried") {
+		t.Errorf("con un aviso debería pintarse el aviso del forge:\n%s", joined)
+	}
+	if strings.Contains(joined, "(empty)") {
+		t.Errorf("con un aviso no debería pintarse también el estado vacío:\n%s", joined)
+	}
+	// El aviso va por encima de las filas, con row: -1.
+	if lines[0].row != -1 {
+		t.Errorf("el aviso debería ser la primera línea con row -1, es %+v", lines[0])
+	}
+}
+
+// TestSyncScrollNoSeRompeEnTerminalesDiminutos deja constancia del borde del
+// auto-scroll: por muy enana que sea la terminal, el desplazamiento tiene que
+// seguir a la fila del cursor.
+//
+// No es un test de la guarda `view <= 0` de syncScroll, y el motivo está aquí
+// para que nadie lo busque después: computeLayout garantiza bodyLines >= 1
+// (layout.go), así que esa guarda no se puede alcanzar desde el modelo. Es
+// defensa ante un layout futuro que devuelva cero, no comportamiento actual. El
+// caso que sí es real es el de abajo: una terminal tan pequeña que el cuerpo
+// central se queda en la línea mínima.
+func TestSyncScrollNoSeRompeEnTerminalesDiminutos(t *testing.T) {
+	m := longModel(t, 60)
+	m = press(t, m, "end")
+	if it, ok := m.selected(); !ok || it.Title != "Item 1" {
+		t.Fatalf("con end el cursor debería estar en la última fila, no en %q", it.Title)
+	}
+
+	// Se encoge la terminal y el desplazamiento tiene que seguir siendo válido:
+	// acotado al contenido y con el cursor dentro de lo que se ve.
+	for _, h := range []int{40, 12, 8, 5, 3, 1} {
+		m.height = h
+		m.syncScroll()
+		lay := m.layout()
+		if lay.bodyLines < 1 {
+			t.Fatalf("height=%d: bodyLines = %d, pero el layout garantiza >= 1", h, lay.bodyLines)
+		}
+		lines := m.listLines(m.contentWidth())
+		if m.scroll < 0 || m.scroll > max(0, len(lines)-1) {
+			t.Errorf("height=%d: scroll = %d fuera de rango con %d líneas", h, m.scroll, len(lines))
+		}
+		// Y el cursor tiene que caer dentro de la ventana visible.
+		if cl := cursorLine(lines, m.cursor); cl >= 0 {
+			vis := visibleList(lines, m.scroll, lay.bodyLines)
+			found := false
+			for _, v := range vis {
+				if v.row == m.cursor {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("height=%d: la fila del cursor no está en la ventana (línea %d de %d, %d visibles)",
+					h, cl, len(lines), len(vis))
+			}
+		}
+	}
+}
+
 // TestDetailPaneShowsSelectedItem es el panel inferior: describe el ítem bajo el
 // cursor y cambia al moverlo, con la ruta completa del forge. Los dos ítems van
 // a la sección activa (Assigned) con el mismo UpdatedAt, para que el orden entre
