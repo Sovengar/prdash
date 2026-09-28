@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestEnvQuitaLasGitDeLocalizacion fija lo que hace el filtro del entorno.
@@ -53,6 +54,48 @@ func TestEnvQuitaLasGitDeLocalizacion(t *testing.T) {
 		if !contains(env, want) {
 			t.Errorf("Env() no trae %q", want)
 		}
+	}
+}
+
+// TestNewUsaGitYElTimeoutPorDefecto: un Runner construido a mano con el binario
+// vacío tiene que hablar con `git` del PATH, no fallar. Y el timeout es un
+// contrato: un Runner sin timeout no puede quedarse colgado esperando un clon.
+func TestNewUsaGitYElTimeoutPorDefecto(t *testing.T) {
+	r := New()
+	if r.Bin != "git" {
+		t.Errorf("Bin = %q, want git", r.Bin)
+	}
+	if r.Timeout != DefaultTimeout {
+		t.Errorf("Timeout = %v, want %v", r.Timeout, DefaultTimeout)
+	}
+	// Un Runner con Timeout=0 usa el default en cada Run, y no lo muta. La
+	// prueba es sobre un repo de verdad: con Timeout=0 el plazo nace vencido, así
+	// que sin el default el comando se cancelaría antes de arrancar y el fallo
+	// sería de plazo, no de git.
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-b", "main", repo).CombinedOutput(); err != nil {
+		t.Fatalf("init: %v\n%s", err, out)
+	}
+	cero := &Runner{}
+	if _, err := cero.Run(t.Context(), repo, "rev-parse", "--is-bare-repository"); err != nil {
+		t.Errorf("timeout=0 debería usar el default, pero falló: %v", err)
+	}
+	if cero.Timeout != 0 {
+		t.Errorf("Run mutó el Timeout del Runner: %v", cero.Timeout)
+	}
+	// Y con un timeout negativo pasa lo mismo que con cero: el default lo arregla.
+	neg := &Runner{Timeout: -time.Second}
+	if _, err := neg.Run(t.Context(), repo, "rev-parse", "--is-bare-repository"); err != nil {
+		t.Errorf("timeout negativo debería usar el default, pero falló: %v", err)
+	}
+	if neg.Timeout != -time.Second {
+		t.Errorf("Run mutó el Timeout del Runner: %v", neg.Timeout)
+	}
+	// Un Runner con Bin vacío habla con el `git` del PATH, no con una cadena
+	// vacía: sin esto, ningún Runner construido a mano funcionaría.
+	conBin := &Runner{Bin: "git", Timeout: time.Second}
+	if _, err := conBin.Run(t.Context(), repo, "rev-parse", "--is-bare-repository"); err != nil {
+		t.Errorf("con Bin=git explícito: %v", err)
 	}
 }
 

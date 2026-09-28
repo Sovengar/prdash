@@ -30,6 +30,16 @@ func TestLoadFromMissingFileReturnsDefaultsSilently(t *testing.T) {
 	}
 }
 
+// escribirConfig deja un config.toml en path. Los tests de merge necesitan un
+// fichero de verdad porque el parseo del TOML es parte de lo que se prueba: un
+// mapa a mano saltaría justo la parte donde un valor mal formado se degrada.
+func escribirConfig(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoadFromBrokenFileReturnsDefaultsWithWarning(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("roots = [unclosed"), 0o644); err != nil {
@@ -227,6 +237,183 @@ func TestExpandAll(t *testing.T) {
 	}
 	if got[1] != "/abs" || got[2] != "~" {
 		t.Errorf("entradas sin ~/ no deben cambiar: %v", got)
+	}
+}
+
+// TestLasRutasVaciasNoBorranLosDefaults: el patrón de merge del config trata
+// "no puesto" y "puesto a vacío" como cosas distintas a propósito, y en las rutas
+// esa diferencia se nota. Un puntero nil (la clave no está en el TOML) no toca
+// nada. Un puntero a "" SÍ se aplica… salvo en las rutas, donde una cadena
+// vacía no es "usa la ruta por defecto" sino "no hay ruta", que deja al resolver
+// de repos y al de worktrees sin sitio donde escribir y rompe en runtime.
+//
+// Se afirma en los dos sentidos: nil conserva, "" conserva en las rutas. Lo
+// segundo es una decisión de diseño, no un accidente, y por eso tiene test.
+func TestLasRutasVaciasNoBorranLosDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	escribirConfig(t, path, `
+data_dir = ""
+clone_dir = ""
+worktree_dir = ""
+roots = [""]
+`)
+	cfg, warn := LoadFrom(path)
+	if warn != "" {
+		t.Fatalf("un config con rutas vacías no es un error: %s", warn)
+	}
+	def := Defaults()
+	if cfg.DataDir != def.DataDir {
+		t.Errorf("data_dir vacío no debería pisar el default: %q vs %q", cfg.DataDir, def.DataDir)
+	}
+	if cfg.CloneDir != def.CloneDir {
+		t.Errorf("clone_dir vacío no debería pisar el default: %q vs %q", cfg.CloneDir, def.CloneDir)
+	}
+	if cfg.WorktreeDir != def.WorktreeDir {
+		t.Errorf("worktree_dir vacío no debería pisar el default: %q vs %q", cfg.WorktreeDir, def.WorktreeDir)
+	}
+	// Y una ruta de verdad sí se aplica, para que el caso anterior no se lea
+	// como "las rutas del config se ignoran siempre".
+	otro := t.TempDir()
+	path2 := filepath.Join(dir, "otro.toml")
+	escribirConfig(t, path2, "data_dir = \""+otro+"\"\n")
+	cfg2, _ := LoadFrom(path2)
+	if cfg2.DataDir != otro {
+		t.Errorf("data_dir con valor = %q, want %q", cfg2.DataDir, otro)
+	}
+}
+
+// TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque: los tres forges no se
+// mergean igual. GitHub y GitLab tienen bloque propio, así que la condición
+// es "el bloque está". Bitbucket solo tiene `enabled`, y la condición es doble
+// (`bloque != nil && enabled != nil`) porque sin la segunda mitad un
+// `[forge.bitbucket]` sin `enabled` pondría el forge a false sin que el usuario
+// lo pidiera. Afirmar el `false` explícito es lo que distingue una cosa de la
+// otra.
+func TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque(t *testing.T) {
+	dir := t.TempDir()
+	// Con `enabled = false` explícito: el forge se apaga.
+	path := filepath.Join(dir, "off.toml")
+	escribirConfig(t, path, "[forge.bitbucket]\nenabled = false\n")
+	cfg, _ := LoadFrom(path)
+	if cfg.Forges.Bitbucket.Enabled {
+		t.Error("enabled = false debería apagar bitbucket")
+	}
+
+	// Con `enabled = true`: se enciende.
+	path = filepath.Join(dir, "on.toml")
+	escribirConfig(t, path, "[forge.bitbucket]\nenabled = true\n")
+	cfg, _ = LoadFrom(path)
+	if !cfg.Forges.Bitbucket.Enabled {
+		t.Error("enabled = true debería encender bitbucket")
+	}
+
+	// Con el bloque pero sin `enabled`: el default se queda, que es false. Sin el
+	// segundo `&&` de la condición, un bloque a secas desreferenciaría un puntero
+	// nil y el arranque de prdash acabaría en un panic por config ausente.
+	path = filepath.Join(dir, "bare.toml")
+	escribirConfig(t, path, "[forge.bitbucket]\n")
+	cfg, _ = LoadFrom(path)
+	if cfg.Forges.Bitbucket.Enabled {
+		t.Error("un bloque sin enabled no debería encender el forge")
+	}
+	// Y un bloque con otros campos tampoco: la condición es sobre `enabled`, no
+	// sobre "hay bloque de bitbucket".
+	path = filepath.Join(dir, "vacio.toml")
+	escribirConfig(t, path, "[forge.bitbucket]\nclone_base = \"https://bitbucket.example.com\"\n")
+	cfg, warn := LoadFrom(path)
+	if warn != "" {
+		t.Errorf("un bloque sin enabled no es un config roto: %s", warn)
+	}
+	if cfg.Forges.Bitbucket.Enabled {
+		t.Error("un bloque con otros campos no debería encender el forge")
+	}
+}
+
+// TestLosKeybindingsVaciosNoDesactivanAtajos: el merge de keybindings ignora el
+// valor vacío a propósito. Un mapa de atajos se escribe porDelta —"quiero otra
+// tecla"— y un valor vacío no significa "sin tecla" sino "no he cambiado esto":
+// aceptarlo borraría el atajo por defecto de la acción, que es un item que
+// disappears de la TUI sin que nadie lo haya pedido. Es la diferencia entre un
+// config que degrada y uno que desactiva.
+//
+// Y un valor de verdad sí sobreescribe: si no, el filtro no haría nada.
+func TestLosKeybindingsVaciosNoDesactivanAtajos(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kb.toml")
+	escribirConfig(t, path, `
+[keybindings]
+"quit" = ""
+"merge" = "x"
+`)
+	cfg, warn := LoadFrom(path)
+	if warn != "" {
+		t.Fatalf("config roto: %s", warn)
+	}
+	def := DefaultKeybindings()
+	// El vacío conserva el atajo por defecto de esa acción.
+	if cfg.Keybindings["quit"] != def["quit"] {
+		t.Errorf("quit = %q, want el default %q: un valor vacío no desactiva el atajo", cfg.Keybindings["quit"], def["quit"])
+	}
+	// El valor de verdad sobreescribe.
+	if cfg.Keybindings["merge"] != "x" {
+		t.Errorf("merge = %q, want \"x\"", cfg.Keybindings["merge"])
+	}
+	// Y ninguna acción se queda sin tecla.
+	for accion, tecla := range cfg.Keybindings {
+		if tecla == "" {
+			t.Errorf("la acción %q quedó sin tecla: %v", accion, cfg.Keybindings)
+		}
+	}
+}
+
+// TestExpandSoloTocaElTilDEInicial: expand solo debe convertir un `~/` de
+// verdad. Los casos que NO toca son la mitad del contrato y los que más
+// duelen al romperse:
+//
+//   - "~" a secas es el home, no un prefijo: convertirlo daría home + "" y
+//     una ruta que parece la del home pero no lo es.
+//   - "~user/dev" es el home de OTRO usuario, que expand() no sabe resolver y
+//     no debe tocar: tocarlo lo convertiría en un path del home actual con un
+//     directorio "user" dentro, que es un path válido y por tanto silencioso.
+//   - "~x" tampoco: la segunda letra tiene que ser un separador, o un
+//     directorio que empieza por ~ se convierte sin querer.
+//   - Una "~" al final o en medio no es prefijo: "a~b" y "/a~/b" son rutas
+//     literales.
+func TestExpandSoloTocaElTilDEInicial(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("sin home: %v", err)
+	}
+	cases := map[string]string{
+		"~/dev":     filepath.Join(home, "dev"),
+		"~/":        filepath.Join(home),
+		"~":         "~",         // a secas no se convierte
+		"~user/dev": "~user/dev", // es el home de otro usuario: no se sabe
+		"~x":        "~x",        // la segunda letra no es separador
+		"a~b":       "a~b",       // la ~ no está al principio
+		"/a~/b":     "/a~/b",     // idem, dentro de una ruta absoluta
+		"~a/b":      "~a/b",      // segunda letra no separador
+		"~a":        "~a",        // idem sin barra
+		"":          "",          // vacío se deja
+		"/abs":      "/abs",      // sin tilde
+		"relative":  "relative",  // sin tilde
+		"dev/":      "dev/",      // sin tilde
+		"~~/dev":    "~~/dev",    // doble tilde: la segunda no es separador
+	}
+	for in, want := range cases {
+		if got := expand(in); got != want {
+			t.Errorf("expand(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// Un "~/" de dos caracteres es el caso mínimo que sí se convierte: el borde
+	// de len(p) < 2.
+	if got := expand("~/"); got != filepath.Join(home) {
+		t.Errorf(`expand("~/") = %q, want %q`, got, filepath.Join(home))
+	}
+	// Y un solo carácter no puede ser prefijo: no hay segunda letra que mirar.
+	if got := expand("~"); got != "~" {
+		t.Errorf(`expand("~") = %q, want "~"`, got)
 	}
 }
 

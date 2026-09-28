@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -469,6 +470,141 @@ func TestSyncScrollNoSeRompeEnTerminalesDiminutos(t *testing.T) {
 					h, cl, len(lines), len(vis))
 			}
 		}
+	}
+}
+
+// TestPadYTruncateMidenEnRunesYWEnBordes: las dos funciones que decide el ancho
+// de la tabla. Los bordes importan y son los que se confunden:
+//
+//   - pad con una cadena que YA cabe no añade nada. Si añadiera, la celda se
+//     saldría de su columna y la tabla bailaría al escribir encima.
+//   - truncate con w=0 devuelve vacío, no un panic ni un "…" colgando: sin ancho
+//     no hay nada que enseñar.
+//   - truncate con w=1 devuelve solo elipsis, no el primer carácter más la
+//     elipsis (que son dos columnas en una de ancho).
+//   - truncate recorta a w runes exactos, contando el "…" como uno, porque es lo
+//     que hace que la columna respete su ancho.
+func TestPadYTruncateMidenEnRunesYWEnBordes(t *testing.T) {
+	// pad: cuenta runes, no bytes, y no rellena si ya cabe.
+	if got := pad("ab", 4); got != "ab  " {
+		t.Errorf("pad(ab,4) = %q, want \"ab  \"", got)
+	}
+	if got := pad("ab", 2); got != "ab" {
+		t.Errorf("pad con la cadena justa = %q, want %q (no rellena de más)", got, "ab")
+	}
+	if got := pad("abcd", 2); got != "abcd" {
+		t.Errorf("pad de una cadena más larga = %q, want sin cambios (queda al truncado)", got)
+	}
+	// Con acentos y emoji: son runes, y un byte de más descuadraría la columna.
+	if got := utf8.RuneCountInString(pad("áé", 4)); got != 4 {
+		t.Errorf("pad con acentos = %d runes, want 4", got)
+	}
+	if got := pad("👍", 3); utf8.RuneCountInString(got) != 3 {
+		t.Errorf("pad con un emoji = %d runes, want 3", utf8.RuneCountInString(got))
+	}
+
+	// truncate: el ancho es en runes y el "…" cuenta.
+	if got := truncate("abcdef", 4); got != "abc…" {
+		t.Errorf("truncate(abcdef,4) = %q, want \"abc…\"", got)
+	}
+	if got := utf8.RuneCountInString(truncate("abcdefgh", 5)); got != 5 {
+		t.Errorf("truncate debe dar EXACTAMENTE 5 runes, dio %d", got)
+	}
+	// Sin recorte si ya cabe, o si cabe justo.
+	if got := truncate("abc", 3); got != "abc" {
+		t.Errorf("truncate de lo que cabe justo = %q, want sin cambios", got)
+	}
+	if got := truncate("abc", 10); got != "abc" {
+		t.Errorf("truncate de lo que sobra sitio = %q, want sin cambios", got)
+	}
+	// Ancho 0 y 1: los bordes donde un "…" se colaría de más.
+	if got := truncate("abc", 0); got != "" {
+		t.Errorf("truncate(abc,0) = %q, want vacío", got)
+	}
+	if got := truncate("abc", 1); got != "…" {
+		t.Errorf("truncate(abc,1) = %q, want solo la elipsis (dos columnas en una)", got)
+	}
+	if got := truncate("abc", -1); got != "" {
+		t.Errorf("truncate con ancho negativo = %q, want vacío", got)
+	}
+	// Y con acentos: se recorta por runes, no por bytes, o partiría un carácter
+	// por la mitad y la columna quedaría con un rune inválido.
+	if got := truncate("áéíóú", 3); got != "áé…" {
+		t.Errorf("truncate con acentos = %q, want \"áé…\"", got)
+	}
+}
+
+// TestCenteredOriginColocaLaCaja: la esquina de un popup, y la función está
+// compartida con la capa de gráficos a propósito (comentario en overlay.go): si
+// el marco y la imagen calcularan su sitio por su cuenta, caerían en rectángulos
+// distintos y solo se vería cuando coincidieran.
+//
+// El caso que importa es la caja más alta que el área: el centro saldría
+// negativo y hay que pegarla al borde, no dejar el índice en negativo (que
+// would panear la línea de arriba).
+func TestCenteredOriginColocaLaCaja(t *testing.T) {
+	cases := []struct {
+		name                      string
+		width, height, boxW, boxH int
+		wantX, wantY              int
+	}{
+		{"caja centrada en un área mayor", 20, 10, 4, 4, 8, 3},
+		{"caja que llena el área", 10, 10, 10, 10, 0, 0},
+		{"más alta que el área", 20, 3, 4, 8, 8, 0},
+		{"más ancha que el área", 3, 10, 10, 2, 0, 4},
+		{"una fila de diferencia", 20, 11, 4, 4, 8, 3},
+		{"impar por arriba", 21, 11, 4, 4, 8, 3},
+		{"área de una línea", 20, 1, 4, 1, 8, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			x, y := centeredOrigin(c.width, c.height, c.boxW, c.boxH)
+			if x != c.wantX || y != c.wantY {
+				t.Errorf("centeredOrigin(%d,%d,%d,%d) = %d,%d, want %d,%d",
+					c.width, c.height, c.boxW, c.boxH, x, y, c.wantX, c.wantY)
+			}
+			// El origen nunca es negativo: un índice así parte la línea de arriba
+			// al indexarla. Que la caja desborde por abajo SÍ es legitimo (una
+			// ventana más alta que la pantalla), y lo recorta quien dibuja.
+			if x < 0 || y < 0 {
+				t.Errorf("origen negativo: x=%d y=%d", x, y)
+			}
+		})
+	}
+}
+
+// TestOverlayCenteredRecortaLaCajaQueNoCabe: un popup más alto que la pantalla se
+// recorta por abajo en vez de desbordar. Y una caja vacía no toca la vista, que es
+// lo que evita que un popup sin contenido borre la pantalla.
+func TestOverlayCenteredRecortaLaCajaQueNoCabe(t *testing.T) {
+	// Fondo de líneas anchas para que la caja caiga DENTRO: el overlay recorta
+	// la línea donde hace falta el texto de la caja, no borra la línea entera. Con
+	// un fondo más corto que el desplazamiento, el texto de la caja se pegaría al
+	// final de la línea en vez de en su sitio, que es el comportamiento de ansi.
+	fondo := "aaaa\naaaa\naaaa\naaaa"
+	got := overlayCentered(fondo, "1\n2\n3\n4\n5\n6", 10)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("líneas = %d, want 4 (el fondo no crece):\n%s", len(lines), got)
+	}
+	// x = (10-1)/2 = 4, así que la caja pisa la quinta columna de cada línea.
+	for i, want := range []string{"aaaa1", "aaaa2", "aaaa3", "aaaa4"} {
+		if lines[i] != want {
+			t.Errorf("línea %d = %q, want %q (la caja se pinta encima del fondo)", i, lines[i], want)
+		}
+	}
+	// Una caja vacía deja la vista como estaba.
+	if got := overlayCentered(fondo, "", 10); got != fondo {
+		t.Errorf("caja vacía = %q, want la vista intacta", got)
+	}
+	// Y la caja se recorta al ANCHO del viewport: una caja más ancha se pinta
+	// recortada sobre el fondo, que conserva su longitud. Con x=0 porque la caja
+	// es más ancha que el área, el resultado es la caja recortada + el resto del
+	// fondo intacto.
+	got = overlayCentered("aaaaaaaaaa", "0123456789", 6)
+	linea := strings.Split(got, "\n")[0]
+	if linea != "012345aaaa" {
+		t.Errorf("línea = %q, want \"012345aaaa\" (caja recortada al ancho, fondo detrás)", linea)
 	}
 }
 
