@@ -1,6 +1,8 @@
 package testutil
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,8 +32,34 @@ import (
 // la local de cada repo, que es la que pone InitRepo. Requiere git >= 2.32; en
 // uno más viejo esas variables se ignoran y los tests siguen valiendo, porque la
 // identidad ya va en el env.
+// Las variables GIT_* de localización sobreescriben a cmd.Dir por completo: con
+// GIT_DIR puesto, `git config` escribe en ese repo y da igual en qué directorio
+// se ejecute el comando. Si quien lanza la suite está dentro de un hook, de un
+// `git -C`, o de cualquier contexto que exporte GIT_DIR/GIT_WORK_TREE, los
+// fixtures escriben la config del repo ajeno en vez de la de su TempDir. Se
+// filtran aquí, que es el mismo filtro que hace gitcmd.Env() en producción.
+//
+// Un repo real no necesita GIT_DIR para funcionar: cmd.Dir basta, y es lo que
+// estos fixtures usan.
 func gitEnv() []string {
-	return append(os.Environ(),
+	env := os.Environ()
+	out := env[:0]
+	for _, kv := range env {
+		switch {
+		case strings.HasPrefix(kv, "GIT_DIR="),
+			strings.HasPrefix(kv, "GIT_WORK_TREE="),
+			strings.HasPrefix(kv, "GIT_INDEX_FILE="),
+			strings.HasPrefix(kv, "GIT_COMMON_DIR="),
+			strings.HasPrefix(kv, "GIT_OBJECT_DIRECTORY="),
+			strings.HasPrefix(kv, "GIT_ALTERNATE_OBJECT_DIRECTORIES="),
+			strings.HasPrefix(kv, "GIT_NAMESPACE="),
+			strings.HasPrefix(kv, "GIT_CEILING_DIRECTORIES="),
+			strings.HasPrefix(kv, "GIT_PREFIX="):
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out,
 		"GIT_TERMINAL_PROMPT=0",
 		"LC_ALL=C",
 		"GIT_CONFIG_GLOBAL=/dev/null",
@@ -45,18 +73,49 @@ func gitEnv() []string {
 
 // RunGit ejecuta git en dir y devuelve stdout recortado, fallando el test ante
 // error. Es la base de los fixtures de repos reales (sin red).
+//
+// dir es obligatorio y tiene que existir. Un dir vacío haría que git corriera
+// en el directorio de trabajo del proceso de test —el del paquete, que vive
+// DENTRO del repo— y un `git config` o un `git remote` de los fixtures escribiría
+// entonces en la config del repo real del que se está leyendo el código. Ya
+// pasó: una suite Green'se dejó el repo en core.bare=true con un origin
+// apuntando a un TempDir. El error se ve al instante, que es lo que se busca.
 func RunGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
+	requireDir(t, dir)
 	cmd := exec.Command("git", args...)
-	if dir != "" {
-		cmd.Dir = dir
-	}
+	cmd.Dir = dir
 	cmd.Env = gitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v en %s: %v\n%s", args, dir, err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// requireDir aborta el test si dir no sirve como directorio de trabajo de git.
+func requireDir(t *testing.T, dir string) {
+	t.Helper()
+	if err := checkDir(dir); err != nil {
+		t.Fatalf("testutil: %v", err)
+	}
+}
+
+// checkDir explica por qué dir no sirve como directorio de trabajo de git. Vive
+// separada de requireDir para que el test pueda afirmar el motivo sin tener que
+// provocar un t.Fatal.
+func checkDir(dir string) error {
+	if dir == "" {
+		return errors.New("dir vacío: git correría en el repo real y escribiría en su config")
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("%q no existe: %w", dir, err)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%q no es un directorio", dir)
+	}
+	return nil
 }
 
 // InitRepo crea un repo git normal en dir con identidad local.
@@ -88,6 +147,9 @@ func CommitFile(t *testing.T, dir, name, content, msg string) {
 // InitBare crea un repo bare (hace de origin/remoto local).
 func InitBare(t *testing.T, dir string) {
 	t.Helper()
+	if dir == "" {
+		t.Fatal("testutil: dir vacío: `git init --bare` caería en el repo real y le pondría core.bare")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +159,7 @@ func InitBare(t *testing.T, dir string) {
 // SetRemote añade (o reemplaza) un remote en dir.
 func SetRemote(t *testing.T, dir, name, url string) {
 	t.Helper()
+	requireDir(t, dir)
 	rm := exec.Command("git", "remote", "remove", name)
 	rm.Dir = dir
 	rm.Env = gitEnv()
@@ -114,6 +177,7 @@ func Push(t *testing.T, dir string, args ...string) {
 // RefExists informa si un ref existe en dir.
 func RefExists(t *testing.T, dir, ref string) bool {
 	t.Helper()
+	requireDir(t, dir)
 	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", ref)
 	cmd.Dir = dir
 	cmd.Env = gitEnv()

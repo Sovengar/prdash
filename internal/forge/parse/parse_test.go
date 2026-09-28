@@ -3,6 +3,7 @@ package parse
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -360,6 +361,91 @@ func TestParseGHChecksBuckets(t *testing.T) {
 				t.Fatalf("state = %s, want %s (%+v)", got.State, c.want, got)
 			}
 		})
+	}
+}
+
+// TestParseErrorDiceQueYDonde: un error de parseo tiene que decir qué falló
+// además de dónde. Sin la causa, "invalid JSON" no distingue un payload
+// truncado de una respuesta que no es JSON, y quien lee el aviso no puede
+// actuar. Y un error sin causa no debe inventar una: el motivo se compone tal
+// cual, sin un ": " colgando al final.
+func TestParseErrorDiceQueYDonde(t *testing.T) {
+	_, _, err := ParseGHGraphQLSearch("{")
+	if err == nil {
+		t.Fatal("se esperaba error de parseo")
+	}
+	if got := err.Error(); !strings.HasPrefix(got, "parse gh-graphql: invalid JSON: ") || got == "parse gh-graphql: invalid JSON: " {
+		t.Errorf("Error() = %q, want el motivo con la causa del unmarshal", got)
+	}
+
+	sinCausa := (&Error{Tool: "gh-graphql", Msg: "boom"}).Error()
+	if sinCausa != "parse gh-graphql: boom" {
+		t.Errorf("Error() sin causa = %q, want %q", sinCausa, "parse gh-graphql: boom")
+	}
+}
+
+// TestGHRollupDistinguePendienteDeTerminado: el `status` de un CheckRun es la
+// señal de "en curso", y su `conclusion` solo significa algo cuando el check ya
+// terminó. Un check con conclusion vacía no es un check que pasó ni uno que
+// falló: está corriendo, y el gate de merge lo trata distinto a un CI verde.
+func TestGHRollupDistinguePendienteDeTerminado(t *testing.T) {
+	raw := `{"data":{"repository":{"pullRequest":{"number":1,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[
+		{"__typename":"CheckRun","status":"IN_PROGRESS","conclusion":""},
+		{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"}
+	]}}}}]}}}}}`
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	c := items[0].Checks
+	if c.Total != 2 || c.Pending != 1 || c.Failing != 0 || c.State != model.ChecksPending {
+		t.Errorf("checks = %+v, want 1 de 2 pendiente y estado pending", c)
+	}
+}
+
+// TestSplitRepoURL: el separador puede estar al principio de la ruta, y entonces
+// el repositorio es lo que viene detrás. Cortar el prefijo de host antes de
+// buscar "/repos/" perdería el ítem entero.
+func TestSplitRepoURL(t *testing.T) {
+	cases := []struct {
+		in          string
+		owner, name string
+	}{
+		{"https://api.github.com/repos/acme/lib", "acme", "lib"},
+		{"https://api.github.com/repos/acme/lib/", "acme", "lib"},
+		{"/repos/acme/lib", "acme", "lib"},
+		{"repos/acme/lib", "", ""}, // sin el separador con barra inicial no es la misma ruta
+		{"https://api.github.com/user", "", ""},
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		owner, name := splitRepoURL(c.in)
+		if owner != c.owner || name != c.name {
+			t.Errorf("splitRepoURL(%q) = %q,%q; want %q,%q", c.in, owner, name, c.owner, c.name)
+		}
+	}
+}
+
+// TestProjectFromRef: el proyecto sale de lo que precede al último "!". Una ref
+// sin proyecto ("!12", que es lo que devuelve GitLab cuando no lo conoce) deja
+// el proyecto vacío: inventarse un repo llamado "!12" convertiría un dato
+// ausente en una ruta que no existe.
+func TestProjectFromRef(t *testing.T) {
+	cases := map[string]string{
+		"grp/proj!12": "grp/proj",
+		"proj!12":     "proj",
+		"grp/sub/p!3": "grp/sub/p",
+		"!12":         "",
+		"grp/proj":    "grp/proj",
+		"":            "",
+	}
+	for ref, want := range cases {
+		if got := projectFromRef(ref); got != want {
+			t.Errorf("projectFromRef(%q) = %q, want %q", ref, got, want)
+		}
 	}
 }
 

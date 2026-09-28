@@ -50,6 +50,33 @@ func TestParseGLBranchesAvisaSiNoLeyoNada(t *testing.T) {
 	}
 }
 
+// TestParseGLBranchesArrastraLaCausa: si el listado no se pudo leer, el aviso
+// tiene que decir por qué. Un error genérico deja al usuario mirando un buscador
+// vacío sin saber si fue la red, la auth o una respuesta con otra forma.
+func TestParseGLBranchesArrastraLaCausa(t *testing.T) {
+	for _, in := range []string{"basura\n", "[]\nnot-json\n"} {
+		names, err := ParseGLBranches(in)
+		if err == nil {
+			t.Fatalf("ParseGLBranches(%q) = %v, want error", in, names)
+		}
+		if !strings.HasPrefix(err.Error(), "could not read the branch list: ") {
+			t.Errorf("ParseGLBranches(%q) = %q, want el motivo con la causa del unmarshal", in, err)
+		}
+	}
+}
+
+// TestParseGLBranchesSinCausaNoLaInventa: líneas legibles pero sin nombre no son
+// un error de sintaxis, así que el aviso no debe colgarse una causa inventada.
+func TestParseGLBranchesSinCausaNoLaInventa(t *testing.T) {
+	names, err := ParseGLBranches(`{"commit":{"id":"abc"}}`)
+	if err == nil {
+		t.Fatalf("ParseGLBranches = %v, want error", names)
+	}
+	if got := err.Error(); got != "could not read the branch list" {
+		t.Errorf("error = %q, want el aviso sin causa", got)
+	}
+}
+
 // TestParseGLBranchesAceptaVacioDeVerdad: una respuesta vacía de verdad es un
 // repositorio sin ramas, y eso no es un error: quien llama lo distingue porque lo
 // dice con una lista vacía y sin warning.

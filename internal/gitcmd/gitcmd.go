@@ -93,8 +93,16 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 }
 
 // Env compone el entorno del subproceso: descarta el locale del usuario para
-// forzar mensajes en inglés y añade modo no interactivo (sin prompt de
-// credenciales, sin pager, sin color).
+// forzar mensajes en inglés, quita las variables GIT_* de localización y añade
+// modo no interactivo (sin prompt de credenciales, sin pager, sin color).
+//
+// Las GIT_* de localización se quitan porque le ganan a cmd.Dir: con GIT_DIR (o
+// GIT_WORK_TREE, GIT_INDEX_FILE…) en el entorno, git opera en ESE repo y da
+// igual el directorio en el que se le ejecute. prdash elige el repo de cada ítem
+// por su cuenta, así que heredar el contexto de git de quien lo lanzó haría que
+// una operación de la TUI cayera en un repo que no es el del ítem — que es
+// justo el fallo que borra la rama equivocada. prdash se llama siempre con el
+// repo explícito en el argumento, no con el contexto del shell.
 func Env() []string {
 	env := os.Environ()
 	out := env[:0]
@@ -103,7 +111,16 @@ func Env() []string {
 		case strings.HasPrefix(kv, "LC_ALL="),
 			strings.HasPrefix(kv, "LANG="),
 			strings.HasPrefix(kv, "LANGUAGE="),
-			strings.HasPrefix(kv, "LC_MESSAGES="):
+			strings.HasPrefix(kv, "LC_MESSAGES="),
+			strings.HasPrefix(kv, "GIT_DIR="),
+			strings.HasPrefix(kv, "GIT_WORK_TREE="),
+			strings.HasPrefix(kv, "GIT_INDEX_FILE="),
+			strings.HasPrefix(kv, "GIT_COMMON_DIR="),
+			strings.HasPrefix(kv, "GIT_OBJECT_DIRECTORY="),
+			strings.HasPrefix(kv, "GIT_ALTERNATE_OBJECT_DIRECTORIES="),
+			strings.HasPrefix(kv, "GIT_NAMESPACE="),
+			strings.HasPrefix(kv, "GIT_CEILING_DIRECTORIES="),
+			strings.HasPrefix(kv, "GIT_PREFIX="):
 			continue
 		}
 		out = append(out, kv)
