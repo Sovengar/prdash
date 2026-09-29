@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"prdash/internal/forge/model"
 )
@@ -251,6 +254,90 @@ func TestClipTopRecortaPorArribaYNoDejaHuecos(t *testing.T) {
 	// no necesita un bloque de altura fija.
 	if got := clipTop([]string{"x"}, 5); len(got) != 1 {
 		t.Errorf("una línea con 5 filas = %d, want 1", len(got))
+	}
+}
+
+// TestLosCamposDelDetalleNoSePisanNiSeComen: el detalle es una ficha de dos
+// columnas, y su geometría tiene tres invariantes que se rompen en silencio:
+//
+//   - el valor se recorta a `ancho - labelWidth`, que es lo que deja sitio a la
+//     etiqueta. Sin ese `-`, un valor largo llega a la columna de al lado y la
+//     ficha se lee con los datos corridos.
+//   - la celda tiene un mínimo de 24 columnas, porque por debajo de eso la
+//     etiqueta se come el valor entero y no queda nada que leer.
+//   - el hueco entre columnas se rellena con lo que sobra, y lo que sobra se
+//     mide sobre el valor YA recortado y en texto plano, nunca sobre la cadena
+//     coloreada (que daría un número de columnas inventado).
+func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
+	largo := detailField{key: "checks", value: strings.Repeat("x", 200)}
+
+	// El valor recortado nunca pasa del ancho de la celda menos la etiqueta.
+	for _, inner := range []int{30, 40, 60, 80, 120} {
+		cell := max(24, (inner-detailGap)/2)
+		linea, w := detailCell(largo, cell)
+		if w > cell {
+			t.Errorf("inner %d (celda %d): el campo mide %d columnas, want <= %d: %q",
+				inner, cell, w, cell, ansi.Strip(linea))
+		}
+		// Y el ancho devuelto es el real, en texto plano: la etiqueta más el
+		// valor recortado.
+		want := labelWidth + utf8.RuneCountInString(stripANSI(linea)) - labelWidth
+		if w != want {
+			t.Errorf("inner %d: el ancho devuelto es %d pero el valor mide %d: el padding se calcularía mal",
+				inner, w, want)
+		}
+	}
+
+	// La celda nunca baja de 24 por muy estrecho que sea el interior: por debajo
+	// la etiqueta se comería el valor.
+	for _, inner := range []int{10, 20, 28, 30} {
+		if cell := max(24, (inner-detailGap)/2); cell != 24 {
+			t.Errorf("inner %d dio celda de %d columnas, want el mínimo de 24", inner, cell)
+		}
+	}
+
+	// Y una fila de la rejilla no se pasa del interior, que es lo que garantiza que las
+	// dos columnas y el hueco caben. En un interior estrecho la celda cae a su
+	// mínimo de 24, y entonces la fila son dos celdas más el hueco: ese es el
+	// número que hace observable el `max(24, ...)`, porque comparar el ancho que
+	// devuelve detailCell con el mismo `cell` que se le pasó sería una tautología.
+	for _, inner := range []int{10, 28, 30, 40} {
+		filas := detailGrid([]detailField{largo, largo}, inner)
+		if len(filas) != 1 {
+			t.Fatalf("inner %d: %d filas, want 1", inner, len(filas))
+		}
+		// Los dos valores llenan la celda, así que el hueco es el de siempre.
+		want := 2*24 + detailGap
+		if w := ansi.StringWidth(filas[0]); w != want {
+			t.Errorf("inner %d: la fila mide %d columnas, want %d (dos celdas de 24 más el hueco de %d): %q",
+				inner, w, want, detailGap, ansi.Strip(filas[0]))
+		}
+	}
+	for _, inner := range []int{60, 80, 120, 200} {
+		for _, line := range detailGrid([]detailField{largo, largo, largo}, inner) {
+			if w := ansi.StringWidth(line); w > inner {
+				t.Errorf("inner %d: la fila mide %d columnas, want <= %d: %q", inner, w, inner, ansi.Strip(line))
+			}
+		}
+	}
+
+	// Un campo de ancho completo (el URL) también cabe, y con un interior pequeño
+	// no se sale.
+	for _, inner := range []int{20, 38, 60, 160} {
+		linea := fullWidthField(detailField{key: "url", value: "https://gitlab.example.com/grp/proj/-/merge_requests/1"}, inner)
+		if w := ansi.StringWidth(linea); w > inner {
+			t.Errorf("inner %d: el campo de ancho completo mide %d columnas, want <= %d: %q",
+				inner, w, inner, ansi.Strip(linea))
+		}
+	}
+	// Y con un interior de 1 columna (el mínimo) no revienta: el max(1, ...)
+	// impide un ancho negativo, que panicaría en truncate.
+	for _, inner := range []int{0, 1, 2} {
+		linea := fullWidthField(detailField{key: "u", value: "valor"}, inner)
+		if w := ansi.StringWidth(linea); w != labelWidth+1 {
+			t.Errorf("inner %d: el campo mínimo mide %d columnas, want %d (etiqueta + 1)",
+				inner, w, labelWidth+1)
+		}
 	}
 }
 
