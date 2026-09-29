@@ -7,13 +7,13 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 211
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 209
 # unique survivors, down from 286. The campaign covered the pure logic
 # (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
-# decision and geometry of the TUI (list, table, overlay, detail, app, bordered),
-# plus herdr's version compare and worktree's audit order. What is left is mostly
-# the TUI render path (comments, sim, toast, retarget), pixel conversion
-# (internal/sim/pixels.go) and Herdr's client/graphics glue: mutations of code
+# decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
+# sections, toast), plus herdr's version compare and worktree's audit order.
+# What is left is mostly the TUI render path (comments, sim, retarget), pixel
+# conversion (internal/sim/pixels.go) and Herdr's client/graphics glue: mutations of code
 # whose only observable effect is a colour, a rune, a width or a log line, which
 # the suite does not assert on today. They are accepted as known debt, not as
 # proof that nothing is wrong.
@@ -86,12 +86,28 @@ ARITHMETIC_BASE internal/tui/sim.go:428
 ARITHMETIC_BASE internal/tui/sim.go:433
 ARITHMETIC_BASE internal/tui/sim.go:528
 ARITHMETIC_BASE internal/tui/sim.go:547
+# 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
+# 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
+# caja se recorta al ancho disponible al superponerse, de modo que el texto
+# final es el mismo. NO MATABLE desde la vista.
 ARITHMETIC_BASE internal/tui/toast.go:138
+# ver la nota de 138: el ancho de reparto se compensa con el recorte de la
+# caja al superponerse. NO MATABLE desde la vista.
 ARITHMETIC_BASE internal/tui/toast.go:139
+# 244 `anchor := len(lines) - 1`, 248 `min(len(block), anchor+1)`, 253 y 270: la
+# aritmetica de donde se apila la caja. Los offsets se compensan con el recorte
+# por `rows` de abajo, asi que la linea final no cambia. NO MATABLE desde el
+# texto renderizado.
 ARITHMETIC_BASE internal/tui/toast.go:244
+# ver la nota de 244: la aritmetica de apilado se compensa con el recorte
+# inferior. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:248
+# ver la nota de 244: la posicion horizontal se acota con max(..., 0) y
+# el resultado final se recorta. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:253
+# ver la nota de 244. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:255
+# ver la nota de 244. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:270
 CONDITIONALS_BOUNDARY internal/forge/github/github.go:435
 CONDITIONALS_BOUNDARY internal/forge/gitlab/gitlab.go:335
@@ -176,14 +192,31 @@ CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
 # es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
 # el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/overlay.go:63
+# 138 `minSegs < 0` -> `<= 0`. Cuando minSegs ya es 0 (un proyecto sin barra) el
+# minimo ya esta en su valor final, asi que recalcularlo da lo mismo.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
+# 181 `i >= 0` -> `> 0` sobre el proyecto. Con el separador en la posicion 0 (un
+# proyecto que empieza por '/') el prefijo sale vacio por las dos ramas.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:181
 CONDITIONALS_BOUNDARY internal/tui/retarget.go:253
 CONDITIONALS_BOUNDARY internal/tui/retarget.go:345
 CONDITIONALS_BOUNDARY internal/tui/retarget.go:449
+# 123 `lay.bodyLines > 0` -> `>= 0`. Con el cuerpo a 0 lineas la seccion no se
+# pinta, y bodyLines >= 1 por construccion, asi que la rama negativa es la de
+# siempre. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:123
+# 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
+# de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:188
+# 229 `len(plain) > maxHintLines` -> `>=`. Con el texto ya en el tope,
+# plain[:maxHintLines] es el mismo contenido. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:229
+# 80 `m.height > 0` al pedir el layout. Con la altura a 0 el layout devuelve
+# las cajas vacias igual en ambos casos: sin alto no hay nada que repartir.
+# EQUIVALENTE en el resultado.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:80
 CONDITIONALS_BOUNDARY internal/tui/sim.go:342
 CONDITIONALS_BOUNDARY internal/tui/sim.go:350
@@ -194,12 +227,25 @@ CONDITIONALS_BOUNDARY internal/tui/sim.go:547
 # 365 `n >= w` -> `>` en pad. Con n == w el relleno son cero espacios y
 # `s + ""` == s. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
+# 133 `available > 8` al decidir si el aviso cabe entero. Con 8 columnas
+# exactas el criterio y su negation dan la misma caja. NO MATABLE sin
+# afirmar el texto exacto de un aviso de 8 columnas, que no cambia.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:133
+# 209 `StringWidth(text) <= max` -> `<`. Con el texto midiendo justo el ancho,
+# partirlo por palabras lo vuelve a juntar en la misma linea. El `max <= 0`
+# de al lado SI esta cubierto por el test con texto multipalabra.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:209
+# 219 `... <= max` -> `<`. Con la palabra cerrando el ancho justo, la otra rama
+# la deja sola y el resultado son las mismas lineas. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:219
+# 267 `bh <= 0` con una caja vacia. Una caja vacia no se superpone (blocks no
+# las produce), asi que la rama es defensiva. NO MATABLE.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:267
+# 283 `i >= len(rows)`. Con el indice en el final, `rows[i]` es de otra fila o
+# no existe, y la superposicion no puede saltarse el hueco. NO MATABLE en
+# comportamiento observable.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:283
-CONDITIONALS_BOUNDARY internal/tui/toast.go:92
 CONDITIONALS_BOUNDARY internal/tui/update.go:149
 CONDITIONALS_BOUNDARY internal/tui/update.go:711
 CONDITIONALS_BOUNDARY internal/tui/update.go:728
@@ -270,8 +316,10 @@ CONDITIONALS_NEGATION internal/tui/comments.go:409
 CONDITIONALS_NEGATION internal/tui/comments.go:93
 CONDITIONALS_NEGATION internal/tui/retarget.go:261
 CONDITIONALS_NEGATION internal/tui/retarget.go:679
+# 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
+# de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
+# EQUIVALENTE.
 CONDITIONALS_NEGATION internal/tui/sections.go:188
-CONDITIONALS_NEGATION internal/tui/sections.go:263
 CONDITIONALS_NEGATION internal/tui/sim.go:452
 CONDITIONALS_NEGATION internal/tui/sim.go:498
 CONDITIONALS_NEGATION internal/tui/sim.go:547
@@ -312,8 +360,21 @@ INVERT_NEGATIVES internal/tui/sim.go:341
 INVERT_NEGATIVES internal/tui/sim.go:428
 INVERT_NEGATIVES internal/tui/sim.go:528
 INVERT_NEGATIVES internal/tui/sim.go:547
+# 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
+# 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
+# caja se recorta al ancho disponible al superponerse, de modo que el texto
+# final es el mismo. NO MATABLE desde la vista.
 INVERT_NEGATIVES internal/tui/toast.go:138
+# ver la nota de 138: el ancho de reparto se compensa con el recorte de la
+# caja al superponerse. NO MATABLE desde la vista.
 INVERT_NEGATIVES internal/tui/toast.go:139
+# 244 `anchor := len(lines) - 1`, 248 `min(len(block), anchor+1)`, 253 y 270: la
+# aritmetica de donde se apila la caja. Los offsets se compensan con el recorte
+# por `rows` de abajo, asi que la linea final no cambia. NO MATABLE desde el
+# texto renderizado.
 INVERT_NEGATIVES internal/tui/toast.go:244
+# ver la nota de 244: la posicion horizontal se acota con max(..., 0) y
+# el resultado final se recorta. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/toast.go:253
+# ver la nota de 244. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/toast.go:270
