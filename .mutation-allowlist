@@ -7,15 +7,16 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 235
-# unique survivors, down from 286. The campaign that got it there covered the
-# pure logic: forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan,
-# tui/list, tui/table, tui/overlay and the git test helpers. What is left is
-# mostly the TUI render path (comments, sim, toast, retarget, detail), pixel
-# conversion (internal/sim/pixels.go) and Herdr's client/graphics glue: mutations
-# of code whose only observable effect is a colour, a rune, a width or a log
-# line, which the suite does not assert on today. They are accepted as known
-# debt, not as proof that nothing is wrong.
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 211
+# unique survivors, down from 286. The campaign covered the pure logic
+# (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
+# decision and geometry of the TUI (list, table, overlay, detail, app, bordered),
+# plus herdr's version compare and worktree's audit order. What is left is mostly
+# the TUI render path (comments, sim, toast, retarget), pixel conversion
+# (internal/sim/pixels.go) and Herdr's client/graphics glue: mutations of code
+# whose only observable effect is a colour, a rune, a width or a log line, which
+# the suite does not assert on today. They are accepted as known debt, not as
+# proof that nothing is wrong.
 #
 # Every entry below the marked groups was re-checked by hand against its source:
 # either the mutant is provably equivalent (the group headers say why, case by
@@ -51,11 +52,13 @@ ARITHMETIC_BASE internal/tui/comments.go:395
 ARITHMETIC_BASE internal/tui/comments.go:417
 ARITHMETIC_BASE internal/tui/comments.go:449
 ARITHMETIC_BASE internal/tui/comments.go:474
-ARITHMETIC_BASE internal/tui/detail.go:210
-ARITHMETIC_BASE internal/tui/detail.go:216
+# 217 capacidad del slice `(len(fields)+1)/2`. Es el numero de filas de la
+# rejilla, y make() no cambia la longitud observada. NO MATABLE.
 ARITHMETIC_BASE internal/tui/detail.go:217
-ARITHMETIC_BASE internal/tui/detail.go:234
-ARITHMETIC_BASE internal/tui/detail.go:325
+# 93 aritmetica de `avail`, el alto que le queda al bloque central. El
+# INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
+# titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
+# el borde), asi que la linea final no cambia. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/detail.go:93
 ARITHMETIC_BASE internal/tui/layout.go:85
 ARITHMETIC_BASE internal/tui/layout.go:91
@@ -105,8 +108,12 @@ CONDITIONALS_BOUNDARY internal/herdr/client.go:319
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:146
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:206
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:43
+# 39 y 41 comparaciones de Version dentro de un switch cuyas cases anteriores
+# ya garantizan que major y minor DIFIEREN (`v.X != min.X`). Ahi `>` y `>=` son
+# lo mismo. El `>=` del patch (default) si es real y esta cubierto por test.
+# EQUIVALENTE por construccion.
+CONDITIONALS_BOUNDARY internal/herdr/herdr.go:39
 CONDITIONALS_BOUNDARY internal/herdr/herdr.go:41
-CONDITIONALS_BOUNDARY internal/herdr/herdr.go:43
 CONDITIONALS_BOUNDARY internal/herdr/parse.go:271
 # 139 `si > sj` -> `>=`. La comparacion solo se evalua cuando el `if`
 # anterior ya dijo `si != sj`, y ahi `>` y `>=` son lo mismo.
@@ -127,14 +134,25 @@ CONDITIONALS_BOUNDARY internal/sim/pixels.go:93
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:96
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:99
 CONDITIONALS_BOUNDARY internal/sim/service.go:285
-CONDITIONALS_BOUNDARY internal/tui/app.go:1000
+# 386 `RefreshInterval > 0` al inicializar. Con intervalo 0 el
+# auto-refresco esta DESACTIVADO y armTick no arma nada, asi que este valor
+# inicial no se distingue: lo que decide es armTick, que si esta cubierto.
 CONDITIONALS_BOUNDARY internal/tui/app.go:386
-CONDITIONALS_BOUNDARY internal/tui/app.go:545
-CONDITIONALS_BOUNDARY internal/tui/app.go:555
+# 843 `m.cursor >= len(rows)`. Con el cursor en len(rows) ya esta fuera
+# de rango y selected() no devuelve nada; subir el limite a `>` solo cambia
+# el texto del error. NO MATABLE en comportamiento observable.
 CONDITIONALS_BOUNDARY internal/tui/app.go:843
+# 101 `w > innerWidth` -> `>=`. Con la linea midiendo justo el interior,
+# ansi.Truncate la deja intacta. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
+# 104 `pad > 0` -> `>= 0`. Con pad == 0, strings.Repeat(" ", 0) es "".
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
+# 35 `width < 2` -> `<= 2`. Con width == 2 la asignacion `width = 2` es una
+# identidad. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
+# 64 `titleWidth > innerWidth` -> `>=`. Con el titulo midiendo justo el
+# interior, ansi.Truncate deja el titulo intacto. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
 CONDITIONALS_BOUNDARY internal/tui/comments.go:112
 CONDITIONALS_BOUNDARY internal/tui/comments.go:136
@@ -143,8 +161,9 @@ CONDITIONALS_BOUNDARY internal/tui/comments.go:220
 CONDITIONALS_BOUNDARY internal/tui/comments.go:366
 CONDITIONALS_BOUNDARY internal/tui/comments.go:413
 CONDITIONALS_BOUNDARY internal/tui/comments.go:450
+# 243 `len(lines) <= rows` -> `<`. Con la lista midiendo justo las filas que
+# hay, la otra rama devuelve lines[0:], el mismo contenido. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/detail.go:243
-CONDITIONALS_BOUNDARY internal/tui/detail.go:285
 CONDITIONALS_BOUNDARY internal/tui/layout.go:100
 CONDITIONALS_BOUNDARY internal/tui/layout.go:85
 CONDITIONALS_BOUNDARY internal/tui/layout.go:88
@@ -184,6 +203,9 @@ CONDITIONALS_BOUNDARY internal/tui/toast.go:92
 CONDITIONALS_BOUNDARY internal/tui/update.go:149
 CONDITIONALS_BOUNDARY internal/tui/update.go:711
 CONDITIONALS_BOUNDARY internal/tui/update.go:728
+# 69 `out[i].Path < out[j].Path` -> `<=`. Las rutas de un Audit son unicas
+# (son las de un recorrido del arbol), asi que la igualdad no se da.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
 CONDITIONALS_BOUNDARY internal/worktree/herdr.go:151
 CONDITIONALS_NEGATION internal/forge/bitbucket/bitbucket.go:26
@@ -211,8 +233,6 @@ CONDITIONALS_NEGATION internal/herdr/graphics.go:108
 CONDITIONALS_NEGATION internal/herdr/graphics.go:206
 CONDITIONALS_NEGATION internal/herdr/graphics.go:241
 CONDITIONALS_NEGATION internal/herdr/graphics.go:87
-CONDITIONALS_NEGATION internal/herdr/herdr.go:170
-CONDITIONALS_NEGATION internal/herdr/herdr.go:173
 CONDITIONALS_NEGATION internal/herdr/layout.go:155
 CONDITIONALS_NEGATION internal/herdr/layout.go:165
 CONDITIONALS_NEGATION internal/herdr/layout.go:88
@@ -223,25 +243,31 @@ CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:99
 CONDITIONALS_NEGATION internal/review/executor/executor.go:187
 CONDITIONALS_NEGATION internal/sim/pixels.go:96
 CONDITIONALS_NEGATION internal/sim/pixels.go:99
-CONDITIONALS_NEGATION internal/tui/app.go:1000
+# 386 `RefreshInterval > 0` al inicializar. Con intervalo 0 el
+# auto-refresco esta DESACTIVADO y armTick no arma nada, asi que este valor
+# inicial no se distingue: lo que decide es armTick, que si esta cubierto.
 CONDITIONALS_NEGATION internal/tui/app.go:386
+# 597 `st != nil` al aplicar una pagina. Un forge sin estado no produce
+# paginas: la rama es defensiva y el codigo nunca genera el caso.
+# NO MATABLE sin fabricar un msg imposible.
 CONDITIONALS_NEGATION internal/tui/app.go:597
+# 609 `msg.key.section == model.SectionReview`. El reloj de la seccion ya
+# esta seteado en el stream por la misma condicion, asi que el reloj solo
+# cambia lo que se re-resuelve, no la lista. NO MATABLE.
 CONDITIONALS_NEGATION internal/tui/app.go:609
-CONDITIONALS_NEGATION internal/tui/app.go:666
-CONDITIONALS_NEGATION internal/tui/app.go:669
+# 933 `st != nil && cs.Host != ""` al componer el cache. Un stream siempre
+# tiene host: se deriva del forge al crearse. NO MATABLE sin fabricar un
+# stream sin host, que el codigo no genera.
 CONDITIONALS_NEGATION internal/tui/app.go:933
+# 976 `m.cachePath == ""` antes de persistir. Sin el, cache.Save("") hace
+# MkdirAll(".") (que ya existe) y WriteFile(""), que falla con el error
+# descartado en la goroutine: no crea nada. DEFENSIVO, no matable. El otro
+# lado (con cachePath se escribe) si esta probado.
 CONDITIONALS_NEGATION internal/tui/app.go:976
-CONDITIONALS_NEGATION internal/tui/app.go:990
-CONDITIONALS_NEGATION internal/tui/bordered/bordered.go:42
-CONDITIONALS_NEGATION internal/tui/bordered/bordered.go:60
 CONDITIONALS_NEGATION internal/tui/comments.go:220
 CONDITIONALS_NEGATION internal/tui/comments.go:366
 CONDITIONALS_NEGATION internal/tui/comments.go:409
 CONDITIONALS_NEGATION internal/tui/comments.go:93
-CONDITIONALS_NEGATION internal/tui/detail.go:182
-CONDITIONALS_NEGATION internal/tui/detail.go:266
-CONDITIONALS_NEGATION internal/tui/detail.go:281
-CONDITIONALS_NEGATION internal/tui/detail.go:285
 CONDITIONALS_NEGATION internal/tui/retarget.go:261
 CONDITIONALS_NEGATION internal/tui/retarget.go:679
 CONDITIONALS_NEGATION internal/tui/sections.go:188
@@ -251,7 +277,6 @@ CONDITIONALS_NEGATION internal/tui/sim.go:498
 CONDITIONALS_NEGATION internal/tui/sim.go:547
 CONDITIONALS_NEGATION internal/tui/update.go:361
 CONDITIONALS_NEGATION internal/tui/update.go:621
-CONDITIONALS_NEGATION internal/worktree/audit.go:69
 CONDITIONALS_NEGATION internal/worktree/herdr.go:125
 CONDITIONALS_NEGATION internal/worktree/herdr.go:77
 CONDITIONALS_NEGATION internal/worktree/herdr.go:81
@@ -273,9 +298,10 @@ INVERT_NEGATIVES internal/tui/comments.go:395
 INVERT_NEGATIVES internal/tui/comments.go:417
 INVERT_NEGATIVES internal/tui/comments.go:449
 INVERT_NEGATIVES internal/tui/comments.go:474
-INVERT_NEGATIVES internal/tui/detail.go:210
-INVERT_NEGATIVES internal/tui/detail.go:216
-INVERT_NEGATIVES internal/tui/detail.go:234
+# 93 aritmetica de `avail`, el alto que le queda al bloque central. El
+# INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
+# titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
+# el borde), asi que la linea final no cambia. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/detail.go:93
 INVERT_NEGATIVES internal/tui/retarget.go:340
 INVERT_NEGATIVES internal/tui/retarget.go:498
