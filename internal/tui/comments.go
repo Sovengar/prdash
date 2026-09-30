@@ -188,9 +188,9 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		return nil
 	}
 
-	// El cuerpo va dentro de la caja y esta sangrada, así que el ancho de texto son
-	// el sangrado, los dos bordes verticales y nada más.
-	bodyWidth := max(8, commentBoxWidth(inner)-commentBoxBorder)
+	// El cuerpo va dentro de la caja y esta sangrada: el ancho sale de una función
+	// aparte porque es geometría comprobable, no un detalle del pintado.
+	bodyWidth := commentBodyWidth(inner)
 
 	// Se cuenta cuántas filas necesita cada comentario componiéndolo con el tope
 	// alto, que es el mismo código que lo pinta, así que el reparto no puede mentir
@@ -279,6 +279,18 @@ func commentBox(body []string, legend string, outer int) []string {
 		lines[i] = inset + l + inset
 	}
 	return lines
+}
+
+// commentBodyWidth es el ancho de TEXTO del cuerpo de un comentario, que es más
+// estrecho que el de la caja por dos motivos que se suman: el sangrado de la caja
+// por los dos lados, y los dos bordes verticales del marco.
+//
+// Está en su propia función por el mismo motivo que commentWidths: dentro del
+// pintado, un cuerpo dos columnas más ancho no da una caja más ancha —la caja
+// trunca igual— sino dos caracteres menos por línea, y eso no lo ve ningún test del
+// render. Siendo una aritmética pura se comprueba directo, y el suelo de 8 con ella.
+func commentBodyWidth(outer int) int {
+	return max(8, commentBoxWidth(outer)-commentBoxBorder)
 }
 
 // commentInset es el sangrado de la caja de comentarios, por lado. Es lo que hace
@@ -386,13 +398,7 @@ func commentBody(c model.Comment, lines, inner int) []string {
 	// que un índice fuera de rango al marcar el corte.
 	lines = max(1, lines)
 	author := truncate(c.Author, maxCommentAuthor)
-
-	// La primera fila lleva el autor delante, así que su cuerpo dispone de menos
-	// ancho. Todo se mide en plano y sobre runes: el ancho que hay que rellenar es
-	// el del texto, y cortar un texto multibyte por bytes deja un rune partido en
-	// pantalla.
-	first := max(8, inner-utf8.RuneCountInString(commentIndent+author+commentSep))
-	cont := max(8, inner-utf8.RuneCountInString(contIndent))
+	first, cont := commentWidths(inner, author)
 
 	// Se guardan aparte el último trozo escrito y el ancho que tenía, para poder
 	// recortarlo al marcar el corte sin volver a medir una fila ya vestida con
@@ -430,9 +436,38 @@ func commentBody(c model.Comment, lines, inner int) []string {
 	return out
 }
 
+// commentWidths son los dos anchos de texto de un comentario: el de la primera
+// fila, que lleva el autor delante, y el de las siguientes, que solo llevan el
+// sangrado de continuación.
+//
+// Están en una función propia, y no en línea en commentBody, por una razón concreta:
+// la geometría es lo que hay que poder comprobar, y dentro del bucle de pintado
+// cualquier error suyo queda tapado por el recorte del marco. Una primera fila dos
+// columnas más ancha no da una caja más ancha —la caja trunca igual— sino dos
+// caracteres menos por línea, y eso no lo ve ningún test del render. Siendo una
+// función pura, se comprueba directo: el ancho es el ancho, sin pintar nada.
+//
+// La cuenta es en RUNES y sobre texto plano: el ancho que hay que rellenar es el
+// del texto, y medir una fila ya vestida con estilos daría un número de columnas
+// que no es el de la caja. El nombre del autor va dentro porque es lo que empuja el
+// cuerpo de la primera fila, y por eso depende de `author` y no solo de `inner`.
+func commentWidths(inner int, author string) (first, cont int) {
+	first = max(8, inner-utf8.RuneCountInString(commentIndent+author+commentSep))
+	cont = max(8, inner-utf8.RuneCountInString(contIndent))
+	return first, cont
+}
+
 // commentRow compone una fila de comentario. La primera lleva el autor delante y
-// las siguientes se sangran hasta donde empieza su texto, para que el cuerpo se
-// lea como un bloque y no como trozos sueltos.
+// las siguientes llevan el sangrado de continuación, para que el cuerpo se lea como
+// un bloque y no como trozos sueltos.
+//
+// OJO, porque el bloque del comentario de abajo dice otra cosa: la continuación NO
+// se alinea con el texto de la primera fila. El sangrado de continuación es un
+// constante (4 columnas) y el texto de la primera empieza en 2 + nombre + 2, así
+// que con un autor corto el cuerpo queda escalonado hacia la izquierda. Lo que hace
+// que se lea como bloque es que TODAS las filas siguientes comparten sangrado, no
+// que encajen con la primera. Alinearlas de verdad con el autor daría a un nombre
+// largo un cuerpo de una columna, y el nombre no es lo que dice algo.
 //
 // cut marca que quedaba más texto detrás. No basta con recortar: si el último
 // trozo cabía justo, se quedaría sin "…" y una fila que parece acabada dice que
@@ -481,8 +516,11 @@ func clipRunes(runes []rune, n int) string {
 const maxCommentAuthor = 24
 
 // Sangrado de los comentarios. Los separan de la ficha sin necesitar una línea en
-// blanco, que en un panel de 18 filas es cara; y las filas siguientes se alinean
-// con el texto de la primera para que el cuerpo se lea como un bloque.
+// blanco, que en un panel de 18 filas es cara; y las filas siguientes llevan un
+// sangrado FIJO, el mismo entre ellas, para que el cuerpo se lea como un bloque.
+// No se alinean con el texto de la primera fila: esa lleva el autor delante y su
+// ancho depende de lo largo que sea el nombre, así que alinearse con ella haría que
+// un nombre largo se comiera el cuerpo, y el nombre no es lo que dice nada.
 const (
 	commentIndent = "  "
 	contIndent    = "    "
