@@ -10,6 +10,84 @@ import (
 	"prdash/internal/forge/model"
 )
 
+// TestLasFlechasSiguenLaListaEnLosDosSentidos: arriba y abajo tienen que ser la
+// MISMA operacion con el signo cambiado. La de abajo estaba probada y la de arriba
+// no, y esa asimetria se nota: un `+ 1` en la de arriba la convertiria en un
+// segundo "abajo" que seguiria funcionando desde el medio de la lista y solo
+// fallaria en el borde, y un `- 2` saltaria una fila.
+//
+// La lista NO es circular: se TOPA en los extremos, al contrario que el selector de
+// ramas, que si es circular. Esa diferencia es intentional —una lista de trabajo
+// no da la vuelta, y al dabajo de la ultima estarian avisos y no items— y es justo
+// el borde que distingue un `- 1` bien puesto de un `+ 1`: en el medio de la lista
+// los dos se comportan igual y solo en el extremo se separan.
+func TestLasFlechasSiguenLaListaEnLosDosSentidos(t *testing.T) {
+	items := make([]model.Item, 4)
+	for i := range items {
+		items[i] = mkItem("github", "github.com", "acme/widget", "Uno", i+1, "")
+	}
+	n := len(items)
+	nueva := func() Model {
+		return send(t, newTestModel(t, ghAdapter()),
+			page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, items, false))
+	}
+
+	// Abajo: recorre los cuatro y se queda en el ultimo. No vuelve al primero.
+	m := nueva()
+	if m.cursor != 0 {
+		t.Fatalf("el cursor inicial = %d, want 0", m.cursor)
+	}
+	for i := range items {
+		m = press(t, m, "down")
+		want := min(i+1, n-1)
+		if m.cursor != want {
+			t.Fatalf("tras %d pasos abajo el cursor = %d, want %d", i+1, m.cursor, want)
+		}
+	}
+	m = press(t, m, "down")
+	if m.cursor != n-1 {
+		t.Errorf("abajo en el ultimo dio %d, want %d: la lista no es circular", m.cursor, n-1)
+	}
+	m = press(t, m, "j")
+	if m.cursor != n-1 {
+		t.Errorf("j en el ultimo dio %d, want %d", m.cursor, n-1)
+	}
+
+	// Arriba: el camino entero desde arriba, y se queda en el primero. Este es el
+	// caso que separa el `- 1` del `+ 1`: con el cursor en el primero, un `+ 1`
+	// baja a la segunda fila y todo lo de despues va bien.
+	m = nueva()
+	m.cursor = n - 1
+	m = press(t, m, "up")
+	if m.cursor != n-2 {
+		t.Fatalf("arriba desde el ultimo dio %d, want %d", m.cursor, n-2)
+	}
+	m = press(t, m, "k")
+	if m.cursor != n-3 {
+		t.Errorf("k dio el cursor %d, want %d", m.cursor, n-3)
+	}
+	m.cursor = 1
+	m = press(t, m, "up")
+	if m.cursor != 0 {
+		t.Errorf("arriba desde la segunda fila dio %d, want 0", m.cursor)
+	}
+	m = press(t, m, "up")
+	if m.cursor != 0 {
+		t.Errorf("arriba en el primero dio %d, want 0: la lista no es circular", m.cursor)
+	}
+
+	// Y el recorrido completo hacia arriba desde abajo, que es donde una resta mal
+	// puesta se acumula en vez de notarse en un paso.
+	m = nueva()
+	m.cursor = n - 1
+	for want := n - 2; want >= 0; want-- {
+		m = press(t, m, "up")
+		if m.cursor != want {
+			t.Fatalf("vuelta hacia arriba: el cursor = %d, want %d", m.cursor, want)
+		}
+	}
+}
+
 // TestSinFilasNoSePintaNiUnAviso: sin filas no hay dónde pintar nada, y el primer
 // corte de commentLines es exactamente eso. Se afirma con el caso más difícil: con
 // avisos de acción y sin comentarios, que es la única rama que devuelve contenido
@@ -267,13 +345,13 @@ func TestLaLeyendaDiceCuantosSeVenDeCuantosHay(t *testing.T) {
 		shown, total, outer int
 		wantPista           bool
 	}{
-		{3, 3, espacioJusto, false},   // todo visto: nada que anunciar
-		{3, 12, espacioJusto, true},   // hay más y cabe JUSTO
-		{3, 12, espacioCorto, false},  // un rune menos y ya no cabe
-		{3, 12, 60, true},             // y con hueco de sobra, también
-		{1, 1, espacioJusto, false},   // uno de uno
-		{5, 5, espacioJusto, false},   // cinco de cinco
-		{3, 12, 8, false},             // ni el suelo da
+		{3, 3, espacioJusto, false},  // todo visto: nada que anunciar
+		{3, 12, espacioJusto, true},  // hay más y cabe JUSTO
+		{3, 12, espacioCorto, false}, // un rune menos y ya no cabe
+		{3, 12, 60, true},            // y con hueco de sobra, también
+		{1, 1, espacioJusto, false},  // uno de uno
+		{5, 5, espacioJusto, false},  // cinco de cinco
+		{3, 12, 8, false},            // ni el suelo da
 	} {
 		got := commentLegend(c.shown, c.total, c.outer)
 		if !strings.Contains(stripANSI(got), itoaSmall(c.shown)+" of "+itoaSmall(c.total)) {
