@@ -7,18 +7,22 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 174
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 159
 # unique survivors, down from 286. The campaign covered the pure logic
 # (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
 # decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
 # sections, toast, retarget) plus the image fit of internal/sim, herdr's version
 # compare and worktree's audit order.
-# What is left is the tight-boundary of the text wrap (ancho del cuerpo, sangria
-# de la continuacion, punto de corte de una fila), Herdr's client/graphics glue, and
-# a handful of clamps whose floor can never bind because an earlier floor is
-# bigger. Those are mutations of code whose only observable effect is a rune at a
-# given column, which the suite does not assert on today. They are accepted as
-# known debt, not as proof that nothing is wrong.
+# What is left is thin: a couple of clamps whose floor can never bind because an
+# earlier floor is bigger, arithmetic that is absorbed by a later comparison, and
+# Herdr's client/graphics glue. The text-wrap geometry is NO LONGER in this file:
+# it was extracted into pure functions (commentWidths, commentBodyWidth, padLines)
+# precisely because it was untestable through the render, where the frame truncates
+# the evidence away.
+#
+# The lesson from this campaign, for whoever retakes it: a surviving mutant is not
+# proof that the code is untestable. In every case here the obstacle was the VIEW
+# the assertion was made through, not the code.
 #
 # NOTA SOBRE EL METODO, para quien retome esto: un script que mute a mano y mire
 # solo la ultima linea de `go test` da falsos positivos. Con el suite ya en rojo,
@@ -44,46 +48,37 @@ ARITHMETIC_BASE internal/herdr/client.go:278
 ARITHMETIC_BASE internal/sim/sim.go:186
 # 153 `max(1, inner-labelWidth)`. El suelo de 1 protege a truncate de un
 # ancho negativo, y el interior de un detalle nunca baja de labelWidth por
-# el suelo de 38 de contentWidth. NO MATABLE: haria falta quitar antes
-# ese suelo, que es una decision de layout.
+# el suelo de 38 de contentWidth. NO MATABLE: haria falta quitar antes ese
+# suelo, que es una decision de layout.
 ARITHMETIC_BASE internal/tui/comments.go:153
-# 174 y 187 `avail < commentChrome+len(...)`. Los dos cortes hacen lo mismo
-# con dos medidas distintas: 174 mira la lista que vino, 187 la que se va a
-# enseñar. La diferencia solo aparece con el tope de cinco activo (lista de
-# 20, shown de 5), y en ese caso 187 es el que manda y 174 el mas
-# laxo. Con lista <= 5 los dos dan lo mismo.
-# NO MATABLE sin una lista de mas de cinco comentarios Y un presupuesto en
-# la franja donde los dos cortes discrepan.
+# 174 y 187 `avail < commentChrome+len(...)`. 174 mira la lista que vino,
+# 187 la que se va a enseñar. Solo difieren con el tope de cinco activo y
+# un presupuesto en la franja entre los dos cortes. NO MATABLE sin una
+# lista de mas de cinco Y un presupuesto en esa franja.
 ARITHMETIC_BASE internal/tui/comments.go:174
 # 177 `avail - commentChrome`. Un presupuesto MAYOR no da una caja mas
-# alta: la caja toma lo que necesita y no rellena. Un presupuesto MENOS
-# si se nota (muerto por el test). El `+1` no se nota por lo mismo.
-# EQUIVALENTE por el hecho de que el bloque no estira.
+# alta: la caja toma lo que necesita y no rellena. Un presupuesto MENOS si
+# se nota (muerto por el test). EQUIVALENTE por el hecho de que el bloque
+# no estira.
 ARITHMETIC_BASE internal/tui/comments.go:177
 ARITHMETIC_BASE internal/tui/comments.go:187
-# 193 `commentBoxWidth(inner)-commentBoxBorder`. Un cuerpo mas ancho se sale
-# de la caja, pero la caja trunca cada linea a su ancho al pintarla, asi que
-# el mutant queda ENMASCARADO: se ven menos caracteres por linea, no una
-# caja mas ancha. El numero de filas si cambia, pero con el tope de
-# maxCommentLines manyas pruebas dan el mismo. NO MATABLE sin afirmar el
-# punto exacto de corte, que es un golden del wrap.
-ARITHMETIC_BASE internal/tui/comments.go:193
 # 226 `len(body)+len(lines) > budget` -> el signo. Con la suma restada el
 # presupuesto nunca se pasa y la red no se dispara: el bloque se pinta entero
 # y el test de 'la caja toma lo que necesita' lo ve. El `>=` SI esta
 # muerto por el caso del presupuesto justo.
 ARITHMETIC_BASE internal/tui/comments.go:226
-ARITHMETIC_BASE internal/tui/comments.go:296
-# 395 `max(8, inner-runes)`. Como el de 193, el ancho de la continuacion se
-# enmascara con el recorte del marco. NO MATABLE sin golden del wrap.
-ARITHMETIC_BASE internal/tui/comments.go:395
-# 417 `out[len(out)-1]`. Muerto: escribir en la penultima fila en vez de la
-# ultima mueve el pie del comentario una fila arriba y desalinea el resto.
-ARITHMETIC_BASE internal/tui/comments.go:417
-# 449 `max(1, w-1)`. El `w-1` deja sitio a la marca de corte. Sin el, un
-# comentario que hay que cortar se sale una columna. NO MATABLE sin un
-# caso donde el recorte cae exactamente en el ancho de la caja.
-ARITHMETIC_BASE internal/tui/comments.go:449
+# 308 `max(8, outer-2*commentInset)`. Muerto: el sangrado de los dos lados es
+# una columna por lado, y con tres la caja se estrecha de mas. El suelo de 8
+# tambien esta muerto.
+ARITHMETIC_BASE internal/tui/comments.go:308
+# 423 el corte: `out[len(out)-1]` con el idx de commentRow. El indice de la
+# fila es lo unico que decide si se lleva el autor delante (`idx == 0`), y en el
+# momento del corte `len(out) >= lines` con `lines >= 1`, asi que ya hay al menos
+# una fila y el idx nunca es 0. Con `len(out)` en vez de `len(out)-1` el prefijo
+# es el mismo. EQUIVALENTE.
+# Si `idx` fuera 0 y `out` estuviera vacio, `out[len(out)-1]` reventaria, pero
+# eso no se da: el suelo de `lines` garantiza que hay una fila escrita.
+ARITHMETIC_BASE internal/tui/comments.go:423
 # 217 capacidad del slice `(len(fields)+1)/2`. Es el numero de filas de la
 # rejilla, y make() no cambia la longitud observada. NO MATABLE.
 ARITHMETIC_BASE internal/tui/detail.go:217
@@ -125,14 +120,6 @@ ARITHMETIC_BASE internal/tui/retarget.go:576
 # adapter que se bloquee, y con un timeout mas corto el test se vuelve
 # intermitente por carrera. NO MATABLE sin un reloj inyectado.
 ARITHMETIC_BASE internal/tui/sim.go:228
-# 528 `for len(body) < height-simChrome-1`. El relleno de lineas en blanco
-# hasta llenar la caja. Con un cuerpo que ya cabe, quitar una fila de
-# relleno deja la caja mas corta, pero el borde de abajo se recalcula y el
-# alto final es el mismo. Con `+1` aparece una fila en blanco de mas, que
-# solo se ve contando lineas. NO MATABLE sin afirmar el alto de la caja
-# con un cuerpo corto, que es lo que hace el test de retarget para el
-# popup de ahi, no para este.
-ARITHMETIC_BASE internal/tui/sim.go:528
 # 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
 # 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
 # caja se recorta al ancho disponible al superponerse, de modo que el texto
@@ -156,12 +143,6 @@ ARITHMETIC_BASE internal/tui/toast.go:253
 ARITHMETIC_BASE internal/tui/toast.go:255
 # ver la nota de 244. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:270
-# 321 y 325 `m.cursor - 1` y `m.cursor + 1`. Arriba y abajo son la MISMA
-# operacion con el signo cambiado, y solo la de abajo estaba probada. Un `+1`
-# en la de arriba la convierte en un segundo abajo que funciona desde el medio
-# de la lista y solo falla en el borde. Muerto por el test del recorrido
-# entero en los dos sentidos.
-ARITHMETIC_BASE internal/tui/update.go:321
 CONDITIONALS_BOUNDARY internal/forge/github/github.go:435
 CONDITIONALS_BOUNDARY internal/forge/gitlab/gitlab.go:335
 # 595 `i >= 0` sobre el fullPath. Con i == 0 (ruta que empieza por '/') la
@@ -242,27 +223,17 @@ CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
 # 112 `st.total < len(st.list)` -> `<=`. Con total == len(list) la asignacion
 # `st.total = len(list)` es una identidad. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:112
-# 136 `avail <= 0` -> `< 0`. Con avail == 0 el mutante sigue adelante, pero
-# el corte siguiente (`avail < commentChrome+len(list)`) lo devuelve: 0 <
-# 2+n siempre. Los dos caminos dan nil. EQUIVALENTE por absorcion del
-# corte posterior.
+# 136 `avail <= 0` -> `< 0`. Con avail == 0 el mutante sigue adelante, pero el
+# corte siguiente lo devuelve: 0 < 2+n siempre. Los dos caminos dan nil.
+# EQUIVALENTE por absorcion del corte posterior.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:136
-# 183 `len(shown) > CommentLimit` -> `>=`. Con exactamente cinco comentarios el
-# truncado `shown[:5]` es la misma lista. EQUIVALENTE.
+# 183 `len(shown) > CommentLimit` -> `>=`. Con exactamente cinco comentarios
+# el truncado `shown[:5]` es la misma lista. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:183
 # 220 `total > budget` -> `>=`. En la frontera las dos ramas dan lo mismo:
 # `rows = need` y `allocate(need, budget)` con presupuesto suficiente
-# devuelve `need`. EQUIVALENTE (y el test de allocate lo demuestra).
+# devuelve `need`. EQUIVALENTE, y el test de allocate lo demuestra.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:220
-# 413 `len(out) >= lines`. En la frontera el mutante deja la ultima fila fuera
-# del recorte, y la fila que se pierde es la ULTIMA, que es la del pie del
-# comentario. El corte por arriba ya la habia quitado. NO MATABLE sin
-# construir un comentario cuyo corte cae exactamente en `lines`.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:413
-# 450 `n <= room`. En la frontera el texto entra justa y el mutante anade una
-# marca de corte a un texto que cabia entero. NO MATABLE sin el ancho
-# exacto, que es lo mismo que el 449.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:450
 # 243 `len(lines) <= rows` -> `<`. Con la lista midiendo justo las filas que
 # hay, la otra rama devuelve lines[0:], el mismo contenido. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/detail.go:243
@@ -308,30 +279,21 @@ CONDITIONALS_BOUNDARY internal/tui/sections.go:229
 # las cajas vacias igual en ambos casos: sin alto no hay nada que repartir.
 # EQUIVALENTE en el resultado.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:80
-# 342 `innerCols <= 0 || innerRows <= 0`. Con el cero exacto el
-# `sim.Resize` devuelve nil y la funcion sale igual. EQUIVALENTE.
+# 342 `innerCols <= 0 || innerRows <= 0`. Con el cero exacto `sim.Resize`
+# devuelve nil y la funcion sale igual. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sim.go:342
 # 350 `cellW <= 0 || cellH <= 0`. Con el cero exacto la celda se usa como si
-# fuera 0 y el reescalado sale nil. Es la degradacion: no pintar antes que
-# pintar con una celda que no existe. EQUIVALENTE por el corte de
-# abajo.
+# fuera 0 y el reescalado sale nil: es la degradacion, no pintar antes que
+# pintar con una celda que no existe. EQUIVALENTE por el corte de abajo.
 CONDITIONALS_BOUNDARY internal/tui/sim.go:350
 # 448 `w <= 0 || h <= 0`. Con el cero exacto `sim.Cells` devuelve vacio. Ojo:
-# con el `&&` este NO es equivalente: un popup de 0 columnas se pinta
-# entero y uno de 0 filas no. El mutante de este fichero solo cambia
-# `<= 0` por `< 0` en la disyccion, y ese si es equivalente.
+# con el `&&` este NO seria equivalente (un popup de 0 columnas se pinta
+# entero y uno de 0 filas no), pero el mutante solo cambia `<= 0` por `< 0`
+# en la disyccion, y ese si es equivalente.
 CONDITIONALS_BOUNDARY internal/tui/sim.go:448
-# 528 `for len(body) < height-simChrome-1`. El relleno de lineas en blanco
-# hasta llenar la caja. Con un cuerpo que ya cabe, quitar una fila de
-# relleno deja la caja mas corta, pero el borde de abajo se recalcula y el
-# alto final es el mismo. Con `+1` aparece una fila en blanco de mas, que
-# solo se ve contando lineas. NO MATABLE sin afirmar el alto de la caja
-# con un cuerpo corto, que es lo que hace el test de retarget para el
-# popup de ahi, no para este.
-CONDITIONALS_BOUNDARY internal/tui/sim.go:528
-# 547 `pad > 0` -> `>= 0`. Con pad == 0, `strings.Repeat(" ", 0)` es `""` y
+# 566 `pad > 0` -> `>= 0`. Con pad == 0, `strings.Repeat(" ", 0)` es `""` y
 # `s + "" == s`. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/sim.go:547
+CONDITIONALS_BOUNDARY internal/tui/sim.go:566
 # 365 `n >= w` -> `>` en pad. Con n == w el relleno son cero espacios y
 # `s + ""` == s. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
@@ -418,35 +380,21 @@ CONDITIONALS_NEGATION internal/tui/app.go:933
 CONDITIONALS_NEGATION internal/tui/app.go:976
 # 220 `total > budget` -> `>=`. En la frontera las dos ramas dan lo mismo:
 # `rows = need` y `allocate(need, budget)` con presupuesto suficiente
-# devuelve `need`. EQUIVALENTE (y el test de allocate lo demuestra).
+# devuelve `need`. EQUIVALENTE, y el test de allocate lo demuestra.
 CONDITIONALS_NEGATION internal/tui/comments.go:220
-# 409 `len(out) == 0`. La rama se ocupa del primer trozo de comentario, que
-# por construccion es el unico caso en que no hay nada todavia. Con las
-# demas escrituras la condicion no puede ser cierta de otra forma.
-# NO MATABLE sin fabricar un segundo trozo con la lista ya vacia.
-CONDITIONALS_NEGATION internal/tui/comments.go:409
-# 93 `len(warns) > 0 && len(page.Comments) == 0`. Los dos lados son
-# el mismo caso desde dosAngles: si no hay comentarios, la pagina no los
-# trae tampoco, asi que la segunda mitad ya se cumple sola cuando la primera
-# puede ser cierta. EQUIVALENTE.
+# 93 `len(warns) > 0 && len(page.Comments) == 0`. Los dos lados son el mismo
+# caso desde dos angulos: si no hay comentarios, la pagina no los trae
+# tampoco. EQUIVALENTE.
 CONDITIONALS_NEGATION internal/tui/comments.go:93
 # 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
 # de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
 # EQUIVALENTE.
 CONDITIONALS_NEGATION internal/tui/sections.go:188
-# 452 `m.sim.cells != nil && m.sim.cellW == w && m.sim.cellH == h`. Las tres
-# partes y la negada entera estan muertas por los tests. Lo que sobrevive es
-# la variante que compara solo el ancho, que con el alto igual es
+# 452 la cache de celdas. Las tres partes y la negada entera estan muertas.
+# Sobrevive la variante que compara solo el ancho, y con el alto igual es
 # indistinguible: el alto lo fija simChrome y la caja no lo cambia entre
-# dos anchos. NO MATABLE sin dos anchos con el MISMO alto, que no se dan.
+# dos anchos. NO MATABLE sin dos anchos con el MISMO alto.
 CONDITIONALS_NEGATION internal/tui/sim.go:452
-# 498 `i == m.sim.cursor`. El cursor se pinta con el simbolo y el resto de
-# filas con espacios, asi que una fila de mas o de menos cambia el ancho
-# de la columna. Muerto por el test del popup. Sobrevive la variante de
-# la busqueda, donde el cursor es el unico pintado y las demas filas son
-# texto: ahi la fila equivocada sigue siendo texto legible y el ojo no la
-# distingue sin un golden.
-CONDITIONALS_NEGATION internal/tui/sim.go:498
 CONDITIONALS_NEGATION internal/tui/update.go:361
 CONDITIONALS_NEGATION internal/tui/update.go:621
 CONDITIONALS_NEGATION internal/worktree/herdr.go:125
@@ -476,31 +424,22 @@ INCREMENT_DECREMENT internal/tui/sim.go:288
 INVERT_NEGATIVES internal/herdr/client.go:278
 # 153 `max(1, inner-labelWidth)`. El suelo de 1 protege a truncate de un
 # ancho negativo, y el interior de un detalle nunca baja de labelWidth por
-# el suelo de 38 de contentWidth. NO MATABLE: haria falta quitar antes
-# ese suelo, que es una decision de layout.
+# el suelo de 38 de contentWidth. NO MATABLE: haria falta quitar antes ese
+# suelo, que es una decision de layout.
 INVERT_NEGATIVES internal/tui/comments.go:153
 # 177 `avail - commentChrome`. Un presupuesto MAYOR no da una caja mas
-# alta: la caja toma lo que necesita y no rellena. Un presupuesto MENOS
-# si se nota (muerto por el test). El `+1` no se nota por lo mismo.
-# EQUIVALENTE por el hecho de que el bloque no estira.
+# alta: la caja toma lo que necesita y no rellena. Un presupuesto MENOS si
+# se nota (muerto por el test). EQUIVALENTE por el hecho de que el bloque
+# no estira.
 INVERT_NEGATIVES internal/tui/comments.go:177
-# 193 `commentBoxWidth(inner)-commentBoxBorder`. Un cuerpo mas ancho se sale
-# de la caja, pero la caja trunca cada linea a su ancho al pintarla, asi que
-# el mutant queda ENMASCARADO: se ven menos caracteres por linea, no una
-# caja mas ancha. El numero de filas si cambia, pero con el tope de
-# maxCommentLines manyas pruebas dan el mismo. NO MATABLE sin afirmar el
-# punto exacto de corte, que es un golden del wrap.
-INVERT_NEGATIVES internal/tui/comments.go:193
-# 395 `max(8, inner-runes)`. Como el de 193, el ancho de la continuacion se
-# enmascara con el recorte del marco. NO MATABLE sin golden del wrap.
-INVERT_NEGATIVES internal/tui/comments.go:395
-# 417 `out[len(out)-1]`. Muerto: escribir en la penultima fila en vez de la
-# ultima mueve el pie del comentario una fila arriba y desalinea el resto.
-INVERT_NEGATIVES internal/tui/comments.go:417
-# 449 `max(1, w-1)`. El `w-1` deja sitio a la marca de corte. Sin el, un
-# comentario que hay que cortar se sale una columna. NO MATABLE sin un
-# caso donde el recorte cae exactamente en el ancho de la caja.
-INVERT_NEGATIVES internal/tui/comments.go:449
+# 423 el corte: `out[len(out)-1]` con el idx de commentRow. El indice de la
+# fila es lo unico que decide si se lleva el autor delante (`idx == 0`), y en el
+# momento del corte `len(out) >= lines` con `lines >= 1`, asi que ya hay al menos
+# una fila y el idx nunca es 0. Con `len(out)` en vez de `len(out)-1` el prefijo
+# es el mismo. EQUIVALENTE.
+# Si `idx` fuera 0 y `out` estuviera vacio, `out[len(out)-1]` reventaria, pero
+# eso no se da: el suelo de `lines` garantiza que hay una fila escrita.
+INVERT_NEGATIVES internal/tui/comments.go:423
 # 93 aritmetica de `avail`, el alto que le queda al bloque central. El
 # INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
 # titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
@@ -521,14 +460,6 @@ INVERT_NEGATIVES internal/tui/retarget.go:498
 # mas (se sale por debajo del borde) ni una de menos (esconde una rama).
 # Muerto por el test que cuenta las filas pintadas.
 INVERT_NEGATIVES internal/tui/retarget.go:505
-# 528 `for len(body) < height-simChrome-1`. El relleno de lineas en blanco
-# hasta llenar la caja. Con un cuerpo que ya cabe, quitar una fila de
-# relleno deja la caja mas corta, pero el borde de abajo se recalcula y el
-# alto final es el mismo. Con `+1` aparece una fila en blanco de mas, que
-# solo se ve contando lineas. NO MATABLE sin afirmar el alto de la caja
-# con un cuerpo corto, que es lo que hace el test de retarget para el
-# popup de ahi, no para este.
-INVERT_NEGATIVES internal/tui/sim.go:528
 # 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
 # 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
 # caja se recorta al ancho disponible al superponerse, de modo que el texto
@@ -547,9 +478,3 @@ INVERT_NEGATIVES internal/tui/toast.go:244
 INVERT_NEGATIVES internal/tui/toast.go:253
 # ver la nota de 244. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/toast.go:270
-# 321 y 325 `m.cursor - 1` y `m.cursor + 1`. Arriba y abajo son la MISMA
-# operacion con el signo cambiado, y solo la de abajo estaba probada. Un `+1`
-# en la de arriba la convierte en un segundo abajo que funciona desde el medio
-# de la lista y solo falla en el borde. Muerto por el test del recorrido
-# entero en los dos sentidos.
-INVERT_NEGATIVES internal/tui/update.go:321
