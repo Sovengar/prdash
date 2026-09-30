@@ -523,13 +523,32 @@ func (m Model) simBusyBox() string {
 // terminal lo que ya está en pantalla y encima lo taparía dos veces.
 func (m Model) simImageBox() string {
 	width, height := m.simBox()
-	body := make([]string, 0, height)
-	body = append(body, m.sim.cells...)
-	for len(body) < height-simChrome-1 {
-		body = append(body, "")
-	}
+	// El cuerpo se rellena hasta el alto MENOS el marco y la línea del pie, que es
+	// justo lo que mide simChrome. Antes se rellenaba hasta alto - marco - 1, y la
+	// caja salía una fila más corta de lo que decía simBox: como el alto lo
+	// heredan el centrado y la colocación de la imagen, esa fila se nota.
+	body := padLines(m.sim.cells, height-simChrome)
 	body = append(body, styleDim.Render("esc close · o open image"))
 	return borderedBox(" simulate: "+string(m.sim.kind)+" "+refLabel(m.sim.item), strings.Join(body, "\n"), width)
+}
+
+// padLines completa una lista de líneas con líneas vacías hasta que mida `want`.
+//
+// Está en su propia función por la misma razón que la geometría de los
+// comentarios: el relleno decide el ALTO de la caja, y dentro del pintado ese alto
+// lo absorbe el borde. Una caja una fila más corta no se ve como una caja más
+// corta, se ve como una caja con el pie pegado al borde de arriba.
+//
+// El relleno es un SUELO y no un recorte: si ya hay más líneas de las pedidas, se
+// devuelven todas. Recortar el contenido para forzar una altura sería tirar
+// imagen, y la imagen es lo que el usuario está mirando.
+func padLines(lines []string, want int) []string {
+	out := make([]string, 0, max(0, want))
+	out = append(out, lines...)
+	for len(out) < want {
+		out = append(out, "")
+	}
+	return out
 }
 
 // simBorder es el color del popup: el de la información, para que se distinga de
