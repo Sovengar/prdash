@@ -513,9 +513,12 @@ func (m Model) retargetRows() int {
 	return min(retargetRows, max(retargetMinRows, free))
 }
 
-// retargetBox es la geometría del popup: sus dimensiones exteriores.
-func (m Model) retargetBox() (w, h int) {
-	return min(m.contentWidth(), retargetChooserWidth), m.retargetRows() + retargetChrome
+// retargetBoxWidth es el ancho exterior del popup. Solo el ancho: la altura la
+// calcula quien compone la caja, con las líneas que de verdad tiene, y devolverla
+// aquí era un número que nadie leía (las tres cajas del popup la descartaban con
+// `_`), que es la clase de valor que luego se permite mutar sin que nada se entere.
+func (m Model) retargetBoxWidth() int {
+	return min(m.contentWidth(), retargetChooserWidth)
 }
 
 // retargetOverlay compone la caja del popup, o dice que no hay nada que pintar.
@@ -541,7 +544,7 @@ func (m Model) retargetOverlay() (string, bool) {
 // por eso la única salida es `esc`: sin ella, un fallo del forge dejaría el popup
 // esperando algo que no va a llegar.
 func (m Model) retargetBusyBox() string {
-	width, _ := m.retargetBox()
+	width := m.retargetBoxWidth()
 	if m.retarget.errMsg != "" {
 		body := styleError.Render(m.retarget.errMsg) + "\n" + styleHint.Render("esc close")
 		return borderedBox(" retarget "+refLabel(m.retarget.item), body, width)
@@ -559,7 +562,7 @@ func (m Model) retargetBusyBox() string {
 // de partida —esa se corta antes de llegar aquí—, así que si compartieran símbolo
 // el popup no diría nunca qué es lo que está elegido.
 func (m Model) retargetSearchBox() string {
-	width, _ := m.retargetBox()
+	width := m.retargetBoxWidth()
 	it := m.retarget.item
 	inner := max(8, width-2)
 
@@ -632,7 +635,7 @@ func pluralBranches(n int) string {
 // ítem, y lo que se hubiera aprobado antes pasa a compararse contra otra cosa. Por
 // eso la línea del medio dice qué deja de ser verdad, y no solo qué teclas hay.
 func (m Model) retargetConfirmBox() string {
-	width, _ := m.retargetBox()
+	width := m.retargetBoxWidth()
 	from := m.retarget.item.TargetBranch
 	if from == "" {
 		from = "unknown"

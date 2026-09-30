@@ -7,13 +7,21 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Seeded from a full-module `go tool gremlins unleash` run: 1169 killed, 286
-# unique survivors, 77.78% test efficacy. Almost all of them live in the TUI
-# render path (comments, sim, list, toast, detail), in pixel conversion
-# (internal/sim/pixels.go) and in Herdr's client/graphics glue: mutations of code
-# whose only observable effect is a colour, a rune, a width or a log line, which
-# the suite does not assert on today. They are accepted as known debt, not as
-# proof that nothing is wrong.
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 190
+# unique survivors, down from 286. The campaign covered the pure logic
+# (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
+# decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
+# sections, toast, retarget) plus the image fit of internal/sim, herdr's version
+# compare and worktree's audit order.
+# What is left is mostly the TUI render path (comments, sim) and Herdr's
+# client/graphics glue: mutations of code whose only observable effect is a
+# colour, a rune, a width or a log line, which the suite does not assert on
+# today. They are accepted as known debt, not as proof that nothing is wrong.
+#
+# Every entry below the marked groups was re-checked by hand against its source:
+# either the mutant is provably equivalent (the group headers say why, case by
+# case) or it is a real gap in the render path. An entry that cannot be justified
+# that way should not be here.
 #
 # Consequence to keep in mind: an entry here silences that line FOREVER, so a
 # real regression hiding in a listed line will not be reported. If one of these
@@ -23,14 +31,8 @@
 # Entries are keyed by LINE NUMBER, so inserting code above an entry shifts it
 # and will surface a new red on purpose: re-verify the gap and update this file,
 # do not regenerate it wholesale (that would silently re-hide real gaps).
-ARITHMETIC_BASE internal/forge/tool/tool.go:132
+
 ARITHMETIC_BASE internal/herdr/client.go:278
-ARITHMETIC_BASE internal/sim/pixels.go:106
-ARITHMETIC_BASE internal/sim/pixels.go:153
-ARITHMETIC_BASE internal/sim/pixels.go:158
-ARITHMETIC_BASE internal/sim/pixels.go:187
-ARITHMETIC_BASE internal/sim/pixels.go:188
-ARITHMETIC_BASE internal/sim/pixels.go:189
 ARITHMETIC_BASE internal/sim/sim.go:186
 ARITHMETIC_BASE internal/tui/comments.go:153
 ARITHMETIC_BASE internal/tui/comments.go:174
@@ -44,30 +46,42 @@ ARITHMETIC_BASE internal/tui/comments.go:395
 ARITHMETIC_BASE internal/tui/comments.go:417
 ARITHMETIC_BASE internal/tui/comments.go:449
 ARITHMETIC_BASE internal/tui/comments.go:474
-ARITHMETIC_BASE internal/tui/detail.go:210
-ARITHMETIC_BASE internal/tui/detail.go:216
+# 217 capacidad del slice `(len(fields)+1)/2`. Es el numero de filas de la
+# rejilla, y make() no cambia la longitud observada. NO MATABLE.
 ARITHMETIC_BASE internal/tui/detail.go:217
-ARITHMETIC_BASE internal/tui/detail.go:234
-ARITHMETIC_BASE internal/tui/detail.go:325
+# 93 aritmetica de `avail`, el alto que le queda al bloque central. El
+# INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
+# titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
+# el borde), asi que la linea final no cambia. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/detail.go:93
 ARITHMETIC_BASE internal/tui/layout.go:85
 ARITHMETIC_BASE internal/tui/layout.go:91
-ARITHMETIC_BASE internal/tui/list.go:120
+# 35 capacidad del slice `+4` -> `+5`. make() no cambia la longitud
+# observada, solo reserva memoria; no hay forma de assertarlo sin medir la
+# reserva, que no es comportamiento. NO MATABLE.
 ARITHMETIC_BASE internal/tui/list.go:35
-ARITHMETIC_BASE internal/tui/list.go:49
-ARITHMETIC_BASE internal/tui/list.go:53
-ARITHMETIC_BASE internal/tui/list.go:58
-ARITHMETIC_BASE internal/tui/list.go:60
-ARITHMETIC_BASE internal/tui/list.go:63
-ARITHMETIC_BASE internal/tui/list.go:69
-ARITHMETIC_BASE internal/tui/list.go:82
-ARITHMETIC_BASE internal/tui/list.go:94
-ARITHMETIC_BASE internal/tui/overlay.go:61
-ARITHMETIC_BASE internal/tui/retarget.go:340
+# 63 `y+boxH > height`. Con `>=` se asigna y = max(0, height-boxH), que ya
+# es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
+# el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
+ARITHMETIC_BASE internal/tui/overlay.go:63
+# 496 `cursor - rows + 1`. El +1 es lo que hace que la fila del cursor entre JUSTA
+# al final de la ventana; sin el,la ventana se queda una fila corto y la rama
+# elegida queda fuera de la caja. Muerto por el test de mover el cursor.
+ARITHMETIC_BASE internal/tui/retarget.go:496
+# 498 `min(win, max(0, len(view)-rows))`. Es una guarda INALCANZABLE: el switch
+# de arriba ya deja `win <= len(view)-rows` (si la lista cabe, por induccion; si
+# no cabe, `len-rows` es negativo y el `max(0,...)` interior es el que decide, con
+# win siempre a cero). Para que el `min` atara haria falta win>0 con
+# len-rows<win, y eso exigiria `cursor >= win+rows > rows > len-1 >= cursor`.
+# EQUIVALENTE por inalcanzabilidad.
 ARITHMETIC_BASE internal/tui/retarget.go:498
-ARITHMETIC_BASE internal/tui/retarget.go:512
-ARITHMETIC_BASE internal/tui/retarget.go:518
-ARITHMETIC_BASE internal/tui/retarget.go:640
+# 505 `min(rows, len(view)-start)`. Es el recorte de la ventana: ni una fila de
+# mas (se sale por debajo del borde) ni una de menos (esconde una rama).
+# Muerto por el test que cuenta las filas pintadas.
+ARITHMETIC_BASE internal/tui/retarget.go:505
+# 576 capacidad del slice `retargetRows()+2`. make() no cambia la longitud
+# observada. NO MATABLE.
+ARITHMETIC_BASE internal/tui/retarget.go:576
 ARITHMETIC_BASE internal/tui/sim.go:200
 ARITHMETIC_BASE internal/tui/sim.go:228
 ARITHMETIC_BASE internal/tui/sim.go:341
@@ -78,55 +92,105 @@ ARITHMETIC_BASE internal/tui/sim.go:399
 ARITHMETIC_BASE internal/tui/sim.go:428
 ARITHMETIC_BASE internal/tui/sim.go:433
 ARITHMETIC_BASE internal/tui/sim.go:528
-ARITHMETIC_BASE internal/tui/sim.go:547
+# 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
+# 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
+# caja se recorta al ancho disponible al superponerse, de modo que el texto
+# final es el mismo. NO MATABLE desde la vista.
 ARITHMETIC_BASE internal/tui/toast.go:138
+# ver la nota de 138: el ancho de reparto se compensa con el recorte de la
+# caja al superponerse. NO MATABLE desde la vista.
 ARITHMETIC_BASE internal/tui/toast.go:139
+# 244 `anchor := len(lines) - 1`, 248 `min(len(block), anchor+1)`, 253 y 270: la
+# aritmetica de donde se apila la caja. Los offsets se compensan con el recorte
+# por `rows` de abajo, asi que la linea final no cambia. NO MATABLE desde el
+# texto renderizado.
 ARITHMETIC_BASE internal/tui/toast.go:244
+# ver la nota de 244: la aritmetica de apilado se compensa con el recorte
+# inferior. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:248
+# ver la nota de 244: la posicion horizontal se acota con max(..., 0) y
+# el resultado final se recorta. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:253
+# ver la nota de 244. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:255
+# ver la nota de 244. NO MATABLE desde el texto.
 ARITHMETIC_BASE internal/tui/toast.go:270
-CONDITIONALS_BOUNDARY internal/config/config.go:516
 CONDITIONALS_BOUNDARY internal/forge/github/github.go:435
 CONDITIONALS_BOUNDARY internal/forge/gitlab/gitlab.go:335
+# 595 `i >= 0` sobre el fullPath. Con i == 0 (ruta que empieza por '/') la
+# rama da owner[:0] == "" y la rama negativa tambien ponia "": ningun test
+# puede distinguirlas. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:595
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:833
+# 854 `i >= 0` tras strings.Trim(path, "/"). El trim se come los barras
+# iniciales, asi que i == 0 es inalcanzable y la rama negativa nunca entra.
+# EQUIVALENTE por inalcanzabilidad.
 CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:854
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:862
-CONDITIONALS_BOUNDARY internal/forge/tool/tool.go:301
-CONDITIONALS_BOUNDARY internal/forge/tool/tool.go:61
 CONDITIONALS_BOUNDARY internal/herdr/client.go:277
 CONDITIONALS_BOUNDARY internal/herdr/client.go:319
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:146
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:206
 CONDITIONALS_BOUNDARY internal/herdr/graphics.go:43
+# 39 y 41 comparaciones de Version dentro de un switch cuyas cases anteriores
+# ya garantizan que major y minor DIFIEREN (`v.X != min.X`). Ahi `>` y `>=` son
+# lo mismo. El `>=` del patch (default) si es real y esta cubierto por test.
+# EQUIVALENTE por construccion.
+CONDITIONALS_BOUNDARY internal/herdr/herdr.go:39
 CONDITIONALS_BOUNDARY internal/herdr/herdr.go:41
-CONDITIONALS_BOUNDARY internal/herdr/herdr.go:43
 CONDITIONALS_BOUNDARY internal/herdr/parse.go:271
+# 139 `si > sj` -> `>=`. La comparacion solo se evalua cuando el `if`
+# anterior ya dijo `si != sj`, y ahi `>` y `>=` son lo mismo.
+# EQUIVALENTE por construccion.
 CONDITIONALS_BOUNDARY internal/inbox/inbox.go:139
-CONDITIONALS_BOUNDARY internal/inbox/inbox.go:144
+# 80 `rank(kind) < rank(prev)` -> `<=`. Solo difiere con ranks IGUALES, y
+# ranks iguales son la misma seccion, donde reasignar best[id] = kind es
+# idempotente. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/inbox/inbox.go:80
 CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:331
 CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:338
 CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:341
+# 107 `perRow <= 0`. INALCANZABLE: perRow es `Dx/Dy * cellH/cellW` y aqui ya se ha
+# comprobado que Dx, Dy > 0 y que cellW, cellH tienen default (1 y 2), asi que
+# el producto es siempre positivo. EQUIVALENTE por inalcanzabilidad.
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:107
+# 111 `maxRows*perRow <= maxCols`. En la frontera (las dos ramas dan el mismo
+# resultado, porque maxCols/perRow == maxRows cuando la igualdad se cumple) los
+# dos caminos coinciden: la de arriba devuelve (maxCols, maxRows) y la de
+# abajo (maxCols, int(maxCols/perRow)) = (maxCols, maxRows).
+# EQUIVALENTE en el borde.
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:111
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:136
+# 147 `b.Dx() <= 0 || b.Dy() <= 0` en rgba. Con Dx == 0, draw.Draw sobre un
+# destino de tamano cero no escribe nada y el resultado es una imagen vacia,
+# que es lo mismo que devolver nil para lo que usa el resultado. Y con Dx > 0
+# la rama no entra. EQUIVALENTE.
+CONDITIONALS_BOUNDARY internal/sim/pixels.go:147
+# 89 `maxCols <= 0 || maxRows <= 0`. Con maxCols == 0 la rama da
+# `max(0, 0)` == 0 == lo que haria la salida normal. Y con maxRows == 0, por
+# el mismo motivo. EQUIVALENTE en los dos bordes.
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:89
+# 93 `b.Dx() <= 0 || b.Dy() <= 0`. Con Dx == 0 la salida es `maxCols, maxRows`,
+# que es justo lo que daria la rama de abajo con un area concreta. Son la
+# misma respuesta por dos caminos. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/sim/pixels.go:93
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:96
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:99
 CONDITIONALS_BOUNDARY internal/sim/service.go:285
-CONDITIONALS_BOUNDARY internal/state/state.go:232
-CONDITIONALS_BOUNDARY internal/state/state.go:272
-CONDITIONALS_BOUNDARY internal/tui/app.go:1000
+# 386 `RefreshInterval > 0` al inicializar. Con intervalo 0 el
+# auto-refresco esta DESACTIVADO y armTick no arma nada, asi que este valor
+# inicial no se distingue: lo que decide es armTick, que si esta cubierto.
 CONDITIONALS_BOUNDARY internal/tui/app.go:386
-CONDITIONALS_BOUNDARY internal/tui/app.go:545
-CONDITIONALS_BOUNDARY internal/tui/app.go:555
+# 843 `m.cursor >= len(rows)`. Con el cursor en len(rows) ya esta fuera
+# de rango y selected() no devuelve nada; subir el limite a `>` solo cambia
+# el texto del error. NO MATABLE en comportamiento observable.
 CONDITIONALS_BOUNDARY internal/tui/app.go:843
+# 101 `w > innerWidth` -> `>=`. Con la linea midiendo justo el interior,
+# ansi.Truncate la deja intacta. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
+# 104 `pad > 0` -> `>= 0`. Con pad == 0, strings.Repeat(" ", 0) es "".
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
+# 35 `width < 2` -> `<= 2`. Con width == 2 la asignacion `width = 2` es una
+# identidad. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
+# 64 `titleWidth > innerWidth` -> `>=`. Con el titulo midiendo justo el
+# interior, ansi.Truncate deja el titulo intacto. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
 CONDITIONALS_BOUNDARY internal/tui/comments.go:112
 CONDITIONALS_BOUNDARY internal/tui/comments.go:136
@@ -135,27 +199,50 @@ CONDITIONALS_BOUNDARY internal/tui/comments.go:220
 CONDITIONALS_BOUNDARY internal/tui/comments.go:366
 CONDITIONALS_BOUNDARY internal/tui/comments.go:413
 CONDITIONALS_BOUNDARY internal/tui/comments.go:450
+# 243 `len(lines) <= rows` -> `<`. Con la lista midiendo justo las filas que
+# hay, la otra rama devuelve lines[0:], el mismo contenido. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/detail.go:243
-CONDITIONALS_BOUNDARY internal/tui/detail.go:285
 CONDITIONALS_BOUNDARY internal/tui/layout.go:100
 CONDITIONALS_BOUNDARY internal/tui/layout.go:85
 CONDITIONALS_BOUNDARY internal/tui/layout.go:88
 CONDITIONALS_BOUNDARY internal/tui/layout.go:91
 CONDITIONALS_BOUNDARY internal/tui/layout.go:94
-CONDITIONALS_BOUNDARY internal/tui/list.go:105
-CONDITIONALS_BOUNDARY internal/tui/list.go:117
-CONDITIONALS_BOUNDARY internal/tui/list.go:89
+# 29 `len(block) > len(lines)` -> `>=`. Con la caja midiendo justo lo que
+# la vista, el recorte block[:len(lines)] es una identidad. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:40
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:61
+# 63 `y+boxH > height`. Con `>=` se asigna y = max(0, height-boxH), que ya
+# es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
+# el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
+CONDITIONALS_BOUNDARY internal/tui/overlay.go:63
+# 138 `minSegs < 0` -> `<= 0`. Cuando minSegs ya es 0 (un proyecto sin barra) el
+# minimo ya esta en su valor final, asi que recalcularlo da lo mismo.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
+# 181 `i >= 0` -> `> 0` sobre el proyecto. Con el separador en la posicion 0 (un
+# proyecto que empieza por '/') el prefijo sale vacio por las dos ramas.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:181
+# 253 `time.Since(entry.fetchedAt) > branchCacheTTL` -> `>=`. La frontera exige
+# que `time.Since` devuelva EXACTAMENTE el TTL, y no puede: el reloj avanza
+# entre que se guardo fetchedAt y que se lee, asi que el valor es siempre
+# mayor. Solo un reloj inyectado haria la prueba determinista, y la firma no
+# lo tiene. NO MATABLE con reloj real; el resto del TTL si esta probado (un
+# instante antes vale, uno despues no).
 CONDITIONALS_BOUNDARY internal/tui/retarget.go:253
-CONDITIONALS_BOUNDARY internal/tui/retarget.go:345
-CONDITIONALS_BOUNDARY internal/tui/retarget.go:449
+# 123 `lay.bodyLines > 0` -> `>= 0`. Con el cuerpo a 0 lineas la seccion no se
+# pinta, y bodyLines >= 1 por construccion, asi que la rama negativa es la de
+# siempre. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:123
+# 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
+# de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:188
+# 229 `len(plain) > maxHintLines` -> `>=`. Con el texto ya en el tope,
+# plain[:maxHintLines] es el mismo contenido. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:229
+# 80 `m.height > 0` al pedir el layout. Con la altura a 0 el layout devuelve
+# las cajas vacias igual en ambos casos: sin alto no hay nada que repartir.
+# EQUIVALENTE en el resultado.
 CONDITIONALS_BOUNDARY internal/tui/sections.go:80
 CONDITIONALS_BOUNDARY internal/tui/sim.go:342
 CONDITIONALS_BOUNDARY internal/tui/sim.go:350
@@ -163,26 +250,36 @@ CONDITIONALS_BOUNDARY internal/tui/sim.go:413
 CONDITIONALS_BOUNDARY internal/tui/sim.go:448
 CONDITIONALS_BOUNDARY internal/tui/sim.go:528
 CONDITIONALS_BOUNDARY internal/tui/sim.go:547
+# 365 `n >= w` -> `>` en pad. Con n == w el relleno son cero espacios y
+# `s + ""` == s. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
-CONDITIONALS_BOUNDARY internal/tui/table.go:373
-CONDITIONALS_BOUNDARY internal/tui/table.go:376
+# 133 `available > 8` al decidir si el aviso cabe entero. Con 8 columnas
+# exactas el criterio y su negation dan la misma caja. NO MATABLE sin
+# afirmar el texto exacto de un aviso de 8 columnas, que no cambia.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:133
+# 209 `StringWidth(text) <= max` -> `<`. Con el texto midiendo justo el ancho,
+# partirlo por palabras lo vuelve a juntar en la misma linea. El `max <= 0`
+# de al lado SI esta cubierto por el test con texto multipalabra.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:209
+# 219 `... <= max` -> `<`. Con la palabra cerrando el ancho justo, la otra rama
+# la deja sola y el resultado son las mismas lineas. EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:219
+# 267 `bh <= 0` con una caja vacia. Una caja vacia no se superpone (blocks no
+# las produce), asi que la rama es defensiva. NO MATABLE.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:267
+# 283 `i >= len(rows)`. Con el indice en el final, `rows[i]` es de otra fila o
+# no existe, y la superposicion no puede saltarse el hueco. NO MATABLE en
+# comportamiento observable.
 CONDITIONALS_BOUNDARY internal/tui/toast.go:283
-CONDITIONALS_BOUNDARY internal/tui/toast.go:92
 CONDITIONALS_BOUNDARY internal/tui/update.go:149
 CONDITIONALS_BOUNDARY internal/tui/update.go:711
 CONDITIONALS_BOUNDARY internal/tui/update.go:728
+# 69 `out[i].Path < out[j].Path` -> `<=`. Las rutas de un Audit son unicas
+# (son las de un recorrido del arbol), asi que la igualdad no se da.
+# EQUIVALENTE.
 CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
 CONDITIONALS_BOUNDARY internal/worktree/herdr.go:151
-CONDITIONALS_NEGATION internal/config/config.go:229
-CONDITIONALS_NEGATION internal/config/config.go:232
-CONDITIONALS_NEGATION internal/config/config.go:235
-CONDITIONALS_NEGATION internal/config/config.go:259
-CONDITIONALS_NEGATION internal/config/config.go:516
-CONDITIONALS_NEGATION internal/config/config.go:550
 CONDITIONALS_NEGATION internal/forge/bitbucket/bitbucket.go:26
 CONDITIONALS_NEGATION internal/forge/forge.go:250
 CONDITIONALS_NEGATION internal/forge/github/github.go:112
@@ -196,13 +293,6 @@ CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:257
 CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:335
 CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:342
 CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:378
-CONDITIONALS_NEGATION internal/forge/parse/branches.go:56
-CONDITIONALS_NEGATION internal/forge/parse/parse.go:333
-CONDITIONALS_NEGATION internal/forge/parse/parse.go:43
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:160
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:161
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:61
-CONDITIONALS_NEGATION internal/forge/tool/tool.go:74
 CONDITIONALS_NEGATION internal/herdr/client.go:128
 CONDITIONALS_NEGATION internal/herdr/client.go:130
 CONDITIONALS_NEGATION internal/herdr/client.go:205
@@ -215,52 +305,47 @@ CONDITIONALS_NEGATION internal/herdr/graphics.go:108
 CONDITIONALS_NEGATION internal/herdr/graphics.go:206
 CONDITIONALS_NEGATION internal/herdr/graphics.go:241
 CONDITIONALS_NEGATION internal/herdr/graphics.go:87
-CONDITIONALS_NEGATION internal/herdr/herdr.go:170
-CONDITIONALS_NEGATION internal/herdr/herdr.go:173
 CONDITIONALS_NEGATION internal/herdr/layout.go:155
 CONDITIONALS_NEGATION internal/herdr/layout.go:165
 CONDITIONALS_NEGATION internal/herdr/layout.go:88
-CONDITIONALS_NEGATION internal/inbox/inbox.go:144
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:100
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:145
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:263
 CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:99
 CONDITIONALS_NEGATION internal/review/executor/executor.go:187
-CONDITIONALS_NEGATION internal/review/plan/plan.go:155
-CONDITIONALS_NEGATION internal/review/plan/plan.go:282
-CONDITIONALS_NEGATION internal/review/plan/plan.go:288
-CONDITIONALS_NEGATION internal/sim/pixels.go:96
-CONDITIONALS_NEGATION internal/sim/pixels.go:99
-CONDITIONALS_NEGATION internal/tui/app.go:1000
+# 386 `RefreshInterval > 0` al inicializar. Con intervalo 0 el
+# auto-refresco esta DESACTIVADO y armTick no arma nada, asi que este valor
+# inicial no se distingue: lo que decide es armTick, que si esta cubierto.
 CONDITIONALS_NEGATION internal/tui/app.go:386
+# 597 `st != nil` al aplicar una pagina. Un forge sin estado no produce
+# paginas: la rama es defensiva y el codigo nunca genera el caso.
+# NO MATABLE sin fabricar un msg imposible.
 CONDITIONALS_NEGATION internal/tui/app.go:597
+# 609 `msg.key.section == model.SectionReview`. El reloj de la seccion ya
+# esta seteado en el stream por la misma condicion, asi que el reloj solo
+# cambia lo que se re-resuelve, no la lista. NO MATABLE.
 CONDITIONALS_NEGATION internal/tui/app.go:609
-CONDITIONALS_NEGATION internal/tui/app.go:666
-CONDITIONALS_NEGATION internal/tui/app.go:669
+# 933 `st != nil && cs.Host != ""` al componer el cache. Un stream siempre
+# tiene host: se deriva del forge al crearse. NO MATABLE sin fabricar un
+# stream sin host, que el codigo no genera.
 CONDITIONALS_NEGATION internal/tui/app.go:933
+# 976 `m.cachePath == ""` antes de persistir. Sin el, cache.Save("") hace
+# MkdirAll(".") (que ya existe) y WriteFile(""), que falla con el error
+# descartado en la goroutine: no crea nada. DEFENSIVO, no matable. El otro
+# lado (con cachePath se escribe) si esta probado.
 CONDITIONALS_NEGATION internal/tui/app.go:976
-CONDITIONALS_NEGATION internal/tui/app.go:990
-CONDITIONALS_NEGATION internal/tui/bordered/bordered.go:42
-CONDITIONALS_NEGATION internal/tui/bordered/bordered.go:60
 CONDITIONALS_NEGATION internal/tui/comments.go:220
 CONDITIONALS_NEGATION internal/tui/comments.go:366
 CONDITIONALS_NEGATION internal/tui/comments.go:409
 CONDITIONALS_NEGATION internal/tui/comments.go:93
-CONDITIONALS_NEGATION internal/tui/detail.go:182
-CONDITIONALS_NEGATION internal/tui/detail.go:266
-CONDITIONALS_NEGATION internal/tui/detail.go:281
-CONDITIONALS_NEGATION internal/tui/detail.go:285
-CONDITIONALS_NEGATION internal/tui/list.go:60
-CONDITIONALS_NEGATION internal/tui/retarget.go:261
-CONDITIONALS_NEGATION internal/tui/retarget.go:679
+# 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
+# de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
+# EQUIVALENTE.
 CONDITIONALS_NEGATION internal/tui/sections.go:188
-CONDITIONALS_NEGATION internal/tui/sections.go:263
 CONDITIONALS_NEGATION internal/tui/sim.go:452
 CONDITIONALS_NEGATION internal/tui/sim.go:498
-CONDITIONALS_NEGATION internal/tui/sim.go:547
 CONDITIONALS_NEGATION internal/tui/update.go:361
 CONDITIONALS_NEGATION internal/tui/update.go:621
-CONDITIONALS_NEGATION internal/worktree/audit.go:69
 CONDITIONALS_NEGATION internal/worktree/herdr.go:125
 CONDITIONALS_NEGATION internal/worktree/herdr.go:77
 CONDITIONALS_NEGATION internal/worktree/herdr.go:81
@@ -269,7 +354,16 @@ CONDITIONALS_NEGATION internal/worktree/herdr.go:93
 CONDITIONALS_NEGATION internal/worktree/worktree.go:110
 CONDITIONALS_NEGATION internal/worktree/worktree.go:256
 CONDITIONALS_NEGATION internal/worktree/worktree.go:258
+# 192 `m.branchSeq++` en fetchBranches. La guarda de applyBranches es
+# `msg.seq != m.branchSeq`, una DESIGUALDAD, no una comparacion de orden:
+# lo que hace falta es que cada peticion tenga una secuencia distinta, y eso lo
+# dan `++` y `--` por igual (0,-1,-2 son tan distintos como 1,2,3). Solo un
+# `branchSeq = branchSeq`恒 identico dejaria dos peticiones con el mismo
+# numero, que no es lo que muta. EQUIVALENTE por construccion.
 INCREMENT_DECREMENT internal/tui/retarget.go:192
+# 354 `m.branchSeq++` en closeRetarget, por lo mismo que el 192: la guarda es
+# `!=`. Lo que importa es que el numero CAMBIE al cerrar, y eso lo hace
+# `++` y `--` igual. El test de cerrar el popup afirma el cambio, no el signo.
 INCREMENT_DECREMENT internal/tui/retarget.go:354
 INCREMENT_DECREMENT internal/tui/sim.go:214
 INCREMENT_DECREMENT internal/tui/sim.go:288
@@ -282,30 +376,45 @@ INVERT_NEGATIVES internal/tui/comments.go:395
 INVERT_NEGATIVES internal/tui/comments.go:417
 INVERT_NEGATIVES internal/tui/comments.go:449
 INVERT_NEGATIVES internal/tui/comments.go:474
-INVERT_NEGATIVES internal/tui/detail.go:210
-INVERT_NEGATIVES internal/tui/detail.go:216
-INVERT_NEGATIVES internal/tui/detail.go:234
+# 93 aritmetica de `avail`, el alto que le queda al bloque central. El
+# INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
+# titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
+# el borde), asi que la linea final no cambia. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/detail.go:93
-INVERT_NEGATIVES internal/tui/list.go:120
-INVERT_NEGATIVES internal/tui/list.go:49
-INVERT_NEGATIVES internal/tui/list.go:53
-INVERT_NEGATIVES internal/tui/list.go:58
-INVERT_NEGATIVES internal/tui/list.go:60
-INVERT_NEGATIVES internal/tui/list.go:63
-INVERT_NEGATIVES internal/tui/list.go:69
-INVERT_NEGATIVES internal/tui/list.go:82
-INVERT_NEGATIVES internal/tui/list.go:94
-INVERT_NEGATIVES internal/tui/retarget.go:340
+# 496 `cursor - rows + 1`. El +1 es lo que hace que la fila del cursor entre JUSTA
+# al final de la ventana; sin el,la ventana se queda una fila corto y la rama
+# elegida queda fuera de la caja. Muerto por el test de mover el cursor.
+INVERT_NEGATIVES internal/tui/retarget.go:496
+# 498 `min(win, max(0, len(view)-rows))`. Es una guarda INALCANZABLE: el switch
+# de arriba ya deja `win <= len(view)-rows` (si la lista cabe, por induccion; si
+# no cabe, `len-rows` es negativo y el `max(0,...)` interior es el que decide, con
+# win siempre a cero). Para que el `min` atara haria falta win>0 con
+# len-rows<win, y eso exigiria `cursor >= win+rows > rows > len-1 >= cursor`.
+# EQUIVALENTE por inalcanzabilidad.
 INVERT_NEGATIVES internal/tui/retarget.go:498
-INVERT_NEGATIVES internal/tui/retarget.go:512
-INVERT_NEGATIVES internal/tui/retarget.go:640
+# 505 `min(rows, len(view)-start)`. Es el recorte de la ventana: ni una fila de
+# mas (se sale por debajo del borde) ni una de menos (esconde una rama).
+# Muerto por el test que cuenta las filas pintadas.
+INVERT_NEGATIVES internal/tui/retarget.go:505
 INVERT_NEGATIVES internal/tui/sim.go:200
 INVERT_NEGATIVES internal/tui/sim.go:341
 INVERT_NEGATIVES internal/tui/sim.go:428
 INVERT_NEGATIVES internal/tui/sim.go:528
-INVERT_NEGATIVES internal/tui/sim.go:547
+# 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
+# 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
+# caja se recorta al ancho disponible al superponerse, de modo que el texto
+# final es el mismo. NO MATABLE desde la vista.
 INVERT_NEGATIVES internal/tui/toast.go:138
+# ver la nota de 138: el ancho de reparto se compensa con el recorte de la
+# caja al superponerse. NO MATABLE desde la vista.
 INVERT_NEGATIVES internal/tui/toast.go:139
+# 244 `anchor := len(lines) - 1`, 248 `min(len(block), anchor+1)`, 253 y 270: la
+# aritmetica de donde se apila la caja. Los offsets se compensan con el recorte
+# por `rows` de abajo, asi que la linea final no cambia. NO MATABLE desde el
+# texto renderizado.
 INVERT_NEGATIVES internal/tui/toast.go:244
+# ver la nota de 244: la posicion horizontal se acota con max(..., 0) y
+# el resultado final se recorta. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/toast.go:253
+# ver la nota de 244. NO MATABLE desde el texto.
 INVERT_NEGATIVES internal/tui/toast.go:270

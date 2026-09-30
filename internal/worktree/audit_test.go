@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"prdash/internal/testutil"
@@ -55,6 +56,52 @@ func TestAuditListsOnlyOwnedWorktrees(t *testing.T) {
 	}
 	if entries[0].Branch != "propia" {
 		t.Fatalf("rama = %q", entries[0].Branch)
+	}
+}
+
+// TestAuditOrdenaPorRuta: Audit garantiza el orden por ruta (está en su
+// contrato) y de ese orden depende la limpieza por lotes, que borra una entrada
+// detrás de otra.
+//
+// Sin afirmarlo, invertir la comparación del sort no lo detecta ningún test: el
+// recorrido de directorios de filepath.WalkDir ya sale en orden lexicográfico, de
+// modo que el sort parece un no-op y el listado sale igual. Solo se nota cuando se
+// mete trabajo en la raíz que el walk NO puede ordenar por nosotros.
+func TestAuditOrdenaPorRuta(t *testing.T) {
+	repo := newRepo(t)
+	base := t.TempDir()
+
+	// Se crean en orden REVERSOS a como deben salir, y con números de dos cifras
+	// para que un orden lexic-inglés ("10" < "2") no losconfunda.
+	var quiere []string
+	for _, n := range []string{"prdash-pr-10", "prdash-pr-2", "prdash-pr-1"} {
+		testutil.RunGit(t, repo, "branch", n)
+		path := filepath.Join(base, n)
+		if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: n, Path: path, Label: n}); err != nil {
+			t.Fatalf("crear %s: %v", n, err)
+		}
+		quiere = append(quiere, path)
+	}
+	// El orden que se espera es el LEXICOGRÁFICO de las rutas, no el de creación
+	// ni el numérico: "prdash-pr-1" < "prdash-pr-10" < "prdash-pr-2". Con dos
+	// cifras el orden numérico y el de cadena discrepan, que es justo lo que
+	// hace que la prueba tenga contenido: un sort por número o por orden de
+	// creación se confundiría con el de cadena solo en estos nombres.
+	slices.Sort(quiere)
+
+	entries := NewGitDirect(base).Audit(context.Background())
+	if len(entries) != len(quiere) {
+		t.Fatalf("Audit = %d entradas, want %d", len(entries), len(quiere))
+	}
+	for i, e := range entries {
+		if e.Path != quiere[i] {
+			var got []string
+			for _, x := range entries {
+				got = append(got, filepath.Base(x.Path))
+			}
+			t.Errorf("Audit no viene ordenado por ruta: %v", got)
+			break
+		}
 	}
 }
 

@@ -1,6 +1,10 @@
 package herdr
 
-import "testing"
+import (
+	"errors"
+	"os"
+	"testing"
+)
 
 // Fixtures de la forma real de la CLI: todo va envuelto en {"id","result"}.
 
@@ -82,6 +86,109 @@ const fixtureNotification = `{
   "id": "cli:notification:show",
   "result": {"type": "notification_show", "shown": true, "reason": ""}
 }`
+
+// TestVersionAtLeastComparaPorCascada: el versionado de Herdr decide si se puede
+// usar una capacidad, así que un `>` mal puesto convierte un requisito en "no
+// disponible" o en "creo que sí" sobre una versión que no lo soporta.
+//
+// Los casos que importan son los de la frontera: la versión EXACTA mínima tiene
+// que validar (por eso el patch es `>=` y no `>`), y un minor superior vale con
+// cualquier patch. Un major superior manda sobre todo lo demás.
+func TestVersionAtLeastComparaPorCascada(t *testing.T) {
+	min := Version{Major: 0, Minor: 9, Patch: 3}
+	cases := []struct {
+		name string
+		v    Version
+		want bool
+	}{
+		{"la exacta mínima", Version{0, 9, 3, ""}, true},
+		{"patch por encima", Version{0, 9, 4, ""}, true},
+		{"minor por encima, patch por debajo", Version{0, 10, 0, ""}, true},
+		{"major por encima con todo por debajo", Version{1, 0, 0, ""}, true},
+		{"patch por debajo", Version{0, 9, 2, ""}, false},
+		{"minor por debajo", Version{0, 8, 9, ""}, false},
+		{"major por debajo", Version{0, 0, 0, ""}, false},
+		{"todo cero contra todo cero", Version{0, 0, 0, ""}, true},
+	}
+	for _, c := range cases[:len(cases)-1] {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.v.AtLeast(min); got != c.want {
+				t.Errorf("Version(%s).AtLeast(%s) = %v, want %v", c.v, min, got, c.want)
+			}
+		})
+	}
+	// La versión mínima 0.0.0 no es un caso raro: es lo que se recibe cuando no
+	// se puede leer la versión, y "cualquier cosa cumple" es la degradación
+	// correcta para no bloquear la TUI por un dato que no se sabe.
+	if !(Version{}).AtLeast(Version{}) {
+		t.Error("0.0.0 debería cumplir el mínimo 0.0.0: es la degradación cuando no se lee la versión")
+	}
+	if (Version{}).AtLeast(min) {
+		t.Error("0.0.0 no debería cumplir un mínimo 0.9.3")
+	}
+	// Y una versión enorme cumple: el 0.x de Herdr es el que hace inútil un
+	// rango de versiones, no un techo.
+	if !(Version{99, 0, 0, ""}).AtLeast(min) {
+		t.Error("un major muy alto debería cumplir cualquier mínimo 0.x")
+	}
+}
+
+// TestErrorComponeElMensajeConLoQueHay: el mensaje de Herdr es lo que la TUI
+// enseña, y las tres partes que se añaden (código del servidor, código de salida,
+// causa) son opcionales e independientes. Un "exit 0" colgado o un código de
+// servidor inventado son ruido que manda a mirar donde no es.
+func TestErrorComponeElMensajeConLoQueHay(t *testing.T) {
+	cases := []struct {
+		name string
+		err  *Error
+		want string
+	}{
+		{
+			"solo el mensaje",
+			&Error{Args: []string{"pane", "list"}, Msg: "pane not found"},
+			"herdr [pane list]: pane not found",
+		},
+		{
+			"con código de servidor",
+			&Error{Args: []string{"pane", "list"}, Msg: "pane not found", Code: "E_NOENT"},
+			"herdr [pane list]: pane not found [E_NOENT]",
+		},
+		{
+			"con código de salida",
+			&Error{Args: []string{"pane", "list"}, Msg: "pane not found", Exit: 2},
+			"herdr [pane list]: pane not found (exit 2)",
+		},
+		{
+			"con los dos",
+			&Error{Args: []string{"pane", "list"}, Msg: "pane not found", Exit: 2, Code: "E_NOENT"},
+			"herdr [pane list]: pane not found [E_NOENT] (exit 2)",
+		},
+		{
+			// Un exit 0 con código de salida != 0 es un dato raro pero posible si
+			// el proceso se corta por una señal; el código se enseña igual.
+			"sin args",
+			&Error{Msg: "boom"},
+			"herdr []: boom",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.err.Error(); got != c.want {
+				t.Errorf("Error() = %q, want %q", got, c.want)
+			}
+		})
+	}
+	// Y la causa: Unwrap la preserva, que es lo que permite clasificar sin
+	// depender del texto.
+	causa := os.ErrNotExist
+	err := &Error{Msg: "x", Err: causa}
+	if !errors.Is(err, causa) {
+		t.Error("errors.Is debería encontrar la causa a través del *Error")
+	}
+	if (&Error{Msg: "x"}).Unwrap() != nil {
+		t.Error("sin causa, Unwrap debería devolver nil")
+	}
+}
 
 func TestParseWorktreeCreated(t *testing.T) {
 	info, err := parseWorktreeCreated([]byte(fixtureWorktreeCreated))

@@ -122,16 +122,27 @@ func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows i
 // mandar 1920×1080 para pintar un rectángulo de 800 px y wasting 5× el ancho de
 // banda base64.
 func Resize(img image.Image, w, h int) *image.RGBA {
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	// El nil y la imagen de tamaño cero se descartan dentro de rgba, no con un
+	// `img == nil` propio: pedirse los bounds de un nil es un panic, así que un
+	// comprobante aquí, DESPUÉS de la llamada, no cubría nada.
 	src := rgba(img)
-	if src == nil || w <= 0 || h <= 0 {
+	if src == nil {
 		return nil
 	}
 	return shrink(src, w, h)
 }
 
-// rgba normaliza a *image.RGBA para poder leer píxeles por índice. Una imagen
-// vacía (bounds de tamaño cero) no tiene nada que dibujar.
+// rgba normaliza a *image.RGBA para poder leer píxeles por índice. Devuelve nil
+// para lo que no se puede promediar: una imagen inexistente (pedirle los bounds
+// sería un panic) y una vacía (bounds de tamaño cero), que no tiene nada que
+// dibujar.
 func rgba(img image.Image) *image.RGBA {
+	if img == nil {
+		return nil
+	}
 	b := img.Bounds()
 	if b.Dx() <= 0 || b.Dy() <= 0 {
 		return nil
@@ -145,18 +156,23 @@ func rgba(img image.Image) *image.RGBA {
 // enteras pueden quedar vacías en destino muy grande respecto del original, y
 // ahí se copia el píxel de la esquina en vez de dejar el negro: un píxel de
 // ruido en una imagen diminuta se lee como una mota que el render sí tenía.
+//
+// `src` siempre viene de rgba, que deja los bounds en el origen: por eso los
+// índices no suman el Min. Sumarlo no costaba nada, pero era aritmética que ya no
+// podía cambiar el resultado, y es exactamente la clase de valor que se puede
+// mutar sin que ninguna prueba se entere.
 func shrink(src *image.RGBA, w, h int) *image.RGBA {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	sb := src.Bounds()
 	for y := range h {
-		y0 := sb.Min.Y + y*sb.Dy()/h
-		y1 := sb.Min.Y + (y+1)*sb.Dy()/h
+		y0 := y * sb.Dy() / h
+		y1 := (y + 1) * sb.Dy() / h
 		if y1 <= y0 {
 			y1 = min(y0+1, sb.Max.Y)
 		}
 		for x := range w {
-			x0 := sb.Min.X + x*sb.Dx()/w
-			x1 := sb.Min.X + (x+1)*sb.Dx()/w
+			x0 := x * sb.Dx() / w
+			x1 := (x + 1) * sb.Dx() / w
 			if x1 <= x0 {
 				x1 = min(x0+1, sb.Max.X)
 			}

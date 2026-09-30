@@ -100,13 +100,15 @@ func scrollFor(current, target, total, view int) int {
 // syncScroll es el auto-scroll: deja visible la fila del cursor tras moverlo o
 // tras reconstruir el inbox. Va en Update (no en View) porque View tiene
 // receptor por valor y sus cambios se perderían.
+//
+// No se guarda el caso view <= 0 porque no existe: computeLayout garantiza
+// bodyLines >= 1 incluso en una terminal de una línea (es el "último recurso" de
+// layout.go, que aprieta el panel y los atajos antes que dejar la lista sin
+// cuerpo). Si algún día el layout devolviera cero, visibleList ya devuelve nil
+// y el recorte es inocuo, así que la guarda solo añadiría un camino muerto.
 func (m *Model) syncScroll() {
-	view := m.layout().bodyLines
-	if view <= 0 {
-		return
-	}
 	lines := m.listLines(m.contentWidth())
-	m.scroll = scrollFor(m.scroll, cursorLine(lines, m.cursor), len(lines), view)
+	m.scroll = scrollFor(m.scroll, cursorLine(lines, m.cursor), len(lines), m.layout().bodyLines)
 }
 
 // visibleList acota el desplazamiento al contenido actual y devuelve las líneas

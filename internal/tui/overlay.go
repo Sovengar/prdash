@@ -35,11 +35,13 @@ func overlayCentered(content, box string, width int) string {
 
 	x, y := centeredOrigin(width, len(lines), ansi.StringWidth(block[0]), bh)
 
+	// i no puede salirse. Arriba bh <= len(lines) por el recorte, y
+	// centeredOrigin deja y <= len(lines)-bh, así que y+bh <= len(lines) y
+	// j < bh da i < len(lines). El caso límite (i == len(lines)) necesitaría un
+	// corte por la derecha, que es el otro eje: aquí la caja se pinta entera por
+	// arriba y lo que se sale es lo que hay alrededor.
 	for j := range bh {
 		i := y + j
-		if i >= len(lines) {
-			break
-		}
 		cell := ansi.Truncate(block[j], width, "")
 		cw := ansi.StringWidth(cell)
 		line := lines[i]

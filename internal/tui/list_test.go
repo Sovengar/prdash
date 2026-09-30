@@ -7,10 +7,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"prdash/internal/forge/model"
+	"prdash/internal/inbox"
 	"prdash/internal/testutil"
 )
 
@@ -196,6 +198,557 @@ func TestPageKeysMoveOneWindow(t *testing.T) {
 	}
 	if m.cursor != len(m.rows())-1 {
 		t.Errorf("cursor tras varios pgdown = %d, want %d", m.cursor, len(m.rows())-1)
+	}
+}
+
+// TestScrollForAcomodaLaVentanaAlCursor cubre la aritmética del auto-scroll como
+// función pura, donde los bordes sí importan y a través del modelo se pierden.
+//
+// Los tres casos son los que se rompen si la condición se invierte o el borde
+// se mueve: la fila que cabe justo en la ventana no debe desplazar (si
+// desplazara, la lista saltaría una línea antes de tiempo), la primera que se
+// sale SÍ debe, y la última tiene que quedar pegada al borde inferior, no una
+// más allá.
+func TestScrollForAcomodaLaVentanaAlCursor(t *testing.T) {
+	cases := []struct {
+		name                         string
+		current, target, total, view int
+		want                         int
+	}{
+		{"el cursor ya se ve", 0, 3, 60, 10, 0},
+		{"la última fila de la ventana cabe", 0, 9, 60, 10, 0},
+		{"una por encima de la ventana sí desplaza", 0, 10, 60, 10, 1},
+		{"el cursor está por encima", 5, 1, 60, 10, 1},
+		{"el cursor es la primera línea", 5, 0, 60, 10, 0},
+		// 60 líneas en una ventana de 10: la última fila es la 59, así que el
+		// desplazamiento tiene que ser 59-10+1 = 50, y el recorte final lo
+		// confirma (50+10 == 60, el contenido entero).
+		{"la última fila se pega al borde", 0, 59, 60, 10, 50},
+		{"el contenido cabe entero", 0, 5, 8, 10, 0},
+		{"sin fila que seguir deja el scroll", 7, -1, 60, 10, 7},
+		{"target negativo no arrastra el scroll a cero", 0, -1, 60, 10, 0},
+		{"la ventana se acota al contenido", 40, 40, 12, 10, 2},
+		{"una ventana mayor que el contenido deja arriba", 0, 0, 4, 10, 0},
+		{"el scroll nunca queda negativo", -5, 0, 60, 10, 0},
+		{"el scroll nunca se pasa del final", 99, 59, 60, 10, 50},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := scrollFor(c.current, c.target, c.total, c.view); got != c.want {
+				t.Errorf("scrollFor(%d, %d, %d, %d) = %d, want %d",
+					c.current, c.target, c.total, c.view, got, c.want)
+			}
+		})
+	}
+}
+
+// TestCursorLineLocalizaLaFilaDelCursor: cursorLine devuelve el índice de la
+// línea que corresponde a la fila del cursor, no el número de la fila. Se
+// diferencia porque por encima de las filas hay líneas fijas (prefijo, avisos,
+// header) y porque los avisos y el indicador de paginación llevan row: -1 y no
+// deben confundirse con la fila 0.
+func TestCursorLineLocalizaLaFilaDelCursor(t *testing.T) {
+	lines := []listLine{
+		{text: "prefijo", row: -1},
+		{text: "aviso", row: -1},
+		{text: "header", row: -1},
+		{text: "fila 0", row: 0},
+		{text: "fila 1", row: 1},
+		{text: "loading more", row: -1},
+	}
+	// cursor 0 tiene que dar la fila 0, no la línea de prefijo: es justo el caso
+	// donde el row: -1 de las líneas fijas puede confundirse con la primera fila.
+	cases := map[int]int{0: 3, 1: 4, 2: -1, 99: -1}
+	for cursor, want := range cases {
+		if got := cursorLine(lines, cursor); got != want {
+			t.Errorf("cursorLine(cursor=%d) = %d, want %d", cursor, got, want)
+		}
+	}
+	// Y una lista sin filas de ítem no puede dar ninguna: el cursor no está.
+	// Una lista de cromo puro (todo row: -1) es el caso real de una sección sin
+	// ítems pero con avisos.
+	if got := cursorLine([]listLine{{text: "vacío", row: -1}}, 0); got != -1 {
+		t.Errorf("cursorLine sobre una lista sin filas = %d, want -1", got)
+	}
+	if got := cursorLine(nil, 0); got != -1 {
+		t.Errorf("cursorLine(nil, 0) = %d, want -1", got)
+	}
+}
+
+// TestVisibleListAcotaLaVentana al contenido: sin esto, un scroll desfasado por
+// un refresco podría cortaría en blanco o se saldría del final. Con view <= 0 o
+// sin líneas no hay nada que ver y se devuelve nil en vez de un tramo vacío.
+func TestVisibleListAcotaLaVentanaAlContenido(t *testing.T) {
+	lines := make([]listLine, 10)
+	for i := range lines {
+		lines[i] = listLine{row: i}
+	}
+
+	// Recorte normal: view líneas desde scroll.
+	got := visibleList(lines, 3, 4)
+	if len(got) != 4 || got[0].row != 3 || got[3].row != 6 {
+		t.Errorf("visibleList(3, 4) = %d líneas empezando en %d", len(got), got[0].row)
+	}
+	// Un scroll que se pasa del final se recorta hacia atrás para llenar la
+	// ventana: con 10 líneas y scroll 99, la ventana son las 6 últimas, no un
+	// tramo de 2 al final. Un recorte de 2 dejaría medio panel en negro.
+	got = visibleList(lines, 99, 4)
+	if len(got) != 4 || got[0].row != 6 {
+		t.Errorf("visibleList(99, 4) = %d líneas empezando en %d, want 4 desde 6", len(got), got[0].row)
+	}
+	// El recorte de la ventana es el único que puede devolver menos de `view`
+	// líneas, y ocurre cuando el contenido no da para una ventana entera desde
+	// el principio: 6 líneas en una ventana de 8 son 6, no 8.
+	seis := lines[:6]
+	got = visibleList(seis, 0, 8)
+	if len(got) != 6 || got[0].row != 0 {
+		t.Errorf("visibleList(6 líneas, view 8) = %d líneas, want 6 desde 0", len(got))
+	}
+	// Y la ventana se acota sin comerse una línea de más del contenido: desde 3
+	// con view 3 sobre 6 líneas salen las 3 últimas, no 4.
+	got = visibleList(seis, 3, 3)
+	if len(got) != 3 || got[0].row != 3 {
+		t.Errorf("visibleList(6 líneas, 3, 3) = %d líneas desde %d, want 3 desde 3", len(got), got[0].row)
+	}
+	// Un scroll desfasado se acota por los dos lados en vez de romper.
+	got = visibleList(lines, -5, 3)
+	if len(got) != 3 || got[0].row != 0 {
+		t.Errorf("visibleList(-5, 3) = %d líneas empezando en %d, want 3 desde 0", len(got), got[0].row)
+	}
+	got = visibleList(lines, 99, 3)
+	if len(got) != 3 || got[0].row != 7 {
+		t.Errorf("visibleList(99, 3) = %d líneas empezando en %d, want 3 desde 7", len(got), got[0].row)
+	}
+	// Sin ventana o sin contenido no hay vista.
+	if visibleList(lines, 0, 0) != nil || visibleList(nil, 0, 5) != nil {
+		t.Error("sin ventana o sin líneas visibleList debería devolver nil")
+	}
+}
+
+// TestListLinesComponeElCuerpoEnOrden fija la composición exacta del cuerpo, que
+// es un contrato y no un detalle: las filas se numeran con `row` para que el
+// cursor y el scroll las encuentren, y el desplazamiento de la lista depende de
+// que `row` coincida con la posición real. Si un append metiera una fila con el
+// `row` equivocado, el cursor apuntaría a otra fila y el scroll llevaría la
+// ventana a un sitio que no corresponde.
+//
+// Se afirma también qué líneas fijas hay por encima y por debajo de las filas
+// (prefijo, avisos, header, "loading more…"), porque son las que llevan row: -1
+// y las que se intercalan sin romper la numeración.
+func TestListLinesComponeElCuerpoEnOrden(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
+		mkItem("github", "github.com", "acme/widget", "Uno", 1, ""),
+		mkItem("github", "github.com", "acme/widget", "Dos", 2, ""),
+	}, false))
+
+	lines := m.listLines(m.contentWidth())
+	var rows []int
+	for _, l := range lines {
+		rows = append(rows, l.row)
+	}
+	// Los dos ítems comparten el proyecto, así que hay prefijo: prefijo + header
+	// + las dos filas. Lo que importa es que las filas empiecen en row 0 y sigan
+	// la numeración: el prefijo y el header son cromo con row -1.
+	want := []int{-1, -1, 0, 1}
+	if len(rows) != len(want) {
+		t.Fatalf("líneas = %v, want %v", rows, want)
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Fatalf("rows = %v, want %v (la fila %d debe ser row %d)", rows, want, i, want[i])
+		}
+	}
+
+	// La fila del cursor se localiza por row, y solo esa lleva el marcador.
+	i0 := cursorLine(lines, 0)
+	if i0 < 0 || lines[i0].row != 0 {
+		t.Fatalf("cursorLine(0) = %d", i0)
+	}
+	conCursor := stripANSI(lines[i0].text)
+	sinCursor := stripANSI(lines[cursorLine(lines, 1)].text)
+	if conCursor == sinCursor {
+		t.Errorf("la fila del cursor no se distingue de la otra:\n%s", conCursor)
+	}
+
+	// Con "loading more…" la línea de paginación va al final, con row: -1 para
+	// que ni el cursor ni el scroll la confundan con un ítem. Sale de la misma
+	// página con more=true, no de una segunda: el indicador describe la lista que
+	// se está pintando.
+	m2 := newTestModel(t, ghAdapter())
+	m2 = send(t, m2, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
+		mkItem("github", "github.com", "acme/widget", "Uno", 1, ""),
+	}, true))
+	lines = m2.listLines(m2.contentWidth())
+	last := lines[len(lines)-1]
+	if last.row != -1 || !strings.Contains(stripANSI(last.text), "loading more") {
+		t.Errorf("la última línea = %+v, want el indicador de paginación con row -1", last)
+	}
+}
+
+// TestListLinesVaciaPintaElEstadoVacio: una sección sin ítems y sin avisos no
+// pinta filas ni header, sino el estado vacío. Si se quitara ese caso, la lista
+// saldría en blanco sin explicación, que es indistinguible de un bug de pintado.
+func TestListLinesVaciaPintaElEstadoVacio(t *testing.T) {
+	m := newTestModel(t, ghAdapter())
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, nil, false))
+
+	lines := m.listLines(m.contentWidth())
+	if len(lines) != 1 {
+		t.Fatalf("líneas = %d (%v), want solo la del estado vacío", len(lines), lines)
+	}
+	if lines[0].row != -1 || !strings.Contains(stripANSI(lines[0].text), "(empty)") {
+		t.Errorf("línea = %+v, want el estado vacío con row -1", lines[0])
+	}
+	// Y con avisos, el aviso sustituye al estado vacío: hay algo que explicar, y
+	// un "(empty)" al lado de un "⚠" sería una contradicción en pantalla. El
+	// texto sale de problemText, que para un warning de red da la etiqueta corta
+	// y no el Msg crudo.
+	m = send(t, m, pageMsg{
+		cycle:    1,
+		key:      streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested},
+		warnings: []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "network", Msg: "dial tcp: timeout"}},
+	})
+	lines = m.listLines(m.contentWidth())
+	joined := ""
+	for _, l := range lines {
+		joined += stripANSI(l.text)
+	}
+	if !strings.Contains(joined, "github: could not be queried") {
+		t.Errorf("con un aviso debería pintarse el aviso del forge:\n%s", joined)
+	}
+	if strings.Contains(joined, "(empty)") {
+		t.Errorf("con un aviso no debería pintarse también el estado vacío:\n%s", joined)
+	}
+	// El aviso va por encima de las filas, con row: -1.
+	if lines[0].row != -1 {
+		t.Errorf("el aviso debería ser la primera línea con row -1, es %+v", lines[0])
+	}
+}
+
+// TestSyncScrollNoSeRompeEnTerminalesDiminutos deja constancia del borde del
+// auto-scroll: por muy enana que sea la terminal, el desplazamiento tiene que
+// seguir a la fila del cursor.
+//
+// No es un test de la guarda `view <= 0` de syncScroll, y el motivo está aquí
+// para que nadie lo busque después: computeLayout garantiza bodyLines >= 1
+// (layout.go), así que esa guarda no se puede alcanzar desde el modelo. Es
+// defensa ante un layout futuro que devuelva cero, no comportamiento actual. El
+// caso que sí es real es el de abajo: una terminal tan pequeña que el cuerpo
+// central se queda en la línea mínima.
+func TestSyncScrollNoSeRompeEnTerminalesDiminutos(t *testing.T) {
+	m := longModel(t, 60)
+	m = press(t, m, "end")
+	if it, ok := m.selected(); !ok || it.Title != "Item 1" {
+		t.Fatalf("con end el cursor debería estar en la última fila, no en %q", it.Title)
+	}
+
+	// Se encoge la terminal y el desplazamiento tiene que seguir siendo válido:
+	// acotado al contenido y con el cursor dentro de lo que se ve.
+	for _, h := range []int{40, 12, 8, 5, 3, 1} {
+		m.height = h
+		m.syncScroll()
+		lay := m.layout()
+		if lay.bodyLines < 1 {
+			t.Fatalf("height=%d: bodyLines = %d, pero el layout garantiza >= 1", h, lay.bodyLines)
+		}
+		lines := m.listLines(m.contentWidth())
+		if m.scroll < 0 || m.scroll > max(0, len(lines)-1) {
+			t.Errorf("height=%d: scroll = %d fuera de rango con %d líneas", h, m.scroll, len(lines))
+		}
+		// Y el cursor tiene que caer dentro de la ventana visible.
+		if cl := cursorLine(lines, m.cursor); cl >= 0 {
+			vis := visibleList(lines, m.scroll, lay.bodyLines)
+			found := false
+			for _, v := range vis {
+				if v.row == m.cursor {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("height=%d: la fila del cursor no está en la ventana (línea %d de %d, %d visibles)",
+					h, cl, len(lines), len(vis))
+			}
+		}
+	}
+}
+
+// TestPadYTruncateMidenEnRunesYWEnBordes: las dos funciones que decide el ancho
+// de la tabla. Los bordes importan y son los que se confunden:
+//
+//   - pad con una cadena que YA cabe no añade nada. Si añadiera, la celda se
+//     saldría de su columna y la tabla bailaría al escribir encima.
+//   - truncate con w=0 devuelve vacío, no un panic ni un "…" colgando: sin ancho
+//     no hay nada que enseñar.
+//   - truncate con w=1 devuelve solo elipsis, no el primer carácter más la
+//     elipsis (que son dos columnas en una de ancho).
+//   - truncate recorta a w runes exactos, contando el "…" como uno, porque es lo
+//     que hace que la columna respete su ancho.
+func TestPadYTruncateMidenEnRunesYWEnBordes(t *testing.T) {
+	// pad: cuenta runes, no bytes, y no rellena si ya cabe.
+	if got := pad("ab", 4); got != "ab  " {
+		t.Errorf("pad(ab,4) = %q, want \"ab  \"", got)
+	}
+	if got := pad("ab", 2); got != "ab" {
+		t.Errorf("pad con la cadena justa = %q, want %q (no rellena de más)", got, "ab")
+	}
+	if got := pad("abcd", 2); got != "abcd" {
+		t.Errorf("pad de una cadena más larga = %q, want sin cambios (queda al truncado)", got)
+	}
+	// Con acentos y emoji: son runes, y un byte de más descuadraría la columna.
+	if got := utf8.RuneCountInString(pad("áé", 4)); got != 4 {
+		t.Errorf("pad con acentos = %d runes, want 4", got)
+	}
+	if got := pad("👍", 3); utf8.RuneCountInString(got) != 3 {
+		t.Errorf("pad con un emoji = %d runes, want 3", utf8.RuneCountInString(got))
+	}
+
+	// truncate: el ancho es en runes y el "…" cuenta.
+	if got := truncate("abcdef", 4); got != "abc…" {
+		t.Errorf("truncate(abcdef,4) = %q, want \"abc…\"", got)
+	}
+	if got := utf8.RuneCountInString(truncate("abcdefgh", 5)); got != 5 {
+		t.Errorf("truncate debe dar EXACTAMENTE 5 runes, dio %d", got)
+	}
+	// Sin recorte si ya cabe, o si cabe justo.
+	if got := truncate("abc", 3); got != "abc" {
+		t.Errorf("truncate de lo que cabe justo = %q, want sin cambios", got)
+	}
+	if got := truncate("abc", 10); got != "abc" {
+		t.Errorf("truncate de lo que sobra sitio = %q, want sin cambios", got)
+	}
+	// Ancho 0 y 1: los bordes donde un "…" se colaría de más.
+	if got := truncate("abc", 0); got != "" {
+		t.Errorf("truncate(abc,0) = %q, want vacío", got)
+	}
+	if got := truncate("abc", 1); got != "…" {
+		t.Errorf("truncate(abc,1) = %q, want solo la elipsis (dos columnas en una)", got)
+	}
+	if got := truncate("abc", -1); got != "" {
+		t.Errorf("truncate con ancho negativo = %q, want vacío", got)
+	}
+	// Y con acentos: se recorta por runes, no por bytes, o partiría un carácter
+	// por la mitad y la columna quedaría con un rune inválido.
+	if got := truncate("áéíóú", 3); got != "áé…" {
+		t.Errorf("truncate con acentos = %q, want \"áé…\"", got)
+	}
+}
+
+// TestCenteredOriginColocaLaCaja: la esquina de un popup, y la función está
+// compartida con la capa de gráficos a propósito (comentario en overlay.go): si
+// el marco y la imagen calcularan su sitio por su cuenta, caerían en rectángulos
+// distintos y solo se vería cuando coincidieran.
+//
+// El caso que importa es la caja más alta que el área: el centro saldría
+// negativo y hay que pegarla al borde, no dejar el índice en negativo (que
+// would panear la línea de arriba).
+func TestCenteredOriginColocaLaCaja(t *testing.T) {
+	cases := []struct {
+		name                      string
+		width, height, boxW, boxH int
+		wantX, wantY              int
+	}{
+		{"caja centrada en un área mayor", 20, 10, 4, 4, 8, 3},
+		{"caja que llena el área", 10, 10, 10, 10, 0, 0},
+		{"más alta que el área", 20, 3, 4, 8, 8, 0},
+		{"más ancha que el área", 3, 10, 10, 2, 0, 4},
+		{"una fila de diferencia", 20, 11, 4, 4, 8, 3},
+		{"impar por arriba", 21, 11, 4, 4, 8, 3},
+		{"área de una línea", 20, 1, 4, 1, 8, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			x, y := centeredOrigin(c.width, c.height, c.boxW, c.boxH)
+			if x != c.wantX || y != c.wantY {
+				t.Errorf("centeredOrigin(%d,%d,%d,%d) = %d,%d, want %d,%d",
+					c.width, c.height, c.boxW, c.boxH, x, y, c.wantX, c.wantY)
+			}
+			// El origen nunca es negativo: un índice así parte la línea de arriba
+			// al indexarla. Que la caja desborde por abajo SÍ es legitimo (una
+			// ventana más alta que la pantalla), y lo recorta quien dibuja.
+			if x < 0 || y < 0 {
+				t.Errorf("origen negativo: x=%d y=%d", x, y)
+			}
+		})
+	}
+}
+
+// TestOverlayCenteredRecortaLaCajaQueNoCabe: un popup más alto que la pantalla se
+// recorta por abajo en vez de desbordar. Y una caja vacía no toca la vista, que es
+// lo que evita que un popup sin contenido borre la pantalla.
+func TestOverlayCenteredRecortaLaCajaQueNoCabe(t *testing.T) {
+	// Fondo de líneas anchas para que la caja caiga DENTRO: el overlay recorta
+	// la línea donde hace falta el texto de la caja, no borra la línea entera. Con
+	// un fondo más corto que el desplazamiento, el texto de la caja se pegaría al
+	// final de la línea en vez de en su sitio, que es el comportamiento de ansi.
+	fondo := "aaaa\naaaa\naaaa\naaaa"
+	got := overlayCentered(fondo, "1\n2\n3\n4\n5\n6", 10)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("líneas = %d, want 4 (el fondo no crece):\n%s", len(lines), got)
+	}
+	// x = (10-1)/2 = 4, así que la caja pisa la quinta columna de cada línea.
+	for i, want := range []string{"aaaa1", "aaaa2", "aaaa3", "aaaa4"} {
+		if lines[i] != want {
+			t.Errorf("línea %d = %q, want %q (la caja se pinta encima del fondo)", i, lines[i], want)
+		}
+	}
+	// Una caja vacía deja la vista como estaba.
+	if got := overlayCentered(fondo, "", 10); got != fondo {
+		t.Errorf("caja vacía = %q, want la vista intacta", got)
+	}
+	// Y la caja se recorta al ANCHO del viewport: una caja más ancha se pinta
+	// recortada sobre el fondo, que conserva su longitud. Con x=0 porque la caja
+	// es más ancha que el área, el resultado es la caja recortada + el resto del
+	// fondo intacto.
+	got = overlayCentered("aaaaaaaaaa", "0123456789", 6)
+	linea := strings.Split(got, "\n")[0]
+	if linea != "012345aaaa" {
+		t.Errorf("línea = %q, want \"012345aaaa\" (caja recortada al ancho, fondo detrás)", linea)
+	}
+}
+
+// TestLaFilaPintaLasCeldasQueCabenEsas: el `inner-2` que listLines pasa a
+// renderItem es la misma decisión que el del header, y por eso el `fitColumns` de
+// los dos tiene que dar el mismo número. Header y filas comparten layout a
+// propósito, para que escribir encima no mueva una columna.
+//
+// Si a la fila se le pasara un ancho mayor, metería una celda más que el header no
+// tiene: una columna que aparece en los datos y no en sus títulos, es decir la
+// tabla deja de leerse. El ancho de la fila no lo delata —las celdas se reparten
+// por su propio ancho, no rellenan el hueco—, así que se afirma el número de
+// celdas, que es lo que cambia.
+func TestLaFilaPintaLasCeldasQueCabenEsas(t *testing.T) {
+	m := longModel(t, 3)
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
+
+	for width := 20; width <= 140; width++ {
+		m.width = width
+		inner := m.contentWidth()
+		want := fitColumns(lay, inner-2)
+		// El ancho de las celdas más el prefijo de dos columnas ("  " o "▸ "),
+		// que es lo que listLines descuenta del ancho útil.
+		wantW := 2
+		for _, c := range lay.cols[:want] {
+			wantW += c.width
+		}
+
+		for _, l := range m.listLines(inner) {
+			if l.row < 0 {
+				continue
+			}
+			if got := ansi.StringWidth(stripANSI(l.text)); got != wantW {
+				t.Fatalf("ancho %d: la fila %d mide %d columnas, want %d (las de %d celdas que caben)",
+					width, l.row, got, wantW, want)
+			}
+		}
+	}
+}
+
+// TestElHeaderMuestraLasColumnasQueCabenEsas: el `inner-2` que listLines pasa al
+// header es la decisión más silenciosa de la lista, porque no se nota en el ancho
+// —el header se recorta por la derecha con TrimRight y siempre queda más corto que
+// las filas— sino en QUÉ columnas aparecen.
+//
+// El 2 del resta es el prefijo "  " de la línea, así que el header se mide contra
+// el ancho útil. Pasarle un ancho distinto metería o sacaría una columna, y una
+// columna de más o de menos cambia la lectura de la tabla entera. Por eso el test
+// no compara anchos sino el conjunto de títulos: las que caben tienen que estar y
+// la primera que no cabe tiene que faltar.
+func TestElHeaderMuestraLasColumnasQueCabenEsas(t *testing.T) {
+	m := longModel(t, 6)
+	// Se barre el ancho para cruzar todas las fronteras de columnas.
+	for width := 20; width <= 140; width += 2 {
+		m.width = width
+		inner := m.contentWidth()
+		lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
+		want := fitColumns(lay, inner-2)
+
+		lines := m.listLines(inner)
+		hi := -1
+		for i, l := range lines {
+			if l.row == 0 {
+				hi = i
+			}
+		}
+		if hi < 1 {
+			t.Fatalf("ancho %d: no encuentro la primera fila en %d líneas", width, len(lines))
+		}
+		header := stripANSI(lines[hi-1].text)
+
+		for i := range want {
+			if !strings.Contains(header, lay.cols[i].title) {
+				t.Fatalf("ancho %d: faltan las %d primeras columnas en el header, que dice %q", width, want, header)
+			}
+		}
+		if want < len(lay.cols) && strings.Contains(header, lay.cols[want].title) {
+			t.Fatalf("ancho %d: la columna %d (%q) no cabe y no debería estar en el header: %q",
+				width, want, lay.cols[want].title, header)
+		}
+	}
+}
+
+// TestFitColumnsDejaSiempreForge: con un ancho ridículo sigue entrando la columna
+// de FORGE, y con un ancho enorme entran todas. El mínimo de una columna es lo que
+// hace que la lista siga diciendo de qué forge es cada ítem, que es justo lo que
+// no puede faltar cuando no hay sitio.
+func TestFitColumnsDejaSiempreForge(t *testing.T) {
+	m := longModel(t, 3)
+	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
+	total := len(lay.cols)
+	if total < 2 {
+		t.Fatalf("la layout necesita al menos FORGE y otra columna, tiene %d", total)
+	}
+
+	// Ancho de sobra: todas.
+	if got := fitColumns(lay, 100_000); got != total {
+		t.Errorf("con ancho de sobra caben %d columnas, dio %d", total, got)
+	}
+	// Cada frontera: con el ancho justo caben k, y con una columna menos caben
+	// k-1. Es el borde de la condición, y el que decide si la última columna
+	// aparece o desaparece.
+	usado := 0
+	for k := 1; k <= total; k++ {
+		borde := usado + lay.cols[k-1].width
+		if got := fitColumns(lay, borde); got != k {
+			t.Errorf("con el ancho justo de %d columnas caben %d, dio %d", k, k, got)
+		}
+		if k > 1 {
+			if got := fitColumns(lay, borde-1); got != k-1 {
+				t.Errorf("con el ancho de %d columnas caben %d y con %d caben %d, dio %d", k, k, k-1, k-1, got)
+			}
+		}
+		usado = borde
+	}
+	// Por debajo de una sola columna, la de FORGE sigue ahí. Nunca 0: una lista
+	// sin columnas no dice de qué forge es nada.
+	for _, w := range []int{0, 1, -5, -100} {
+		if got := fitColumns(lay, w); got != 1 {
+			t.Errorf("fitColumns(%d) = %d, want 1 (FORGE siempre entra)", w, got)
+		}
+	}
+}
+
+// TestElMarcadorDelCursorVaEnSuFila: la fila del cursor se marca, y SOLO esa. Un
+// `==` invertido pondría la marca en las filas equivocadas, que es peor que no
+// marcar nada: el usuario haría clic mental sobre un ítem que no es el suyo.
+func TestElMarcadorDelCursorVaEnSuFila(t *testing.T) {
+	m := longModel(t, 4)
+
+	for cursor := range 4 {
+		m.cursor = cursor
+		lines := m.listLines(m.contentWidth())
+		for _, l := range lines {
+			if l.row < 0 {
+				continue
+			}
+			plano := stripANSI(l.text)
+			marcado := strings.Contains(plano, "▸")
+			if want := l.row == cursor; marcado != want {
+				t.Errorf("fila %d con cursor en %d: marcada=%v, want %v (%q)", l.row, cursor, marcado, want, plano)
+			}
+		}
 	}
 }
 
