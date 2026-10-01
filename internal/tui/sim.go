@@ -444,11 +444,23 @@ func (m *Model) renderSimCells() {
 		return
 	}
 	cols, rows := m.simBox()
+	// El hueco interior NO se comprueba contra cero, y antes se comprobaba. Es
+	// INALCANZABLE, y la cuenta es corta:
+	//
+	//   - `simBox` devuelve, en modo imagen, `cols+2, rows+simChrome`;
+	//   - `sim.FitCells` devuelve `max(..., 1)` en las dos dimensiones, en las dos
+	//     ramas que tiene;
+	//   - y aquí se resta exactamente `2` y `simChrome`, que es lo que `simBox` añadió.
+	//
+	// O sea que `w` y `h` son exactamente lo que devolvió `FitCells`, y eso es al menos
+	// 1. Ni medio celda. Un hueco de cero columnas no se puede construir.
+	//
+	// Y la comprobación, aunque se pudiera, no cambiaría nada: `sim.Cells` devuelve `nil`
+	// con `w <= 0 || h <= 0`, o sea que sin celdas tampoco habría geometría que anotar
+	// más que un cero. La guarda era una tercera forma de decir lo mismo que dicen
+	// `FitCells` y `Cells`, y la menos clara de las tres porque era la única que no
+	// decía por qué.
 	w, h := cols-2, rows-simChrome
-	if w <= 0 || h <= 0 {
-		m.sim.cells, m.sim.cellW, m.sim.cellH = nil, 0, 0
-		return
-	}
 	if m.sim.cells != nil && m.sim.cellW == w && m.sim.cellH == h {
 		return
 	}
