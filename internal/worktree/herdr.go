@@ -151,6 +151,11 @@ func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 		return Worktree{}, fmt.Errorf("worktree: %s already holds branch %s, not %s", spec.Path, existing.Branch, spec.Branch)
 	}
 
+	// La etiqueta se resuelve con la MISMA regla que en `Create`: la del llamador si la
+	// dio, y si no, la que ya tenía el checkout. No es que se parezca, es que es la
+	// misma decisión: tener la regla escrita en un sitio y repetida en otro es
+	// garantizar que un día diverjan. Un `if` de tres líneas que dice lo mismo que
+	// otro `if` de tres líneas es una duplicación con comentarios en los dos sitios.
 	wt := existing
 	wt.Repo = spec.Repo
 	if spec.Label != "" {

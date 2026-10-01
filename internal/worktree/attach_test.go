@@ -3,13 +3,16 @@ package worktree
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"prdash/internal/herdr"
+	"prdash/internal/testutil"
 )
 
 // Los tests de `attach` cubren la ADOPCIÓN: cuando el checkout ya tiene un workspace
-// abierto en Herdr, se adopta en vez de abrir uno nuevo.
+// abierto en Herdr, se adopta en vez de abrir uno nuevo. Y al final, los de `reuse`,
+// que es la otra mitad: la etiqueta de un checkout que ya existe.
 //
 // Y la razón de que la adopción se compruebe en vez de confiar es lo que hay que
 // tener presente al leer los tests: el `open_workspace_id` que devuelve
@@ -303,4 +306,114 @@ func TestAttachUnIdMaloCortaLaBusqueda(t *testing.T) {
 	if len(runner.paneListArgs) != 1 || runner.paneListArgs[0] != "ws-cerrado" {
 		t.Errorf("preguntó por los panes de %v, want exactamente [ws-cerrado]", runner.paneListArgs)
 	}
+}
+
+// TestReuseLaEtiquetaDelLlamadorPisaLaDelCheckout: al REUTILIZAR un checkout que ya
+// existe, la etiqueta es la que pide el llamador, no la que tenia el checkout.
+//
+// Y el caso de verdad es el contrario del que parece: el checkout en disco puede tener
+// una etiqueta de la sesión anterior, puesta por quien lo montara entonces. Si esa
+// ganara, el worktree volveria con el nombre viejo y prdash dejaria de reconocerlo
+// como el worktree que esta mirando — que es como un PR aparece dos veces en la
+// lista, o como el suyo desaparece.
+//
+// O sea que el `if spec.Label != ""` no es una defensa contra un dato malo: es la
+// regla de que la etiqueta la manda quien esta montando AHORA, no la que quedo escrita
+// la vez anterior.
+func TestReuseLaEtiquetaDelLlamadorPisaLaDelCheckout(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+
+	base := t.TempDir()
+	dest := filepath.Join(base, "prdash-pr-1")
+	if _, err := NewGitDirect(base).Create(context.Background(),
+		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "etiqueta-VIEJA"}); err != nil {
+		t.Fatalf("preparar worktree: %v", err)
+	}
+
+	runner := &fakeRunner{
+		available: true,
+		listResult: []herdr.WorktreeInfo{
+			{Path: dest, Branch: "feature", Label: "la-del-repo-del-nativo"},
+		},
+		workspace: herdr.WorkspaceInfo{WorkspaceID: "w1", RootPaneID: "w1:p1"},
+	}
+
+	// El llamador pide una etiqueta DISTINTA, que es lo unico que hace el test
+	//ouro: si coincidieran, las dos reglas darian lo mismo y no se probaria nada.
+	wt, err := NewHerdrNative(runner, base).Create(context.Background(),
+		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash/acme#12"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if wt.Label != "prdash/acme#12" {
+		t.Errorf("label=%q, want la del llamador prdash/acme#12: si gana la del checkout "+
+			"o la del nativo, el worktree vuelve con el nombre de la sesión anterior y "+
+			"prdash deja de reconocerlo", wt.Label)
+	}
+	// Y que la etiqueta sea la del llamador es lo que va al workspace, no la del
+	// repo: el `--label` del workspace es por donde se le reconoce.
+	if len(runner.wsCalls) != 1 || runner.wsCalls[0].Label != "prdash/acme#12" {
+		t.Errorf("el workspace se abrió con label %q, want la del llamador",
+			labelDe(runner.wsCalls))
+	}
+}
+
+// TestReuseSinEtiquetaDelLlamadorConservaLaDelCheckout: si el llamador NO dio
+// etiqueta, se conserva la del checkout —que es el NOMBRE DEL DIRECTORIO, porque eso
+// es lo que `inspect` deduce del disco— y no se cae a la del nativo.
+//
+// Y esto NO es lo mismo que en `Create`, y la diferencia es el motivo de que sean dos
+// ramas y no una. Al reutilizar hay un checkout REAL en disco, y su nombre es un dato
+// de verdad: es como se le llama a esa cosa en el sistema de archivos, y es lo único
+// que lo distingue de los demás worktrees del mismo repo. En `Create` no hay checkout
+// previo, así que ahí sí se recurre a los datos de Herdr.
+//
+// La tentación sería usar la del nativo, que es el nombre del repo. Sería peor: todos
+// los worktrees del mismo repo se llamarían igual, y la etiqueta dejaría de distinguir
+// el PR 7 del PR 6. Un nombre de repo no identifica un worktree.
+//
+// Un `if` de estos dos parece el mismo y no lo es, y por eso el comentario de la regla
+// está en el sitio: para que se lea que la diferencia es DEL DATO QUE HAY, no una
+// inconsistencia entre un sitio y otro.
+func TestReuseSinEtiquetaDelLlamadorConservaLaDelCheckout(t *testing.T) {
+	repo := newRepo(t)
+	testutil.RunGit(t, repo, "branch", "feature")
+
+	base := t.TempDir()
+	// El nombre del directorio es lo que va a acabar siendo la etiqueta.
+	dest := filepath.Join(base, "el-pr-7-del-repo-acme")
+	if _, err := NewGitDirect(base).Create(context.Background(),
+		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "lo-que-pase"}); err != nil {
+		t.Fatalf("preparar worktree: %v", err)
+	}
+
+	runner := &fakeRunner{
+		available: true,
+		listResult: []herdr.WorktreeInfo{
+			{Path: dest, Branch: "feature", Label: "acme-widget"},
+		},
+		workspace: herdr.WorkspaceInfo{WorkspaceID: "w1", RootPaneID: "w1:p1"},
+	}
+
+	// El llamador NO da etiqueta: Spec.Label va vacío.
+	wt, err := NewHerdrNative(runner, base).Create(context.Background(),
+		Spec{Repo: repo, Branch: "feature", Path: dest})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if wt.Label != "el-pr-7-del-repo-acme" {
+		t.Errorf("label=%q, want el nombre del checkout el-pr-7-del-repo-acme", wt.Label)
+	}
+	if wt.Label == "acme-widget" {
+		t.Error("la etiqueta es el nombre del repo que reporta el nativo: todos los " +
+			"worktrees de ese repo se llamarían igual y dejarían de distinguirse")
+	}
+}
+
+func labelDe(calls []herdr.WorkspaceSpec) string {
+	if len(calls) == 0 {
+		return "<no se abrió ningún workspace>"
+	}
+	return calls[0].Label
 }
