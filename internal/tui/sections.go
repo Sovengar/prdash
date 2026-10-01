@@ -77,7 +77,22 @@ func (m Model) sectionLines(title string, content []string, paintable bool) box 
 // layout calcula el reparto de alto de la vista: lista arriba, panel de detalle
 // abajo.
 func (m Model) layout() layout {
-	return computeLayout(m.height, len(m.hintLines()), m.height > 0)
+	// El tercer argumento no lleva `m.height > 0`, y antes lo llevaba. Es INALCANZABLE
+	// como guarda, porque `computeLayout` empieza por `if !show || height <= 0`:
+	//
+	//   - con `show` a `false` se devuelve el layout vacío, igual que con altura cero;
+	//   - y con `show` a `true` y altura cero o negativa, la propia guarda de
+	//     `computeLayout` lo devuelve vacío también.
+	//
+	// O sea que el `m.height > 0` del llamador y el `height <= 0` del llamado son la
+	// MISMA comprobación escrita en los dos sitios, y el del llamador no añade nada. Lo
+	// que sí cambia con `show` es el valor de entrada, no la guarda: con `show` a
+	// `false`, `computeLayout` ni siquiera mira la altura.
+	//
+	// Y la asimetría que queda es la que importa y no la que se borró: antes del primer
+	// `WindowSizeMsg` la altura es cero, y devolver un layout vacío es exactamente
+	// "pinta la lista entera sin recortar", que es lo que evita un render inicial vacío.
+	return computeLayout(m.height, len(m.hintLines()), true)
 }
 
 // compose apila las cajas visibles: la cabecera, las que le pase el cuerpo
