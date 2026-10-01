@@ -7,7 +7,7 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 80
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 68
 # unique survivors, down from 286. The campaign covered the pure logic
 # (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
 # decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
@@ -15,7 +15,7 @@
 # compare and worktree's audit order.
 # What is left is thin: a couple of clamps whose floor can never bind because an
 #
-# Last sync re-measured only: internal/tui/comments.go, internal/tui/sim.go. Every other
+# Last sync re-measured only: internal/tui/comments.go, internal/tui/sim.go, internal/worktree/herdr.go. Every other
 # entry is carried over from the previous full-module run and is NOT
 # re-verified by it. Only a full run proves those.
 
@@ -46,23 +46,20 @@ CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
-# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:112
-# 112 `st.total < len(st.list)`. EQUIVALENTE con `<=`: con total == len(list) la
-# asignacion `st.total = len(list)` es una identidad, asi que el mutante hace lo
-# mismo que el original. La regla de verdad, que si se afirma en un test para
-# todos los pares de total y lista, es que el total NUNCA es menor que la lista:
-# si no, el rotulo diria '2 de 1', que es un numero que no existe.
+# `st.total < len(st.list)`. EQUIVALENTE con `<=`: con total == len(list) la
+# asignacion `st.total = len(st.list)` es una identidad, asi que el mutante hace lo
+# mismo que el original. La regla de verdad, que si se afirma en un test para todos
+# los pares de total y lista, es que el total NUNCA es menor que la lista: si no, el
+# rotulo diria '2 de 1', que es un numero que no existe.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:112
-# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:136
-# 136 `avail <= 0`. EQUIVALENTE con `<`: con avail == 0 el mutante no sale por
-# aqui, pero la guarda siguiente es `avail < commentChrome+len(st.list)` y 0
-# siempre es menor que eso, asi que sale igual. ABSORVIDO por la guarda posterior,
-# que es la que de verdad decide cuando no hay sitio.
+# `avail <= 0`. EQUIVALENTE con `<`: con avail == 0 el mutante no sale por aqui,
+# pero la guarda siguiente es `avail < commentChrome+len(st.list)` y 0 siempre es
+# menor que eso, asi que sale igual. ABSORVIDO por la guarda posterior, que es la
+# que de verdad decide cuando no hay sitio.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:136
-# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:188
-# 188 `len(shown) > forge.CommentLimit`. EQUIVALENTE con `>=`: con exactamente
-# cinco comentarios el recorte `shown[:5]` es la lista entera. La mutacion que si
-# importa, `[:4]`, si la mata el test del tope de cinco.
+# `len(shown) > forge.CommentLimit`. EQUIVALENTE con `>=`: con exactamente cinco
+# comentarios el recorte `shown[:5]` es la lista entera. La mutacion que si importa,
+# `[:4]`, si la mata el test del tope de cinco.
 # Y la segunda guarda que habia DEBAJO se borro, con la cuenta corta:
 # `avail < commentChrome+len(shown)` se cumple siempre que el
 # `avail < commentChrome+len(st.list)` de arriba, porque `len(shown) <= len(st.list)`
@@ -70,52 +67,42 @@ CONDITIONALS_BOUNDARY internal/tui/comments.go:136
 # no cubria nada: solo hacia que se leyera como si el recorte del tope tuviera su
 # propia comprobacion de sitio, y no la tiene porque no la necesita.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:188
-# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:228
-# 228 `total > budget`. EQUIVALENTE con `>=`: en la frontera `allocate(need, budget)`
+# `total > budget`. EQUIVALENTE con `>=`: en la frontera `allocate(need, budget)`
 # con presupuesto suficiente devuelve `need`, que es lo que ya hace la rama de no
 # repartir. Las dos ramas dan el mismo reparto.
-# Y la RED DE SEGURIDAD que estaba dentro del bucle se BORRO, con la cuenta
-# corta: la guarda de arriba da `budget >= len(st.list) >= len(need)`, y allocate
-# reparte `min(budget, sum(need))` filas, o sea que la suma nunca pasa del
-# presupuesto. Una red que no puede dispararse es peor que ninguna, porque hace
-# que el reparto parezca tener una segunda salvaguarda cuando lo que tiene es una
-# aritmetica que hay que mirar.
+# Y la RED DE SEGURIDAD que estaba dentro del bucle se BORRO, con la cuenta corta:
+# la guarda de arriba da `budget >= len(st.list) >= len(need)`, y allocate reparte
+# `min(budget, sum(need))` filas, o sea que la suma nunca pasa del presupuesto. Una
+# red que no puede dispararse es peor que ninguna, porque hace que el reparto parezca
+# tener una segunda salvaguarda cuando lo que tiene es una aritmetica que hay que
+# mirar.
 # Y el `max(1, rows[i])` de ese bucle tambien, y por las dos ramas: `need[i]` es la
-# cuenta de filas de un commentBody, que devuelve al menos una fila siempre (tiene
-# su propio suelo, y un cuerpo vacio devuelve la fila que lo dice), y allocate
-# deja a todos en 1 como minimo antes de repartir. SEIS suelo inalcanzable borrado
-# en la campana.
+# cuenta de filas de un commentBody, que devuelve al menos una fila siempre (tiene su
+# propio suelo, y un cuerpo vacio devuelve la fila que lo dice), y allocate deja a
+# todos en 1 como minimo antes de repartir. SEIS suelo inalcanzable borrado en la
+# campana.
 CONDITIONALS_BOUNDARY internal/tui/comments.go:228
-# ENTRADA: ARITHMETIC_BASE internal/tui/comments.go:336
-# 336 `commentBoxWidth`. Los DOS sentidos de la aritmetica mueren: con `max(9, ...)`
-# el suelo sube una columna, y con `outer-3*inset` el sangrado se descuenta tres
-# veces en vez de dos. Se mira la funcion DIRECTA y no solo a traves de
-# `commentBodyWidth`, que la compone: un error dentro se propaga y se ve como un
-# ancho de texto raro, mientras que mirada sola es un error de SANGADO, que es lo
-# que es.
-# Y el descuento es el doble porque el sangrado va a los dos lados: con uno solo la
+# `commentBoxWidth`. Los DOS sentidos de la aritmetica mueren: con `max(9, ...)`
+# el suelo sube una columna, y con `outer-3*inset` el sangrado se descuenta tres veces
+# en vez de dos. Se mira la funcion DIRECTA y no solo a traves de `commentBodyWidth`,
+# que la compone: un error dentro se propaga y se ve como un ancho de texto raro,
+# mientras que mirada sola es un error de SANGADO, que es lo que es.
+# Y el descuento es el doble porque el sangrio va a los dos lados: con uno solo la
 # caja se queda una columna mas ancha por un lado, que es lo que hace que el borde
 # de fuera se vea desplazado.
 ARITHMETIC_BASE internal/tui/comments.go:336
-# ENTRADA: ARITHMETIC_BASE internal/tui/comments.go:451
-# 451 el corte. El INVERT_NEGATIVES del indice es MUERTO: `out[-(len(out)-1)]` es
-# un indice negativo y revienta, y un panic tambien es una muerte aunque no salga
-# un '--- FAIL' que buscar.
+# el corte. El INVERT_NEGATIVES del indice es MUERTO: `out[-(len(out)-1)]` es un
+# indice negativo y revienta, y un panic tambien es una muerte aunque no salga un
+# '--- FAIL' que buscar.
 # El ARITHMETIC_BASE es EQUIVALENTE: el indice de la fila solo decide si commentRow
 # lleva el autor delante (`idx == 0`), y en el momento del corte `len(out) >= lines`
 # con `lines >= 1`, asi que ya hay al menos una fila y el idx nunca es 0. Con
 # `len(out)` en vez de `len(out)-1` el prefijo es el mismo. Y si `idx` fuera 0 con
 # `out` vacio, `out[len(out)-1]` reventaria, pero el suelo de `lines` lo impide.
 ARITHMETIC_BASE internal/tui/comments.go:451
-# ENTRADA: INVERT_NEGATIVES internal/tui/comments.go:451
-# 451 el corte. El INVERT_NEGATIVES del indice es MUERTO: `out[-(len(out)-1)]` es
-# un indice negativo y revienta, y un panic tambien es una muerte aunque no salga
-# un '--- FAIL' que buscar.
-# El ARITHMETIC_BASE es EQUIVALENTE: el indice de la fila solo decide si commentRow
-# lleva el autor delante (`idx == 0`), y en el momento del corte `len(out) >= lines`
-# con `lines >= 1`, asi que ya hay al menos una fila y el idx nunca es 0. Con
-# `len(out)` en vez de `len(out)-1` el prefijo es el mismo. Y si `idx` fuera 0 con
-# `out` vacio, `out[len(out)-1]` reventaria, pero el suelo de `lines` lo impide.
+# el indice invertido. MUERTO por panic: `out[-(len(out)-1)]` es un indice
+# negativo y revienta. Un panic tambien es una muerte aunque no salga un '--- FAIL'
+# que buscar, porque en vez de marcar un test lo tira todo.
 INVERT_NEGATIVES internal/tui/comments.go:451
 ARITHMETIC_BASE internal/tui/detail.go:238
 CONDITIONALS_BOUNDARY internal/tui/detail.go:264
@@ -137,14 +124,18 @@ CONDITIONALS_BOUNDARY internal/tui/sections.go:188
 CONDITIONALS_NEGATION internal/tui/sections.go:188
 CONDITIONALS_BOUNDARY internal/tui/sections.go:229
 CONDITIONALS_BOUNDARY internal/tui/sections.go:80
-INCREMENT_DECREMENT internal/tui/sim.go:214
-ARITHMETIC_BASE internal/tui/sim.go:228
-INCREMENT_DECREMENT internal/tui/sim.go:288
 CONDITIONALS_BOUNDARY internal/tui/sim.go:342
-CONDITIONALS_BOUNDARY internal/tui/sim.go:350
-CONDITIONALS_BOUNDARY internal/tui/sim.go:448
-CONDITIONALS_NEGATION internal/tui/sim.go:452
-CONDITIONALS_BOUNDARY internal/tui/sim.go:566
+# `padRight`: `if pad := n - ansi.StringWidth(s); pad > 0`. EQUIVALENTE con `>=`:
+# en el borde, `pad == 0`, y las dos ramas hacen lo mismo. Con `> 0` no entra y sale
+# por el `return s`; con `>= 0` entra y hace `s + strings.Repeat(" ", 0)`, que es `s`
+# con cero espacios.
+#
+# Es una IDENTIDAD en la frontera, y lo que la demuestra es que en el borde el
+# resultado es el mismo: `TestPadRightConElBordeExecto` afirma el ancho justo con
+# cadenas vacias, de un caracter, con acentos y con emoji. Los otros cinco sentidos de
+# `padRight` mueren: rellenar con otro caracter, rellenar al doble, no rellenar, y
+# rellenar una columna de menos.
+CONDITIONALS_BOUNDARY internal/tui/sim.go:578
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
 ARITHMETIC_BASE internal/tui/toast.go:319
 INVERT_NEGATIVES internal/tui/toast.go:319
@@ -154,12 +145,6 @@ CONDITIONALS_NEGATION internal/tui/update.go:621
 CONDITIONALS_BOUNDARY internal/tui/update.go:711
 CONDITIONALS_BOUNDARY internal/tui/update.go:728
 CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
-CONDITIONALS_NEGATION internal/worktree/herdr.go:125
-CONDITIONALS_BOUNDARY internal/worktree/herdr.go:151
-CONDITIONALS_NEGATION internal/worktree/herdr.go:77
-CONDITIONALS_NEGATION internal/worktree/herdr.go:81
-CONDITIONALS_NEGATION internal/worktree/herdr.go:87
-CONDITIONALS_NEGATION internal/worktree/herdr.go:93
 CONDITIONALS_NEGATION internal/worktree/worktree.go:110
 CONDITIONALS_NEGATION internal/worktree/worktree.go:256
 CONDITIONALS_NEGATION internal/worktree/worktree.go:258
