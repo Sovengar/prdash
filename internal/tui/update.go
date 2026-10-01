@@ -725,9 +725,12 @@ func (m Model) View() tea.View {
 	// Los avisos van superpuestos abajo a la derecha: la vista de fondo no se
 	// vuelve a componer, solo se recorta por donde hace falta. Solo aterrizan en
 	// el interior de las cajas, así que no pisan ningún borde.
-	if toasts := m.toast.blocks(m.contentWidth()); len(toasts) > 0 {
-		v.text = overlayToasts(v.text, toasts, m.contentWidth(), v.rows)
-	}
+	//
+	// Y aquí no hay `if len(toasts) > 0`, y antes lo había. Es la misma guarda
+	// escrita dos veces: `overlayToasts` empieza por `if len(boxes) == 0 { return
+	// content }`, así que llamarla sin avisos devuelve la vista intacta. La del
+	// llamador no añadía nada y solo se mantenía viva en el allowlist.
+	v.text = overlayToasts(v.text, m.toast.blocks(m.contentWidth()), m.contentWidth(), v.rows)
 	// El popup va después de los toasts para quedar por encima de ellos: es la
 	// capa que el usuario acaba de abrir, y un aviso no puede taparla.
 	if box, ok := m.simOverlay(); ok {
