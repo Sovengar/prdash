@@ -65,6 +65,33 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 		return Worktree{}, fmt.Errorf("create the native worktree at %s: %w", spec.Path, err)
 	}
 
+	return composed(spec, info), nil
+}
+
+// composed junta lo que pidió el llamador con lo que contestó Herdr. Es una
+// función pura a propósito: son reglas de precedencia entre dos fuentes, y una
+// precedencia es exactamente el tipo de cosa que no se puede leer a ojo en un
+// cuerpo de provisioning.
+//
+// La regla, y es una sola: PARA CADA CAMPO, lo que dijo Herdr gana si lo dijo, y
+// si no, lo que pidió el llamador. Herdr manda porque es el que sabe: si movió el
+// checkout a otro path, o si le renombró la rama, el Worktree tiene que reflejar
+// donde está de verdad, no donde se pidió que estuviera. Mentir aquí no da un
+// error visible: da un worktree que apunta a un sitio donde no hay nada, y el
+// review se monta en el vacío.
+//
+// Y hay una excepción, que es la etiqueta. `spec.Label` es la etiqueta de
+// OWNERSHIP que pidió el llamador, y es lo único por lo que prdash reconoce el
+// worktree. En cambio `info.Label` es el nombre del repo que reporta el nativo, y
+// `info.WorkspaceLabel` es el `--label` con el que se abrió el workspace: ninguno de
+// los dos es lo que prdash pidió. Por eso la etiqueta NO se toma de Herdr si el
+// llamador ya dio una; solo se recurre a las otras cuando no dio ninguna, y en ese
+// orden. Si se invirtiera, el worktree se renombraría solo al nombre del repo y
+// prdash dejaría de reconocerlo.
+//
+// El último recurso es el nombre del path, porque un worktree sin etiqueta no se
+// puede distinguir de otro y el `id` acaba siendo la etiqueta de todos modos.
+func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 	wt := Worktree{
 		ID:          spec.Path,
 		Label:       spec.Label,
@@ -81,19 +108,23 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	if info.Branch != "" {
 		wt.Branch = info.Branch
 	}
-	// La etiqueta de ownership es la que pidió el llamador: `--label` etiqueta
-	// el workspace, mientras que `worktree.label` del nativo es el nombre del
-	// repo y no sirve como identificador de prdash.
 	if wt.Label == "" {
 		wt.Label = info.WorkspaceLabel
 	}
 	if wt.Label == "" {
 		wt.Label = info.Label
 	}
-	if wt.Label == "" {
+	// El nombre del path es el último recurso porque es el único que siempre está.
+	//
+	// Y con un path VACÍO no hay nombre que tomar: `filepath.Base("")` sale ".", y
+	// una etiqueta de "." es peor que no tener etiqueta. Vacía se ve que falta;
+	// "." parece un nombre elegido, y dos worktrees sin path se llamarían igual.
+	// Por eso la condición mira el PATH y no el nombre: lo que falta es el sitio
+	// del que sacarlo.
+	if wt.Label == "" && wt.Path != "" {
 		wt.Label = filepath.Base(wt.Path)
 	}
-	return wt, nil
+	return wt
 }
 
 // reuse devuelve el worktree ya existente y, si sigue abierto como workspace,
