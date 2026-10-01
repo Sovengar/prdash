@@ -26,11 +26,11 @@ func overlayCentered(content, box string, width int) string {
 	}
 	lines := strings.Split(content, "\n")
 	block := strings.Split(box, "\n")
-	if len(block) > len(lines) {
-		// No cabe en vertical: se recorta por abajo, que es lo que hace un
-		// terminal con una ventana más alta que la pantalla.
-		block = block[:len(lines)]
-	}
+	// No cabe en vertical: se recorta por abajo, que es lo que hace un terminal con una
+	// ventana más alta que la pantalla. El recorte va con `min` y no con una pregunta
+	// porque no hay pregunta que hacer: quedarse con el más corto de los dos es lo mismo
+	// que preguntar cuál es más corto, sin la rama que la pregunta deja detrás.
+	block = block[:min(len(block), len(lines))]
 	bh := len(block)
 
 	x, y := centeredOrigin(width, len(lines), ansi.StringWidth(block[0]), bh)
@@ -57,11 +57,29 @@ func overlayCentered(content, box string, width int) string {
 // recorta la vista y la capa de gráficos que coloca la imagen. Si cada una calculara
 // su sitio, el marco y la imagen caerían en rectángulos distintos —y solo se vería
 // cuando coinciden, que es lo peor que puede pasarle a un error de posición—.
+//
+// Las dos coordenadas son el mismo reparto con un suelo a cero, y el suelo es lo que
+// hace el trabajo entero: una caja más grande que el área no puede centrarse, así que
+// se pega a la esquina.
+//
+// Y aquí estaba el código muerto de la tanda. Eran tres líneas y un `if`:
+//
+//	y = max(0, (height-boxH)/2)
+//	if y+boxH > height {
+//		y = max(0, height-boxH)
+//	}
+//
+// El `if` no podía activarse NUNCA. Con la caja metida en el área, la y sale a
+// `(height-boxH)/2` y `(height-boxH)/2 + boxH` es `(height+boxH)/2`, que es menor o
+// igual que el área justo cuando `boxH <= height`, que es el supuesto del caso. Y con
+// la caja más alta, `height-boxH` es negativo, la y sale a cero por el suelo y el
+// `if` la deja como estaba. O sea que el `if` solo podía activarse en el caso que el
+// suelo ya cubría, y su cuerpo volvía a poner el suelo.
+//
+// Probado quitándolo: la suite sigue verde con la y del `if` forzada a la mitad del
+// área, y eso es que el `if` no decide nada.
 func centeredOrigin(width, height, boxW, boxH int) (x, y int) {
 	x = max(0, (width-boxW)/2)
 	y = max(0, (height-boxH)/2)
-	if y+boxH > height {
-		y = max(0, height-boxH)
-	}
 	return x, y
 }
