@@ -32,9 +32,16 @@ func RenderWithTitle(border lipgloss.Border, borderFg color.Color, title, conten
 // deja la línea completa de relleno. El ancho exterior es width (mínimo 2) y el
 // interior width-2; cada línea de contenido se recorta al interior.
 func RenderWithTitles(border lipgloss.Border, borderFg color.Color, topTitle string, topAlign int, bottomTitle string, bottomAlign int, content string, width int) string {
-	if width < 2 {
-		width = 2
-	}
+	// El suelo a dos, y no la comprobación de antes (`if width < 2 { width = 2 }`):
+	// el mínimo es un máximo, no una rama. Con la condición, el borde de la condición
+	// —el ancho exactamente dos— la hacía indistinguible de `width <= 2`, porque las
+	// dos dejan el ancho en dos y no hay entrada que las separe. Con `max` no hay
+	// comparación que mutar en la frontera: o el ancho es dos o es mayor.
+	//
+	// El motivo del mínimo es el mismo de antes y no cambia: por debajo de dos no
+	// caben los dos bordes, y el suelo es lo que permite al layout no tener que
+	// comprobar nada antes de pintar.
+	width = max(2, width)
 
 	innerWidth := width - 2 // width >= 2 → nunca negativo
 
@@ -60,11 +67,18 @@ func borderLine(style *ansi.Style, left, fill, right string, innerWidth, align i
 	if fill == "" {
 		fill = " "
 	}
+	// El título se recorta SIEMPRE, sin preguntar. `ansi.Truncate` es identidad
+	// visible cuando el texto ya cabe, así que la pregunta `titleWidth > innerWidth`
+	// solo servía para tener una rama que mutar en la frontera —y en esa frontera, con
+	// el título midiendo justo el interior, truncar y no truncar dan el mismo texto y
+	// el mismo ancho—.
+	//
+	// Se recorta sin condición y el ancho se vuelve a MEDIR en vez de darse por bueno:
+	// medir es lo que hace que el reparto del relleno de abajo sea el correcto, y
+	// `titleWidth = innerWidth` a secas mentía si el truncado hubiera dejado el título
+	// en menos de lo que el interior da.
+	title = ansi.Truncate(title, innerWidth, "")
 	titleWidth := ansi.StringWidth(title)
-	if titleWidth > innerWidth {
-		title = ansi.Truncate(title, innerWidth, "")
-		titleWidth = innerWidth
-	}
 
 	remaining := innerWidth - titleWidth
 	var leftPad, rightPad int
@@ -98,12 +112,15 @@ func contentLines(style *ansi.Style, leftChar, rightChar, content string, innerW
 	raw := strings.Split(content, "\n") // siempre >= 1 elemento
 	lines := make([]string, 0, len(raw))
 	for _, line := range raw {
-		if w := ansi.StringWidth(line); w > innerWidth {
-			line = ansi.Truncate(line, innerWidth, "")
-		}
-		if pad := innerWidth - ansi.StringWidth(line); pad > 0 {
-			line += strings.Repeat(" ", pad)
-		}
+		// Recorta y rellena SIN preguntar, por la misma razón que el título: las dos
+		// preguntas —`w > innerWidth` y `pad > 0`— eran identidades en su frontera.
+		// Recortar un texto que ya cabe no lo cambia, y rellenar con cero espacios no
+		// añade nada. Y el relleno se puede pedir sin condiciones porque el recorte
+		// anterior garantiza que la diferencia nunca es negativa: `strings.Repeat` con
+		// un número negativo es un PANIC, así que la guarda no era decorativa, era lo
+		// que impedía el panic. Lo que la impide ahora es el orden de las dos líneas.
+		line = ansi.Truncate(line, innerWidth, "")
+		line += strings.Repeat(" ", innerWidth-ansi.StringWidth(line))
 		lines = append(lines, styled(style, leftChar)+line+styled(style, rightChar))
 	}
 	return lines
