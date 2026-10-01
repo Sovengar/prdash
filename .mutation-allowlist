@@ -7,7 +7,7 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 68
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 61
 # unique survivors, down from 286. The campaign covered the pure logic
 # (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
 # decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
@@ -45,18 +45,17 @@ CONDITIONALS_NEGATION internal/tui/app.go:959
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
 CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
 # `st.total < len(st.list)`. EQUIVALENTE con `<=`: con total == len(list) la
 # asignacion `st.total = len(st.list)` es una identidad, asi que el mutante hace lo
 # mismo que el original. La regla de verdad, que si se afirma en un test para todos
 # los pares de total y lista, es que el total NUNCA es menor que la lista: si no, el
 # rotulo diria '2 de 1', que es un numero que no existe.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:112
+CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
 # `avail <= 0`. EQUIVALENTE con `<`: con avail == 0 el mutante no sale por aqui,
 # pero la guarda siguiente es `avail < commentChrome+len(st.list)` y 0 siempre es
 # menor que eso, asi que sale igual. ABSORVIDO por la guarda posterior, que es la
 # que de verdad decide cuando no hay sitio.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:136
+CONDITIONALS_BOUNDARY internal/tui/comments.go:112
 # `len(shown) > forge.CommentLimit`. EQUIVALENTE con `>=`: con exactamente cinco
 # comentarios el recorte `shown[:5]` es la lista entera. La mutacion que si importa,
 # `[:4]`, si la mata el test del tope de cinco.
@@ -66,7 +65,7 @@ CONDITIONALS_BOUNDARY internal/tui/comments.go:136
 # por el tope de cinco. La primera es estrictamente mas fuerte, asi que la segunda
 # no cubria nada: solo hacia que se leyera como si el recorte del tope tuviera su
 # propia comprobacion de sitio, y no la tiene porque no la necesita.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:188
+CONDITIONALS_BOUNDARY internal/tui/comments.go:136
 # `total > budget`. EQUIVALENTE con `>=`: en la frontera `allocate(need, budget)`
 # con presupuesto suficiente devuelve `need`, que es lo que ya hace la rama de no
 # repartir. Las dos ramas dan el mismo reparto.
@@ -81,7 +80,7 @@ CONDITIONALS_BOUNDARY internal/tui/comments.go:188
 # propio suelo, y un cuerpo vacio devuelve la fila que lo dice), y allocate deja a
 # todos en 1 como minimo antes de repartir. SEIS suelo inalcanzable borrado en la
 # campana.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:228
+CONDITIONALS_BOUNDARY internal/tui/comments.go:188
 # `commentBoxWidth`. Los DOS sentidos de la aritmetica mueren: con `max(9, ...)`
 # el suelo sube una columna, y con `outer-3*inset` el sangrado se descuenta tres veces
 # en vez de dos. Se mira la funcion DIRECTA y no solo a traves de `commentBodyWidth`,
@@ -90,7 +89,7 @@ CONDITIONALS_BOUNDARY internal/tui/comments.go:228
 # Y el descuento es el doble porque el sangrio va a los dos lados: con uno solo la
 # caja se queda una columna mas ancha por un lado, que es lo que hace que el borde
 # de fuera se vea desplazado.
-ARITHMETIC_BASE internal/tui/comments.go:336
+CONDITIONALS_BOUNDARY internal/tui/comments.go:228
 # el corte. El INVERT_NEGATIVES del indice es MUERTO: `out[-(len(out)-1)]` es un
 # indice negativo y revienta, y un panic tambien es una muerte aunque no salga un
 # '--- FAIL' que buscar.
@@ -99,18 +98,14 @@ ARITHMETIC_BASE internal/tui/comments.go:336
 # con `lines >= 1`, asi que ya hay al menos una fila y el idx nunca es 0. Con
 # `len(out)` en vez de `len(out)-1` el prefijo es el mismo. Y si `idx` fuera 0 con
 # `out` vacio, `out[len(out)-1]` reventaria, pero el suelo de `lines` lo impide.
-ARITHMETIC_BASE internal/tui/comments.go:451
+ARITHMETIC_BASE internal/tui/comments.go:336
 # el indice invertido. MUERTO por panic: `out[-(len(out)-1)]` es un indice
 # negativo y revienta. Un panic tambien es una muerte aunque no salga un '--- FAIL'
 # que buscar, porque en vez de marcar un test lo tira todo.
+ARITHMETIC_BASE internal/tui/comments.go:451
 INVERT_NEGATIVES internal/tui/comments.go:451
 ARITHMETIC_BASE internal/tui/detail.go:238
 CONDITIONALS_BOUNDARY internal/tui/detail.go:264
-CONDITIONALS_BOUNDARY internal/tui/layout.go:100
-ARITHMETIC_BASE internal/tui/layout.go:85
-CONDITIONALS_BOUNDARY internal/tui/layout.go:85
-CONDITIONALS_BOUNDARY internal/tui/layout.go:88
-ARITHMETIC_BASE internal/tui/layout.go:91
 ARITHMETIC_BASE internal/tui/list.go:35
 CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
 ARITHMETIC_BASE internal/tui/overlay.go:63
@@ -119,22 +114,35 @@ CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
 INCREMENT_DECREMENT internal/tui/retarget.go:192
 INCREMENT_DECREMENT internal/tui/retarget.go:373
 ARITHMETIC_BASE internal/tui/retarget.go:629
-CONDITIONALS_BOUNDARY internal/tui/sections.go:123
-CONDITIONALS_BOUNDARY internal/tui/sections.go:188
-CONDITIONALS_NEGATION internal/tui/sections.go:188
-CONDITIONALS_BOUNDARY internal/tui/sections.go:229
-CONDITIONALS_BOUNDARY internal/tui/sections.go:80
+# 138 `lay.bodyLines > 0`. EQUIVALENTE con `>=`, y la razon es la misma que en los
+# otros dos recortes de este fichero: `bodyLines` sale de `computeLayout`, que siempre
+# lo deja en `max(1, height-reserved())`, o sea 1 o mas, o en cero cuando `show` es
+# falso. Con cero, `visibleList(all, scroll, 0)` devuelve la lista vacia y el cuerpo se
+# queda igual con la guarda o sin ella: las dos ramas pintan nada. Y en la frontera de
+# 0, `>=` entra en el `if` pero el `for` no itera. Identidad en el borde.
+# Lo que SI distingue las dos es quitar la guarda entera, y ese mutante tambien esta
+# vivo por lo mismo: `visibleList` con cero filas devuelve vacio por su cuenta.
+# 138 `lay.bodyLines > 0`. EQUIVALENTE con `>=`, por la misma cuenta que los otros
+# dos recortes del fichero: `bodyLines` sale de `computeLayout`, que siempre lo deja
+# en `max(1, height-reserved())` —uno o mas— o en cero cuando `show` es falso. Con
+# cero, `visibleList(all, scroll, 0)` devuelve la lista vacia, asi que el cuerpo queda
+# igual con la guarda o sin ella. Y en la frontera de cero, `>=` entra en el `if` pero
+# el `for` no itera. Identidad en el borde.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:138
+# 203 `hintLines < len(lines)`. EQUIVALENTE con `>=`: en el borde, con el presupuesto
+# IGUAL al numero de lineas, recortar la lista por su longitud entera es una
+# identidad —`lines[:len(lines)]` es la lista entera—. Y con presupuesto mayor, el
+# mutante recorta a `len(lines)`, que ya es el tamano. Las dos ramas dan lo mismo.
+# El suelo `max(0, hintLines)` tampoco es opcional: cortar por un numero NEGATIVO en
+# Go es un PANIC, y el test lo comprueba con un presupuesto de -1.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:203
+# 244 `len(plain) > maxHintLines`. EQUIVALENTE con `>=` por la misma cuenta que el 203:
+# recortar una lista por su longitud entera a esa longitud es una identidad. Con
+# `len(plain) == maxHintLines` las dos dan la lista entera, y con mas lineas las dos
+# dan las primeras `maxHintLines`. Y `plain` sale de `wrapText`, que con un ancho
+# normal no pasa de ahi, asi que la condicion ni siquiera llega a ser cierta.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:244
 CONDITIONALS_BOUNDARY internal/tui/sim.go:342
-# `padRight`: `if pad := n - ansi.StringWidth(s); pad > 0`. EQUIVALENTE con `>=`:
-# en el borde, `pad == 0`, y las dos ramas hacen lo mismo. Con `> 0` no entra y sale
-# por el `return s`; con `>= 0` entra y hace `s + strings.Repeat(" ", 0)`, que es `s`
-# con cero espacios.
-#
-# Es una IDENTIDAD en la frontera, y lo que la demuestra es que en el borde el
-# resultado es el mismo: `TestPadRightConElBordeExecto` afirma el ancho justo con
-# cadenas vacias, de un caracter, con acentos y con emoji. Los otros cinco sentidos de
-# `padRight` mueren: rellenar con otro caracter, rellenar al doble, no rellenar, y
-# rellenar una columna de menos.
 CONDITIONALS_BOUNDARY internal/tui/sim.go:578
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
 ARITHMETIC_BASE internal/tui/toast.go:319
@@ -147,4 +155,5 @@ CONDITIONALS_BOUNDARY internal/tui/update.go:728
 CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
 CONDITIONALS_NEGATION internal/worktree/worktree.go:110
 CONDITIONALS_NEGATION internal/worktree/worktree.go:256
+# 
 CONDITIONALS_NEGATION internal/worktree/worktree.go:258
