@@ -109,7 +109,16 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 // checks) para refrescarlo tras una acción o un cambio en el forge.
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	owner, name := splitProject(ref.Project)
-	if owner == "" || name == "" {
+	// Solo hace falta mirar el dueño. El nombre vacío NO puede darse con dueño
+	// puesto: splitProject recorta las barras de los dos extremos, así que el
+	// proyecto no acaba nunca en "/", y con barra en algún sitio el nombre es todo lo
+	// que va detrás. Sin barra no hay dueño. O sea, "nombre vacío" implica "dueño
+	// vacío", y la segunda mitad de la condición era ruido.
+	//
+	// Y es mejor que sea una sola condición: un "|| name == \"\"" que no puede
+	// cumplirse es una condición que alguien va a creer que sí, y el día que se relaje
+	// el recorte de barras la guarda deja de cubrir el caso que dice cubrir.
+	if owner == "" {
 		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("invalid repo reference: %q", ref.Project))}
 	}
 

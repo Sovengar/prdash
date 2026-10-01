@@ -327,6 +327,14 @@ func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]str
 		return model.RepoRef{}, false
 	}
 
+	// Las tres formas que se reconocen, y SOLO esas tres. La condición del "@" pide
+	// que haya algo ANTES del "@", porque un SCP con el usuario vacío ("@host:a/b")
+	// no es un remoto de git y normalizarlo produciría un repo que no existe.
+	//
+	// Y el "://" se acepta en la posición 0 aunque el esquema falte, porque no hace
+	// falta decidir aquí: url.Parse rechaza "://algo" por esquema ausente, así que
+	// esa entrada cae sola. Lo que no se debe es dejar que una entrada así se cuele
+	// por la rama de SCP, que es lo que haría un "!= 0" en lugar de un ">= 0".
 	var host, path string
 	if i := strings.Index(raw, "://"); i >= 0 {
 		u, err := url.Parse(raw)
@@ -335,7 +343,7 @@ func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]str
 		}
 		host = u.Hostname()
 		path = u.Path
-	} else if at := strings.Index(raw, "@"); at >= 0 {
+	} else if at := strings.Index(raw, "@"); at > 0 {
 		rest := raw[at+1:]
 		colon := strings.Index(rest, ":")
 		if colon < 0 {

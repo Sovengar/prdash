@@ -103,10 +103,18 @@ func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows i
 	// cols por línea: la imagen es imgW/imgH de ancha, y una celda es cellH/cellW
 	// de alta, así que cada fila de celdas "consume" imgW/imgH * cellH/cellW
 	// columnas.
+	//
+	// Aquí no hay guarda, y antes la había (`perRow <= 0`), y era INALCANZABLE: los
+	// cuatro factores son positivos por lo de arriba. Dx y Dy son mayores que cero
+	// porque se acaba de comprobar, y cellW y cellH también, porque sus suelos son 1
+	// y 2. Un producto de positivos no es ni cero ni negativo, y una división de
+	// positivos tampoco.
+	//
+	// Se quita porque una guarda que no puede llegar es dos cosas malas a la vez:
+	// esconde la aritmética de verdad —que es la relación de aspecto, lo único que
+	// decide el tamaño— y da la sensación de que esa aritmética está protegida
+	// cuando lo que está protegida es una condición imposible.
 	perRow := float64(b.Dx()) / float64(b.Dy()) * float64(cellH) / float64(cellW)
-	if perRow <= 0 {
-		return maxCols, maxRows
-	}
 
 	if float64(maxRows)*perRow <= float64(maxCols) {
 		// El alto manda: se usan todas las líneas disponibles.

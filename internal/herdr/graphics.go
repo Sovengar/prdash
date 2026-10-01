@@ -24,6 +24,15 @@ var ErrNoGraphics = errors.New("herdr: pane graphics unavailable")
 // dejar el popup a medias.
 const graphicsTimeout = 5 * time.Second
 
+// defaultCellWidthPx y defaultCellHeightPx son las dimensiones de celda con las que
+// se dibuja cuando el pane no las dice. 1×2 es lo habitual en un terminal, y es una
+// aproximación declarada: una imagen deformada se nota pero se mira, y sin imagen no
+// se mira nada.
+const (
+	defaultCellWidthPx  = 1
+	defaultCellHeightPx = 2
+)
+
 // GraphicsLayer es la capa donde prdash publica la imagen de la simulación. Es
 // propia y con nombre, para poder quitarla sin tocar nada ajeno: la capa es del
 // pane, no de prdash, y lo que no es de prdash no se toca.
@@ -40,6 +49,11 @@ type Placement struct {
 }
 
 // Empty informa si la colocación no dibuja nada.
+//
+// Una colocación con una dimensión en cero o menos no dibuja nada, y ademas es peor
+// que no dibujar: el rectángulo de celdas se manda igual y el servidor tiene que
+// decidir qué hacer con un rectángulo degenerado. Por eso se comprueba ANTES de
+// mandar nada, y no se deja que lo rechace el otro lado.
 func (p Placement) Empty() bool { return p.Cols <= 0 || p.Rows <= 0 }
 
 // GraphicsInfo es lo que Herdr sabe del pane que importa para colocar una imagen.
@@ -102,15 +116,57 @@ func (g *Graphics) pane() string {
 // versión instalada. La última parte se deduce del id de pane con el que se llama,
 // así que no se puede afirmar sin preguntar, y preguntar cuesta una ida al socket.
 func (g *Graphics) Available() bool {
-	if g.env("HERDR_ENV") != "1" {
-		return false
-	}
-	if g.socket() == "" || g.pane() == "" {
-		return false
-	}
+	return graphicsReady(g.env("HERDR_ENV"), g.socket(), g.pane()) && g.probe()
+}
+
+// probe pregunta por el pane para confirmar que el método existe en la versión
+// instalada. Va aparte de la política a propósito: la política es una función pura
+// de tres cadenas y se puede comprobar entera, y la pregunta es la parte que cuesta
+// una ida al socket.
+func (g *Graphics) probe() bool {
 	_, err := g.Info(context.Background())
 	return err == nil
 }
+
+// graphicsReady son las condiciones para que la capa de gráficos sea un camino
+// posible, SIN la ida al socket: estar dentro de Herdr y tener socket y pane.
+//
+// Se separa de Available por el mismo motivo que el resto de la geometría de este
+// repo: dentro de Available, con su ida al socket detrás, estas tres comparaciones
+// no se pueden comprobar sin montar un socket falso. Como lo que decide es una
+// regla de tres entradas y una salida, se afirma como lo que es, con las nueve
+// combinaciones.
+//
+// Y el orden importa: estar fuera de Herdr se comprueba PRIMERO, antes de mirar el
+// socket. Al revés, un proceso corriendo fuera de Herdr con las variables puestas se
+// irait al socket de todas formas, y no es solo una ida inútil: el socket puede estar
+// ahí, de otro proceso, y escribirle sería escribir en la sesión de otro.
+func graphicsReady(herdrEnv, socket, pane string) bool {
+	if herdrEnv != "1" {
+		return false
+	}
+	return socket != "" && pane != ""
+}
+
+// graphicsTimeoutFor es el plazo de una petición: el que venga, o el de por defecto.
+//
+// Un plazo de cero o NEGATIVO no es "sin plazo", es un plazo que ya pasó, y eso hace
+// que la petición se corte antes de enviarse. Por eso se sustituye, no se usa tal
+// cual.
+func graphicsTimeoutFor(t time.Duration) time.Duration {
+	if t <= 0 {
+		return graphicsTimeout
+	}
+	return t
+}
+
+// haveGraphicsTarget dice si hay a quién preguntar: socket y pane.
+//
+// Los dos hacen falta, y no por simetría: sin pane no hay rectángulo donde colocar la
+// imagen, y sin socket no hay a quién preguntarlo. Mandar la petición con solo uno
+// de los dos convierte un error local y barato (antes de tocar nada) en un error
+// remoto y opaco.
+func haveGraphicsTarget(socket, pane string) bool { return socket != "" && pane != "" }
 
 // Info pregunta por el pane: tamaño de celda y visibilidad.
 func (g *Graphics) Info(ctx context.Context) (GraphicsInfo, error) {
@@ -142,9 +198,26 @@ func (g *Graphics) Info(ctx context.Context) (GraphicsInfo, error) {
 // un terminal, cuando no se puede preguntar: es una aproximación, y una imagen
 // deformada es preferible a no pintar imagen.
 func (g *Graphics) CellSize(ctx context.Context) (cellW, cellH int) {
-	info, err := g.Info(ctx)
+	return cellSizeFrom(g.Info(ctx))
+}
+
+// cellSizeFrom decide el tamaño de celda a partir de lo que respondió el pane, sin
+// la ida al socket.
+//
+// Las tres degradaciones, y las tres son distintas:
+//
+//   - No se pudo preguntar (error): aproximación 1×2.
+//   - El pane respondió con una dimensión en cero o menos: también aproximación,
+//     porque una celda de cero píxeles no es una celda, es una división por cero que
+//     el que la use no ve venir.
+//
+// La segunda es la que se confunde con la primera: una celda de 0 de ancho y otra
+// ausente dan el mismo resultado, y no es casualidad: las dos significan que no
+// hay medida. Por eso la condición es un O, y por eso se comprueba que un 0 exacto
+// cae ya en la aproximación y no en "usa el 0 que te han dado".
+func cellSizeFrom(info GraphicsInfo, err error) (cellW, cellH int) {
 	if err != nil || info.CellWidthPx <= 0 || info.CellHeightPx <= 0 {
-		return 1, 2
+		return defaultCellWidthPx, defaultCellHeightPx
 	}
 	return info.CellWidthPx, info.CellHeightPx
 }
@@ -199,13 +272,10 @@ func (g *Graphics) Clear(ctx context.Context, layer string) error {
 // reutilizarla solo produciría un error de pipe en la segunda llamada.
 func (g *Graphics) call(ctx context.Context, method string, params map[string]any, out any) error {
 	socket := g.socket()
-	if socket == "" || g.pane() == "" {
+	if !haveGraphicsTarget(socket, g.pane()) {
 		return ErrNoGraphics
 	}
-	timeout := g.Timeout
-	if timeout <= 0 {
-		timeout = graphicsTimeout
-	}
+	timeout := graphicsTimeoutFor(g.Timeout)
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

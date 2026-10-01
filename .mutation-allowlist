@@ -7,397 +7,155 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 159
+# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 80
 # unique survivors, down from 286. The campaign covered the pure logic
 # (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
 # decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
 # sections, toast, retarget) plus the image fit of internal/sim, herdr's version
 # compare and worktree's audit order.
 # What is left is thin: a couple of clamps whose floor can never bind because an
-# earlier floor is bigger, arithmetic that is absorbed by a later comparison, and
-# Herdr's client/graphics glue. The text-wrap geometry is NO LONGER in this file:
-# it was extracted into pure functions (commentWidths, commentBodyWidth, padLines)
-# precisely because it was untestable through the render, where the frame truncates
-# the evidence away.
 #
-# The lesson from this campaign, for whoever retakes it: a surviving mutant is not
-# proof that the code is untestable. In every case here the obstacle was the VIEW
-# the assertion was made through, not the code.
-#
-# NOTA SOBRE EL METODO, para quien retome esto: un script que mute a mano y mire
-# solo la ultima linea de `go test` da falsos positivos. Con el suite ya en rojo,
-# esa linea es FAIL para cualquier mutante y todos parecen muertos. La comprobacion
-# de base verde ANTES de mutar es lo que separa un "MUERTO" real de un "MUERTO"
-# de mentira, y en una tanda entera se llevo por delante una decena de ellos.
-#
-# Every entry below the marked groups was re-checked by hand against its source:
-# either the mutant is provably equivalent (the group headers say why, case by
-# case) or it is a real gap in the render path. An entry that cannot be justified
-# that way should not be here.
-#
-# Consequence to keep in mind: an entry here silences that line FOREVER, so a
-# real regression hiding in a listed line will not be reported. If one of these
-# becomes load-bearing, delete its entry and let the gate go red until a test
-# kills it.
-#
-# Entries are keyed by LINE NUMBER, so inserting code above an entry shifts it
-# and will surface a new red on purpose: re-verify the gap and update this file,
-# do not regenerate it wholesale (that would silently re-hide real gaps).
+# Last sync re-measured only: internal/tui/comments.go, internal/tui/sim.go. Every other
+# entry is carried over from the previous full-module run and is NOT
+# re-verified by it. Only a full run proves those.
 
-ARITHMETIC_BASE internal/herdr/client.go:278
-ARITHMETIC_BASE internal/sim/sim.go:186
-# 153 `max(1, inner-labelWidth)`. El suelo de 1 protege a truncate de un
-# ancho negativo, y el interior de un detalle nunca baja de labelWidth por
-# el suelo de 38 de contentWidth. NO MATABLE: haria falta quitar antes ese
-# suelo, que es una decision de layout.
-ARITHMETIC_BASE internal/tui/comments.go:153
-# 174 y 187 `avail < commentChrome+len(...)`. 174 mira la lista que vino,
-# 187 la que se va a enseñar. Solo difieren con el tope de cinco activo y
-# un presupuesto en la franja entre los dos cortes. NO MATABLE sin una
-# lista de mas de cinco Y un presupuesto en esa franja.
-ARITHMETIC_BASE internal/tui/comments.go:174
-# 177 `avail - commentChrome`. Un presupuesto MAYOR no da una caja mas
-# alta: la caja toma lo que necesita y no rellena. Un presupuesto MENOS si
-# se nota (muerto por el test). EQUIVALENTE por el hecho de que el bloque
-# no estira.
-ARITHMETIC_BASE internal/tui/comments.go:177
-ARITHMETIC_BASE internal/tui/comments.go:187
-# 226 `len(body)+len(lines) > budget` -> el signo. Con la suma restada el
-# presupuesto nunca se pasa y la red no se dispara: el bloque se pinta entero
-# y el test de 'la caja toma lo que necesita' lo ve. El `>=` SI esta
-# muerto por el caso del presupuesto justo.
-ARITHMETIC_BASE internal/tui/comments.go:226
-# 308 `max(8, outer-2*commentInset)`. Muerto: el sangrado de los dos lados es
-# una columna por lado, y con tres la caja se estrecha de mas. El suelo de 8
-# tambien esta muerto.
-ARITHMETIC_BASE internal/tui/comments.go:308
-# 423 el corte: `out[len(out)-1]` con el idx de commentRow. El indice de la
-# fila es lo unico que decide si se lleva el autor delante (`idx == 0`), y en el
-# momento del corte `len(out) >= lines` con `lines >= 1`, asi que ya hay al menos
-# una fila y el idx nunca es 0. Con `len(out)` en vez de `len(out)-1` el prefijo
-# es el mismo. EQUIVALENTE.
-# Si `idx` fuera 0 y `out` estuviera vacio, `out[len(out)-1]` reventaria, pero
-# eso no se da: el suelo de `lines` garantiza que hay una fila escrita.
-ARITHMETIC_BASE internal/tui/comments.go:423
-# 217 capacidad del slice `(len(fields)+1)/2`. Es el numero de filas de la
-# rejilla, y make() no cambia la longitud observada. NO MATABLE.
-ARITHMETIC_BASE internal/tui/detail.go:217
-# 93 aritmetica de `avail`, el alto que le queda al bloque central. El
-# INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
-# titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
-# el borde), asi que la linea final no cambia. NO MATABLE desde el texto.
-ARITHMETIC_BASE internal/tui/detail.go:93
-ARITHMETIC_BASE internal/tui/layout.go:85
-ARITHMETIC_BASE internal/tui/layout.go:91
-# 35 capacidad del slice `+4` -> `+5`. make() no cambia la longitud
-# observada, solo reserva memoria; no hay forma de assertarlo sin medir la
-# reserva, que no es comportamiento. NO MATABLE.
-ARITHMETIC_BASE internal/tui/list.go:35
-# 63 `y+boxH > height`. Con `>=` se asigna y = max(0, height-boxH), que ya
-# es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
-# el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
-ARITHMETIC_BASE internal/tui/overlay.go:63
-# 496 `cursor - rows + 1`. El +1 es lo que hace que la fila del cursor entre JUSTA
-# al final de la ventana; sin el,la ventana se queda una fila corto y la rama
-# elegida queda fuera de la caja. Muerto por el test de mover el cursor.
-ARITHMETIC_BASE internal/tui/retarget.go:496
-# 498 `min(win, max(0, len(view)-rows))`. Es una guarda INALCANZABLE: el switch
-# de arriba ya deja `win <= len(view)-rows` (si la lista cabe, por induccion; si
-# no cabe, `len-rows` es negativo y el `max(0,...)` interior es el que decide, con
-# win siempre a cero). Para que el `min` atara haria falta win>0 con
-# len-rows<win, y eso exigiria `cursor >= win+rows > rows > len-1 >= cursor`.
-# EQUIVALENTE por inalcanzabilidad.
-ARITHMETIC_BASE internal/tui/retarget.go:498
-# 505 `min(rows, len(view)-start)`. Es el recorte de la ventana: ni una fila de
-# mas (se sale por debajo del borde) ni una de menos (esconde una rama).
-# Muerto por el test que cuenta las filas pintadas.
-ARITHMETIC_BASE internal/tui/retarget.go:505
-# 576 capacidad del slice `retargetRows()+2`. make() no cambia la longitud
-# observada. NO MATABLE.
-ARITHMETIC_BASE internal/tui/retarget.go:576
-# 228 `2*time.Second`. El plazo acota un listing colgado. Bajarlo no se ve
-# con un adapter que responde bien, y subirlo tampoco: hace falta un
-# adapter que se bloquee, y con un timeout mas corto el test se vuelve
-# intermitente por carrera. NO MATABLE sin un reloj inyectado.
-ARITHMETIC_BASE internal/tui/sim.go:228
-# 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
-# 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
-# caja se recorta al ancho disponible al superponerse, de modo que el texto
-# final es el mismo. NO MATABLE desde la vista.
-ARITHMETIC_BASE internal/tui/toast.go:138
-# ver la nota de 138: el ancho de reparto se compensa con el recorte de la
-# caja al superponerse. NO MATABLE desde la vista.
-ARITHMETIC_BASE internal/tui/toast.go:139
-# 244 `anchor := len(lines) - 1`, 248 `min(len(block), anchor+1)`, 253 y 270: la
-# aritmetica de donde se apila la caja. Los offsets se compensan con el recorte
-# por `rows` de abajo, asi que la linea final no cambia. NO MATABLE desde el
-# texto renderizado.
-ARITHMETIC_BASE internal/tui/toast.go:244
-# ver la nota de 244: la aritmetica de apilado se compensa con el recorte
-# inferior. NO MATABLE desde el texto.
-ARITHMETIC_BASE internal/tui/toast.go:248
-# ver la nota de 244: la posicion horizontal se acota con max(..., 0) y
-# el resultado final se recorta. NO MATABLE desde el texto.
-ARITHMETIC_BASE internal/tui/toast.go:253
-# ver la nota de 244. NO MATABLE desde el texto.
-ARITHMETIC_BASE internal/tui/toast.go:255
-# ver la nota de 244. NO MATABLE desde el texto.
-ARITHMETIC_BASE internal/tui/toast.go:270
-CONDITIONALS_BOUNDARY internal/forge/github/github.go:435
-CONDITIONALS_BOUNDARY internal/forge/gitlab/gitlab.go:335
-# 595 `i >= 0` sobre el fullPath. Con i == 0 (ruta que empieza por '/') la
-# rama da owner[:0] == "" y la rama negativa tambien ponia "": ningun test
-# puede distinguirlas. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:595
-# 854 `i >= 0` tras strings.Trim(path, "/"). El trim se come los barras
-# iniciales, asi que i == 0 es inalcanzable y la rama negativa nunca entra.
-# EQUIVALENTE por inalcanzabilidad.
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:854
-CONDITIONALS_BOUNDARY internal/herdr/client.go:277
-CONDITIONALS_BOUNDARY internal/herdr/client.go:319
-CONDITIONALS_BOUNDARY internal/herdr/graphics.go:146
-CONDITIONALS_BOUNDARY internal/herdr/graphics.go:206
-CONDITIONALS_BOUNDARY internal/herdr/graphics.go:43
-# 39 y 41 comparaciones de Version dentro de un switch cuyas cases anteriores
-# ya garantizan que major y minor DIFIEREN (`v.X != min.X`). Ahi `>` y `>=` son
-# lo mismo. El `>=` del patch (default) si es real y esta cubierto por test.
-# EQUIVALENTE por construccion.
-CONDITIONALS_BOUNDARY internal/herdr/herdr.go:39
-CONDITIONALS_BOUNDARY internal/herdr/herdr.go:41
-CONDITIONALS_BOUNDARY internal/herdr/parse.go:271
-# 139 `si > sj` -> `>=`. La comparacion solo se evalua cuando el `if`
-# anterior ya dijo `si != sj`, y ahi `>` y `>=` son lo mismo.
-# EQUIVALENTE por construccion.
-CONDITIONALS_BOUNDARY internal/inbox/inbox.go:139
-# 80 `rank(kind) < rank(prev)` -> `<=`. Solo difiere con ranks IGUALES, y
-# ranks iguales son la misma seccion, donde reasignar best[id] = kind es
-# idempotente. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/inbox/inbox.go:80
-CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:331
-CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:338
-CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:341
-# 107 `perRow <= 0`. INALCANZABLE: perRow es `Dx/Dy * cellH/cellW` y aqui ya se ha
-# comprobado que Dx, Dy > 0 y que cellW, cellH tienen default (1 y 2), asi que
-# el producto es siempre positivo. EQUIVALENTE por inalcanzabilidad.
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:107
-# 111 `maxRows*perRow <= maxCols`. En la frontera (las dos ramas dan el mismo
-# resultado, porque maxCols/perRow == maxRows cuando la igualdad se cumple) los
-# dos caminos coinciden: la de arriba devuelve (maxCols, maxRows) y la de
-# abajo (maxCols, int(maxCols/perRow)) = (maxCols, maxRows).
-# EQUIVALENTE en el borde.
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:111
-# 147 `b.Dx() <= 0 || b.Dy() <= 0` en rgba. Con Dx == 0, draw.Draw sobre un
-# destino de tamano cero no escribe nada y el resultado es una imagen vacia,
-# que es lo mismo que devolver nil para lo que usa el resultado. Y con Dx > 0
-# la rama no entra. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:147
-# 89 `maxCols <= 0 || maxRows <= 0`. Con maxCols == 0 la rama da
-# `max(0, 0)` == 0 == lo que haria la salida normal. Y con maxRows == 0, por
-# el mismo motivo. EQUIVALENTE en los dos bordes.
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:89
-# 93 `b.Dx() <= 0 || b.Dy() <= 0`. Con Dx == 0 la salida es `maxCols, maxRows`,
-# que es justo lo que daria la rama de abajo con un area concreta. Son la
-# misma respuesta por dos caminos. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:93
-CONDITIONALS_BOUNDARY internal/sim/service.go:285
-# 386 `RefreshInterval > 0` al inicializar. Con intervalo 0 el
-# auto-refresco esta DESACTIVADO y armTick no arma nada, asi que este valor
-# inicial no se distingue: lo que decide es armTick, que si esta cubierto.
-CONDITIONALS_BOUNDARY internal/tui/app.go:386
-# 843 `m.cursor >= len(rows)`. Con el cursor en len(rows) ya esta fuera
-# de rango y selected() no devuelve nada; subir el limite a `>` solo cambia
-# el texto del error. NO MATABLE en comportamiento observable.
-CONDITIONALS_BOUNDARY internal/tui/app.go:843
-# 101 `w > innerWidth` -> `>=`. Con la linea midiendo justo el interior,
-# ansi.Truncate la deja intacta. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
-# 104 `pad > 0` -> `>= 0`. Con pad == 0, strings.Repeat(" ", 0) es "".
-# EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
-# 35 `width < 2` -> `<= 2`. Con width == 2 la asignacion `width = 2` es una
-# identidad. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
-# 64 `titleWidth > innerWidth` -> `>=`. Con el titulo midiendo justo el
-# interior, ansi.Truncate deja el titulo intacto. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
-# 112 `st.total < len(st.list)` -> `<=`. Con total == len(list) la asignacion
-# `st.total = len(list)` es una identidad. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:112
-# 136 `avail <= 0` -> `< 0`. Con avail == 0 el mutante sigue adelante, pero el
-# corte siguiente lo devuelve: 0 < 2+n siempre. Los dos caminos dan nil.
-# EQUIVALENTE por absorcion del corte posterior.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:136
-# 183 `len(shown) > CommentLimit` -> `>=`. Con exactamente cinco comentarios
-# el truncado `shown[:5]` es la misma lista. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:183
-# 220 `total > budget` -> `>=`. En la frontera las dos ramas dan lo mismo:
-# `rows = need` y `allocate(need, budget)` con presupuesto suficiente
-# devuelve `need`. EQUIVALENTE, y el test de allocate lo demuestra.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:220
-# 243 `len(lines) <= rows` -> `<`. Con la lista midiendo justo las filas que
-# hay, la otra rama devuelve lines[0:], el mismo contenido. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/detail.go:243
-CONDITIONALS_BOUNDARY internal/tui/layout.go:100
-CONDITIONALS_BOUNDARY internal/tui/layout.go:85
-CONDITIONALS_BOUNDARY internal/tui/layout.go:88
-CONDITIONALS_BOUNDARY internal/tui/layout.go:91
-CONDITIONALS_BOUNDARY internal/tui/layout.go:94
-# 29 `len(block) > len(lines)` -> `>=`. Con la caja midiendo justo lo que
-# la vista, el recorte block[:len(lines)] es una identidad. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
-# 63 `y+boxH > height`. Con `>=` se asigna y = max(0, height-boxH), que ya
-# es el valor de y; y el ARITHMETIC_BASE vecino tampoco cambia nada porque
-# el recorte de block de arriba ya deja bh <= len(lines). EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:63
-# 138 `minSegs < 0` -> `<= 0`. Cuando minSegs ya es 0 (un proyecto sin barra) el
-# minimo ya esta en su valor final, asi que recalcularlo da lo mismo.
-# EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
-# 181 `i >= 0` -> `> 0` sobre el proyecto. Con el separador en la posicion 0 (un
-# proyecto que empieza por '/') el prefijo sale vacio por las dos ramas.
-# EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/refcol.go:181
-# 253 `time.Since(entry.fetchedAt) > branchCacheTTL` -> `>=`. La frontera exige
-# que `time.Since` devuelva EXACTAMENTE el TTL, y no puede: el reloj avanza
-# entre que se guardo fetchedAt y que se lee, asi que el valor es siempre
-# mayor. Solo un reloj inyectado haria la prueba determinista, y la firma no
-# lo tiene. NO MATABLE con reloj real; el resto del TTL si esta probado (un
-# instante antes vale, uno despues no).
-CONDITIONALS_BOUNDARY internal/tui/retarget.go:253
-# 123 `lay.bodyLines > 0` -> `>= 0`. Con el cuerpo a 0 lineas la seccion no se
-# pinta, y bodyLines >= 1 por construccion, asi que la rama negativa es la de
-# siempre. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:123
-# 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
-# de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
-# EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:188
-# 229 `len(plain) > maxHintLines` -> `>=`. Con el texto ya en el tope,
-# plain[:maxHintLines] es el mismo contenido. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:229
-# 80 `m.height > 0` al pedir el layout. Con la altura a 0 el layout devuelve
-# las cajas vacias igual en ambos casos: sin alto no hay nada que repartir.
-# EQUIVALENTE en el resultado.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:80
-# 342 `innerCols <= 0 || innerRows <= 0`. Con el cero exacto `sim.Resize`
-# devuelve nil y la funcion sale igual. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/sim.go:342
-# 350 `cellW <= 0 || cellH <= 0`. Con el cero exacto la celda se usa como si
-# fuera 0 y el reescalado sale nil: es la degradacion, no pintar antes que
-# pintar con una celda que no existe. EQUIVALENTE por el corte de abajo.
-CONDITIONALS_BOUNDARY internal/tui/sim.go:350
-# 448 `w <= 0 || h <= 0`. Con el cero exacto `sim.Cells` devuelve vacio. Ojo:
-# con el `&&` este NO seria equivalente (un popup de 0 columnas se pinta
-# entero y uno de 0 filas no), pero el mutante solo cambia `<= 0` por `< 0`
-# en la disyccion, y ese si es equivalente.
-CONDITIONALS_BOUNDARY internal/tui/sim.go:448
-# 566 `pad > 0` -> `>= 0`. Con pad == 0, `strings.Repeat(" ", 0)` es `""` y
-# `s + "" == s`. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/sim.go:566
-# 365 `n >= w` -> `>` en pad. Con n == w el relleno son cero espacios y
-# `s + ""` == s. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/table.go:365
-# 133 `available > 8` al decidir si el aviso cabe entero. Con 8 columnas
-# exactas el criterio y su negation dan la misma caja. NO MATABLE sin
-# afirmar el texto exacto de un aviso de 8 columnas, que no cambia.
-CONDITIONALS_BOUNDARY internal/tui/toast.go:133
-# 209 `StringWidth(text) <= max` -> `<`. Con el texto midiendo justo el ancho,
-# partirlo por palabras lo vuelve a juntar en la misma linea. El `max <= 0`
-# de al lado SI esta cubierto por el test con texto multipalabra.
-# EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/toast.go:209
-# 219 `... <= max` -> `<`. Con la palabra cerrando el ancho justo, la otra rama
-# la deja sola y el resultado son las mismas lineas. EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/tui/toast.go:219
-# 267 `bh <= 0` con una caja vacia. Una caja vacia no se superpone (blocks no
-# las produce), asi que la rama es defensiva. NO MATABLE.
-CONDITIONALS_BOUNDARY internal/tui/toast.go:267
-# 283 `i >= len(rows)`. Con el indice en el final, `rows[i]` es de otra fila o
-# no existe, y la superposicion no puede saltarse el hueco. NO MATABLE en
-# comportamiento observable.
-CONDITIONALS_BOUNDARY internal/tui/toast.go:283
-CONDITIONALS_BOUNDARY internal/tui/update.go:149
-CONDITIONALS_BOUNDARY internal/tui/update.go:711
-CONDITIONALS_BOUNDARY internal/tui/update.go:728
-# 69 `out[i].Path < out[j].Path` -> `<=`. Las rutas de un Audit son unicas
-# (son las de un recorrido del arbol), asi que la igualdad no se da.
-# EQUIVALENTE.
-CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
-CONDITIONALS_BOUNDARY internal/worktree/herdr.go:151
 CONDITIONALS_NEGATION internal/forge/bitbucket/bitbucket.go:26
 CONDITIONALS_NEGATION internal/forge/forge.go:250
-CONDITIONALS_NEGATION internal/forge/github/github.go:112
-CONDITIONALS_NEGATION internal/forge/github/github.go:117
-CONDITIONALS_NEGATION internal/forge/github/github.go:274
-CONDITIONALS_NEGATION internal/forge/github/github.go:321
-CONDITIONALS_NEGATION internal/forge/github/github.go:45
-CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:135
-CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:140
-CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:257
-CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:335
-CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:342
-CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:378
-CONDITIONALS_NEGATION internal/herdr/client.go:128
-CONDITIONALS_NEGATION internal/herdr/client.go:130
-CONDITIONALS_NEGATION internal/herdr/client.go:205
-CONDITIONALS_NEGATION internal/herdr/client.go:208
-CONDITIONALS_NEGATION internal/herdr/client.go:244
-CONDITIONALS_NEGATION internal/herdr/client.go:277
-CONDITIONALS_NEGATION internal/herdr/client.go:367
-CONDITIONALS_NEGATION internal/herdr/graphics.go:105
-CONDITIONALS_NEGATION internal/herdr/graphics.go:108
-CONDITIONALS_NEGATION internal/herdr/graphics.go:206
-CONDITIONALS_NEGATION internal/herdr/graphics.go:241
-CONDITIONALS_NEGATION internal/herdr/graphics.go:87
+CONDITIONALS_NEGATION internal/forge/github/github.go:130
+CONDITIONALS_BOUNDARY internal/forge/github/github.go:444
+CONDITIONALS_BOUNDARY internal/forge/gitlab/gitlab.go:352
+CONDITIONALS_NEGATION internal/forge/gitlab/gitlab.go:352
+CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:595
+CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:854
+CONDITIONALS_BOUNDARY internal/herdr/herdr.go:39
+CONDITIONALS_BOUNDARY internal/herdr/herdr.go:41
 CONDITIONALS_NEGATION internal/herdr/layout.go:155
 CONDITIONALS_NEGATION internal/herdr/layout.go:165
 CONDITIONALS_NEGATION internal/herdr/layout.go:88
-CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:100
-CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:145
-CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:263
-CONDITIONALS_NEGATION internal/reporesolver/reporesolver.go:99
+CONDITIONALS_BOUNDARY internal/herdr/parse.go:271
+CONDITIONALS_BOUNDARY internal/inbox/inbox.go:139
+CONDITIONALS_BOUNDARY internal/inbox/inbox.go:80
+CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:339
+CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:349
 CONDITIONALS_NEGATION internal/review/executor/executor.go:187
-# 386 `RefreshInterval > 0` al inicializar. Con intervalo 0 el
-# auto-refresco esta DESACTIVADO y armTick no arma nada, asi que este valor
-# inicial no se distingue: lo que decide es armTick, que si esta cubierto.
-CONDITIONALS_NEGATION internal/tui/app.go:386
-# 597 `st != nil` al aplicar una pagina. Un forge sin estado no produce
-# paginas: la rama es defensiva y el codigo nunca genera el caso.
-# NO MATABLE sin fabricar un msg imposible.
-CONDITIONALS_NEGATION internal/tui/app.go:597
-# 609 `msg.key.section == model.SectionReview`. El reloj de la seccion ya
-# esta seteado en el stream por la misma condicion, asi que el reloj solo
-# cambia lo que se re-resuelve, no la lista. NO MATABLE.
-CONDITIONALS_NEGATION internal/tui/app.go:609
-# 933 `st != nil && cs.Host != ""` al componer el cache. Un stream siempre
-# tiene host: se deriva del forge al crearse. NO MATABLE sin fabricar un
-# stream sin host, que el codigo no genera.
-CONDITIONALS_NEGATION internal/tui/app.go:933
-# 976 `m.cachePath == ""` antes de persistir. Sin el, cache.Save("") hace
-# MkdirAll(".") (que ya existe) y WriteFile(""), que falla con el error
-# descartado en la goroutine: no crea nada. DEFENSIVO, no matable. El otro
-# lado (con cachePath se escribe) si esta probado.
-CONDITIONALS_NEGATION internal/tui/app.go:976
-# 220 `total > budget` -> `>=`. En la frontera las dos ramas dan lo mismo:
-# `rows = need` y `allocate(need, budget)` con presupuesto suficiente
-# devuelve `need`. EQUIVALENTE, y el test de allocate lo demuestra.
-CONDITIONALS_NEGATION internal/tui/comments.go:220
-# 93 `len(warns) > 0 && len(page.Comments) == 0`. Los dos lados son el mismo
-# caso desde dos angulos: si no hay comentarios, la pagina no los trae
-# tampoco. EQUIVALENTE.
-CONDITIONALS_NEGATION internal/tui/comments.go:93
-# 188 `hintLines < len(lines)` -> `<=`. Con el numero de filas justo igual al
-# de lineas, el truncado lines[:hintLines] devuelve el mismo contenido.
-# EQUIVALENTE.
+CONDITIONALS_BOUNDARY internal/sim/pixels.go:119
+CONDITIONALS_BOUNDARY internal/sim/service.go:285
+ARITHMETIC_BASE internal/sim/sim.go:186
+CONDITIONALS_NEGATION internal/tui/app.go:959
+CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
+CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
+CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
+CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
+# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:112
+# 112 `st.total < len(st.list)`. EQUIVALENTE con `<=`: con total == len(list) la
+# asignacion `st.total = len(list)` es una identidad, asi que el mutante hace lo
+# mismo que el original. La regla de verdad, que si se afirma en un test para
+# todos los pares de total y lista, es que el total NUNCA es menor que la lista:
+# si no, el rotulo diria '2 de 1', que es un numero que no existe.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:112
+# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:136
+# 136 `avail <= 0`. EQUIVALENTE con `<`: con avail == 0 el mutante no sale por
+# aqui, pero la guarda siguiente es `avail < commentChrome+len(st.list)` y 0
+# siempre es menor que eso, asi que sale igual. ABSORVIDO por la guarda posterior,
+# que es la que de verdad decide cuando no hay sitio.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:136
+# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:188
+# 188 `len(shown) > forge.CommentLimit`. EQUIVALENTE con `>=`: con exactamente
+# cinco comentarios el recorte `shown[:5]` es la lista entera. La mutacion que si
+# importa, `[:4]`, si la mata el test del tope de cinco.
+# Y la segunda guarda que habia DEBAJO se borro, con la cuenta corta:
+# `avail < commentChrome+len(shown)` se cumple siempre que el
+# `avail < commentChrome+len(st.list)` de arriba, porque `len(shown) <= len(st.list)`
+# por el tope de cinco. La primera es estrictamente mas fuerte, asi que la segunda
+# no cubria nada: solo hacia que se leyera como si el recorte del tope tuviera su
+# propia comprobacion de sitio, y no la tiene porque no la necesita.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:188
+# ENTRADA: CONDITIONALS_BOUNDARY internal/tui/comments.go:228
+# 228 `total > budget`. EQUIVALENTE con `>=`: en la frontera `allocate(need, budget)`
+# con presupuesto suficiente devuelve `need`, que es lo que ya hace la rama de no
+# repartir. Las dos ramas dan el mismo reparto.
+# Y la RED DE SEGURIDAD que estaba dentro del bucle se BORRO, con la cuenta
+# corta: la guarda de arriba da `budget >= len(st.list) >= len(need)`, y allocate
+# reparte `min(budget, sum(need))` filas, o sea que la suma nunca pasa del
+# presupuesto. Una red que no puede dispararse es peor que ninguna, porque hace
+# que el reparto parezca tener una segunda salvaguarda cuando lo que tiene es una
+# aritmetica que hay que mirar.
+# Y el `max(1, rows[i])` de ese bucle tambien, y por las dos ramas: `need[i]` es la
+# cuenta de filas de un commentBody, que devuelve al menos una fila siempre (tiene
+# su propio suelo, y un cuerpo vacio devuelve la fila que lo dice), y allocate
+# deja a todos en 1 como minimo antes de repartir. SEIS suelo inalcanzable borrado
+# en la campana.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:228
+# ENTRADA: ARITHMETIC_BASE internal/tui/comments.go:336
+# 336 `commentBoxWidth`. Los DOS sentidos de la aritmetica mueren: con `max(9, ...)`
+# el suelo sube una columna, y con `outer-3*inset` el sangrado se descuenta tres
+# veces en vez de dos. Se mira la funcion DIRECTA y no solo a traves de
+# `commentBodyWidth`, que la compone: un error dentro se propaga y se ve como un
+# ancho de texto raro, mientras que mirada sola es un error de SANGADO, que es lo
+# que es.
+# Y el descuento es el doble porque el sangrado va a los dos lados: con uno solo la
+# caja se queda una columna mas ancha por un lado, que es lo que hace que el borde
+# de fuera se vea desplazado.
+ARITHMETIC_BASE internal/tui/comments.go:336
+# ENTRADA: ARITHMETIC_BASE internal/tui/comments.go:451
+# 451 el corte. El INVERT_NEGATIVES del indice es MUERTO: `out[-(len(out)-1)]` es
+# un indice negativo y revienta, y un panic tambien es una muerte aunque no salga
+# un '--- FAIL' que buscar.
+# El ARITHMETIC_BASE es EQUIVALENTE: el indice de la fila solo decide si commentRow
+# lleva el autor delante (`idx == 0`), y en el momento del corte `len(out) >= lines`
+# con `lines >= 1`, asi que ya hay al menos una fila y el idx nunca es 0. Con
+# `len(out)` en vez de `len(out)-1` el prefijo es el mismo. Y si `idx` fuera 0 con
+# `out` vacio, `out[len(out)-1]` reventaria, pero el suelo de `lines` lo impide.
+ARITHMETIC_BASE internal/tui/comments.go:451
+# ENTRADA: INVERT_NEGATIVES internal/tui/comments.go:451
+# 451 el corte. El INVERT_NEGATIVES del indice es MUERTO: `out[-(len(out)-1)]` es
+# un indice negativo y revienta, y un panic tambien es una muerte aunque no salga
+# un '--- FAIL' que buscar.
+# El ARITHMETIC_BASE es EQUIVALENTE: el indice de la fila solo decide si commentRow
+# lleva el autor delante (`idx == 0`), y en el momento del corte `len(out) >= lines`
+# con `lines >= 1`, asi que ya hay al menos una fila y el idx nunca es 0. Con
+# `len(out)` en vez de `len(out)-1` el prefijo es el mismo. Y si `idx` fuera 0 con
+# `out` vacio, `out[len(out)-1]` reventaria, pero el suelo de `lines` lo impide.
+INVERT_NEGATIVES internal/tui/comments.go:451
+ARITHMETIC_BASE internal/tui/detail.go:238
+CONDITIONALS_BOUNDARY internal/tui/detail.go:264
+CONDITIONALS_BOUNDARY internal/tui/layout.go:100
+ARITHMETIC_BASE internal/tui/layout.go:85
+CONDITIONALS_BOUNDARY internal/tui/layout.go:85
+CONDITIONALS_BOUNDARY internal/tui/layout.go:88
+ARITHMETIC_BASE internal/tui/layout.go:91
+ARITHMETIC_BASE internal/tui/list.go:35
+CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
+ARITHMETIC_BASE internal/tui/overlay.go:63
+CONDITIONALS_BOUNDARY internal/tui/overlay.go:63
+CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
+INCREMENT_DECREMENT internal/tui/retarget.go:192
+INCREMENT_DECREMENT internal/tui/retarget.go:373
+ARITHMETIC_BASE internal/tui/retarget.go:629
+CONDITIONALS_BOUNDARY internal/tui/sections.go:123
+CONDITIONALS_BOUNDARY internal/tui/sections.go:188
 CONDITIONALS_NEGATION internal/tui/sections.go:188
-# 452 la cache de celdas. Las tres partes y la negada entera estan muertas.
-# Sobrevive la variante que compara solo el ancho, y con el alto igual es
-# indistinguible: el alto lo fija simChrome y la caja no lo cambia entre
-# dos anchos. NO MATABLE sin dos anchos con el MISMO alto.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:229
+CONDITIONALS_BOUNDARY internal/tui/sections.go:80
+INCREMENT_DECREMENT internal/tui/sim.go:214
+ARITHMETIC_BASE internal/tui/sim.go:228
+INCREMENT_DECREMENT internal/tui/sim.go:288
+CONDITIONALS_BOUNDARY internal/tui/sim.go:342
+CONDITIONALS_BOUNDARY internal/tui/sim.go:350
+CONDITIONALS_BOUNDARY internal/tui/sim.go:448
 CONDITIONALS_NEGATION internal/tui/sim.go:452
+CONDITIONALS_BOUNDARY internal/tui/sim.go:566
+CONDITIONALS_BOUNDARY internal/tui/table.go:365
+ARITHMETIC_BASE internal/tui/toast.go:319
+INVERT_NEGATIVES internal/tui/toast.go:319
+CONDITIONALS_BOUNDARY internal/tui/update.go:149
 CONDITIONALS_NEGATION internal/tui/update.go:361
 CONDITIONALS_NEGATION internal/tui/update.go:621
+CONDITIONALS_BOUNDARY internal/tui/update.go:711
+CONDITIONALS_BOUNDARY internal/tui/update.go:728
+CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
 CONDITIONALS_NEGATION internal/worktree/herdr.go:125
+CONDITIONALS_BOUNDARY internal/worktree/herdr.go:151
 CONDITIONALS_NEGATION internal/worktree/herdr.go:77
 CONDITIONALS_NEGATION internal/worktree/herdr.go:81
 CONDITIONALS_NEGATION internal/worktree/herdr.go:87
@@ -405,76 +163,3 @@ CONDITIONALS_NEGATION internal/worktree/herdr.go:93
 CONDITIONALS_NEGATION internal/worktree/worktree.go:110
 CONDITIONALS_NEGATION internal/worktree/worktree.go:256
 CONDITIONALS_NEGATION internal/worktree/worktree.go:258
-# 192 `m.branchSeq++` en fetchBranches. La guarda de applyBranches es
-# `msg.seq != m.branchSeq`, una DESIGUALDAD, no una comparacion de orden:
-# lo que hace falta es que cada peticion tenga una secuencia distinta, y eso lo
-# dan `++` y `--` por igual (0,-1,-2 son tan distintos como 1,2,3). Solo un
-# `branchSeq = branchSeq`恒 identico dejaria dos peticiones con el mismo
-# numero, que no es lo que muta. EQUIVALENTE por construccion.
-INCREMENT_DECREMENT internal/tui/retarget.go:192
-# 354 `m.branchSeq++` en closeRetarget, por lo mismo que el 192: la guarda es
-# `!=`. Lo que importa es que el numero CAMBIE al cerrar, y eso lo hace
-# `++` y `--` igual. El test de cerrar el popup afirma el cambio, no el signo.
-INCREMENT_DECREMENT internal/tui/retarget.go:354
-# 214 y 288 `m.simSeq++`. La guarda es de DESIGUALDAD, no de orden, asi que
-# `++` y `--` dan la misma distincion entre peticiones. EQUIVALENTE por
-# construccion, igual que el branchSeq de retarget.
-INCREMENT_DECREMENT internal/tui/sim.go:214
-INCREMENT_DECREMENT internal/tui/sim.go:288
-INVERT_NEGATIVES internal/herdr/client.go:278
-# 153 `max(1, inner-labelWidth)`. El suelo de 1 protege a truncate de un
-# ancho negativo, y el interior de un detalle nunca baja de labelWidth por
-# el suelo de 38 de contentWidth. NO MATABLE: haria falta quitar antes ese
-# suelo, que es una decision de layout.
-INVERT_NEGATIVES internal/tui/comments.go:153
-# 177 `avail - commentChrome`. Un presupuesto MAYOR no da una caja mas
-# alta: la caja toma lo que necesita y no rellena. Un presupuesto MENOS si
-# se nota (muerto por el test). EQUIVALENTE por el hecho de que el bloque
-# no estira.
-INVERT_NEGATIVES internal/tui/comments.go:177
-# 423 el corte: `out[len(out)-1]` con el idx de commentRow. El indice de la
-# fila es lo unico que decide si se lleva el autor delante (`idx == 0`), y en el
-# momento del corte `len(out) >= lines` con `lines >= 1`, asi que ya hay al menos
-# una fila y el idx nunca es 0. Con `len(out)` en vez de `len(out)-1` el prefijo
-# es el mismo. EQUIVALENTE.
-# Si `idx` fuera 0 y `out` estuviera vacio, `out[len(out)-1]` reventaria, pero
-# eso no se da: el suelo de `lines` garantiza que hay una fila escrita.
-INVERT_NEGATIVES internal/tui/comments.go:423
-# 93 aritmetica de `avail`, el alto que le queda al bloque central. El
-# INVERT_NEGATIVES cambia el signo de un sumando y el ARITHMETIC_BASE el 2 de
-# titulo y hueco, pero ambos se compensan con el recorte posterior (clipTop y
-# el borde), asi que la linea final no cambia. NO MATABLE desde el texto.
-INVERT_NEGATIVES internal/tui/detail.go:93
-# 496 `cursor - rows + 1`. El +1 es lo que hace que la fila del cursor entre JUSTA
-# al final de la ventana; sin el,la ventana se queda una fila corto y la rama
-# elegida queda fuera de la caja. Muerto por el test de mover el cursor.
-INVERT_NEGATIVES internal/tui/retarget.go:496
-# 498 `min(win, max(0, len(view)-rows))`. Es una guarda INALCANZABLE: el switch
-# de arriba ya deja `win <= len(view)-rows` (si la lista cabe, por induccion; si
-# no cabe, `len-rows` es negativo y el `max(0,...)` interior es el que decide, con
-# win siempre a cero). Para que el `min` atara haria falta win>0 con
-# len-rows<win, y eso exigiria `cursor >= win+rows > rows > len-1 >= cursor`.
-# EQUIVALENTE por inalcanzabilidad.
-INVERT_NEGATIVES internal/tui/retarget.go:498
-# 505 `min(rows, len(view)-start)`. Es el recorte de la ventana: ni una fila de
-# mas (se sale por debajo del borde) ni una de menos (esconde una rama).
-# Muerto por el test que cuenta las filas pintadas.
-INVERT_NEGATIVES internal/tui/retarget.go:505
-# 138 y 139 el ancho interior de la caja (`max(width-4, 8)` y `max(inner-2,
-# 4)`) y el reparto del texto. El ancho de la linea si cambia, pero la
-# caja se recorta al ancho disponible al superponerse, de modo que el texto
-# final es el mismo. NO MATABLE desde la vista.
-INVERT_NEGATIVES internal/tui/toast.go:138
-# ver la nota de 138: el ancho de reparto se compensa con el recorte de la
-# caja al superponerse. NO MATABLE desde la vista.
-INVERT_NEGATIVES internal/tui/toast.go:139
-# 244 `anchor := len(lines) - 1`, 248 `min(len(block), anchor+1)`, 253 y 270: la
-# aritmetica de donde se apila la caja. Los offsets se compensan con el recorte
-# por `rows` de abajo, asi que la linea final no cambia. NO MATABLE desde el
-# texto renderizado.
-INVERT_NEGATIVES internal/tui/toast.go:244
-# ver la nota de 244: la posicion horizontal se acota con max(..., 0) y
-# el resultado final se recorta. NO MATABLE desde el texto.
-INVERT_NEGATIVES internal/tui/toast.go:253
-# ver la nota de 244. NO MATABLE desde el texto.
-INVERT_NEGATIVES internal/tui/toast.go:270

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -119,18 +118,32 @@ func (c *Client) result(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 // newError tipa el fallo leyendo el JSON de stderr (si lo hay).
+//
+// El mensaje sale de UNA de dos fuentes, nunca de las dos mezcladas: el `message` del
+// servidor si el stderr es una respuesta de Herdr, y la primera línea del stderr si no
+// lo es. Antes se empezaba por la primera línea y se sobrescribía con el `message`
+// solo si venía, así que un servidor que manda código SIN mensaje dejaba el JSON
+// crudo pegado en el mensaje: el usuario veía `{"error":{"code":"E_SOLO"}}` como
+// explicación de un fallo, con el código repetido dos veces y sin nada legible.
+//
+// La razón de que sea excluyente es que el JSON solo contiene el código, y el código
+// ya va en su campo. Si no hay `message`, lo que queda del stderr no dice nada que el
+// campo Code no diga ya, y el mensaje del error de exec ("exit status 3") al menos
+// dice que el proceso se cayó.
 func newError(args []string, err error, stderr []byte) *Error {
-	e := &Error{Args: args, Err: err, Msg: firstLine(string(stderr))}
+	e := &Error{Args: args, Err: err}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		e.Exit = exit.ExitCode()
 	}
 	if code, msg := parseServerError(stderr); code != "" || msg != "" {
 		e.Code = code
-		if msg != "" {
-			e.Msg = msg
-		}
+		e.Msg = msg
+	} else {
+		e.Msg = firstLine(string(stderr))
 	}
+	// Y si no queda nada legible, el error de exec. Un error sin texto se pinta como
+	// un fallo sin explicación, que es peor que no pintar el error.
 	if e.Msg == "" {
 		e.Msg = err.Error()
 	}
@@ -143,23 +156,7 @@ func (c *Client) WorktreeCreate(ctx context.Context, spec WorktreeSpec) (Worktre
 	if err := c.guard("worktree", "create"); err != nil {
 		return WorktreeInfo{}, err
 	}
-	args := []string{"worktree", "create"}
-	if spec.Cwd != "" {
-		args = append(args, "--cwd", spec.Cwd)
-	}
-	if spec.Branch != "" {
-		args = append(args, "--branch", spec.Branch)
-	}
-	if spec.Path != "" {
-		args = append(args, "--path", spec.Path)
-	}
-	if spec.Label != "" {
-		args = append(args, "--label", spec.Label)
-	}
-	if spec.NoFocus {
-		args = append(args, "--no-focus")
-	}
-	out, err := c.result(ctx, args...)
+	out, err := c.result(ctx, worktreeCreateArgs(spec)...)
 	if err != nil {
 		return WorktreeInfo{}, err
 	}
@@ -168,11 +165,7 @@ func (c *Client) WorktreeCreate(ctx context.Context, spec WorktreeSpec) (Worktre
 
 // WorktreeList lista los worktrees del repo en cwd.
 func (c *Client) WorktreeList(ctx context.Context, cwd string) ([]WorktreeInfo, error) {
-	args := []string{"worktree", "list"}
-	if cwd != "" {
-		args = append(args, "--cwd", cwd)
-	}
-	out, err := c.result(ctx, args...)
+	out, err := c.result(ctx, worktreeListArgs(cwd)...)
 	if err != nil {
 		return nil, err
 	}
@@ -188,11 +181,7 @@ func (c *Client) WorktreeRemove(ctx context.Context, workspaceID string, force b
 	if err := c.guard("worktree", "remove"); err != nil {
 		return err
 	}
-	args := []string{"worktree", "remove", "--workspace", workspaceID}
-	if force {
-		args = append(args, "--force")
-	}
-	_, err := c.result(ctx, args...)
+	_, err := c.result(ctx, worktreeRemoveArgs(workspaceID, force)...)
 	return err
 }
 
@@ -201,17 +190,7 @@ func (c *Client) WorkspaceCreate(ctx context.Context, spec WorkspaceSpec) (Works
 	if err := c.guard("workspace", "create"); err != nil {
 		return WorkspaceInfo{}, err
 	}
-	args := []string{"workspace", "create"}
-	if spec.Cwd != "" {
-		args = append(args, "--cwd", spec.Cwd)
-	}
-	if spec.Label != "" {
-		args = append(args, "--label", spec.Label)
-	}
-	if spec.NoFocus {
-		args = append(args, "--no-focus")
-	}
-	out, err := c.result(ctx, args...)
+	out, err := c.result(ctx, workspaceCreateArgs(spec)...)
 	if err != nil {
 		return WorkspaceInfo{}, err
 	}
@@ -224,11 +203,7 @@ func (c *Client) WorkspaceClose(ctx context.Context, workspaceID string, group b
 	if err := c.guard("workspace", "close"); err != nil {
 		return err
 	}
-	args := []string{"workspace", "close", workspaceID}
-	if group {
-		args = append(args, "--group")
-	}
-	_, err := c.result(ctx, args...)
+	_, err := c.result(ctx, workspaceCloseArgs(workspaceID, group)...)
 	return err
 }
 
@@ -237,20 +212,7 @@ func (c *Client) TabCreate(ctx context.Context, spec TabSpec) (TabInfo, error) {
 	if err := c.guard("tab", "create"); err != nil {
 		return TabInfo{}, err
 	}
-	args := []string{"tab", "create"}
-	if spec.WorkspaceID != "" {
-		args = append(args, "--workspace", spec.WorkspaceID)
-	}
-	if spec.Cwd != "" {
-		args = append(args, "--cwd", spec.Cwd)
-	}
-	if spec.Label != "" {
-		args = append(args, "--label", spec.Label)
-	}
-	if spec.NoFocus {
-		args = append(args, "--no-focus")
-	}
-	out, err := c.result(ctx, args...)
+	out, err := c.result(ctx, tabCreateArgs(spec)...)
 	if err != nil {
 		return TabInfo{}, err
 	}
@@ -273,23 +235,7 @@ func (c *Client) PaneSplit(ctx context.Context, spec SplitSpec) (PaneInfo, error
 	if err := c.guard("pane", "split"); err != nil {
 		return PaneInfo{}, err
 	}
-	args := []string{"pane", "split", "--pane", spec.PaneID, "--direction", spec.Direction}
-	if spec.Ratio > 0 {
-		args = append(args, "--ratio", strconv.FormatFloat(spec.Ratio, 'f', -1, 64))
-	}
-	if spec.Cwd != "" {
-		args = append(args, "--cwd", spec.Cwd)
-	}
-	for _, kv := range spec.Env {
-		if kv == "" {
-			continue
-		}
-		args = append(args, "--env", kv)
-	}
-	if spec.NoFocus {
-		args = append(args, "--no-focus")
-	}
-	out, err := c.result(ctx, args...)
+	out, err := c.result(ctx, splitArgs(spec)...)
 	if err != nil {
 		return PaneInfo{}, err
 	}
@@ -315,11 +261,7 @@ func (c *Client) PaneWaitOutput(ctx context.Context, paneID, match string, timeo
 	if err := c.guard("pane", "wait-output"); err != nil {
 		return err
 	}
-	args := []string{"pane", "wait-output", "--match", match, paneID}
-	if timeout > 0 {
-		args = append(args, "--timeout", strconv.FormatInt(timeout.Milliseconds(), 10))
-	}
-	_, err := c.result(ctx, args...)
+	_, err := c.result(ctx, waitOutputArgs(paneID, match, timeout)...)
 	return err
 }
 
@@ -347,11 +289,7 @@ func (c *Client) PaneFocus(ctx context.Context, direction string) error {
 
 // PaneList lista los panes, opcionalmente acotado a un workspace.
 func (c *Client) PaneList(ctx context.Context, workspaceID string) ([]PaneInfo, error) {
-	args := []string{"pane", "list"}
-	if workspaceID != "" {
-		args = append(args, "--workspace", workspaceID)
-	}
-	out, err := c.result(ctx, args...)
+	out, err := c.result(ctx, paneListArgs(workspaceID)...)
 	if err != nil {
 		return nil, err
 	}
@@ -363,13 +301,6 @@ func (c *Client) Notify(ctx context.Context, title string, opts NotifyOptions) e
 	if err := c.guard("notification", "show"); err != nil {
 		return err
 	}
-	args := []string{"notification", "show", title}
-	if opts.Body != "" {
-		args = append(args, "--body", opts.Body)
-	}
-	if opts.Sound != "" {
-		args = append(args, "--sound", opts.Sound)
-	}
-	_, err := c.result(ctx, args...)
+	_, err := c.result(ctx, notifyArgs(title, opts)...)
 	return err
 }

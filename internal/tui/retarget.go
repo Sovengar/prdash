@@ -250,10 +250,29 @@ func (m *Model) fillBranches(names []string) {
 // cachedBranches devuelve el listado cacheado de un repositorio si sigue vigente.
 func (m *Model) cachedBranches(key repoKey) ([]string, bool) {
 	entry, ok := m.branchCache[key]
-	if !ok || time.Since(entry.fetchedAt) > branchCacheTTL {
+	if !ok || !branchCacheFresh(entry.fetchedAt, time.Now()) {
 		return nil, false
 	}
 	return entry.names, true
+}
+
+// branchCacheFresh dice si un listado cacheado sigue sirviendo.
+//
+// El reloj es un PARÁMETRO y no una llamada a time.Now() dentro. No por gusto, sino
+// porque la frontera de esta función es justo el TTL, y la frontera con el reloj
+// dentro es una frontera que no se puede probar: hay que esperar el TTL entero para
+// comprobarla, y un test que espera un TTL para verificar una comparación es un test
+// que mide el reloj en vez de la regla.
+//
+// La regla es de las dos que tienen que ir juntas:
+//
+//   - lo que aún no ha pasado de TTL está vigente, y lo que lo pasó no.
+//   - y EXACTAMENTE en el TTL está vigente todavía, porque "pasó el TTL" es "se pasó",
+//     y en el instante en que se alcanza no se ha pasado: se alcanza. Un ">=" aquí
+//     tiraría el caché en el último momento, que es el momento en el que aún sirve,
+//     y el coste de tirarlo es una llamada a la red.
+func branchCacheFresh(fetchedAt, now time.Time) bool {
+	return now.Sub(fetchedAt) <= branchCacheTTL
 }
 
 // storeBranches guarda el listado de un repositorio.
@@ -487,22 +506,56 @@ func (m *Model) moveRetargetCursor(delta int) {
 // el movimiento, y no el render: filtro y flechas comparten así una sola cuenta en
 // lugar de tener cada una la suya.
 func (m *Model) retargetWindow() int {
-	rows := m.retargetRows()
-	win := m.retarget.win
+	return retargetWindowFor(m.retarget.win, m.retarget.cursor, m.retargetRows(), len(m.retarget.view))
+}
+
+// retargetWindowFor es la aritmética de la ventana, sin nada del modelo.
+//
+// Se separa porque tiene TRES consumidores —el cursor, el filtro y el pintado—
+// y porque la última de ellas la recortaba: dentro del render, una ventana desplazada
+// una fila se compensaba con el recorte de la caja, y el allowlist daba por no
+// matable el `cursor - rows + 1` por "no observable desde el texto". Lo observable es
+// la posición, que se mira mirando qué ramas se pintan y cuál es la de arriba.
+//
+// Las tres reglas, que se rompen por lados distintos:
+//
+//   - si el cursor está por ENCIMA de la ventana, la ventana sube a él. Es el caso de
+//     filtrar: la lista se acorta y la selección se queda donde estaba, fuera.
+//   - si el cursor está por DEBAJO, la ventana baja lo justo para incluirlo, con su
+//     última fila en el borde. El "+1" es lo que hace que la fila del cursor quede
+//     DENTRO y no justo debajo.
+//   - y la ventana nunca sale de la lista: ni por arriba del 0, ni por abajo de la
+//     última ventana que cabe. Con menos ramas que filas, la ventana es 0.
+func retargetWindowFor(win, cursor, rows, total int) int {
 	switch {
-	case m.retarget.cursor < win:
-		win = m.retarget.cursor
-	case m.retarget.cursor >= win+rows:
-		win = m.retarget.cursor - rows + 1
+	case cursor < win:
+		win = cursor
+	case cursor >= win+rows:
+		win = cursor - rows + 1
 	}
-	return max(0, min(win, max(0, len(m.retarget.view)-rows)))
+	return max(0, min(win, max(0, total-rows)))
 }
 
 // retargetVisible son las ramas que se pintan y el índice de la primera.
 func (m Model) retargetVisible() ([]string, int) {
-	rows := m.retargetRows()
-	start := min(m.retarget.win, len(m.retarget.view))
-	return m.retarget.view[start:][:min(rows, len(m.retarget.view)-start)], start
+	return retargetVisibleFrom(m.retarget.view, m.retarget.win, m.retargetRows())
+}
+
+// retargetVisibleFrom es el recorte de la lista a la ventana, sin nada del modelo.
+//
+// El par de suelo con el que se recorta son las dos cosas que pueden estar mal, y cada
+// una necesita su suelo:
+//
+//   - `start` no puede pasar de la longitud de la lista, o el corte se sale. Con menos
+//     ramas que filas, la ventana vale la longitud entera y el resultado es un tramo
+//     vacío: se pinta la caja sin ramas, que es lo que se ve cuando un filtro no
+//     deja nada.
+//   - y el Alto no puede pasar de lo que queda desde `start`, o el corte se sale por el
+//     otro lado. Ese es el caso de la última página a medias: quedan dos ramas y
+//     caben diez, y se pintan dos, no diez.
+func retargetVisibleFrom(view []string, win, rows int) ([]string, int) {
+	start := min(win, len(view))
+	return view[start:][:min(rows, len(view)-start)], start
 }
 
 // retargetRows son las filas de rama que caben en el popup, acotadas por la altura

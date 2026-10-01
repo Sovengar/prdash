@@ -150,7 +150,12 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		// todavía no se sabe.
 		return []string{label("Comments", styleDim.Render("loading…"))}
 	case st.err != "":
-		return []string{label("Comments", styleWarn.Render(truncate("not read: "+st.err, max(1, inner-labelWidth))))}
+		// Sin suelo en el ancho: `inner` viene de contentWidth, que no baja de 38, y
+		// labelWidth son 14, así que la diferencia nunca es negativa. Un suelo aquí
+		// protegería un `truncate` de un ancho negativo que no se puede dar, y
+		// escondería que lo que decide es cuánto cabe del error, que es la
+		// pregunta de la línea siguiente.
+		return []string{label("Comments", styleWarn.Render(truncate("not read: "+st.err, inner-labelWidth)))}
 	case len(st.list) == 0:
 		// Sin comentarios no hay caja. La caja existe para separar la conversación
 		// de los campos, y una caja alrededor de la palabra "none" no separa nada:
@@ -183,10 +188,13 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if len(shown) > forge.CommentLimit {
 		shown = shown[:forge.CommentLimit]
 	}
-	// El mismo mínimo, medido ya sobre lo que se va a enseñar y no sobre lo que vino.
-	if avail < commentChrome+len(shown) {
-		return nil
-	}
+	// Y aquí NO hay un segundo mínimo por `len(shown)`. Lo hubo, y era INALCANZABLE:
+	// el de arriba es `avail < commentChrome+len(st.list)` y el de abajo habría sido
+	// `avail < commentChrome+len(shown)`, y como `len(shown) <= len(st.list)` por el
+	// tope de cinco, el primero se cumple siempre que el segundo. Una guarda que la
+	// anterior ya cubre no cubre nada: solo hace que se lea como si el recorte del
+	// tope tuviera su propia comprobación de sitio, y no la tiene porque no la
+	// necesita.
 
 	// El cuerpo va dentro de la caja y esta sangrada: el ancho sale de una función
 	// aparte porque es geometría comprobable, no un detalle del pintado.
@@ -222,15 +230,35 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	}
 
 	for i, c := range shown {
-		lines := commentBody(c, max(1, rows[i]), bodyWidth)
-		if len(body)+len(lines) > budget {
-			// Red de seguridad: la comprobación de arriba ya garantiza que cada
-			// comentario tiene al menos su fila, así que aquí no debería entrar. Si
-			// entra, es que el reparto dio más de una fila a alguien y no se
-			// descuadra la caja: se cae entera.
-			return nil
-		}
-		body = append(body, lines...)
+		// No hay red de seguridad aquí, y antes la había. Era INALCANZABLE, y la
+		// cuenta es corta:
+		//
+		//   - la guarda de arriba dice `avail >= commentChrome+len(st.list)`, así que
+		//     `budget = avail - commentChrome` es al menos `len(st.list)`;
+		//   - y `len(shown)` es a lo sumo `len(st.list)` por el tope de cinco, así
+		//     que `budget >= len(need)`.
+		//
+		// Con eso, allocate reparte como mucho `min(budget, sum(need))`: reparte
+		// `budget - len(need)` filas extra y para en cuanto todos llegan a su `need`.
+		// La suma nunca pasa de `budget`. Y `max(1, rows[i])` no la sube, porque
+		// allocate ya deja a todos en 1 como mínimo.
+		//
+		// Así que el bloque no puede pasar del presupuesto, que es justo lo que la
+		// red fingía comprobar. Y una red que no puede dispararse es peor que
+		// ninguna: hace que el reparto parezca tener una segunda salvaguarda cuando lo
+		// que tiene es una aritmética que hay que mirar, que es la de allocate.
+		//
+		// Lo que sí decide es que `rows[i]` se indexa con el mismo `i` que
+		// `shown`, y eso no lo cubre ninguna guarda: es una estructura, no un número.
+		//
+		// Y `rows[i]` va sin suelo a 1 porque no puede ser 0, por las dos ramas:
+		// `need[i]` es la cuenta de filas de un commentBody, y commentBody devuelve
+		// al menos una fila siempre —tiene su propio suelo, y un cuerpo vacío
+		// devuelve la fila que lo dice—. Y allocate deja a todos en 1 como mínimo
+		// antes de repartir. Un `max(1, ...)` aquí protegería un 0 que no existe, y
+		// taparía el reparto, que es lo que de verdad decide cuántas filas se lleva
+		// cada uno.
+		body = append(body, commentBody(c, rows[i], bodyWidth)...)
 	}
 	return commentBox(body, commentLegend(len(shown), st.total, inner), inner)
 }

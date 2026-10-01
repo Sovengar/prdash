@@ -90,7 +90,7 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	// ficha, y se calcula antes de componerlos porque de él depende cuántas filas
 	// puede gastar cada uno. Sin esto, un bloque de cinco comentarios de cuatro
 	// filas no entraría en un panel de 18 y la escalera lo tiraría entero.
-	avail := rows - len(grid) - len(url) - 2 - len(avisos) // 2 = título + hueco
+	avail := commentBudget(rows, len(grid), len(url), len(avisos))
 	comments := m.commentLines(it, avail, inner)
 
 	// El orden de lo que se cae sale de dos criterios, y no es el orden en que se
@@ -208,6 +208,27 @@ func authReason(auth model.AuthState) string {
 // las mismas 6.
 func fullWidthField(f detailField, inner int) string {
 	return label(f.key, styleDiffText(truncate(f.value, max(1, inner-labelWidth))))
+}
+
+// commentBudget son las filas que le quedan al bloque de comentarios de la ficha.
+//
+// Vive aparte porque es la aritmética que decide cuánto se ve, y dentro de la
+// composición esa aritmética quedaba tapada: un presupuesto un módulo más grande no
+// da un bloque más alto, da un bloque RECORTADO por clipTop al final, así que el
+// recorte se compensaba y la línea final no cambiaba. Con el presupuesto en una
+// función pura, el número se comprueba directo y el recorte se ve como lo que es, que
+// es un recorte.
+//
+// El 2 son el título de la ficha y la línea en blanco que lo separa de los campos: no
+// son contenido de comentarios, pero ocupan filas igual, así que se descuentan. Un
+// presupuesto que no los descontara daría una fila de comentarios de más, y el
+// escalón de abajo la perdería sin avisar.
+//
+// Y puede quedar NEGATIVO, y está bien que quede: es lo que dice que la cabecera no
+// cabe ni sola. Lo que se hace con un presupuesto negativo es no pintar comentarios,
+// no intentar pintar un número negativo de ellos.
+func commentBudget(rows, gridLines, urlLines, warningLines int) int {
+	return rows - gridLines - urlLines - 2 - warningLines
 }
 
 // detailGrid reparte los campos en dos columnas de ancho fijo, por filas

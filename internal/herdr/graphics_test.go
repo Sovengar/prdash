@@ -24,11 +24,28 @@ type fakeSocket struct {
 	served      int
 	// fail hace que la escritura falle, para probar el camino de error.
 	fail bool
+	// silent cierra la conexión SIN contestar nada, que es como se comporta un
+	// servidor que se cae a mitad. Es distinto de fail (que ni siquiera acepta) y
+	// llega hasta ReadBytes, así que es lo que separa "no hay línea" de "hay línea
+	// y además un error".
+	silent bool
+	// halfLine manda la mitad de la respuesta y cierra, para el caso de que haya
+	// algo leído pero no una línea entera.
+	halfLine bool
+	// deadline es la fecha del contexto con el que se abrió la conexión, para
+	// poder afirmar sobre el plazo sin tener que esperarlo.
+	deadline time.Time
+	// dials cuenta las conexiones aceptadas.
+	dials int
 }
 
-func (f *fakeSocket) dial(_ context.Context, _, _ string) (net.Conn, error) {
+func (f *fakeSocket) dial(ctx context.Context, _, _ string) (net.Conn, error) {
 	if f.fail {
 		return nil, errors.New("socket no disponible")
+	}
+	f.dials++
+	if dl, ok := ctx.Deadline(); ok {
+		f.deadline = dl
 	}
 	client, server := net.Pipe()
 	go func() {
@@ -44,6 +61,19 @@ func (f *fakeSocket) dial(_ context.Context, _, _ string) (net.Conn, error) {
 		_ = json.Unmarshal(line, &req)
 		f.lastRequest = req.Params
 		f.served++
+		if f.silent {
+			// Cierra sin contestar. El cliente se queda con una lectura vacía y un
+			// error, que es el caso que hay que distinguir de "hay línea y además
+			// error".
+			return
+		}
+		if f.halfLine {
+			// Escribe media respuesta y cierra: ReadBytes lee algo pero no una línea
+			// entera, así que devuelve datos con error. Un servidor vivo añadiría el
+			// salto; uno que se muere a mitad, no.
+			_, _ = server.Write([]byte(f.response[:len(f.response)/2]))
+			return
+		}
 		_, _ = server.Write([]byte(f.response + "\n"))
 	}()
 	return client, nil
