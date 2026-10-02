@@ -7,7 +7,7 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, timeout 30): 61
+# Last full-module `go tool gremlins unleash` run (4 workers, --timeout-coefficient 3): 47
 # unique survivors, down from 286. The campaign covered the pure logic
 # (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
 # decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
@@ -42,15 +42,6 @@ CONDITIONALS_BOUNDARY internal/sim/pixels.go:119
 CONDITIONALS_BOUNDARY internal/sim/service.go:285
 ARITHMETIC_BASE internal/sim/sim.go:186
 CONDITIONALS_NEGATION internal/tui/app.go:959
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:101
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:104
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:35
-# `st.total < len(st.list)`. EQUIVALENTE con `<=`: con total == len(list) la
-# asignacion `st.total = len(st.list)` es una identidad, asi que el mutante hace lo
-# mismo que el original. La regla de verdad, que si se afirma en un test para todos
-# los pares de total y lista, es que el total NUNCA es menor que la lista: si no, el
-# rotulo diria '2 de 1', que es un numero que no existe.
-CONDITIONALS_BOUNDARY internal/tui/bordered/bordered.go:64
 # `avail <= 0`. EQUIVALENTE con `<`: con avail == 0 el mutante no sale por aqui,
 # pero la guarda siguiente es `avail < commentChrome+len(st.list)` y 0 siempre es
 # menor que eso, asi que sale igual. ABSORVIDO por la guarda posterior, que es la
@@ -107,12 +98,16 @@ INVERT_NEGATIVES internal/tui/comments.go:451
 ARITHMETIC_BASE internal/tui/detail.go:238
 CONDITIONALS_BOUNDARY internal/tui/detail.go:264
 ARITHMETIC_BASE internal/tui/list.go:35
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:29
-ARITHMETIC_BASE internal/tui/overlay.go:63
-CONDITIONALS_BOUNDARY internal/tui/overlay.go:63
 CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
-INCREMENT_DECREMENT internal/tui/retarget.go:192
-INCREMENT_DECREMENT internal/tui/retarget.go:373
+# 629 `make([]string, 0, m.retargetRows()+2)`. EQUIVALENTE, y no es logica: es una
+# PISTA DE CAPACIDAD. Que sobre o que falte una fila de capacidad no cambia el slice
+# que sale: `append` reasigna cuando le falta sitio y desperdicia cuando sobra, y en
+# los dos casos el contenido es el mismo.
+#
+# Y no se puede matar con un test porque no se deja. La unica forma de afirmar la
+# capacidad seria mirar `cap()`, que es justo lo que cambia el mutante: un aserto
+# asi no mira comportamiento, mira la linea que el mutante toco. Allowlistar es
+# para esto.
 ARITHMETIC_BASE internal/tui/retarget.go:629
 # 138 `lay.bodyLines > 0`. EQUIVALENTE con `>=`, y la razon es la misma que en los
 # otros dos recortes de este fichero: `bodyLines` sale de `computeLayout`, que siempre
@@ -147,11 +142,6 @@ CONDITIONALS_BOUNDARY internal/tui/sim.go:578
 CONDITIONALS_BOUNDARY internal/tui/table.go:365
 ARITHMETIC_BASE internal/tui/toast.go:319
 INVERT_NEGATIVES internal/tui/toast.go:319
-CONDITIONALS_BOUNDARY internal/tui/update.go:149
-CONDITIONALS_NEGATION internal/tui/update.go:361
-CONDITIONALS_NEGATION internal/tui/update.go:621
-CONDITIONALS_BOUNDARY internal/tui/update.go:711
-CONDITIONALS_BOUNDARY internal/tui/update.go:728
 CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
 CONDITIONALS_NEGATION internal/worktree/worktree.go:110
 CONDITIONALS_NEGATION internal/worktree/worktree.go:256
