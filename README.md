@@ -11,6 +11,8 @@ Estado: **MVP F1 + F2**. F3 (auto-review con gate y allowlist) es un milestone
 documentado, sin implementar: ver `docs/planning/archive/0001-mvp/f3-milestone.md`.
 Historial de versiones: [`CHANGELOG.md`](CHANGELOG.md).
 
+PR de prueba 8/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ## Requisitos
 
 - Go 1.26+ para compilar.
