@@ -487,6 +487,8 @@ Los panes reciben `PRDASH_BASE` con la rama destino del ítem, además de
 `PRDASH_REPO`, `PRDASH_NUMBER`, `PRDASH_WORKTREE`, `PRDASH_BRANCH` y
 `PRDASH_URL`.
 
+PR de prueba 3/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ### Gestión de worktrees (`prdash worktrees`)
 
 Los worktrees de review se identifican por su nombre/label `prdash-…`: prdash
