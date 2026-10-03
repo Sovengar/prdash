@@ -574,6 +574,8 @@ igual. Lo que sí es un requisito es que el pane esté en el **repo root**, porq
 de Herdr que monte lo último seleccionado en prdash desde otro pane. Sin plugin no
 hay link handlers; para el segundo, salta al pane de prdash y pulsa `r`.
 
+PR de prueba 6/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ## Desarrollo
 
 `make check` es el equivalente local del gate de CI (jobs Build/Lint/Test):
