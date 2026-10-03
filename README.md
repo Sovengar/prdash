@@ -493,6 +493,8 @@ Los worktrees de review se identifican por su nombre/label `prdash-…`: prdash
 **nunca** lista ni borra worktrees ajenos. Cerrar la app no borra nada: no hay
 borrado implícito al salir.
 
+PR de prueba 7/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ```sh
 prdash worktrees                     # lista propia (ruta, rama, estado); marca huérfanos
 prdash worktrees list                # idem, explícito
