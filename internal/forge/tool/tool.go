@@ -124,9 +124,8 @@ func HTTPStatus(msg string) int {
 	return 0
 }
 
-// The order is a precedence table between contradicting signals: rate-limit before the code
-// (403 means both), unmergeable before it (409 too), self-review before that (422 is validation). The
-// test pins the case WITH gh's "(HTTP 422)" suffix: without it the denial was never recorded.
+// The order is a precedence table between contradicting signals: rate-limit before the code (403
+// means both), unmergeable before it (409 too), self-review before that (422 is validation).
 func Kind(err error) string {
 	if err == nil {
 		return ""
@@ -159,9 +158,8 @@ func Kind(err error) string {
 	case strings.Contains(msg, "409"), strings.Contains(msg, "conflict"),
 		strings.Contains(msg, "already closed"), strings.Contains(msg, "already merged"):
 		return "conflict"
-	// Its own class, fitting none above: the request is well formed and its content is not (a base
-	// that does not exist, an empty title). Neither a conflict (a refresh does not help, the value is still
-	// bad) nor a permission (that would disable the action for good), so it is a call error.
+		// Its own class: the request is well formed and its content is not. Neither a conflict (a refresh
+		// does not help, the value is still bad) nor a permission (that would disable it for good).
 	case strings.Contains(msg, "422"):
 		return "validation"
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"),
@@ -221,9 +219,8 @@ func kindForHTTP(code int) string {
 	}
 }
 
-// The forge CLIs do not pass the API's reason on stderr: there is one line with the whole argv,
-// and the reason is in the JSON body. `errors[].message` wins over `message`, which GitHub uses for
-// "Validation Failed".
+// The forge CLIs do not pass the API's reason on stderr: there is one line with the whole argv.
+// `errors[].message` wins over `message`, which GitHub uses for "Validation Failed".
 func APIMessage(body string) string {
 	var payload struct {
 		Message any `json:"message"`

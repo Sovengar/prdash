@@ -10,9 +10,8 @@ import (
 	"testing"
 )
 
-// The suite never inherits the machine's git config: it is global and mutable, and the repos the
-// tests build are real. Identity goes through GIT_AUTHOR_*/GIT_COMMITTER_* because a clone does NOT
-// inherit user.name/user.email from its origin. The GIT_* location vars are filtered as in gitcmd.Env().
+// The suite never inherits the machine's git config: it is global and mutable, and the repos
+// the tests build are real. A clone does NOT inherit user.name from its origin.
 func gitEnv() []string {
 	env := os.Environ()
 	out := env[:0]
@@ -43,9 +42,8 @@ func gitEnv() []string {
 	)
 }
 
-// An interface rather than *testing.T because *testing.T CANNOT be DOUBLED: Fatalf ends in
-// Goexit and testing.common has private fields, so a red test proves nothing about the helper.
-// Applied only where it is needed; widening every helper would change half the API for nothing.
+// An interface rather than *testing.T because *testing.T CANNOT be DOUBLED: Fatalf ends in Goexit
+// and testing.common has private fields, so a red test proves nothing about the helper.
 type testReport interface {
 	Helper()
 	Fatalf(format string, args ...any)
@@ -67,9 +65,8 @@ func abortaCon(t testReport, fn func() error) {
 	aborta(t, fn())
 }
 
-// An empty dir would make git run in the test process's directory — the package's, which lives INSIDE
-// the repo — and a fixture's `git config` or `git remote` would write to the real repo. It happened: a
-// Green's suite left the repo with core.bare=true and an origin pointing at a TempDir.
+// An empty dir would make git run in the test process's directory, INSIDE the repo, and a
+// fixture's `git config` would write to the real one. It happened: a green suite left core.bare.
 func RunGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := runGit(dir, args...)
@@ -77,9 +74,8 @@ func RunGit(t *testing.T, dir string, args ...string) string {
 	return out
 }
 
-// A guard that aborts cannot be checked without a subprocess, because t.Fatal kills the
-// goroutine. The error carries the args and git's output: without them, "exit status 128" says
-// neither what failed nor what answered.
+// A guard that aborts cannot be checked without a subprocess, because t.Fatal kills the goroutine.
+// The error carries the args and git's output: "exit status 128" says neither.
 func runGit(dir string, args ...string) (string, error) {
 	if err := checkDir(dir); err != nil {
 		return "", fmt.Errorf("testutil: %w", err)
@@ -156,9 +152,8 @@ func InitBare(t *testing.T, dir string) {
 	desactivaAutoGC(t, dir)
 }
 
-// The `dir == ""` guard is the one that cost the most: without it `git init --bare` runs in the test
-// process's directory, which lives INSIDE the repo, and sets core.bare=true on the real repo being read.
-// It happened for real.
+// The `dir == ""` guard cost the most: without it `git init --bare` runs in the process's own
+// directory, INSIDE the repo, and sets core.bare=true on the real one. It happened for real.
 func initBare(dir string) error {
 	if dir == "" {
 		return errors.New("dir vacío: `git init --bare` caería en el repo real y le pondría core.bare")

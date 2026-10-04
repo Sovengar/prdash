@@ -198,9 +198,8 @@ func TestRenderSimCellsSinImagenNoDejaCeldasViejas(t *testing.T) {
 	}
 }
 
-// Not a tautology: it calls simBox's formula instead of restating it, and `cols-2 > 0` alone is
-// not enough. This REPLACES an earlier test whose t.Fatalf never ran: it swept 4,500 terminal
-// combinations without finding a box that did not fit, because the floors are there.
+// Not a tautology: it CALLS simBox's formula, and `cols-2 > 0` alone is not enough. This
+// REPLACES a test whose t.Fatalf never ran: it swept 4,500 combinations and always passed.
 func TestLaCajaDelPopupSiempreTieneHuecoInterior(t *testing.T) {
 	imagenes := []image.Image{
 		imagenParaLaGeometria(), // cuadrada
@@ -232,9 +231,8 @@ func TestLaCajaDelPopupSiempreTieneHuecoInterior(t *testing.T) {
 	}
 }
 
-// Not a counter: a mechanism for INVALIDATING, and it works only because the number always moves
-// up. With `m.simSeq--` instead, closing with `++` lands back on 0 and an old render paints over the
-// new one with no error: the popup just looks broken.
+// Not a counter: a mechanism for INVALIDATING, which works only because the number always moves
+// up. With `--` instead, closing with `++` lands back on 0 and an old render paints over the new.
 func TestSimSeqSubeYNuncaBaja(t *testing.T) {
 	m := newTestModel(t)
 	m.SetSimulator(simuladorMudo{})
@@ -346,9 +344,8 @@ type graphicsCaptura struct {
 	capas    []string
 }
 
-// The moment matters, and that was the first attempt's trap: releaseSimLayer does `defer cancel()`,
-// so the context is cancelled as soon as Clear returns. A double that stored it and the test read it
-// afterwards would always see "cancelled" and conclude the delete inherits the app's context.
+// The moment matters: releaseSimLayer does `defer cancel()`, so a double that stored the context
+// would always read "cancelled" and conclude the delete inherits the app's context.
 type clearCall struct {
 	errAlLlamar   error
 	plazoAlLlamar time.Duration

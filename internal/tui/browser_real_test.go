@@ -68,9 +68,8 @@ func TestSinAbridorEnElPathSeAviadoYNoSeAbreNada(t *testing.T) {
 	}
 }
 
-// LookPath looks at the execute bit and NOT the shebang: it finds it and the failure arrives in
-// Start, and the warning must not say "not found" or the user goes to install xdg-utils when the
-// interpreter is what is missing.
+// LookPath looks at the execute bit and NOT the shebang, so the warning must not say "not found":
+// the user would go install xdg-utils when the interpreter is what is missing.
 func TestUnAbridorQueNoSePuedeEjecutarSeAviadoConSuError(t *testing.T) {
 	binDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(binDir, "xdg-open"),

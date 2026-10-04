@@ -10,9 +10,8 @@ import (
 
 const splitRatio = 0.5
 
-// The first tab reuses the container's (the worktree's root pane) and renames it, instead of leaving
-// an orphan tab for the user to close. Only the absence of a base pane is fatal; anything else is a
-// warning.
+// The first tab reuses the container's and renames it, instead of leaving an orphan tab to close.
+// Only the absence of a base pane is fatal; anything else is a warning.
 func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.Plan) ([]string, error) {
 	if len(pl.Tabs) == 0 {
 		return nil, nil

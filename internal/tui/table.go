@@ -1,6 +1,5 @@
-// Rows, columns and cells of the inbox. Each cell returns its plain text and its style separately,
-// and the render pads BEFORE styling, so ANSI codes never break the width. DIFF is the exception: two
-// colours in one cell, whose padding sums their plain widths.
+// Rows, columns and cells of the inbox. Each cell returns plain text and style separately, and
+// the render pads BEFORE styling, so ANSI codes never break the width.
 package tui
 
 import (
@@ -27,9 +26,8 @@ const (
 	colDiffIdx
 )
 
-// In priority order, dropped from the right at narrow widths. DIFF goes last on purpose: it is
-// the only column that can be lost without losing information, and before CHECKS it would climb in
-// priority and take the room from a datum that decides whether the item can be merged.
+// In priority order, dropped from the right at narrow widths. DIFF goes last: it is the only
+// column that can be lost without losing information.
 var tableColumns = []tableColumn{
 	{"FORGE", colForge},
 	{"ITEM", itemWidthMin},
@@ -52,9 +50,8 @@ type cell struct {
 	spans []span
 }
 
-// A column's width is its total size including the gap, not the room for its text. Filling the exact
-// width would leave pad() nothing to add and the cell would touch the next one. Every column ends in
-// at least one space, so two adjacent cells leave two between them.
+// A column's width is its total size including the gap, not the room for its text: filling it
+// exactly would leave pad() nothing and the cell would touch the next one.
 func textWidth(w int) int {
 	return max(w-1, 1)
 }
@@ -110,9 +107,8 @@ func renderCell(c cell) string {
 	for _, s := range c.spans {
 		used += utf8.RuneCountInString(s.text)
 	}
-	// Padding goes at the end of the last span, measured on what that span already occupies rather than
-	// on the total: `used` includes it, so without adding it back the last span gets no padding and the
-	// cell measures less than its column.
+	// Padding goes at the end of the last span, measured on what that span occupies: `used` includes
+	// it, so without adding it back the cell measures less than its column.
 	slack := c.width - used
 	var b strings.Builder
 	last := len(c.spans) - 1
@@ -204,9 +200,8 @@ func styleChecks(c model.Checks) lipglossStyle {
 	}
 }
 
-// Compact so the column's width does not depend on whether the PR touches 40 lines or 40,000. An
-// unknown diffstat is marked "-", like unknown checks: inventing a zero would read as "touches
-// nothing".
+// Compact so the width does not depend on whether the PR touches 40 lines or 40,000. An unknown
+// diffstat is "-": inventing a zero would read as "touches nothing".
 func diffColumnText(d model.DiffStat) string {
 	if !d.Known {
 		return "-"
@@ -224,9 +219,8 @@ func diffCell(d model.DiffStat, width int) cell {
 	return cell{width: width, spans: diffSpans(text)}
 }
 
-// Diff notation and nothing else: which lines are new and which disappeared, not whether the
-// change is good. Nothing that does not fit the shape is coloured — truncated text, a "-", a "no
-// changes" — because colouring a non-number would lie about the datum.
+// Diff notation and nothing else: which lines are new and which disappeared. Nothing that does
+// not fit the shape is coloured, because colouring a non-number would lie about the datum.
 func diffSpans(plain string) []span {
 	add, rest, ok := strings.Cut(plain, " ")
 	if !ok || !isDiffCount(add, '+') {
@@ -271,9 +265,8 @@ func isDiffCount(s string, sign byte) bool {
 	return true
 }
 
-// Rounded in integer tenths rather than with fmt, because 9999 with one decimal comes out "10.0k":
-// neither four runes nor a count that means anything. Rounding up out of the window falls back to
-// integers.
+// Rounded in integer tenths rather than with fmt, because 9999 with one decimal comes out
+// "10.0k": four runes and no meaning. Rounding up out of the window falls back to integers.
 func compactCount(n int) string {
 	switch {
 	case n < 0:

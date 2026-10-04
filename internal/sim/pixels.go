@@ -29,8 +29,7 @@ func Load(path string) (image.Image, error) {
 }
 
 // Box average, not nearest neighbour: a point sample breaks the thin strokes of a commit graph,
-// which is the detail being looked at. Each cell is self-contained (sets both colours and resets), so
-// the text around it is not smudged.
+// which is the detail being looked at. Each cell resets its own colours, so text is not smudged.
 func Cells(img image.Image, w, h int) []string {
 	if img == nil || w <= 0 || h <= 0 {
 		return nil
@@ -60,9 +59,8 @@ func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
 	return FitCells(img, 1, 2, maxCols, maxRows)
 }
 
-// The height is paid double: 16:9 with 1x2 cells needs 3.56 columns per row, or two commits read as a
-// strip of ellipses. The largest size that fits is used rather than filling the area, because the empty
-// cells beside the image are what make it read as finished.
+// The height is paid double: 16:9 with 1x2 cells needs 3.56 columns per row, or two commits read as
+// a strip of ellipses. The largest fitting size is used: the empty cells make it read as finished.
 func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows int) {
 	if img == nil || maxCols <= 0 || maxRows <= 0 {
 		return max(maxCols, 0), max(maxRows, 0)

@@ -12,9 +12,8 @@ import (
 	"prdash/internal/worktree"
 )
 
-// This file exists because listWorktrees and removeWorktreesWithin wrote to fixed os.Stdout and
-//os.Stderr, and without an io.Writer in the path the only way to read the output was replacing
-//the process's files.
+// This file exists because the two functions wrote to a fixed os.Stdout, and without an
+// io.Writer in the path the only way to read the output was replacing the process's files.
 
 func TestListarSeparaElResultadoDelAvisoYCadaCosaEnSuCanal(t *testing.T) {
 	base, orphans, healthy, foreign := worktreeOrphanFixture(t)

@@ -22,9 +22,8 @@ const printTimeout = 60 * time.Second
 // A nil lookup leaves the output with just the F1 information.
 type reviewLookup func(model.Item) (worktree.Worktree, bool)
 
-// The writer is a parameter rather than a fixed os.Stdout: `run` already takes injected writers, and
-// a hardcoded stdout would let every line of the table escape the test while the exit code and the
-// warnings were still checked.
+// The writer is a parameter, not a fixed os.Stdout: a hardcoded one would let every line of the
+// table escape the test while the exit code and the warnings were still checked.
 func runPrintTo(stdout, stderr io.Writer, adapters []forge.Adapter, reviews reviewLookup) {
 	results := make([]inbox.ForgeResult, len(adapters))
 	var wg sync.WaitGroup

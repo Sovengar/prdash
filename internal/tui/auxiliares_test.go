@@ -102,8 +102,7 @@ func TestRequestCommentsRechazaLasTresNegativasYSiempreRearmaElTick(t *testing.T
 		}},
 		{"forge desconocido para el ítem", func(t *testing.T) Model {
 			// The item is selected with its forge present and THEN removed from the map. My first version
-			//built a gitlab-only model and tried to select a github item, so conSeleccion found nothing
-			//and the code took the "no selection" guard one line above: the fixture never arrived.
+			// built a gitlab-only model and selected a github item, so the fixture never arrived.
 			m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 			m = conSeleccion(t, m, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
 			if _, ok := m.selected(); !ok {

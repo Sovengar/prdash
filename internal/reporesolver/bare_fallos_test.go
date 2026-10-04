@@ -206,9 +206,8 @@ func TestUnClonQueFallaNoDejaElTemporalYDiceQueClonar(t *testing.T) {
 			"lleva a mirar el disco en vez del remoto", err)
 	}
 
-	// The assertion is NOT "the clone tree is empty", because it cannot be: the parent's MkdirAll
-	//creates github/github.com/acme/ before cloning, and removing it would throw away work the
-	//next attempt needs.
+	// NOT "the clone tree is empty": it cannot be, because the parent's MkdirAll creates the host
+	// path before cloning, and removing it would throw away work the next attempt needs.
 	destino := r.barePath(ref)
 	for _, ruta := range []string{destino, destino + ".tmp-"} {
 		if _, err := os.Stat(ruta); !os.IsNotExist(err) {

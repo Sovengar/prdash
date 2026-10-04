@@ -24,9 +24,8 @@ const (
 // git-sim.
 func (k Kind) String() string { return string(k) }
 
-// The ref is not the same branch in both cases, which is why whoever asks for it supplies it instead
-// of the runner deducing it: a merge integrates the ref into the active branch, a rebase rebases it
-// onto it.
+// The ref is not the same branch in both cases, which is why the asker supplies it: a merge
+// integrates the ref into the active branch, a rebase rebases it onto it.
 type Spec struct {
 	Kind Kind
 	Ref  string
@@ -98,9 +97,8 @@ func (r *Runner) args(spec Spec, mediaDir string) []string {
 	}
 }
 
-// The image only exists while workdir/media is still there.
-// Its characteristic failure is not finishing badly but not finishing, so the timeout is the only thing
-// that makes it recoverable.
+// The image only exists while workdir/media is still there, and its characteristic failure is not
+// finishing badly but not finishing: the timeout is the only recovery.
 func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec) (string, error) {
 	if spec.Kind != KindMerge && spec.Kind != KindRebase {
 		return "", fmt.Errorf("sim: unknown kind %q", spec.Kind)

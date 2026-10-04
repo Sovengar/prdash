@@ -1,6 +1,5 @@
 // The ITEM column: which part of the project path is visible, and at what width. Long paths do
-// not fit a fixed column, and clipping from the head ate the repo name and the "#number". So the
-// shared prefix lives on its own line and what does not fit is clipped at the tail.
+// not fit a fixed column, and clipping from the head ate the repo name and the "#number".
 package tui
 
 import (
@@ -38,18 +37,16 @@ func (p prefixMode) next() prefixMode {
 	return (p + 1) % 3
 }
 
-// Computed once per render and handed to both the column header and the rows: if each measured on
-// its own, a row could be clipped at one width and the next at another and the table would dance as
-// text is written.
+// Computed once per render and handed to both the header and the rows: if each measured on its
+// own, the table would dance as text is written.
 type refLayout struct {
 	cols   []tableColumn
 	prefix map[model.Section]string
 	mode   prefixMode
 }
 
-// Only the active section is passed in, so no width is spent on suffixes that are not on screen.
-// The mode is asked for explicitly rather than defaulted: every caller has to say what it paints,
-// which is exactly what changes the width and the label.
+// Only the active section is passed in, so no width is spent on suffixes that are off screen. The
+// mode is asked for explicitly: every caller has to say what it paints, which changes the width.
 func newRefLayout(sections []inbox.Section, mode prefixMode) refLayout {
 	l := refLayout{mode: mode, prefix: make(map[model.Section]string, len(sections))}
 	longest := 0

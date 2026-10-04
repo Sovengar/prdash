@@ -251,9 +251,8 @@ func TestUnErrorDelServidorLlegaConSuCodigoYSuMensaje(t *testing.T) {
 	if err == nil {
 		t.Fatal("un error del servidor dio nil")
 	}
-	// The server's error is NOT wrapped in ErrNoGraphics, and my first version assumed it was: the only
-	//two places that look at the error are probe (which only asks whether there is one)
-	// and SetImage.
+	// The server's error is NOT wrapped in ErrNoGraphics, and my first version assumed it was: only
+	// probe (which asks whether there is one) and SetImage ever look at it.
 	for _, quiere := range []string{"no_such_pane", "not found"} {
 		if !strings.Contains(err.Error(), quiere) {
 			t.Errorf("el error %q no trae %q del servidor", err, quiere)

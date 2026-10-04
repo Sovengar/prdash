@@ -18,9 +18,8 @@ func browserCommand(goos, url string) (string, []string) {
 	}
 }
 
-// Launched and detached on purpose: killing the opener on TUI exit would close the browser with it.
-// The empty URL is rejected before anything else, because `xdg-open ""` starts successfully and
-// the toast would say "opening" with nothing behind it.
+// Launched and detached: killing the opener on TUI exit would close the browser with it. The
+// empty URL is rejected first, because `xdg-open ""` starts and the toast would say "opening".
 func (m *Model) openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
 		if url == "" {

@@ -1,6 +1,5 @@
 // Changing an item's target branch: a popup listing the repository's branches, filtered, confirmed
-// before moving. They come from the forge and not a text field, because retargeting to a name that
-// merely resembles the right one is accepted without complaint and not visible until the PR is wrong.
+// before moving. They come from the forge, because a similar-looking name is accepted silently.
 package tui
 
 import (
@@ -26,9 +25,8 @@ const (
 	// what scrolls is the window, not the filter.
 	retargetRows    = 12
 	retargetMinRows = 3
-	// The filter and the hint get their own lines rather than sharing one, because together they do not
-	// fit a narrow terminal and what does not fit goes by the tail: at 52 columns the hint lost its
-	// "esc close", which is the only way to cancel. Separated, each fits and nothing is lost.
+	// The filter and the hint get their own lines: together they do not fit a narrow terminal, and
+	// what does not fit goes by the tail — at 52 columns the hint lost its "esc close".
 	retargetChrome = 5
 	// So it reads as an overlay and not as another view.
 	retargetMargin = 2
@@ -41,9 +39,8 @@ const (
 // stays as it was and nothing was touched.
 const retargetTimeout = 30 * time.Second
 
-// Because paging a 200-branch repository on every open is the kind of cost that makes an action
-// end up unused. Five minutes: short enough for a fresh branch to appear, long enough that returning
-// to the same repository costs nothing.
+// Paging a 200-branch repository on every open is the kind of cost that makes an action end up
+// unused. Five minutes: short enough for a fresh branch, long enough to be free to return.
 const branchCacheTTL = 5 * time.Minute
 
 type retargetState int
@@ -92,9 +89,8 @@ type ReviewLookup interface {
 	ActiveReview(it model.Item) (worktree.Worktree, bool)
 }
 
-// An optional port, separate from ReviewLookup: a capability that DELETES cannot inherit a lookup's
-// "read-only and degradable" contract, and its absence has to be explicit ("no remover means no
-// auto-delete, and the merge is unaffected").
+// An optional port, separate from ReviewLookup: a capability that DELETES cannot inherit a
+// lookup's "read-only and degradable" contract.
 type ReviewRemover interface {
 	RemoveReview(ctx context.Context, it model.Item) (removed bool, reason string, err error)
 }
@@ -130,9 +126,8 @@ func (m Model) openRetarget() (tea.Model, tea.Cmd) {
 	return m, m.fetchBranches(it)
 }
 
-// In the background because blocking the update loop reads as a freeze, which is the one thing an
-// overlay cannot do. The result goes to the events channel like any other work, so its delivery does
-// not depend on the user still pressing keys.
+// In the background because blocking the update loop reads as a freeze, which is the one thing
+// an overlay cannot do.
 func (m *Model) fetchBranches(it model.Item) tea.Cmd {
 	m.branchSeq++
 	seq, appCtx, events := m.branchSeq, m.ctx, m.events
@@ -152,8 +147,7 @@ func (m *Model) fetchBranches(it model.Item) tea.Cmd {
 }
 
 // The CLI's own text rather than an invented one, because it is the only thing that says what
-// happened: an invented "could not read the branches" would hide both a 404 and an expired token, which
-// call for opposite actions.
+// happened: an invented message would hide a 404 and an expired token together.
 func warnMsg(warns []model.Warning) string {
 	for _, w := range warns {
 		if strings.TrimSpace(w.Msg) != "" {
@@ -196,9 +190,8 @@ func (m *Model) cachedBranches(key repoKey) ([]string, bool) {
 	return entry.names, true
 }
 
-// The clock is a PARAMETER, not a time.Now() inside: this function's boundary IS the TTL, and one
-// with the clock in it can only be tested by waiting the whole TTL. Exactly AT the TTL is still fresh,
-// and a `>` would drop the cache at the last moment it still serves.
+// The clock is a PARAMETER, not a time.Now() inside: this function's boundary IS the TTL, and
+// one with the clock in it can only be tested by waiting the whole TTL.
 func branchCacheFresh(fetchedAt, now time.Time) bool {
 	return now.Sub(fetchedAt) <= branchCacheTTL
 }
@@ -211,8 +204,7 @@ func (m *Model) storeBranches(key repoKey, names []string) {
 }
 
 // The current base first is not an ordering whim: it is the only row that describes the starting
-// point and the first to fall off the window. The rest go alphabetically, the only order that can be
-// anticipated without walking the whole list.
+// point. The rest go alphabetically, the only order that needs no walk of the list.
 func orderBranches(names []string, base string) []string {
 	seen := make(map[string]bool, len(names))
 	rest := make([]string, 0, len(names))
@@ -236,9 +228,8 @@ func orderBranches(names []string, base string) []string {
 	return append([]string{head}, rest...)
 }
 
-// The filter runs on the WHOLE name and not on the last segment, so `fix` finds `fix/hunk-pane-argv`.
-// It ignores case because it is an aid to remembering and not a write: the name that comes out is put
-// there by the forge, not the keyboard, so it does not depend on the search getting the case right.
+// The filter runs on the WHOLE name, so `fix` finds `fix/hunk-pane-argv`, and ignores case
+// because the name comes from the forge, not the keyboard.
 func filterBranches(all []string, query string) []string {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -281,9 +272,8 @@ func (m *Model) closeRetarget() {
 	m.retarget = retargetPanel{}
 }
 
-// A key that is not a choice does NOT close this popup: it is swallowed. The armed merge and the
-// simulation popup do cancel on any key, because there they wait for a trigger; here the selection is
-// three presses' work. `esc` cancels.
+// A key that is not a choice does NOT close this popup: it is swallowed, because here the
+// selection is three presses' work. `esc` cancels.
 func (m Model) handleRetargetKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q", "ctrl+c":
@@ -319,8 +309,7 @@ func (m Model) handleRetargetKey(msg tea.KeyPressMsg, key string) (tea.Model, te
 }
 
 // `j` and `k` navigate only with an empty filter; once something is typed they are two more
-// filter letters. With an empty filter you navigate with the usual keys and once you write with the
-// arrows, which are never text.
+// filter letters. Once you write, the arrows navigate, and they are never text.
 func (m Model) handleRetargetSearchKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "enter":
@@ -328,9 +317,8 @@ func (m Model) handleRetargetSearchKey(msg tea.KeyPressMsg, key string) (tea.Mod
 		if !ok {
 			return m, nil
 		}
-		// Pointing at the base it already has is a no-op, and spending a forge call to be told "no
-		// changes" is the kind of cost that makes an action look broken. Cut here and not in the adapter
-		// because it is a view decision, not a forge one.
+		// Pointing at the base it already has is a no-op, and a forge call to be told "no changes" is
+		// the kind of cost that makes an action look broken. A view decision, not a forge one.
 		if branch == m.retarget.item.TargetBranch {
 			m.closeRetarget()
 			m.setNotice("the target branch is already "+branch, levelInfo)
@@ -398,8 +386,7 @@ func (m *Model) retargetWindow() int {
 }
 
 // It has THREE consumers and the last one used to clip it, so the allowlist called the formula
-// unkillable while the render compensated the error. What is observable is the position: above the
-// window it moves up, below it down just enough to keep the cursor's row inside, never off the list.
+// unkillable. What is observable is the position, not the formula.
 func retargetWindowFor(win, cursor, rows, total int) int {
 	switch {
 	case cursor < win:
@@ -414,9 +401,8 @@ func (m Model) retargetVisible() ([]string, int) {
 	return retargetVisibleFrom(m.retarget.view, m.retarget.win, m.retargetRows())
 }
 
-// The pair of floors is the two things that can be wrong, and each needs its own: `start` cannot pass
-// the list's length and the height cannot pass what is left from it. One clips the box to empty, the
-// other paints a half-full last page.
+// The pair of floors is the two things that can be wrong: `start` cannot pass the list's length
+// and the height cannot pass what is left. One clips the box empty, the other half-fills it.
 func retargetVisibleFrom(view []string, win, rows int) ([]string, int) {
 	start := min(win, len(view))
 	return view[start:][:min(rows, len(view)-start)], start
@@ -429,9 +415,8 @@ func (m Model) retargetRows() int {
 	return min(retargetRows, max(retargetMinRows, free))
 }
 
-// Width only: the height is computed by whoever composes the box, from the lines it really has, and
-// returning it here was a number nobody read (all three boxes discarded it with `_`), which is the kind
-// of value that can then be mutated without anything noticing.
+// Width only: the height is computed by whoever composes the box, from the lines it has. All
+// three boxes discarded the old return with `_`, which is how a value rots unnoticed.
 func (m Model) retargetBoxWidth() int {
 	return min(m.contentWidth(), retargetChooserWidth)
 }
@@ -449,9 +434,8 @@ func (m Model) retargetOverlay() (string, bool) {
 	}
 }
 
-// No percentage, because nothing can measure it: the request went to the forge. Faking a progress
-// bar is worse than not measuring. When the listing came with a reason, the reason is shown and esc is
-// the only way out.
+// No percentage, because nothing can measure it: the request went to the forge. When the
+// listing came with a reason, the reason is shown and esc is the only way out.
 func (m Model) retargetBusyBox() string {
 	width := m.retargetBoxWidth()
 	if m.retarget.errMsg != "" {

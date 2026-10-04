@@ -158,9 +158,8 @@ func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 	}
 }
 
-// The checkout is on disk from an earlier session but its Herdr workspace is closed, so
-// `worktree list` returns no open_workspace_id: this is what made the review show up as a loose
-// workspace.
+// The checkout is on disk from an earlier session but its workspace is closed, so
+// `worktree list` returns no open_workspace_id: that is what detached the review.
 func TestHerdrNativeReuseAdoptsCheckoutWithNoOpenWorkspace(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")

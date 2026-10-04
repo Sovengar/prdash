@@ -14,9 +14,8 @@ import (
 
 const DefaultTimeout = 30 * time.Second
 
-// 250ms on purpose, not a second: this is a TUI, what does not answer the keyboard reads as a hang,
-// and a process that has not closed its pipes in 250ms is not going to. With 2s the cut worked and
-// the UI was still unresponsive for two seconds, which is half the problem this was meant to fix.
+// 250ms on purpose, not a second: this is a TUI, what does not answer the keyboard reads as a
+// hang, and a process that has not closed its pipes in 250ms is not going to.
 const pipeCloseGrace = 250 * time.Millisecond
 
 type execFunc func(ctx context.Context, args ...string) (stdout, stderr []byte, err error)
@@ -93,9 +92,8 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, []byte, error
 	cmd := exec.CommandContext(cctx, bin, args...)
 	cmd.Env = os.Environ()
 
-	// Measured before adding it: a binary sleeping five seconds with a 50ms timeout made `run` take
-	// 5.00s. The context kills the process but its CHILD inherits the descriptors and holds the pipe, so the
-	// copy goroutine never finishes and `cmd.Run` never returns.
+	// Measured before adding it: the context kills the process but its CHILD inherits the descriptors
+	// and holds the pipe, so `cmd.Run` never returns.
 	cmd.WaitDelay = pipeCloseGrace
 
 	var out, errb bytes.Buffer

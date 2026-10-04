@@ -1,6 +1,5 @@
-// Package tui implements prdash's cross-forge inbox in Bubbletea v2: three sections with each forge's
-// rich data, an item detail, manual and automatic refresh with progressive loading, and approve/merge
-// actions.
+// Package tui implements prdash's cross-forge inbox in Bubbletea v2: three sections with each
+// forge's rich data, an item detail, refresh with progressive loading, and approve/merge.
 package tui
 
 import (
@@ -68,9 +67,8 @@ type mountMsg struct {
 	err    error
 }
 
-// `base` is the merge warning captured when it was triggered: the cleanup composes on that text
-// rather than on the current warning, so it does not overwrite the facts the merge brought (mode, branch
-// not deleted).
+// `base` is the merge warning captured when it was triggered, so the cleanup composes on that
+// text rather than on the current one and does not overwrite what the merge brought.
 type reviewCleanupMsg struct {
 	base    string
 	level   noticeLevel
@@ -107,9 +105,8 @@ const reviewCleanupTimeout = 30 * time.Second
 // the panel is still true.
 const commentsTimeout = 20 * time.Second
 
-// A clock and not an event, because looking is cheap (one map comparison): that is what spares it from
-// having to be re-armed at every site where the selection can change — keys, pages arriving, actions —
-// and going unasked at one of them. A tick's cost is invisible next to the spinner, which runs far faster.
+// A clock and not an event, because looking is cheap: that spares it from being re-armed at every
+// site where the selection changes — keys, pages arriving, actions — and going unasked at one.
 const commentsPoll = 200 * time.Millisecond
 
 const maxBackoff = 10 * time.Minute
@@ -209,9 +206,8 @@ type Model struct {
 
 	toast *toastManager
 
-	// Storing the state and not just the list is what tells "this PR has no comments" from "I have
-	// not asked yet". Cached per item and not cleared on refresh: re-asking every cycle would only make
-	// the card flicker, and an action on the item can really add comments.
+	// The state and not just the list is what tells "this PR has no comments" from "I have not asked
+	// yet". Cached per item: re-asking every cycle would only make the card flicker.
 	comments map[model.ID]*commentState
 
 	cycle int
@@ -221,9 +217,8 @@ type Model struct {
 
 	simulator Simulator
 	graphics  Graphics
-	// Without it, testing the good path of `openBrowserCmd` —the one returning "opening <url>"— means
-	// RUNNING the command, and that launches the real browser on whoever runs the tests. A tea.Cmd is a
-	// function: it is returned and then called, so "look at the cmd without calling it" is not an option.
+	// Without it, testing the good path of `openBrowserCmd` means RUNNING it, and that launches the
+	// real browser on whoever runs the tests. A tea.Cmd is returned and then called.
 	openURL func(url string) error
 	sim     simPanel
 	simSeq  int
@@ -247,9 +242,8 @@ type Model struct {
 	mergeArmedID model.ID
 	// Not a veto: it is the line the confirmation teaches so the second press is informed.
 	mergeBlockReason string
-	// Session-scoped rather than per item (a housekeeping decision, not one about the PR) and toggled by
-	// `tab` while armed, where it is visible. Starts true because deleting the branch of a merged PR is
-	// what is expected and what the forges do on their own; whoever needs the branch turns it off once.
+	// Session-scoped, not per item, and toggled by `tab` while armed where it is visible. Starts true
+	// because deleting the branch of a merged PR is what the forges do on their own.
 	deleteBranch bool
 
 	events  chan event
@@ -895,9 +889,8 @@ func (m *Model) setNotice(text string, level noticeLevel) {
 	}
 }
 
-// Because wiring is seven `SetX` calls in a row and a missing one does NOT break compilation: the
-// failure only surfaces on the keypress, as a "missing dependency" that names none of the seven. The
-// Simulator and Mounter are interfaces so a test can assert they share THE SAME executor.
+// Because wiring is seven `SetX` calls and a missing one does NOT break compilation: the failure
+// surfaces on the keypress as a "missing dependency" naming none of the seven.
 type Wiring struct {
 	Mounter       Mounter
 	Simulator     Simulator

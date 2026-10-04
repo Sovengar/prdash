@@ -21,9 +21,8 @@ import (
 	"prdash/internal/worktree"
 )
 
-// The shell: pick the mode, warn about config, delegate. Everything below returns a value so it
-// can be tested; what is left here are the three things that cannot be abstracted without inventing
-// something worse: read os.Args, load config from disk, and exit the process.
+// The shell: pick the mode, warn about config, delegate. What is left are the three things that
+// cannot be abstracted without inventing something worse: read os.Args, load config, exit.
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -36,18 +35,16 @@ const (
 	modeWorktrees
 )
 
-// The mode is the ONLY way to say what to do. An earlier version also had a `print bool`, and having
-// both is worse than having neither: `run` ended up reading both and any divergence surfaced as a
-// mode that cannot happen.
+// The mode is the ONLY way to say what to do: an earlier version also had a `print bool`, and
+// `run` ended up reading both, so any divergence surfaced as a mode that cannot happen.
 type opts struct {
 	mode mode
 	sub  string
 	args []string
 }
 
-// Own FlagSet rather than the global one, which `flag.Parse` mutates forever and test order does
-// not guarantee. The subcommand is read BEFORE the flags: the paths `worktrees remove` manages are
-// absolute, so they cannot start with `-`, and reading flags first would eat `--orphans` as a prdash flag.
+// Own FlagSet, because `flag.Parse` mutates the global one forever. The subcommand is read BEFORE
+// the flags: the paths are absolute, so reading flags first would eat `--orphans` as a prdash flag.
 func parseOpts(args []string) (opts, error) {
 	o := opts{mode: modeTUI, sub: "list"}
 

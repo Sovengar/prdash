@@ -18,8 +18,7 @@ import (
 )
 
 // Storing the state and not just the list is what lets "no comments" and "I have not asked yet"
-// paint differently. With only the list, an unasked item and a commentless one are both an empty list, and
-// the first pretends the PR has no conversation.
+// paint differently: with only the list both are an empty list, and the first pretends otherwise.
 type commentState struct {
 	list  []model.Comment
 	total int  // los que dice el forge que hay, para poder decir "5 de 23"
@@ -69,9 +68,8 @@ func (m *Model) requestComments() tea.Cmd {
 		defer cancel()
 		page, warns := a.Comments(ctx, ref, number)
 		msg := commentsMsg{id: id, page: page}
-		// A warning only becomes an error if nothing came back. If the forge sent comments and also slipped
-		// something in, what we have is better than an empty card because of a warning that does not stop
-		// the reading.
+		// A warning only becomes an error if nothing came back: what we have is better than an empty
+		// card because of a warning that does not stop the reading.
 		if len(warns) > 0 && len(page.Comments) == 0 {
 			msg.err = warns[0].Msg
 		}
@@ -98,8 +96,7 @@ func (m *Model) applyComments(msg commentsMsg) {
 }
 
 // Comments go in their own titled box rather than as more card fields: a conversation is what
-// people said about the PR, not data about it, and a border says so without an explanation. The room
-// is shared so all five are always visible instead of the first taking it all.
+// people said about the PR, and a border says so without an explanation.
 func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if avail <= 0 {
 		return nil
@@ -115,20 +112,17 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		// no comments" and we do not know that yet.
 		return []string{label("Comments", styleDim.Render("loading…"))}
 	case st.err != "":
-		// No floor on the width: `inner` comes from contentWidth, never below 38, and labelWidth is 14, so
-		// the difference is never negative. A floor here would guard a truncate of an impossible negative
-		// width and would hide that what decides is how much of the error fits.
+		// No floor on the width: `inner` is never below 38 and labelWidth is 14, so the difference is
+		// never negative. A floor would guard an impossible negative width.
 		return []string{label("Comments", styleWarn.Render(truncate("not read: "+st.err, inner-labelWidth)))}
 	case len(st.list) == 0:
-		// No comments, no box. The box exists to separate the conversation from the fields, and a box around
-		// the word "none" separates nothing — and it is the state of every commentless PR, so a border
-		// appearing and disappearing with each cursor move is noise.
+		// No comments, no box: the box exists to separate the conversation from the fields, and a box
+		// around the word "none" separates nothing.
 		return []string{label("Comments", styleDim.Render("none"))}
 	}
 
-	// Never painted half: a block with a top border and no bottom one is not a half box, it is noise
-	// in the same room. And the WHOLE conversation has to fit, because a clipped box does not look
-	// clipped: it looks like the PR only has that comment.
+	// Never painted half: a top border with no bottom one is not a half box, it is noise in the
+	// same room. And a clipped box does not look clipped — it looks like the only comment.
 	if avail < commentChrome+len(st.list) {
 		return nil
 	}
@@ -145,9 +139,8 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 
 	bodyWidth := commentBodyWidth(inner)
 
-	// Each comment's needed rows are counted by composing it at the tall cap, which is the same code that
-	// paints it, so the allocation cannot lie about what fits. Composing twice is cheap and beats
-	// allocating blind.
+	// Each comment's needed rows are counted by composing it at the tall cap, with the same code
+	// that paints it, so the allocation cannot lie about what fits.
 	need := make([]int, len(shown))
 	total := 0
 	for i, c := range shown {
@@ -155,9 +148,8 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		total += need[i]
 	}
 
-	// The count does not go in the body: it lives on the bottom border, on the right (see
-	// commentLegend). Every body row is something a person wrote, and a count row belongs to nobody — and
-	// on the border it costs no height, so it is not the first thing to go when the panel is tight.
+	// The count lives on the bottom border, not in the body: every body row is something a person
+	// wrote, and on the border it costs no height when the panel is tight.
 	body := make([]string, 0, budget)
 
 	// When they fit, each takes what it needs, which stops a six-paragraph comment starving four
@@ -168,9 +160,8 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	}
 
 	for i, c := range shown {
-		// No safety net here, and there used to be: `budget >= len(need)` already, so allocate distributes
-		// `budget - len(need)` and stops at each one's need. A net that cannot fire is worse than none: it makes
-		// the allocation look like it has a safeguard when what it has is arithmetic.
+		// No safety net here, and there used to be: `budget >= len(need)` already, so allocate
+		// distributes `budget - len(need)`. A net that cannot fire is worse than none.
 		body = append(body, commentBody(c, rows[i], bodyWidth)...)
 	}
 	return commentBox(body, commentLegend(len(shown), st.total, inner), inner)
@@ -187,9 +178,8 @@ const commentTitle = "Comments"
 // than stepping on the outer border.
 func commentBox(body []string, legend string, outer int) []string {
 	border := bordered.Rounded()
-	// The legend does not sit on the corner: a loose "3" with a gap each side makes the bottom line
-	// read as broken. The dash goes OUTSIDE the count's style, and outside is not unstyled — a reset does
-	// not restore the border's grey, so without repainting the dash came out in the foreground colour.
+	// The dash goes OUTSIDE the count's style, and outside is not unstyled: a reset does not restore
+	// the border's grey, so without repainting the dash came out in the foreground colour.
 	legend = " " + legend + styleBorder.Render(" "+border.Bottom)
 	lines := strings.Split(bordered.RenderWithTitles(
 		border, borderColor, " "+commentTitle+" ", bordered.AlignLeft,
@@ -206,9 +196,8 @@ func commentBox(body []string, legend string, outer int) []string {
 	return lines
 }
 
-// Its own function for the same reason as commentWidths: a body two columns wider does not give a
-// wider box — the box clips either way — but two fewer characters per line, and no render test sees that.
-// Being pure arithmetic it is checked directly, floor of 8 included.
+// Its own function: a body two columns wider does not give a wider box — the box clips either
+// way — but two fewer characters per line, and no render test sees that.
 func commentBodyWidth(outer int) int {
 	return max(8, commentBoxWidth(outer)-commentBoxBorder)
 }
@@ -253,8 +242,7 @@ const commentHint = " · open the PR to read the rest"
 const legendGap = 3
 
 // Both numbers are always stated: "3 of 3" says nothing is left out, and 3 comments or 30 is not
-// the same PR. The suffix only when it fits whole and something is hidden — cut in half it says less
-// than the short form.
+// the same PR. The suffix only when it fits whole and something is hidden.
 func commentLegend(shown, total, outer int) string {
 	legend := fmt.Sprintf("%d of %d", shown, total)
 	room := commentBoxWidth(outer) - commentBoxBorder - legendGap
@@ -276,9 +264,8 @@ func commentBody(c model.Comment, lines, inner int) []string {
 	author := truncate(c.Author, maxCommentAuthor)
 	first, cont := commentWidths(inner, author)
 
-	// The last written piece and its width are kept apart so it can be clipped when marking the cut
-	// without measuring a row already dressed with styles: clipping the whole row would cut an ANSI code in
-	// half.
+	// The last piece and its width are kept apart so the cut can be marked without measuring a row
+	// already dressed in styles, which would cut an ANSI code in half.
 	var (
 		out       []string
 		lastPiece string
@@ -309,9 +296,8 @@ func commentBody(c model.Comment, lines, inner int) []string {
 	return out
 }
 
-// In RUNES and over plain text: the width to fill is the text's, and measuring a row already dressed
-// with styles would give a column count that is not the box's. The author's name is inside because that
-// is what pushes the first row's body, which is why it depends on `author` and not only on `inner`.
+// In RUNES and over plain text: measuring a row already dressed in styles gives a column count
+// that is not the box's. The author's name counts because it pushes the first row's body.
 func commentWidths(inner int, author string) (first, cont int) {
 	first = max(8, inner-utf8.RuneCountInString(commentIndent+author+commentSep))
 	cont = max(8, inner-utf8.RuneCountInString(contIndent))
@@ -319,8 +305,7 @@ func commentWidths(inner int, author string) (first, cont int) {
 }
 
 // The continuation does NOT line up with the first row's text: the indent is a constant, and
-// aligning to a long author would leave the name a one-column body. `cut` exists because a row that
-// looks finished says the comment ended there.
+// aligning to a long author would leave the name a one-column body.
 func commentRow(idx int, author, sep, piece string, w int, cut bool) string {
 	indent, prefix := contIndent, ""
 	if idx == 0 {

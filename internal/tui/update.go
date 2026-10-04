@@ -142,15 +142,13 @@ func (m *Model) releaseReader() {
 }
 
 // The re-read item is the most recent state the forge has — it is read AFTER the action — so it
-// always applies; dropping it would revert the item. The cycle is per item so a page captured before
-// the action cannot overwrite it.
+// always applies. The cycle is per item so an older page cannot overwrite it.
 func (m *Model) applyAction(out forge.Outcome, cycle int) tea.Cmd {
 	m.actionBusy = false
 	if out.HasItem {
 		m.actionCycle[out.Item.ID()] = cycle
-		// An action can write to the conversation (an approve leaves a review note), and this is the
-		// ONLY invalidation of that cache: the inbox refresh does not clear it because re-asking every cycle
-		// would make the card flicker.
+		// An action can write to the conversation, and this is the ONLY invalidation of that cache: the
+		// inbox refresh does not clear it, because re-asking every cycle would make the card flicker.
 		delete(m.comments, out.Item.ID())
 		m.applyItemUpdate(out.Item)
 	}
@@ -196,8 +194,7 @@ func triggersReviewCleanup(out forge.Outcome) bool {
 }
 
 // In the background so the Update handler does not block on a git subprocess, and the result
-// arrives with the base warning already captured, so the notice recomposes on it instead of
-// overwriting what the merge brought.
+// arrives with the base warning captured, so the notice recomposes on it.
 func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) tea.Cmd {
 	if m.reviewRemover == nil {
 		return nil
@@ -253,23 +250,20 @@ func keptReviewNotice(reason string) string {
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
-	// Merge is the only two-stage action. While armed only the mode key, `esc` and quitting count;
-	// any other key disarms and behaves as if the merge had not been pressed, so an out-of-time `m` does
-	// not leave the view waiting for a second press.
+	// Merge is the only two-stage action. While armed any other key disarms, so an out-of-time `m`
+	// does not leave the view waiting for a second press.
 	if m.mergeArmed {
 		return m.handleMergeArmed(msg, key)
 	}
 
-	// The simulation overlay takes the whole keyboard while open: it is a question with concrete answers
-	// and any other key closes it, so letting one through would fire actions on an item the user is no
-	// longer looking at.
+	// The simulation overlay takes the whole keyboard while open: letting one through would fire an
+	// action on an item the user is no longer looking at.
 	if m.sim.state != simClosed {
 		return m.handleSimKey(msg, key)
 	}
 
-	// The retarget popup does the same for the same reason. It comes after the simulation one and not before
-	// because the two are mutually exclusive (neither opens from inside the other), so the order only
-	// decides which wins if they ever overlap, and reading order wins.
+	// The retarget popup does the same, and comes after the simulation one because the two are
+	// mutually exclusive; the order only decides which wins if they ever overlap.
 	if m.retarget.state != retargetClosed {
 		return m.handleRetargetKey(msg, key)
 	}
@@ -331,17 +325,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// It does not move the cursor but it does change what the ITEM column measures and, in full and leaf, it
-// removes the prefix line: without resyncing the scroll, a scrolled list would leave the cursor outside
-// the window exactly when the mode changed. Same reason goTop carries its own scroll.
+// It does not move the cursor but it changes what the ITEM column measures and removes the
+// prefix line: without resyncing the scroll, the cursor would leave the window.
 func (m *Model) cyclePrefixMode() {
 	m.prefixMode = m.prefixMode.next()
 	m.syncScroll()
 }
 
-// A hard block prevents arming: it is a property of the forge and no key lifts it. A soft block
-// still arms, and naming the mode IS the confirmation, because naming a strategy having read that
-// the CI is red is having decided.
+// A hard block prevents arming: it is a property of the forge. A soft block still arms, and
+// naming the mode IS the confirmation, because naming a strategy is having decided.
 func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	it, _, ok := m.canAction(forge.ActionMerge)
 	if !ok {
@@ -358,9 +350,8 @@ func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// No default mode, so the confirmation and the choice are one gesture. `tab` is the exception: it
-// picks no mode and does NOT disarm, being the other decision the merge names. A key that is not a
-// mode CONSUMES the press and cancels: it used to delegate to handleKey, so `m` then `a` approved.
+// No default mode, so the confirmation and the choice are one gesture. A key that is not a mode
+// CONSUMES the press: it used to delegate to handleKey, so `m` then `a` approved.
 func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	var mode forge.MergeMode
 	switch key {
@@ -396,9 +387,8 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 		m.setNotice("the selected item changed: press merge again", levelWarn)
 		return m, nil
 	}
-	// Checked against the copy on screen and not against RunAction's re-read on purpose: a refresh between
-	// arming and confirming may have changed the rules, and refusing here a mode the repo no longer
-	// allows is more honest than emitting a merge the forge will reject with a less clear message.
+	// Checked against the copy on screen, not RunAction's re-read: refusing here a mode the repo
+	// no longer allows beats emitting a merge the forge rejects with a vaguer message.
 	if !forge.AllowsMode(it.Merge, mode) {
 		m.disarmMerge()
 		m.setNotice("the repository does not allow "+mode.Label()+" merges", levelWarn)
@@ -467,9 +457,8 @@ func (m *Model) canActionOn(kind forge.ActionKind, it model.Item) (forge.Adapter
 	return a, true
 }
 
-// The branch is named only when it was asked for and the forge did not complain, which is the only case
-// where it can be asserted as deleted: a failed delete is reported by RunAction in DeleteMsg, and a
-// fork PR never deletes it.
+// The branch is named only when the forge did not complain, the only case where it can be
+// asserted as deleted: a fork PR never deletes it.
 func actionDoneNotice(out forge.Outcome) string {
 	switch out.Kind {
 	case forge.ActionMerge:
@@ -499,9 +488,8 @@ func (m *Model) startAction(kind forge.ActionKind, req forge.MergeRequest) tea.C
 		})
 }
 
-// What changes between actions is the three arguments, which is why it is split out. `actionBusy`
-// is set HERE because that is what stops two actions stepping on each other, and two functions
-// setting it would forget once.
+// `actionBusy` is set HERE because that is what stops two actions stepping on each other, and
+// two functions setting it would forget once.
 func (m *Model) launchAction(kind forge.ActionKind, it model.Item, a forge.Adapter, notice string, exec func(context.Context) forge.Outcome) tea.Cmd {
 	m.actionBusy = true
 	m.setNotice(notice, levelInfo)
@@ -603,9 +591,8 @@ func (m Model) View() tea.View {
 	lay := m.layout()
 	it, ok := m.selected()
 	v = m.compose(lay, m.listSection(lay), m.detailSection(it, ok, lay.detailLines))
-	// Only the interior, so no border is stepped on. There is no `if len(toasts) > 0` and there used
-	// to be: overlayToasts returns the view intact with no warnings, so the guard only stayed alive in
-	// the allowlist.
+	// Only the interior, so no border is stepped on. There is no `if len(toasts) > 0`: overlayToasts
+	// returns the view intact with no warnings, so the guard only lived in the allowlist.
 	v.text = overlayToasts(v.text, m.toast.blocks(m.contentWidth()), m.contentWidth(), v.rows)
 	// The popup goes after the toasts so it ends up above them: it is the layer the user just opened, and
 	// a warning must not cover it.

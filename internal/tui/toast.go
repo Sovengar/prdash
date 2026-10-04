@@ -1,6 +1,5 @@
-// Toasts: transient warnings drawn over the view at the bottom right, self-destructing after
-// their TTL. Same model as dbx's ToastManager, with an injectable clock so expiry can be tested
-// without sleeping and a width clipped to the view so it never overflows the terminal.
+// Toasts: transient warnings drawn over the view at the bottom right, self-destructing after their
+// TTL. Same model as dbx's ToastManager, with an injectable clock and a width clipped to the view.
 package tui
 
 import (
@@ -19,13 +18,11 @@ const (
 	// lipgloss Width() is the CONTENT width, so this is what has to be subtracted to know how much
 	// text fits.
 	toastFrame = 4
-	// Only on the first line, which is why the text is wrapped at the usable width minus this.
-	// The icon's width is measured rather than assumed, so a two-column icon tomorrow grows the gap and
-	// the text still fits.
+	// Only on the first line, which is why the text wraps at the usable width minus this. The icon's
+	// width is measured, so a wider icon tomorrow still lets the text fit.
 	toastIconGap = 2
-	// Named apart from toastIconGap because they are different things: one is the icon's width (which
-	// depends on the level) and the other a fixed gap. Summing them into a single 2 would make a
-	// two-column icon push nothing, which is exactly the error that lets the text escape the frame.
+	// Named apart from toastIconGap because they are different things: the icon's width, which depends
+	// on the level, and a fixed gap. Summed into a single 2, a wide icon would push nothing.
 	toastIconSpace = 1
 	// Below 8 columns of text nothing is readable, and an unreadable warning says nothing.
 	toastMinInner = 8
@@ -144,9 +141,8 @@ func (t *toastManager) render(x toast, available int) string {
 		Render(strings.TrimRight(b.String(), "\n"))
 }
 
-// The width is an ESTIMATE, deliberately: the wrapper below is what guarantees the text fits,
-// and an over-estimate wraps into more lines, which beats a frame clipping a word in half. Below 8
-// of usable there is no readable text, and below 4 of wrap a warning breaks one word per line.
+// The width is an ESTIMATE, deliberately: the wrapper guarantees the text fits, and an
+// over-estimate wraps into more lines, which beats a frame clipping a word in half.
 func toastGeometry(message, icon string, available int) (width, wrapAt int) {
 	// Every term is a named piece and the sum is the contract: a missing or extra term makes the warning
 	// overflow or narrow, and from the overlaid text you cannot tell that from the overlay clipping it.
@@ -159,9 +155,8 @@ func toastGeometry(message, icon string, available int) (width, wrapAt int) {
 		width = min(width, available)
 	}
 
-	// No floor on the wrap width, and that is a conclusion rather than an oversight: inner >= 8, so
-	// inner - toastIconGap >= 6, and a floor of 4 or 5 could never bind. A floor that cannot bind is noise
-	// that also invites tests passing through the floor instead of the arithmetic.
+	// No floor on the wrap width, and that is a conclusion: inner >= 8, so inner - toastIconGap >= 6,
+	// and a floor of 4 could never bind. A floor that cannot bind invites tests through it.
 	inner := max(width-toastFrame, toastMinInner)
 	return width, inner - toastIconGap
 }
@@ -231,9 +226,8 @@ func wrapText(text string, max int) []string {
 	return lines
 }
 
-// Only on the rows marked in `rows`, the interior of the boxes: a warning on a border breaks a
-// frame. Each takes the lowest gap that fits; when no free interior is left the rest are dropped,
-// because an unreadable warning says nothing.
+// Only on the interior rows marked in `rows`: a warning on a border breaks a frame. When no
+// free interior is left the rest are dropped, because an unreadable warning says nothing.
 func overlayToasts(content string, boxes []string, width int, rows []bool) string {
 	if len(boxes) == 0 {
 		return content
@@ -259,19 +253,16 @@ func overlayToasts(content string, boxes []string, width int, rows []bool) strin
 	return strings.Join(lines, "\n")
 }
 
-// The cap is anchor+1: the last row is the anchor, so anchor+1 rows fit from it upwards. No
-// zero floor on purpose — anchor comes from len(lines)-1, so anchor >= 0 and a floor could never bind,
-// and a floor that cannot bind is noise that hides the +1 that does matter.
+// The cap is anchor+1: the last row is the anchor, so anchor+1 rows fit from it upwards. No zero
+// floor, because a floor that cannot bind is noise that hides the +1 that does matter.
 func toastBlockHeight(bh, anchor int) int { return min(bh, anchor+1) }
 
 // Pinned to the right with ONE column of air: a warning reaching the last column reads as part
-// of the frame. Its own function because from the overlaid text "overflowed by one" cannot be told
-// from "overflowed and the clip hid it".
+// of the frame. Its own function because the overlay cannot show a one-column overflow.
 func toastColumn(width, bw int) int { return max(width-bw-1, 0) }
 
-// The loop does NOT clamp the anchor: the only caller passes anchor = len(lines)-1 over rows
-// built alongside the lines, and the anchor goes DOWN after each warning, so a clamp could never fire
-// and hid the step upwards. A blown anchor is admitenAviso's job, which bounds every index.
+// The loop does NOT clamp the anchor: the only caller passes len(lines)-1 over rows built
+// alongside, and the anchor goes DOWN, so a clamp could never fire and hid the step upwards.
 func landRow(rows []bool, anchor, bh int) (int, bool) {
 	if bh <= 0 {
 		return 0, false

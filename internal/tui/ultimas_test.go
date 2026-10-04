@@ -278,9 +278,8 @@ func (i imagenRota) ColorModel() color.Model { return color.RGBAModel }
 func (i imagenRota) Bounds() image.Rectangle { return image.Rect(0, 0, i.w, i.h) }
 func (imagenRota) At(int, int) color.Color   { return color.RGBA{} }
 
-// This test REPLACES the guard it documents: the inner gap is exactly what FitCells returned, and
-// FitCells guarantees at least 1. What is checked is that the invariant HOLDS across the
-// three states and terminal widths from 0 to 400, not that the formula is true.
+// This REPLACES the guard it documents: the inner gap is exactly what FitCells returned, and
+// FitCells floors at 1. What is checked is that the invariant HOLDS across widths 0 to 400.
 func TestElHuecoInteriorDelPopupNuncaDesaparecePorMuchoQueSeEstrecheLaTerminal(t *testing.T) {
 	for _, estado := range []simState{simShowing, simChoosing, simRendering} {
 		for _, ancho := range []int{0, 1, 2, 10, 20, 38, 40, 64, 80, 200, 400} {

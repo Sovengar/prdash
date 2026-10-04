@@ -71,8 +71,7 @@ type DiffStat struct {
 func (d DiffStat) Total() int { return d.Additions + d.Deletions }
 
 // Known separates "the repo forbids squash" from "we do not know": without it a repo with all
-// three strategies disabled is indistinguishable from one that allows them, and the UI would offer a
-// mode the forge rejects. An unknown set restricts nothing and consumers must treat it that way.
+// three disabled is indistinguishable from one that allows them. Unknown restricts nothing.
 type MergeRules struct {
 	Known       bool
 	MergeCommit bool
@@ -136,9 +135,8 @@ type Item struct {
 	// instead of integrating blind.
 	HeadSHA string
 	Merge   MergeRules
-	// Separate from Merge because they are different questions: what the repo ALLOWS versus what the
-	// forge can DO with the item as it stands. A repo can allow all three and still not merge you
-	// because the branches collide.
+	// Separate from Merge because they are different questions: what the repo ALLOWS versus what
+	// the forge can DO with the item as it stands.
 	Mergeable Mergeability
 	UpdatedAt time.Time
 }

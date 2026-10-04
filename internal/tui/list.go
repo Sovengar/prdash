@@ -1,6 +1,5 @@
-// The active section is composed ENTIRELY as loose lines (common-path prefix, warnings, column
-// header, rows) and then clipped to the visible window. Scrolling the rows alone would leave the
-// header orphaned from its items.
+// The active section is composed ENTIRELY as loose lines and then clipped to the window.
+// Scrolling the rows alone would leave the header orphaned from its items.
 package tui
 
 import (
@@ -22,8 +21,7 @@ func (m *Model) listLines(inner int) []listLine {
 	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: items}}, m.prefixMode)
 
 	// The common path gets its own line instead of repeating per row: that is what leaves room for
-	// the ITEM suffix without truncating. Without a common path the line is not painted and ITEM
-	// carries the full path, clipped at the tail.
+	// the ITEM suffix. Without a common path the line is not painted and ITEM carries the full path.
 	if prefix := lay.prefixOf(m.activeSection); prefix != "" {
 		lines = append(lines, listLine{text: "  " + styleDim.Render("· "+prefix+"/"), row: -1})
 	}

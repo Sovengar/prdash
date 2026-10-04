@@ -37,9 +37,8 @@ var Streams = []Query{
 // Exactly what the detail pane paints, so we never pay for rows nobody sees.
 const CommentLimit = 5
 
-// Total is separate from the items because they do not have to match: the pane shows CommentLimit
-// and the total is what lets it say "5 of 23". Total is a lower bound, never an overcount, so a short
-// count reads as "there is more" instead of making anyone decide wrongly.
+// Total is separate because they do not have to match: the pane shows CommentLimit and the
+// total is what lets it say "5 of 23". It is a lower bound, never an overcount.
 type CommentPage struct {
 	Comments []model.Comment
 	Total    int
@@ -78,13 +77,11 @@ type Adapter interface {
 type MergeRequest struct {
 	// Not optional: `gh pr merge` without a strategy flag falls into an interactive prompt that hangs.
 	Mode MergeMode
-	// The adapter MUST pin the merge to it: between the inbox refresh and the keypress the branch can
-	// have advanced, and without the pin the merge integrates commits nobody reviewed. Empty means "the
-	// forge did not report it", which becomes a warning and never an unpinned merge.
+	// The adapter MUST pin the merge to it: between the refresh and the keypress the branch can have
+	// advanced. Empty means "the forge did not report it", which warns and never merges unpinned.
 	HeadSHA string
-	// A POST-integration effect the adapter must understand as such: on GitHub the flag that asks for
-	// it also names the branch, so deleting is part of the same command. If the delete fails the merge
-	// already happened, so the result is NOT a failed merge (see Outcome.DeleteMsg).
+	// A POST-integration effect: on GitHub the flag that asks for it also names the branch. If the
+	// delete fails the merge already happened, so the result is NOT a failed merge.
 	DeleteBranch bool
 }
 
@@ -273,9 +270,8 @@ type Outcome struct {
 	HasItem     bool // Item trae el estado releído
 
 	DeleteBranch bool
-	// Separate from Msg because a failed delete is not a failed merge: the item IS merged and retrying is
-	// not the advice. Without the split, "merge failed" on an already-merged item sends the user
-	// looking for a forge state that does not exist.
+	// Separate from Msg because a failed delete is not a failed merge: the item IS merged, and
+	// "merge failed" would send the user looking for a forge state that does not exist.
 	DeleteMsg string
 
 	// FromBase is filled by whoever held the read, not by the adapter: the forge never looks at the old
@@ -324,9 +320,8 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 		Outcome{Mode: req.Mode, DeleteBranch: req.DeleteBranch},
 		ctx, a, kind, ref, number,
 		func(cur model.Item) []model.Warning {
-			// The `default` that used to catch an unknown Kind is gone: RunAction cuts before reaching
-			// here. Keeping it would be a second place where a new Kind dispatches silently, and two places
-			// saying the same thing drift.
+			// The `default` that used to catch an unknown Kind is gone: RunAction cuts before here, and two
+			// places saying the same thing drift.
 			if kind == ActionApprove {
 				return a.Approve(ctx, ref, number)
 			}

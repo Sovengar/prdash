@@ -89,9 +89,8 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	owner, name := splitProject(ref.Project)
-	// Only the owner matters, and an empty name cannot happen with an owner set, so the second half
-	// of the condition was noise. A guard that reads as reachable when it is not is one someone will
-	// believe and later relax.
+	// Only the owner matters, so the second half of the condition was noise: a guard that reads as
+	// reachable when it is not is one someone will believe and later relax.
 	if owner == "" {
 		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("invalid repo reference: %q", ref.Project))}
 	}
@@ -116,9 +115,8 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 	return it, nil
 }
 
-// The conversation is fetched apart from the search: comments are a detail of the selected item,
-// not inbox data, and asking with every list multiplies the queries by the number of PRs nobody is
-// looking at.
+// The conversation is fetched apart from the search: asking with every list multiplies the
+// queries by the number of PRs nobody is looking at.
 func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
 	owner, name := splitProject(ref.Project)
 	if owner == "" || name == "" {
@@ -322,9 +320,8 @@ func prQuery(owner, name string, number int) string {
 	)
 }
 
-// `last`, not `first`: the pane shows the end of the conversation, which is where the current state
-// of the discussion is. It returns nodes in chronological order, not reversed, so a thread reads
-// downwards as it was written.
+// `last`, not `first`: the pane shows the end of the conversation. Nodes come in chronological
+// order, not reversed, so a thread reads downwards as it was written.
 func commentsQuery(owner, name string, number, last int) string {
 	return fmt.Sprintf(
 		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { `+

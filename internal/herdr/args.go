@@ -5,9 +5,8 @@ import (
 	"time"
 )
 
-// Pure, because an argv is the contract with the CLI and an inline guard can only be checked
-// by running it. The rule for optional flags lives here and nowhere else: a flag with an empty value
-// is NOT sent, because `--cwd ""` tells Herdr "use the empty directory".
+// Pure, because an argv is the contract with the CLI and an inline guard can only be checked by
+// running it. A flag with an empty value is NOT sent: `--cwd ""` tells Herdr "use the empty dir".
 type args []string
 
 func (a args) with(flag, value string) args {

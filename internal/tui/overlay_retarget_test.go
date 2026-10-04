@@ -157,9 +157,8 @@ func TestLaSecuenciaDeRamasSubeEnCadaPeticionYEnCadaCierre(t *testing.T) {
 	}
 }
 
-// The `y+boxH > height` condition centeredOrigin used to have is unreachable: with the box inside
-// the area y comes out at (height-boxH)/2 and adding boxH gives (height+boxH)/2, which is at
-// most the area exactly when boxH <= height, which is this case's premise.
+// The `y+boxH > height` condition centeredOrigin used to have is unreachable: with the box
+// inside the area, adding boxH gives (height+boxH)/2, at most the area exactly when boxH <= height.
 func TestLaGuardaDeSalirsePorAbajoNoPuedeDispararse(t *testing.T) {
 	for altura := range -20 {
 		for altoCaja := range -20 {

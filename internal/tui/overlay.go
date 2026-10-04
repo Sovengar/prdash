@@ -32,8 +32,7 @@ func overlayCentered(content, box string, width int) string {
 }
 
 // Its own function because the overlay and the graphics layer have to agree: computed separately
-// they land in different rectangles, and only when they coincided. The floor at zero does the whole
-// job — a box larger than the area is pinned to the corner.
+// they land in different rectangles. The floor at zero does the whole job — a bigger box is pinned.
 func centeredOrigin(width, height, boxW, boxH int) (x, y int) {
 	x = max(0, (width-boxW)/2)
 	y = max(0, (height-boxH)/2)

@@ -174,9 +174,8 @@ func wrapHint(text string, width int, paint func(string) string) []string {
 	return lines
 }
 
-// The branch delete is in the same box because it is the same decision, named with `tab` before the
-// key that fires it. Unknown rules offer all three modes, because not knowing is not forbidding. And a
-// soft block leaves the options in place: the warning informs the second keypress.
+// The branch delete is in the same box because it is the same decision, named with `tab` before
+// the key that fires it. Unknown rules offer all three: not knowing is not forbidding.
 func (m Model) mergeConfirmText() string {
 	it, _ := m.selected()
 	parts := make([]string, 0, 4)

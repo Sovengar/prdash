@@ -59,9 +59,8 @@ func Save(path string, f File) error {
 	return guardaJSON(path, f)
 }
 
-// One helper for both the snapshot and the memo: they ran the same three-step sequence and two
-// copies of a sequence drift. The `any` is what makes the error branch real — marshalling a struct
-// of strings and slices never fails, so with a concrete type the check would be dead code.
+// One helper for both: two copies of a sequence drift. The `any` makes the error branch real —
+// marshalling a struct of strings and slices never fails, so a concrete type would make it dead code.
 func guardaJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

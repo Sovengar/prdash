@@ -58,9 +58,8 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	return composed(spec, info), nil
 }
 
-// Pure on purpose: precedence between two sources is what cannot be read by eye. For EACH FIELD,
-// what Herdr said wins, because lying here has no visible error — it yields a worktree pointing at
-// nothing. The label is the EXCEPTION: spec.Label is the ownership prdash recognises.
+// Pure on purpose: precedence between two sources is what cannot be read by eye. For EACH FIELD
+// what Herdr said wins — lying here has no visible error. The label is the EXCEPTION.
 func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 	wt := Worktree{
 		ID:          spec.Path,
@@ -91,8 +90,7 @@ func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 }
 
 // The checkout must match the branch asked for: reusing another branch's checkout is a fake
-// mount. A checkout with no open workspace gets one opened with cwd inside the worktree, because
-// otherwise the review shows up as a loose workspace detached from the worktree containing it.
+// mount. A checkout with no open workspace gets one, or the review detaches from its worktree.
 func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 	existing, ok, err := h.scan.inspect(ctx, spec.Path)
 	if err != nil {

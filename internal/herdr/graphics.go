@@ -97,9 +97,8 @@ func (g *Graphics) probe() bool {
 	return err == nil
 }
 
-// The order matters: "outside Herdr" is checked FIRST. The other way round, a process running
-// outside Herdr with the variables set would still write to the socket, and the socket may belong to
-// another process: that would be writing into someone else's session.
+// "Outside Herdr" is checked FIRST: the other way round, a process outside Herdr with the variables
+// set would still write to a socket that may belong to another process.
 func graphicsReady(herdrEnv, socket, pane string) bool {
 	if herdrEnv != "1" {
 		return false

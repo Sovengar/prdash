@@ -1,6 +1,5 @@
-// The view's height budget: which boxes are visible and how much height is left for each body. Single
-// source shared by the render, the scroll and the tests, because the parts must add up to the terminal
-// height: the view fills it exactly and any mismatch pushes the hints or the header off screen.
+// The view's height budget: which boxes are visible and how much height is left for each body.
+// One source shared by the render, the scroll and the tests, because the parts must add up.
 package tui
 
 const (
@@ -29,8 +28,7 @@ const (
 )
 
 // The detail keeps its 40% while the body can stay at minListRows, and degrades in order if not:
-// detail to its minimum, then the header box, then the hints to one line, then the hints box. That
-// walk is what makes the view usable in a 20-line terminal.
+// detail to its minimum, then the header, then the hints to one line, then the hints box.
 func computeLayout(height, hintAvailable int, show bool) layout {
 	if !show || height <= 0 {
 		return layout{}

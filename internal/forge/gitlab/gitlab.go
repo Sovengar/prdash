@@ -179,7 +179,6 @@ func glabMergeFlag(mode forge.MergeMode) (string, bool) {
 
 // A PUT, not `glab mr update --target-branch`: an EDIT command that opens an editor, and in a
 // subprocess it fails rather than hangs. Explicit because `-f` makes glab POST, which updates nothing.
-// The reason comes from the body, whose 400 is actionable and whose exit code is not.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -354,8 +353,7 @@ func glAssignedQuery(cursor string) string {
 }
 
 // The iid goes as a string literal because the schema declares it `String!`: GraphQL does not
-// coerce an Int literal into a String. `last` rather than `first`, as on GitHub, and it does not reverse
-// the order.
+// coerce an Int literal into a String. `last` rather than `first`, as on GitHub.
 func glNotesQuery(fullPath string, iid, last int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { `+
@@ -364,9 +362,8 @@ func glNotesQuery(fullPath string, iid, last int) string {
 	)
 }
 
-// An Int literal for a `String!` field is rejected with argumentLiteralsIncompatible and takes the
-// whole query down. flexInt handles the iid arriving as a string in the RESPONSE; what matters here is
-// the literal's type.
+// An Int literal for a `String!` field is rejected with argumentLiteralsIncompatible and takes
+// the whole query down; flexInt only handles the iid arriving as a string in the RESPONSE.
 func glMRQuery(fullPath string, iid int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { %s } } }`,

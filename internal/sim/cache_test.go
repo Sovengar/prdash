@@ -229,9 +229,8 @@ func TestPruneConMenosDeLosQueHayQueConservarNoHaceNadaYConCeroLosBorraTodos(t *
 	if len(nombresDe(t, dir)) != 2 {
 		t.Errorf("prune con keep=10 quitó ficheros: %v", nombresDe(t, dir))
 	}
-	// A NEGATIVE keep is clamped to zero instead of panicking: `files[-1:]` gave
-	//`slice bounds out of range [-1:]`. My first version of this test asserted it did not panic
-	//and I now check it the other way round.
+	// A NEGATIVE keep is clamped to zero instead of panicking: `files[-1:]` gave "slice bounds out
+	// of range [-1:]". My first version asserted it did not panic; now I check it the other way.
 	prune(dir, -1)
 	if quedan := len(nombresDe(t, dir)); quedan != 0 {
 		t.Errorf("con keep=-1 quedan %d ficheros, want 0 (negativo se lee como cero)", quedan)

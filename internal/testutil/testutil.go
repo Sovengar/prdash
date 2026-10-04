@@ -232,9 +232,8 @@ type ConformanceOptions struct {
 	MissingBinary bool // el CLI no existe: los listados deben avisar, no romper
 }
 
-// A gate that cannot be tested does not distinguish a gate from a sign: with the checks in
-// ConformanceViolations returning a list and not touching the test, a test can hand it a broken adapter
-// and see what comes out.
+// A gate that cannot be tested does not distinguish a gate from a sign: with the checks in a list
+// and not touching the test, a test can hand it a broken adapter and see what comes out.
 func RunConformance(t testReport, a forge.Adapter, opts ConformanceOptions) {
 	t.Helper()
 	reportaIncumplimientos(a, opts, func(v string) { t.Error(v) })
@@ -297,9 +296,8 @@ func ConformanceViolations(a forge.Adapter, opts ConformanceOptions) []string {
 	if warns := a.Retarget(ctx, ref, 1, "release/2.0"); opts.Unsupported && !hasKind(warns, "unsupported") {
 		fuera = append(fuera, fmt.Sprintf("%s: Retarget debería reportar unsupported", a.Forge()))
 	}
-	// The branch picker opens even when the listing came back empty, which is why what is checked is
-	// the warning and that there are no branches. An adapter returning an empty list silently would make
-	// the picker look like a repo with no branches, which is a different diagnosis from the right one.
+	// The picker opens even when the listing came back empty, so what is checked is the warning and
+	// that there are no branches: an empty list silently would be a different diagnosis.
 	if names, warns := a.Branches(ctx, ref); opts.Unsupported && !hasKind(warns, "unsupported") {
 		fuera = append(fuera, fmt.Sprintf("%s: Branches debería reportar unsupported", a.Forge()))
 	} else if len(names) != 0 {

@@ -145,9 +145,8 @@ func MergeBlock(it model.Item) Block {
 	return Block{}
 }
 
-// The difference from a conflict —the item changed while you were looking at it, which a refresh
-// fixes— is the one that matters: here the right action is rebase and push, and a warning that says
-// "refresh" sends the operator to the wrong place.
+// The difference from a conflict is the one that matters: a refresh fixes that one, here the
+// right action is rebase and push, and "refresh" sends the operator to the wrong place.
 const UnmergeableReason = "the forge will not merge it as it is: rebase the branch onto the target and push"
 
 func conflictedReason(target string) string {

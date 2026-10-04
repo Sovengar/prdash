@@ -83,8 +83,7 @@ type ghPRNode struct {
 	HeadRefName    string `json:"headRefName"`
 	BaseRefName    string `json:"baseRefName"`
 	// gh assumes the branch is in the target repo, so `--delete-branch` on a fork PR deletes nothing
-	// while gh reports success. Without this field the "branch deleted" warning lies exactly on the
-	// items most closely watched.
+	// while gh reports success — and the warning would lie exactly on the most-watched items.
 	IsCrossRepository bool   `json:"isCrossRepository"`
 	Mergeable         string `json:"mergeable"`
 	// This is what lets the merge be pinned: without it the branch may have moved since the last read.
@@ -407,9 +406,8 @@ type glMR struct {
 	// Separate from State, which is the forge's enum ("opened") and does not cover it: without this a draft
 	// MR was indistinguishable from an open one.
 	Draft bool `json:"draft"`
-	// The detailed one, not `mergeStatus`, because the simple one cannot tell "collides" from "pipeline
-	// missing": with the simple one a red CI is announced as a branch conflict, which is a lie. GitLab
-	// computes it per MR per request, so it is a calculation and not an extra call.
+	// The detailed one, not `mergeStatus`: the simple one cannot tell "collides" from "pipeline
+	// missing", so a red CI is announced as a branch conflict. GitLab computes it per MR anyway.
 	DetailedMergeStatus string `json:"detailedMergeStatus"`
 	SourceBranch        string `json:"sourceBranch"`
 	TargetBranch        string `json:"targetBranch"`
@@ -543,9 +541,8 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	return it
 }
 
-// The enum is accepted in both spellings because REST lowercases it and GraphQL does not: a
-// conflict that does not exist is a false warning, and a false warning that repeats trains the user to
-// ignore the whole box. `need_rebase` is NOT a conflict: the branch integrates without touching anything.
+// The enum is accepted in both spellings because REST lowercases it and GraphQL does not: a conflict
+// that does not exist is a false warning. `need_rebase` is NOT a conflict.
 func mergeableFromGL(v string) model.Mergeability {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "conflict", "broken_status":

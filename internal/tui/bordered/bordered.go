@@ -1,6 +1,5 @@
-// Package bordered draws boxes with a rounded border and the title embedded in the top line. Content
-// is clipped (ANSI-aware) to the inner width rather than re-wrapped, because wrapping would break the
-// height the layout computed.
+// Package bordered draws boxes with a rounded border and the title embedded in the top line.
+// Content is clipped (ANSI-aware) to the inner width, not re-wrapped: wrapping breaks the height.
 package bordered
 
 import (
@@ -88,8 +87,7 @@ func contentLines(style *ansi.Style, leftChar, rightChar, content string, innerW
 	lines := make([]string, 0, len(raw))
 	for _, line := range raw {
 		// Clip and pad without asking: both questions were identities at their boundary. The padding needs
-		// no guard because the clip above guarantees a non-negative difference, and `strings.Repeat` with a
-		// negative count PANICS — the order of the two lines is what prevents it.
+		// no guard because the clip above guarantees a non-negative difference.
 		line = ansi.Truncate(line, innerWidth, "")
 		line += strings.Repeat(" ", innerWidth-ansi.StringWidth(line))
 		lines = append(lines, styled(style, leftChar)+line+styled(style, rightChar))

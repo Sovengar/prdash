@@ -1,6 +1,5 @@
 // `prdash worktrees` manages the review worktrees that belong to prdash. Ownership lives in the
-// name/label, so a foreign worktree is never listed and never deleted, worktrees are kept on exit,
-// and provisioning is the caller's choice so the command works inside and outside Herdr.
+// name/label, so a foreign worktree is never listed and never deleted.
 package main
 
 import (
@@ -18,8 +17,7 @@ import (
 const worktreeTimeout = 30 * time.Second
 
 // Injected writers, not os.Stdout: this is the command that DELETES files, so its output is the
-// evidence that it deleted what it said and nothing else, and a fixed stdout would force a
-// whole-process test to read it.
+// evidence that it deleted what it said and nothing else.
 func runWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer, args []string) int {
 	sub := "list"
 	if len(args) > 0 && args[0] != "" {
@@ -67,9 +65,8 @@ func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err e
 	return orphans, dryRun, paths, nil
 }
 
-// The table goes to stdout and the orphan warnings to stderr because they are different things: the
-// table is the result a script reads, the warning is why a row is marked. `2>/dev/null` keeps the
-// table and drops the explanation, which is what you want.
+// The table goes to stdout and the warnings to stderr because they are different things: the
+// table is the result a script reads, the warning is why a row is marked.
 func listWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), worktreeTimeout)
 	defer cancel()

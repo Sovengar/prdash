@@ -1,6 +1,5 @@
 // Simulation overlay: a popup that picks the command, renders it with git-sim and shows the image
-// over the inbox. In the same view rather than a screen of its own: a simulation is a query about the
-// item already selected, and hiding the view hides what you should be looking at.
+// over the inbox. In the same view, because hiding it hides what you should be looking at.
 package tui
 
 import (
@@ -27,8 +26,7 @@ const (
 	simChooserWidth = 64
 	simChrome       = 3
 	// Numerator and denominator rather than a division: in a Go constant 3/4 is 0 and the popup would
-	// fall back to its floor. Not 100%, because losing the inbox while a simulation is being looked at
-	// loses the context of what is being looked at.
+	// fall back to its floor. Not 100%, because losing the inbox loses the context.
 	simHeightNum  = 3
 	simHeightDen  = 4
 	simMargin     = 2
@@ -76,9 +74,8 @@ type Simulator interface {
 	Simulate(ctx context.Context, it model.Item, kind sim.Kind) (sim.Result, error)
 }
 
-// An optional port, and the one that decides quality: without it the image is drawn with half-blocks
-// and looks pixelated because it quantises to the cell grid (a 1920px image in 84 columns makes each
-// block 23x23 pixels). With it the terminal does the scaling and it looks like an image.
+// The port that decides quality: without it the image is drawn with half-blocks and looks
+// pixelated, because it quantises to the cell grid. With it the terminal scales it.
 type Graphics interface {
 	Available() bool
 	// (0, 0) when unknown.
@@ -118,17 +115,15 @@ func (m Model) openSimulator() (tea.Model, tea.Cmd) {
 		m.setNotice("simulate: the forge reports no target branch for "+refLabel(it), levelWarn)
 		return m, nil
 	}
-	// Disarming is left explicit even though an armed merge is already resolved before this point: if the
-	// action is ever routed from elsewhere, the popup must not coexist with a merge confirmation waiting
-	// for its second key.
+	// Disarming is explicit even though an armed merge is already resolved here: if the action is
+	// ever routed from elsewhere, the popup must not coexist with a merge confirmation.
 	m.disarmMerge()
 	m.sim = simPanel{state: simChoosing, item: it}
 	return m, nil
 }
 
-// Navigates only when there is something to walk: with a single strategy there is no menu, and an arrow
-// that moves nothing has to fall through to the default (which closes) instead of being swallowed. The
-// condition is explicit so adding a second strategy does not leave the arrows dead.
+// Navigates only when there is something to walk: with a single strategy an arrow has to fall
+// through to the default instead of being swallowed.
 func (m *Model) moveSimCursor(key string) bool {
 	if len(simKinds) < 2 {
 		return false
@@ -249,17 +244,15 @@ func (m *Model) applySim(msg simMsg) {
 }
 
 // Rescaled to the rectangle's pixel size before being sent, because that is the size the terminal
-// draws it at: sending the original 1920px only adds base64 bytes. It also fits the cell's real
-// height, which is whatever the terminal measures and not twice its width.
+// draws it at. It also fits the cell's real height, not twice its width.
 func (m *Model) publishSimImage(img image.Image) bool {
 	if m.graphics == nil || !m.graphics.Available() {
 		return false
 	}
 	cols, rows := m.simBox()
 	col, row := m.simBoxOrigin(cols, rows)
-	// The inner gap is not checked against zero because it is unreachable in all three states:
-	// `simBox` adds exactly what is subtracted here, and the floor that closes the selector case is
-	// `contentWidth`'s, not `simMaxCols`/`simMaxRows`, which are image mode's and never reach this.
+	// The inner gap is not checked against zero because it is unreachable: `simBox` adds exactly
+	// what is subtracted here, and the floor that closes the selector case is `contentWidth`'s.
 	innerCols, innerRows := cols-2, rows-simChrome
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -300,9 +293,8 @@ func (m *Model) republishSimImage() {
 	}
 }
 
-// One source, not puritanism: when the box's width and the cells' width were decided separately, the
-// image drew at 94 columns inside a 200-column box and took the left third of the popup with what looked
-// like part of the image on its right.
+// One source, not puritanism: when the two widths were decided separately the image drew at 94
+// columns inside a 200-column box and looked like part of the image on its right.
 func (m Model) simBox() (w, h int) {
 	switch m.sim.state {
 	case simChoosing:
@@ -317,9 +309,8 @@ func (m Model) simBox() (w, h int) {
 	return cols + 2, rows + simChrome
 }
 
-// Herdr measures them (in kitty with the default font 9x19, not 2x1) and using them does two things at
-// once: the image does not distort and no more resolution than is visible is sent. Without Herdr, 1x2 is
-// assumed, which is what most terminals do.
+// Herdr measures them (9x19 with the default kitty font, not 2x1) and using them does two things
+// at once: the image does not distort and no invisible resolution is sent.
 func (m Model) cellSize() (w, h int) {
 	if m.sim.cellW_px > 0 && m.sim.cellH_px > 0 {
 		return m.sim.cellW_px, m.sim.cellH_px
@@ -346,9 +337,8 @@ func (m *Model) renderSimCells() {
 		return
 	}
 	cols, rows := m.simBox()
-	// The inner gap is not checked against zero and used to be. It is unreachable: `simBox` returns
-	// `cols+2, rows+simChrome`, `FitCells` floors both dimensions at 1, and exactly those two are
-	// subtracted here. And it would change nothing anyway: `sim.Cells` returns nil below 1.
+	// The inner gap is not checked against zero and used to be: it is unreachable, `FitCells` floors
+	// both dimensions at 1, and `sim.Cells` returns nil below 1 anyway.
 	w, h := cols-2, rows-simChrome
 	if m.sim.cells != nil && m.sim.cellW == w && m.sim.cellH == h {
 		return
@@ -409,9 +399,8 @@ func (m Model) simBusyBox() string {
 
 func (m Model) simImageBox() string {
 	width, height := m.simBox()
-	// Filled to the height MINUS the frame and the footer line, which is exactly what simChrome measures.
-	// It used to be filled to height - frame - 1 and the box came out a row shorter than simBox said: the
-	// height is inherited by the centring and by the image placement, so that row shows.
+	// Filled to the height MINUS the frame and the footer line, which is what simChrome measures. It
+	// used to be one row less, and that row shows in the centring and the image placement.
 	body := padLines(m.sim.cells, height-simChrome)
 	body = append(body, styleDim.Render("esc close · o open image"))
 	return borderedBox(" simulate: "+string(m.sim.kind)+" "+refLabel(m.sim.item), strings.Join(body, "\n"), width)

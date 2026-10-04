@@ -138,9 +138,8 @@ func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Resul
 	return Result{Kind: kind, Path: path, Ref: spec.Ref, Base: base}, nil
 }
 
-// `--shared` (objects are referenced, not copied) and both branches then materialised as local
-// branches: `git clone` only brings HEAD's branch into local and the rest stay as origin/ refs, which
-// git-sim accepts as an argument but does not draw in the graph.
+// `--shared`, and both branches materialised as local: `git clone` only brings HEAD's branch and
+// leaves the rest as origin/ refs, which git-sim accepts but does not draw.
 func (s *Service) stage(ctx context.Context, place Place, kind Kind, base, tmp string) (string, Spec, error) {
 	if place.Branch == "" {
 		return "", Spec{}, errors.New("the review branch is unknown; mount the review first")
@@ -220,9 +219,8 @@ func copyFile(src, dst string) error {
 
 func creaTemporal(ruta string) (escritura, error) { return os.Create(ruta) }
 
-// Only the creator is injected, because it is the only part that depends on the filesystem in a way
-// the test cannot imitate. The rename and the delete stay on os and are testable for real: a `dst` that
-// is already a non-empty directory fails the rename without touching a line of this function.
+// Only the creator is injected: the rename and the delete stay on os and are testable for real,
+// since a `dst` that is already a non-empty directory fails the rename.
 func copiaPublicando(in io.Reader, dst string, crea func(string) (escritura, error)) error {
 	tmp := dst + ".part"
 	out, err := crea(tmp)

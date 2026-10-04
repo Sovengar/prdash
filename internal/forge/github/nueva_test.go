@@ -128,9 +128,8 @@ exit 4
 	}
 }
 
-// The regex demands a space after "account": `gh auth status` has an "Active account: true"
-//
-//line with the same word.
+// The regex demands a space after "account": `gh auth status` has an "Active account: true" line
+// with the same word.
 func TestElLoginNoSeConfundeConLaLineaDeActiveAccount(t *testing.T) {
 	casos := []struct {
 		nombre string

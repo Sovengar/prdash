@@ -1,6 +1,5 @@
-// Package executor applies the review plan through ports, orchestrating resolve → fetch → branch →
-// worktree → layout without knowing anything about git, Herdr or the configuration. The Herdr port
-// may be nil: the core still mounts the worktree and reports the layout as unavailable.
+// Package executor applies the review plan through ports, orchestrating resolve → fetch → branch
+// → worktree → layout without knowing git, Herdr or the config. The Herdr port may be nil.
 package executor
 
 import (

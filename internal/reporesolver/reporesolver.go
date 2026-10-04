@@ -1,6 +1,5 @@
-// Package reporesolver is the sole owner of prdash's path namespace. It never calls the forge API,
-// only git, so resolving an item does not depend on credentials or on the network beyond the ref
-// fetch itself.
+// Package reporesolver is the sole owner of prdash's path namespace. It never calls the forge
+// API, only git, so resolving an item does not depend on credentials.
 package reporesolver
 
 import (
@@ -271,9 +270,8 @@ func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]str
 		return model.RepoRef{}, false
 	}
 
-	// The "@" condition demands something before it: an SCP with an empty user is not a git remote.
-	// "://" is accepted at position 0 because url.Parse rejects it anyway; what must not happen is such an
-	// entry slipping through the SCP branch, which a "!= 0" instead of ">= 0" would do.
+	// The "@" demands something before it: an SCP with an empty user is not a git remote. "://" is
+	// accepted at 0 because url.Parse rejects it anyway; ">= 0" is what keeps it out of SCP.
 	var host, path string
 	if i := strings.Index(raw, "://"); i >= 0 {
 		u, err := url.Parse(raw)

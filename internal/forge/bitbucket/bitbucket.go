@@ -26,9 +26,8 @@ func (a *Adapter) Forge() string { return ForgeName }
 
 func (a *Adapter) Host() string { return a.host }
 
-// The reason says "not implemented", not "not authenticated": the difference decides what the operator
-// does. "Not authenticated" is fixed by resuming a token, "not implemented" is not fixed at all, so
-// the wrong reason sends the user looking for a token that already works.
+// The reason says "not implemented", not "not authenticated": the first is not fixed at all, so
+// the wrong one sends the user looking for a token that already works.
 func (a *Adapter) Auth(context.Context) model.AuthState {
 	return model.AuthState{Forge: ForgeName, OK: false, Reason: "not implemented in this version"}
 }

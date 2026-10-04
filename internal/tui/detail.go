@@ -23,8 +23,7 @@ const labelWidth = 14
 const detailGap = 4
 
 // Always in the grid, not only when the fields do not fit one column: in a single column the card
-// took 16 of the ~18 lines the 40% gives. Pulling the URL out costs no height — 13 fields take 7 rows
-// in two columns and 12 plus a full-width URL still take 7 — and a URL you cannot copy is no use.
+// took 16 of the ~18 lines the 40% gives. A URL you cannot copy is no use.
 func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	if !ok {
 		return []string{styleDim.Render("no selection: move the cursor onto an item")}
@@ -60,15 +59,13 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	url := []string{fullWidthField(detailField{"URL", orDash(it.URL)}, inner)}
 	avisos := m.detailWarnings(it)
 
-	// The comments' budget is what is left after the card's header, and it is computed before composing
-	// them because it decides how many rows each may spend. Without it a block of five four-line comments
-	// would not fit an 18-row panel and the ladder would drop the whole thing.
+	// The comments' budget is computed before composing them because it decides how many rows each may
+	// spend: without it a block of five four-line comments would drop out of an 18-row panel.
 	avail := commentBudget(rows, len(grid), len(url), len(avisos))
 	comments := m.commentLines(it, avail, inner)
 
 	// What goes first is what can be asked for again, then the most recent; the diffstat is last,
-	// because a datum just lost is worse than one never painted. The jump from fourth to fifth drops three
-	// at once, since dropping only the URL leaves the same height.
+	// because a datum just lost is worse than one never painted.
 	withGap := []string{title, ""}
 	noGap := []string{title}
 	layouts := [][]string{
@@ -113,8 +110,7 @@ func withoutField(fields []detailField, key string) []detailField {
 }
 
 // The forge's veto is sticky until a refresh lifts it, so it earns a row. The own-approval veto is
-// NOT painted: it would repeat the Role field on every render. An unauthenticated forge IS painted with
-// its reason, because the generic label sent users to fix a token that already worked.
+// NOT painted: it would repeat the Role field on every render.
 func (m *Model) detailWarnings(it model.Item) []string {
 	if reason := m.denied[it.ID()]; reason != "" {
 		return []string{"", styleWarn.Render("  action disabled: " + reason)}
@@ -140,9 +136,8 @@ func fullWidthField(f detailField, inner int) string {
 	return label(f.key, styleDiffText(truncate(f.value, max(1, inner-labelWidth))))
 }
 
-// Its own function because that arithmetic was hidden in the composition: a bigger budget does
-// not give a taller block, it gives one clipTop trims at the end, so the trim cancelled out. It may
-// come out NEGATIVE, and that is correct: a negative budget paints no comments.
+// Its own function because that arithmetic was hidden in the composition: a bigger budget gives a
+// block clipTop trims at the end, so the trim cancelled out. NEGATIVE is correct: it paints nothing.
 func commentBudget(rows, gridLines, urlLines, warningLines int) int {
 	return rows - gridLines - urlLines - 2 - warningLines
 }
