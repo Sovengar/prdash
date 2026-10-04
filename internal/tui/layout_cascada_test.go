@@ -123,7 +123,6 @@ func TestAntesDelWindowSizeNoSeRecortaNada(t *testing.T) {
 		t.Log("con altura cero y show se devuelve el mismo layout vacío; se afirma solo " +
 			"que no hay crash")
 	}
-	// And a negative terminal, which Terminal does not produce but a weird resize could.
 	for _, h := range []int{-1, -40} {
 		if got := computeLayout(h, maxHintLines, true); got != (layout{}) {
 			t.Errorf("con altura %d dio %+v, want el layout vacío", h, got)

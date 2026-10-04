@@ -42,7 +42,6 @@ func TestElCursorDeLaAPIEsElNumeroDePaginaYSoloSiEsUnNumero(t *testing.T) {
 		{"0", "page=1"},
 		{"-1", "page=1"},
 		{"-99", "page=1"},
-		// Texto: no se puede convertir.
 		{"abc", "page=1"},
 		{"1abc", "page=1"},
 		{"1.5", "page=1"},

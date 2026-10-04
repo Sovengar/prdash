@@ -62,10 +62,8 @@ func (c *Client) basePane(ctx context.Context, container Container, tab plan.Tab
 	if container.WorkspaceID == "" {
 		return c.newWorkspace(ctx, tab)
 	}
-	// The caller believes this worktree lives in a Herdr workspace. If no pane comes out, the id is
-	// stale — Herdr keeps it in its persisted session and a closed workspace leaves it pointing at
-	// nothing — and opening another workspace would produce a review detached from the worktree that
-	// contains it, with no warning. Failing with the id in the message beats faking a good mount.
+	// The caller believes this worktree lives in a Herdr workspace. A stale id comes from a closed
+	// workspace, and mounting another one would detach the review from its worktree, with no warning.
 	panes, listErr := c.PaneList(ctx, container.WorkspaceID)
 	if listErr != nil {
 		return "", "", fmt.Errorf("the workspace %s of this worktree is gone: %w", container.WorkspaceID, listErr)
@@ -182,10 +180,8 @@ func shellSafe(s string) bool {
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		// `#` is deliberately absent from the safe list: inside a word it is literal (`foo#bar` survives),
-		// but at the START of a word it opens a comment, so `sh -c 'echo #123'` prints nothing. A branch
-		// starting with `#` is valid git, and unquoted that argument vanished from the command.
-		// Dropping `#` from the safe set costs nothing: the rare case gets quoted.
+			// `#` is deliberately absent from the safe list: at the START of a word it opens a comment, so a
+			// branch starting with `#` vanished from the command unquoted. Quoting the rare case costs nothing.
 		case r == '-', r == '_', r == '.', r == '/', r == '@', r == ':', r == '=', r == '+', r == ',', r == '%':
 		default:
 			return false

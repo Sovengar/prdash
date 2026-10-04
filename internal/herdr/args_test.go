@@ -11,7 +11,6 @@ import (
 func TestArgsWithNoMandaElVacioNiUnFlag(t *testing.T) {
 	base := args{"comando"}
 
-	// Vacío: no se añade nada, y la lista no se toca.
 	if got := base.with("--cwd", ""); !reflect.DeepEqual(got, args{"comando"}) {
 		t.Errorf("con el valor vacío salió %q, want solo el comando: un flag vacío no se manda", got)
 	}
@@ -199,7 +198,6 @@ func TestArgvDeCadaComando(t *testing.T) {
 			[]string{"pane", "list", "--workspace", "ws1"},
 		},
 
-		// El sonido vacío es el default de Herdr, y mandarlo fijaría uno.
 		{
 			"notify sin nada",
 			notifyArgs("titulo", NotifyOptions{}),

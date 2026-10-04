@@ -49,7 +49,6 @@ func TestSinPaneConocidoNiInfoNiClearTocanElSocket(t *testing.T) {
 
 // Real: Herdr restarts while the image is being written, and the socket answers RST.
 func TestUnSocketQueMuerreConRSTAlEscribirSeReportaComoFalloDeLaCapaYNoComoUnPanePerdido(t *testing.T) {
-	// La escritura falla siempre.
 	g := graphicsConElWriteRoto(t)
 
 	err := g.SetImage(context.Background(), "prdash-sim", imagenRGBA(4, 4), Placement{Col: 1, Row: 1, Cols: 4, Rows: 2})
@@ -143,7 +142,6 @@ func (connConElWriteRoto) Write([]byte) (int, error) {
 	return 0, errors.New("broken pipe")
 }
 
-// graphicsConElWriteRoto devuelve un `Graphics` cuya escritura falla siempre.
 func graphicsConElWriteRoto(t *testing.T) *Graphics {
 	t.Helper()
 	cliente, servidor := net.Pipe()

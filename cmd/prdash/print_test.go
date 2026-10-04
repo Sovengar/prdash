@@ -153,7 +153,6 @@ func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 
 	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
-	// La ruta completa, sin recortar y sin línea de prefijo.
 	for _, want := range []string{
 		largo + "#100",
 		corto + "#101",

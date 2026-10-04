@@ -146,7 +146,6 @@ func TestCellSizeFromDegradaEnLasTresFormas(t *testing.T) {
 		{"medida normal", GraphicsInfo{CellWidthPx: 9, CellHeightPx: 19}, nil, 9, 19},
 		{"medida 1×1", GraphicsInfo{CellWidthPx: 1, CellHeightPx: 1}, nil, 1, 1},
 		{"medida grande", GraphicsInfo{CellWidthPx: 400, CellHeightPx: 800}, nil, 400, 800},
-		// Caso malo 1: no se pudo preguntar.
 		{"error", GraphicsInfo{CellWidthPx: 9, CellHeightPx: 19}, errors.New("socket"), w, h},
 		{"error y medida a cero", GraphicsInfo{}, errors.New("socket"), w, h},
 		{"ancho a cero", GraphicsInfo{CellWidthPx: 0, CellHeightPx: 19}, nil, w, h},

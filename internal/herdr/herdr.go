@@ -1,8 +1,5 @@
 // Package herdr is the only coupling point with Herdr: it reads HERDR_ENV, invokes the binary and
-// parses its JSON. The rest of the program talks to the Port and never touches Herdr. Outside Herdr, or
-// below the minimum version, the port reports unavailable and no mutating operation runs. All Herdr
-// output is treated as data: server errors arrive as JSON on stderr and become a typed Error, never a
-// panic.
+// parses its JSON. All Herdr output is data: server errors become a typed Error, never a panic.
 package herdr
 
 import (

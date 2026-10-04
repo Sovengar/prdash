@@ -108,8 +108,6 @@ func TestListUnknownSectionReportsUnsupported(t *testing.T) {
 	}
 }
 
-// TestSearchQueryUsesUnionFragments cubre C1: search.nodes es la unión
-// SearchResultItem y contexts.nodes la unión StatusCheckRollupContext.
 func TestSearchQueryUsesUnionFragments(t *testing.T) {
 	q := searchQuery("author:@me", "")
 	for _, want := range []string{"... on PullRequest", "... on CheckRun", "... on StatusContext", "reviewDecision", "statusCheckRollup"} {
@@ -147,7 +145,6 @@ exit 1
 	}
 }
 
-// TestChecksKeepsPendingOnExit8 cubre C8: exit 8 (pendiente) trae JSON válido.
 func TestChecksKeepsPendingOnExit8(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", `#!/bin/sh
@@ -164,7 +161,6 @@ exit 8
 	}
 }
 
-// writeScript crea un binario falso ejecutable y devuelve su ruta.
 func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

@@ -19,7 +19,6 @@ func TestParseRemoteURLClasificaLasFormasAntesDeNormalizar(t *testing.T) {
 		{"scp", "git@github.com:acme/widget.git", true},
 		{"scp con usuario de una columna", "a@github.com:acme/widget.git", true},
 
-		// "@" en la posición 0: usuario vacío. No es un remoto de git.
 		{"scp con usuario vacío", "@github.com:acme/widget.git", false},
 		{"scp con solo arroba", "@", false},
 		{"arroba al principio y dos puntos", "@github.com:acme/widget", false},
@@ -28,12 +27,10 @@ func TestParseRemoteURLClasificaLasFormasAntesDeNormalizar(t *testing.T) {
 		{"esquema vacío y arroba", "://git@github.com/acme/widget", false},
 		{"solo esquema vacío", "://", false},
 
-		// "@" sin dos puntos detrás: no es SCP, es otra cosa.
 		{"arroba sin dos puntos", "git@github.com", false},
 		{"arroba y barra", "git@github.com/acme/widget", false},
 		{"arroba y nada", "git@", false},
 
-		// Ni "@" ni "://": un path local o cualquier otra cosa.
 		{"path local", "/home/u/dev/widget", false},
 		{"path relativo", "../widget", false},
 		{"solo dos puntos", "acme:widget", false},

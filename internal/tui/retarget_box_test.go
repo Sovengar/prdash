@@ -79,7 +79,6 @@ func TestElCursorYLaBaseActualNoCompartenSimbolo(t *testing.T) {
 	if !strings.Contains(fila, "current") {
 		t.Errorf("la base actual no se marca cuando el cursor está encima: %q", fila)
 	}
-	// Y el resto de filas no lleva el distintivo de la base.
 	marked := 0
 	for _, l := range lineas {
 		if strings.Contains(l, "current") {
@@ -233,8 +232,6 @@ func TestLaCuentaDeRamasDistingueFiltradoDeSinFiltrar(t *testing.T) {
 	ramas := []string{"main", "fix/uno", "fix/dos", "wip", "otro"}
 	completas := []string{"main", "fix/uno", "fix/dos", "wip", "otro"}
 
-	// Sin filtro: la cuenta total, en plural o en singular según el número, y sin
-	// la fórmula "X of Y".
 	m := ramasDelPopup(t, "", completas...)
 	txt := stripANSI(m.retargetOverlay2())
 	if !strings.Contains(txt, "5 branches") {

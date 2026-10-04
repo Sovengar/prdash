@@ -1,8 +1,6 @@
-// Simulation overlay: a popup that picks the command, renders it with git-sim and shows the resulting
-// image over the inbox.
-// It lives in the same view as everything else rather than on a screen of its own: a simulation is a
-// query about the item already selected, and hiding the whole view for a couple of seconds to ask about
-// a graph hides exactly what you are supposed to be looking at while it answers.
+// Simulation overlay: a popup that picks the command, renders it with git-sim and shows the image
+// over the inbox. In the same view rather than a screen of its own: a simulation is a query about the
+// item already selected, and hiding the view hides what you should be looking at.
 package tui
 
 import (
@@ -28,10 +26,9 @@ const simLayer = herdr.GraphicsLayer
 const (
 	simChooserWidth = 64
 	simChrome       = 3
-	// Numerator and denominator rather than a division, because in a Go constant 3/4 is 0 and the popup
-	// would fall back to its row floor.
-	// Not 100%: an overlay that covers the whole view stops being an overlay, and losing the inbox exactly
-	// when a simulation is being looked at loses the context of what is being looked at.
+	// Numerator and denominator rather than a division: in a Go constant 3/4 is 0 and the popup would
+	// fall back to its floor. Not 100%, because losing the inbox while a simulation is being looked at
+	// loses the context of what is being looked at.
 	simHeightNum  = 3
 	simHeightDen  = 4
 	simMargin     = 2
@@ -49,11 +46,8 @@ const (
 	simShowing
 )
 
-// Rebase is excluded on purpose, not out of caution: git-sim 0.3.5 cannot draw it. If the item's branch
-// is already based on the base (the normal PR case) it answers "Branch 'main' is already based on
-// active branch 'feat'" and exits 1 with the message the wrong way round; if the branches diverged it
-// blows up with a Python IndexError. Merge works in all three cases. This list is the only thing to
-// touch when the project fixes it.
+// Rebase is excluded on purpose, not out of caution: git-sim 0.3.5 cannot draw it. Merge works in
+// all three cases, and this list is the only thing to touch when the project fixes it.
 var simKinds = []sim.Kind{sim.KindMerge}
 
 // In the Model rather than apart, because it shares its lifecycle: opened by a key, alive while the
@@ -210,10 +204,8 @@ func (m Model) handleSimKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd
 	}
 }
 
-// In the background because blocking the update loop reads as a freeze, which is the one thing an overlay
-// cannot do.
-// While it runs the result goes to the events channel like any other work, so its delivery does not
-// depend on the user still pressing keys.
+// In the background because blocking the update loop reads as a freeze, which is the one thing
+// an overlay cannot do. The result goes to the events channel like any other work.
 func (m *Model) startSim(kind sim.Kind) tea.Cmd {
 	m.sim.state = simRendering
 	m.sim.kind = kind
@@ -256,25 +248,19 @@ func (m *Model) applySim(msg simMsg) {
 	}
 }
 
-// The image is rescaled to the rectangle's pixel size before being sent, because that is the size the
-// terminal draws it at: sending the original 1920px only adds base64 bytes without gaining a visible
-// detail. It also fits the cell's real height, which is not twice its width but whatever the terminal
-// measures.
+// Rescaled to the rectangle's pixel size before being sent, because that is the size the terminal
+// draws it at: sending the original 1920px only adds base64 bytes. It also fits the cell's real
+// height, which is whatever the terminal measures and not twice its width.
 func (m *Model) publishSimImage(img image.Image) bool {
 	if m.graphics == nil || !m.graphics.Available() {
 		return false
 	}
 	cols, rows := m.simBox()
 	col, row := m.simBoxOrigin(cols, rows)
-	//
-	//   - en modo imagen, `simBox` devuelve `cols+2, rows+simChrome` y `FitCells`
-	//   - en modo selector y en modo renderizando, `simBox` devuelve
-	//
-	// comprobado en `TestElHuecoInteriorDelPopupNuncaDesaparecePorMuchoQueSeEstrecheLaTerminal`,
-	//
-	// tener ninguna.
+	// The inner gap is not checked against zero because it is unreachable in all three states:
+	// `simBox` adds exactly what is subtracted here, and the floor that closes the selector case is
+	// `contentWidth`'s, not `simMaxCols`/`simMaxRows`, which are image mode's and never reach this.
 	innerCols, innerRows := cols-2, rows-simChrome
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -361,13 +347,8 @@ func (m *Model) renderSimCells() {
 	}
 	cols, rows := m.simBox()
 	// The inner gap is not checked against zero and used to be. It is unreachable: `simBox` returns
-	// `cols+2, rows+simChrome`, `sim.FitCells` returns `max(..., 1)` in both dimensions in both of its
-	// branches, and exactly `2` and `simChrome` are subtracted here. So `w` and `h` are what FitCells
-	// returned, at least 1.
-	// And the check would not change anything even if it could: `sim.Cells` returns nil for
-	// `w <= 0 || h <= 0`, so without cells there would be no geometry to record but a zero. The guard was
-	// a third way of saying what `FitCells` and `Cells` already say, and the least clear of the three
-	// because it was the only one that did not say why.
+	// `cols+2, rows+simChrome`, `FitCells` floors both dimensions at 1, and exactly those two are
+	// subtracted here. And it would change nothing anyway: `sim.Cells` returns nil below 1.
 	w, h := cols-2, rows-simChrome
 	if m.sim.cells != nil && m.sim.cellW == w && m.sim.cellH == h {
 		return
@@ -391,10 +372,8 @@ func (m Model) simOverlay() (string, bool) {
 	}
 }
 
-// No default mode, like the merge: the simulation shown has to be the one the user wanted, and an
-// implicit strategy would silently swap it for another.
-// With a single strategy available the popup confirms instead of asking, which is what makes a two-second
-// popup worth having.
+// No default mode, like the merge: the simulation shown has to be the one the user wanted. With a
+// single strategy the popup confirms instead of asking, which is what makes it worth having.
 func (m Model) simChooserBox() string {
 	width, _ := m.simBox()
 	it := m.sim.item

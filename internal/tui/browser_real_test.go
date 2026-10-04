@@ -59,7 +59,6 @@ func TestSinAbridorEnElPathSeAviadoYNoSeAbreNada(t *testing.T) {
 	if strings.HasPrefix(msg.text, "abriendo") {
 		t.Errorf("sin abridor el aviso dice %q", msg.text)
 	}
-	// Y nada se creó en el PATH vacío: un intento de abrir habría dejado algo.
 	entradas, err := os.ReadDir(vacio)
 	if err != nil {
 		t.Fatal(err)

@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Fixtures de la forma real de la CLI: todo va envuelto en {"id","result"}.
-
 const fixtureWorktreeCreated = `{
   "id": "cli:worktree:create",
   "result": {

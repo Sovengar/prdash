@@ -162,7 +162,6 @@ func TestElLoginNoSeConfundeConLaLineaDeActiveAccount(t *testing.T) {
 	}
 }
 
-// script crea un ejecutable y devuelve su ruta.
 func script(t *testing.T, dir, nombre, cuerpo string) string {
 	t.Helper()
 	ruta := filepath.Join(dir, nombre)
@@ -174,7 +173,6 @@ func script(t *testing.T, dir, nombre, cuerpo string) string {
 
 func has(xs []string, want string) bool { return cuenta(xs, want) > 0 }
 
-// cuenta cuenta cuántas veces aparece un elemento exacto.
 func cuenta(xs []string, want string) int {
 	n := 0
 	for _, x := range xs {

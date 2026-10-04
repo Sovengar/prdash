@@ -18,7 +18,6 @@ func TestQuitarElBareBorraLoQueHayYToleraLoQueNo(t *testing.T) {
 	r := New(Options{MemoPath: filepath.Join(t.TempDir(), "memo.json")})
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/r", Owner: "o", Name: "r"}
 
-	// No existe: nil, y sin crear nada en el camino.
 	bare := r.barePath(ref)
 	if _, err := os.Stat(bare); err == nil {
 		t.Fatal("el bare ya existía antes de probar")

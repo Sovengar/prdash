@@ -1,7 +1,6 @@
-// Rows, columns and cells of the inbox.
-// Every cell returns its plain text and its style separately, and the render pads the text BEFORE
-// applying the style, so ANSI codes never break the table's width. DIFF is the one exception, with two
-// colours in the same cell: its text is spans, and the padding measures their plain widths summed.
+// Rows, columns and cells of the inbox. Each cell returns its plain text and its style separately,
+// and the render pads BEFORE styling, so ANSI codes never break the width. DIFF is the exception: two
+// colours in one cell, whose padding sums their plain widths.
 package tui
 
 import (
@@ -28,11 +27,9 @@ const (
 	colDiffIdx
 )
 
-// In priority order, dropped from the right at narrow widths so the state columns are never the ones
-// truncated. DIFF goes last on purpose: it is the only column that can be lost without losing
-// information — the detail pane always carries it — and at width 124 with long project paths it does
-// not fit alongside the other six. Before CHECKS it would climb in priority and take the room from a
-// datum that decides whether the item can be merged.
+// In priority order, dropped from the right at narrow widths. DIFF goes last on purpose: it is
+// the only column that can be lost without losing information, and before CHECKS it would climb in
+// priority and take the room from a datum that decides whether the item can be merged.
 var tableColumns = []tableColumn{
 	{"FORGE", colForge},
 	{"ITEM", itemWidthMin},
@@ -227,11 +224,9 @@ func diffCell(d model.DiffStat, width int) cell {
 	return cell{width: width, spans: diffSpans(text)}
 }
 
-// Diff notation and nothing else: it says which lines are new and which disappeared, not whether the
-// change is good.
-// The shape is recognised on purpose and nothing that does not fit is coloured: truncated text, an
-// unknown diffstat's "-", a "no changes". Colouring something that is not a number would lie about
-// the datum.
+// Diff notation and nothing else: which lines are new and which disappeared, not whether the
+// change is good. Nothing that does not fit the shape is coloured — truncated text, a "-", a "no
+// changes" — because colouring a non-number would lie about the datum.
 func diffSpans(plain string) []span {
 	add, rest, ok := strings.Cut(plain, " ")
 	if !ok || !isDiffCount(add, '+') {

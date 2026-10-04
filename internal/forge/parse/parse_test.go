@@ -582,8 +582,6 @@ func TestGHDiffStatAbsentIsUnknown(t *testing.T) {
 	}
 }
 
-// TestGHDiffStatZeroIsKnown: un PR sin cambios da 0/0 y eso SÍ es un dato
-// conocido, no un fallo de recogida.
 func TestGHDiffStatZeroIsKnown(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"number":15,"additions":0,"deletions":0,"changedFiles":0}}}}`
 	items, _, err := ParseGHGraphQLSearch(raw)
@@ -617,7 +615,6 @@ func TestGLRESTAndTodosHaveNoDiffStat(t *testing.T) {
 	}
 }
 
-// TestFlexInt tolera número, string, nulo y valores no numéricos.
 func TestFlexInt(t *testing.T) {
 	cases := map[string]int{
 		`{"n":12}`:    12,

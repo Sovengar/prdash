@@ -58,21 +58,9 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	return composed(spec, info), nil
 }
 
-// Pure on purpose: precedence rules between two sources are exactly what cannot be read by eye in a
-// provisioning body.
-//
-// The rule is one: for EACH FIELD, what Herdr said wins if it said anything, and what the caller asked for
-// otherwise. Herdr wins because it is the one that knows: if it moved the checkout, or renamed the branch,
-// the Worktree has to reflect where it really is. Lying here has no visible error, it yields a worktree
-// pointing at nothing with the review mounted on empty space.
-//
-// The exception is the label. spec.Label is the OWNERSHIP label prdash recognises the worktree by, while
-// info.Label is the repo name the native reports and info.WorkspaceLabel the --label the workspace was
-// opened with: neither is what was asked. So the label is not taken from Herdr when the caller gave one,
-// and the others are only a fallback in that order. Inverted, the worktree would rename itself to the
-// repo name and prdash would stop recognising it.
-//
-// The path name is the last resort because it is the only one always there.
+// Pure on purpose: precedence between two sources is what cannot be read by eye. For EACH FIELD,
+// what Herdr said wins, because lying here has no visible error — it yields a worktree pointing at
+// nothing. The label is the EXCEPTION: spec.Label is the ownership prdash recognises.
 func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 	wt := Worktree{
 		ID:          spec.Path,
@@ -102,14 +90,9 @@ func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 	return wt
 }
 
-// The checkout must match the branch asked for, like the direct-git provisioning: reusing another
-// branch's checkout would be a fake mount.
-//
-// A checkout with no open workspace gets one opened with cwd inside the worktree instead of being
-// returned containerless. Otherwise the layout opens its own workspace and the review shows up as a
-// loose workspace detached from the worktree containing it. `herdr worktree create` cannot cover this:
-// it does `git worktree add` internally and refuses an existing path, but `workspace create` with that
-// cwd does get registered as the worktree's open workspace (verified on Herdr 0.9.1).
+// The checkout must match the branch asked for: reusing another branch's checkout is a fake
+// mount. A checkout with no open workspace gets one opened with cwd inside the worktree, because
+// otherwise the review shows up as a loose workspace detached from the worktree containing it.
 func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 	existing, ok, err := h.scan.inspect(ctx, spec.Path)
 	if err != nil {

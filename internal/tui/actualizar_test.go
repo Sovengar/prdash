@@ -37,8 +37,6 @@ func TestUnMensajeDeCicloObsoletoSeDescartaPeroRearmaLaBomba(t *testing.T) {
 
 		salida, cmd := m.Update(c.viejo)
 
-		// Y el mensaje no tocó datos. El `loading` es el testigo: un `refreshDoneMsg`
-		// vigente lo apagaría.
 		got := salida.(Model)
 		if got.loading != antes {
 			t.Errorf("%s: un mensaje obsoleto tocó `loading` (%v -> %v)", c.nombre, antes, got.loading)
@@ -53,7 +51,6 @@ func TestUnMensajeDeCicloObsoletoSeDescartaPeroRearmaLaBomba(t *testing.T) {
 
 // The other side, so the table above is not worth "everything is re-armed".
 func TestUnMensajeVigenteSiTocaLoQueToca(t *testing.T) {
-	// refreshDoneMsg: apaga el loading y anota cuándo fue.
 	m := modelConNuevoCiclo(t)
 	m.loading = true
 	m.lastRefresh = time.Time{}
@@ -90,7 +87,6 @@ func TestUnMensajeVigenteSiTocaLoQueToca(t *testing.T) {
 
 // The asymmetry with the channel's messages.
 func TestLosMensajesDelModeloNoRearmanLaBomba(t *testing.T) {
-	// notifyMsg: avisa, y nada más.
 	m := modelConNuevoCiclo(t)
 	salida, cmd := m.Update(notifyMsg{text: "algo pasó", level: levelWarn})
 	if cmd != nil {

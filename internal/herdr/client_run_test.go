@@ -52,7 +52,6 @@ func TestRunSaleAlBinarioDeVerdad(t *testing.T) {
 }
 
 func TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo(t *testing.T) {
-	// Sin nada puesto: "herdr".
 	t.Setenv("HERDR_BIN_PATH", "")
 	if got := defaultBin(); got != "herdr" {
 		t.Errorf("sin HERDR_BIN_PATH devolvio %q, want herdr", got)
@@ -63,7 +62,6 @@ func TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo(t *testing.T) {
 		t.Errorf("con HERDR_BIN_PATH devolvio %q, want la ruta de la variable", got)
 	}
 
-	// Y `New` sin binario toma ese mismo.
 	c := New()
 	if c.Bin != "/opt/herdr/bin/herdr" {
 		t.Errorf("New().Bin = %q, want la ruta de HERDR_BIN_PATH", c.Bin)
@@ -98,7 +96,6 @@ func TestInHerdrSoloMiraLaVariable(t *testing.T) {
 }
 
 func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
-	// Fuera de Herdr: vetadas, y sin tocar el binario.
 	llamadas := 0
 	vistos := [][]string{}
 	c := &Client{
@@ -224,7 +221,6 @@ func contieneArg(llamadas [][]string, arg string) bool {
 	return false
 }
 
-// escribirBinario crea un script ejecutable y devuelve su ruta.
 func escribirBinario(t *testing.T, dir, nombre, cuerpo string) string {
 	t.Helper()
 	ruta := filepath.Join(dir, nombre)

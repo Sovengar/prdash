@@ -52,7 +52,6 @@ func TestBuildShowsThreeSectionsWithBothForges(t *testing.T) {
 		t.Errorf("mentions = %d items, want 2", len(got.Items))
 	}
 
-	// Cada ítem indica su forge y su host.
 	for _, sec := range box.Sections {
 		for _, it := range sec.Items {
 			if it.Forge == "" || it.Host == "" {

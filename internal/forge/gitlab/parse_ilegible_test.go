@@ -213,7 +213,6 @@ func TestLeerElEstadoDeUnMRQueExisteLoDevuelveEstampadoConSuIdentidad(t *testing
 	if it.Ref.Forge != "gitlab" || it.Ref.Host != "gitlab.acme.example" {
 		t.Errorf("identidad en el Ref = %s/%s", it.Ref.Forge, it.Ref.Host)
 	}
-	// Y el ID lleva la identidad.
 	if it.ID().Forge != "gitlab" || it.ID().Host != "gitlab.acme.example" {
 		t.Errorf("el ID no lleva la identidad: %+v", it.ID())
 	}

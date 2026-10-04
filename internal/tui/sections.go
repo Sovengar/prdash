@@ -56,12 +56,8 @@ func (m Model) sectionLines(title string, content []string, paintable bool) box 
 }
 
 func (m Model) layout() layout {
-	// The third argument used to carry `m.height > 0` and that guard was unreachable: computeLayout
-	// starts with `if !show || height <= 0`. The caller's `m.height > 0` and the callee's `height <= 0`
-	// are the SAME check written twice.
-	// The asymmetry that does matter is the other one: before the first WindowSizeMsg the height is zero,
-	// and returning an empty layout is exactly "paint the whole list unclipped", which is what avoids
-	// an empty first render.
+	// The third argument used to carry `m.height > 0` and that guard was unreachable: it is the check
+	// computeLayout already does. What matters is the other asymmetry: a zero height means "paint whole".
 	return computeLayout(m.height, len(m.hintLines()), true)
 }
 
@@ -153,10 +149,8 @@ func (m Model) keybindsSection(hintLines int) box {
 
 const hintSep = " · "
 
-// With a merge armed the box stops being help and becomes the confirmation: the warning the user must
-// read before the second keypress, which is why it replaces the bar instead of competing with it. It
-// lives here and not in a toast because a toast expires after 4s and a confirmation answered after
-// looking away has to still be there.
+// With a merge armed the box stops being help and becomes the confirmation, so it replaces the bar
+// instead of competing with it. It lives here and not in a toast, which expires after 4s.
 func (m Model) hintLines() []string {
 	if m.mergeArmed {
 		return wrapHint(m.mergeConfirmText(), m.contentWidth(), func(s string) string { return styleWarn.Render(s) })
@@ -180,15 +174,9 @@ func wrapHint(text string, width int, paint func(string) string) []string {
 	return lines
 }
 
-// The branch delete is in the same box because it is the same decision: it is named here, with `tab`,
-// before the key that fires it. `delete: yes/no` is the value and `tab` is the gesture, and both are
-// only visible with the merge armed, since outside it there is no delete to decide.
-//
-// Only the modes the repository allows are listed, and when the rules are unknown (GitLab does not
-// expose them over GraphQL) all three are offered, because not knowing is not the same as forbidding.
-//
-// When the gate finds a soft block the box says so and the options stay: the warning is not a veto, it
-// is what makes the second keypress informed.
+// The branch delete is in the same box because it is the same decision, named with `tab` before the
+// key that fires it. Unknown rules offer all three modes, because not knowing is not forbidding. And a
+// soft block leaves the options in place: the warning informs the second keypress.
 func (m Model) mergeConfirmText() string {
 	it, _ := m.selected()
 	parts := make([]string, 0, 4)

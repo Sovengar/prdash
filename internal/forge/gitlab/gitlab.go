@@ -1,7 +1,5 @@
-// Package gitlab implements the self-managed GitLab forge over the `glab` CLI. The inbox uses
-// paginated GraphQL and the Todos API for mentions. glab resolves its own host and REST subfolder, so
-// the paths we pass are relative and the host is pinned with `--hostname` and GITLAB_HOST so no call
-// falls through to gitlab.com.
+// Package gitlab implements the self-managed GitLab forge over the `glab` CLI, with paginated
+// GraphQL and the Todos API. glab resolves its own host, so the paths are relative.
 package gitlab
 
 import (
@@ -145,13 +143,8 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 	return a.action(ctx, a.mrArgs("approve", number, ref.Project)...)
 }
 
-// `--auto-merge=false` is not optional: glab defaults it to true, so with a pipeline running the command
-// did not merge, it queued the MR for auto-merge and exited 0. The UI reported "merge ok" on an MR
-// that was still open. `--yes` stops the confirmation from asking anyone.
-//
-// `--sha` is the same kind of trap the other way round: without the pin, glab and GitLab both merge
-// whatever HEAD is at that moment, which may have advanced since the inbox refresh. An empty headSHA
-// refuses the action rather than merging unpinned.
+// `--auto-merge=false` is not optional: glab defaults it to true, so with a pipeline running the
+// command queued the MR and exited 0. `--sha` is the same trap the other way: an empty headSHA refuses.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	extra := []string{"--yes", "--auto-merge=false"}
 	if flag, ok := glabMergeFlag(req.Mode); ok {
@@ -163,10 +156,8 @@ func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req 
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
 	}
 	extra = append(extra, "--sha", req.HeadSHA)
-	// The flag is `-d`/`--remove-source-branch` in glab, not gh's `--delete-branch`: same effect, other
-	// name. With `-R` it deletes the branch of the given repo, which is what is being asked. A project
-	// may have "delete source branch" on by default; the flag forces it for our merges and its absence
-	// leaves the project as it was.
+	// The flag is `-d`/`--remove-source-branch`, not gh's `--delete-branch`, and it forces the
+	// behaviour on projects that leave "delete source branch" to their own default.
 	if req.DeleteBranch {
 		extra = append(extra, "--remove-source-branch")
 	}
@@ -186,16 +177,9 @@ func glabMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
-// A PUT, not `glab mr update --target-branch`. The command is not broken, it is an EDIT command whose
-// raison d'être is opening title and description in an editor, and with an open field flag that door
-// is ajar: in a subprocess with stdin on /dev/null it does not hang, it fails, and a failure caused by
-// an invisible editor is the worst kind. The PUT sends exactly the field it is asked for.
-//
-// Explicit PUT because it is not the default method: with `-f`, glab switches to POST, and a POST on an
-// MR route updates nothing.
-//
-// The reason comes from the body, not stderr: GitLab's 400 ("Reference 'x' does not exist") is
-// actionable and `glab api -X PUT … (exit 1)` is not.
+// A PUT, not `glab mr update --target-branch`: an EDIT command that opens an editor, and in a
+// subprocess it fails rather than hangs. Explicit because `-f` makes glab POST, which updates nothing.
+// The reason comes from the body, whose 400 is actionable and whose exit code is not.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -340,12 +324,8 @@ func restEndpoint(resource string) string {
 	return strings.TrimLeft(resource, "/")
 }
 
-// `diffStats` is one entry PER CHANGED FILE, not an aggregate, so the parsing has to sum it, and the
-// file count is the list's length because the schema exposes no `changedFiles`.
-//
-// The merge strategies are deliberately NOT asked for. There is no `Project.mergeMethod` in the schema,
-// and the REST API gives it per repository (one call per repo), not per MR. So the merge rules arrive
-// unknown in GitLab, and unknown does not restrict.
+// `diffStats` is one entry PER CHANGED FILE and the schema exposes no `changedFiles`, so the count
+// is the list's length. The merge strategies are deliberately not asked: unknown does not restrict.
 const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt ` +
 	`diffHeadSha squash detailedMergeStatus diffStats { additions deletions } ` +
 	`author { username } project { fullPath name group { fullPath } }`

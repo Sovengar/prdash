@@ -223,7 +223,6 @@ func TestIncrementalPages(t *testing.T) {
 	}
 }
 
-// TestManualRefreshIncrementsCycle: la tecla de refresco arranca un ciclo nuevo.
 func TestManualRefreshIncrementsCycle(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	before := m.cycle
@@ -289,7 +288,6 @@ func TestDetailPanelFollowsCursor(t *testing.T) {
 		mkItem("github", "github.com", "acme/widget", "Otro", 2, ""),
 	}, false))
 
-	// Sin tocar ninguna tecla, el panel ya describe el primer ítem.
 	panel := detailPanel(m.View().Content)
 	if panel == "" {
 		t.Fatalf("no hay caja de detalle en la vista:\n%s", m.View().Content)
@@ -300,7 +298,6 @@ func TestDetailPanelFollowsCursor(t *testing.T) {
 		}
 	}
 
-	// Y sigue al cursor: el segundo ítem se ve sin abrir nada.
 	m = press(t, m, "down")
 	panel = detailPanel(m.View().Content)
 	if !strings.Contains(panel, "Otro") || !strings.Contains(panel, "#2") {
@@ -354,7 +351,6 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 				if blocked {
 					t.Fatal("un PR de otro autor no debe vetarse")
 				}
-				// actionBusy se fija de forma síncrona al arrancar la acción.
 				if !m.actionBusy {
 					t.Fatal("aprobar un PR de otro autor debería lanzar la acción")
 				}
@@ -451,7 +447,6 @@ func TestPermissionRecordsDenial(t *testing.T) {
 		t.Fatal("la denegación debería quedar registrada")
 	}
 
-	// Un nuevo intento no lanza acción y explica el motivo.
 	m = press(t, m, "a")
 	if !strings.Contains(lastToast(m), "no tienes permiso") {
 		t.Fatalf("toast after retry = %q", lastToast(m))
@@ -554,8 +549,6 @@ func TestUnchangedHead(t *testing.T) {
 	}
 }
 
-// TestIncrementalUnchangedKeepsItems cubre "refresco incremental": si la
-// cabecera no cambió, se conserva lo ya cargado y no se vuelve a paginar.
 func TestIncrementalUnchangedKeepsItems(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "A", 1, "")}, true))
@@ -570,7 +563,6 @@ func TestIncrementalUnchangedKeepsItems(t *testing.T) {
 		t.Fatal("no debería quedar paginación pendiente")
 	}
 
-	// Nuevo ciclo: la cabecera no cambió.
 	m = send(t, m, pageMsg{cycle: m.cycle, key: streamKey{forge: "github", section: model.SectionAuthored}, unchanged: true})
 	if got := len(m.sectionItems(model.SectionAuthored)); got != 2 {
 		t.Fatalf("el refresco sin cambios debería conservar los ítems: %d", got)
@@ -639,8 +631,6 @@ func TestRefreshDoesNotOverlap(t *testing.T) {
 	}
 }
 
-// TestObsoleteRefreshDoneIsInert cubre M-1: un refreshDone obsoleto no baja
-// loading ni arma un tick (solo rearma la bomba).
 func TestObsoleteRefreshDoneIsInert(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.loading = true
@@ -721,7 +711,6 @@ func TestStaleActionAppliesReread(t *testing.T) {
 	}
 }
 
-// TestRefreshClearsDenied cubre M4: un refresco exitoso limpia la denegación.
 func TestRefreshClearsDenied(t *testing.T) {
 	item := mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR", 4, "")
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})

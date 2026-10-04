@@ -28,11 +28,9 @@ const (
 	keybindsChrome     = 2
 )
 
-// The detail keeps its 40% while the central body can stay at minListRows, and degrades in order if
-// not: the detail panel drops to its minimum, then the header box hides, then the hints drop to one
-// line, then the hint box hides. That walk leaves the essentials and is what makes the view usable in a
-// 20-line terminal.
-// show is false before the first WindowSizeMsg, when nothing is clipped and the whole view paints.
+// The detail keeps its 40% while the body can stay at minListRows, and degrades in order if not:
+// detail to its minimum, then the header box, then the hints to one line, then the hints box. That
+// walk is what makes the view usable in a 20-line terminal.
 func computeLayout(height, hintAvailable int, show bool) layout {
 	if !show || height <= 0 {
 		return layout{}

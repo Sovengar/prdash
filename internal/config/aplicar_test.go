@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// The asymmetry that matters is between `~/algo` and `~otro`: the second does NOT expand.
 func TestUnaRutaDelConfigSeExpandeYLasQueNoEmpiezanPorTildeNo(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -27,7 +26,6 @@ worktree_dir = "~"
 	if quiere := filepath.Join(home, "datos-de-prdash"); cfg.DataDir != quiere {
 		t.Errorf("DataDir = %q, want %q (el ~ con separador sí se expande)", cfg.DataDir, quiere)
 	}
-	// Un `~` solo es un nombre de carpeta llamado `~`, y sin slash no se toca.
 	if cfg.CloneDir != "~otro/cosas" {
 		t.Errorf("CloneDir = %q: un ~ sin separador es un nombre de fichero y se deja como está",
 			cfg.CloneDir)
@@ -211,7 +209,6 @@ func TestUnForgeAusenteDelConfigNoTocaNada(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "uno.toml")
 
-	// Solo GitHub en el TOML: GitLab y Bitbucket intactos.
 	escribirConfig(t, path, "[forge.github]\nhost = \"otro.example.com\"\n")
 	cfg, aviso := LoadFrom(path)
 	if aviso != "" {

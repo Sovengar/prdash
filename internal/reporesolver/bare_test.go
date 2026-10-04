@@ -99,7 +99,6 @@ func TestEnsureBarePropagaElFalloDeClonarYNoDejaBasura(t *testing.T) {
 	if !strings.Contains(err.Error(), "no-existe/prueba.git") {
 		t.Errorf("el error %q no nombra la URL que se intentó clonar", err)
 	}
-	// Y no quedó ni el temporal ni un repo a medio hacer en la ruta canónica.
 	if _, err := os.Stat(dest); err == nil {
 		t.Error("EnsureBare dejó algo en la ruta canónica tras fallar")
 	}

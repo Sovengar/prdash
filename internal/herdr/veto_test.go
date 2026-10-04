@@ -206,7 +206,6 @@ func TestElClienteDeGraficosSeConstruyeYLeeElEntorno(t *testing.T) {
 		t.Errorf("con PaneID puesto dio %q", got)
 	}
 
-	// Sin el entorno: vacíos, no "undefined" ni el nombre de la variable.
 	t.Setenv("HERDR_PANE_ID", "")
 	t.Setenv("HERDR_SOCKET_PATH", "")
 	g = NewGraphics()
@@ -274,7 +273,6 @@ func TestLaVersionSeConsultaUnaSolaYSeCachea(t *testing.T) {
 	if v.Major != 0 || v.Minor != 9 || v.Patch != 1 {
 		t.Errorf("Version dio %d.%d.%d, want 0.9.1", v.Major, v.Minor, v.Patch)
 	}
-	// Y cinco llamadas más no vuelven a preguntar.
 	for i := 0; i < 5; i++ {
 		a.Version()
 		a.Available()

@@ -135,10 +135,8 @@ func (f *FakeAdapter) Approve(_ context.Context, ref model.RepoRef, number int) 
 }
 
 func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
-	// The fake refuses to merge without a pin, like both real adapters, and it does so BEFORE recording
-	// anything: a merge that does not go asked for no strategy. A fake that accepted what production
-	// rejects would make every TUI merge test cover a path that does not exist, and the real failure
-	// would surface in the adapter, where no test reaches.
+	// The fake refuses to merge without a pin, like both real adapters, and BEFORE recording anything: a
+	// fake that accepted what production rejects would leave the real failure where no test reaches.
 	if req.HeadSHA == "" {
 		return []model.Warning{{Forge: f.ForgeName, Kind: "unsupported", Msg: forge.ErrMissingHeadSHA.Error()}}
 	}

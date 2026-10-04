@@ -15,7 +15,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// stubLocator devuelve un Place fijo.
 type stubLocator struct {
 	place Place
 	ok    bool
@@ -64,7 +63,6 @@ func fakeSim(t *testing.T, srcJPEG string) string {
 	return writeScript(t, dir, "git-sim", script)
 }
 
-// writeJPEG crea un JPEG diminuto y devuelve su ruta.
 func writeJPEG(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "src.jpg")
@@ -211,7 +209,6 @@ func TestMaterializePrefersTheLocalBranch(t *testing.T) {
 	repo, _, it := fixture(t)
 	clone := filepath.Join(t.TempDir(), "clone")
 	testutil.RunGit(t, t.TempDir(), "clone", "--quiet", repo, clone)
-	// Se avanza la base solo en el clon local: ahora local y remoto divergen.
 	testutil.RunGit(t, clone, "checkout", "--quiet", "main")
 	testutil.CommitFile(t, clone, "solo-local.txt", "x", "avance local")
 

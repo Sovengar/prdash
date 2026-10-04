@@ -92,8 +92,6 @@ func TestKindUnmergeableIsNotConflict(t *testing.T) {
 			t.Errorf("Kind(%q) = %q, want %q", msg, got, want)
 		}
 	}
-	// El conflicto de estado sigue siendo conflicto: "already merged" y el 409
-	// genérico se resuelven solos.
 	for _, msg := range []string{"already merged", "409 conflict", "HTTP 409: Conflict"} {
 		if got := Kind(errors.New(msg)); got != "conflict" {
 			t.Errorf("Kind(%q) = %q, want conflict", msg, got)
@@ -159,7 +157,6 @@ func TestKindSelfReview(t *testing.T) {
 			t.Errorf("Kind(%q) = %q, want %q", msg, got, want)
 		}
 	}
-	// El rechazo propio no debe caer en la red ni en conflicto.
 	if k := Kind(errors.New("gh: Can not approve your own pull request (exit 1)")); k == "network" || k == "conflict" {
 		t.Errorf("el rechazo propio se clasificó como %q", k)
 	}

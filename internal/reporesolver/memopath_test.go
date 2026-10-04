@@ -75,7 +75,6 @@ func TestLaRutaPorDefectoEsLaDelCacheYNoOtra(t *testing.T) {
 // If the cache directory cannot be determined, New does not fail: the whole repo is built without
 // memo persistence.
 func TestUnaRutaPorDefectoIlegibleNoRompeNew(t *testing.T) {
-	// Sin XDG_CACHE_HOME ni HOME, el directorio de cache no se puede averiguar.
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")
 

@@ -67,7 +67,6 @@ func TestGuardarYLeyersePisanElPropio(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// El directorio no existe todavía.
 	if _, err := os.Stat(filepath.Dir(cachePath)); err == nil {
 		t.Fatal("el directorio de la cache ya existía antes de guardar")
 	}

@@ -97,7 +97,6 @@ func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
 		t.Errorf("prefijo de una sección ausente = %q, want vacío", got)
 	}
 
-	// Sufijos larguísimos (hojas largas tras un grupo corto): se acota al tope.
 	lay = newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems(
 			"g/un-servicio-con-nombre-larguísimo",
@@ -211,7 +210,6 @@ func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 	}
 }
 
-// containsSubstring indica si alguna línea contiene s.
 func containsSubstring(lines []string, s string) bool {
 	for _, l := range lines {
 		if strings.Contains(l, s) {

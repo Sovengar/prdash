@@ -60,10 +60,9 @@ func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
 	return FitCells(img, 1, 2, maxCols, maxRows)
 }
 
-// The height is paid double: a 16:9 image with 1x2 cells needs 3.56 columns per row, not 1.78. Without the
-// factor a graph stretches wide and two commits in a row read as a strip of ellipses instead of two
-// circles. The largest size that fits is used rather than filling the area, because empty cells beside
-// the image are what makes the image read as finished.
+// The height is paid double: 16:9 with 1x2 cells needs 3.56 columns per row, or two commits read as a
+// strip of ellipses. The largest size that fits is used rather than filling the area, because the empty
+// cells beside the image are what make it read as finished.
 func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows int) {
 	if img == nil || maxCols <= 0 || maxRows <= 0 {
 		return max(maxCols, 0), max(maxRows, 0)
@@ -114,11 +113,8 @@ func rgba(img image.Image) *image.RGBA {
 	return out
 }
 
-// Integer fractions can land empty on a destination much larger than the source, and there the
-// corner pixel is copied instead of leaving black: noise in a tiny image reads as a speck the render
-// really had.
-// `src` always comes from rgba, which leaves the bounds at the origin, which is why the indices do
-// not add Min.
+// Integer fractions can land empty on a much larger destination, and there the corner pixel is
+// copied instead of leaving black: noise in a tiny image reads as a speck the render really had.
 func shrink(src *image.RGBA, w, h int) *image.RGBA {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	sb := src.Bounds()

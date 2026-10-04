@@ -84,7 +84,6 @@ func TestDeriveNormalizaEstadosConZ(t *testing.T) {
 	if got := Derive(it); got != StatePending {
 		t.Errorf("Derive(estado=%q) = %v, want StatePending (un estado desconocido no bloquea)", it.State, got)
 	}
-	// Y el camino bueno: un estado en minúsculas y uno en mayúsculas dan lo mismo.
 	for _, s := range []string{"merged", "MERGED", "Merged"} {
 		it.State = s
 		if got := Derive(it); got != StateMerged {

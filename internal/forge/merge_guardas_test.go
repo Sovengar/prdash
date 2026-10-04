@@ -19,7 +19,6 @@ func TestRunActionDelMergePasaElHeadSHAReleidoYNoElDeLaFicha(t *testing.T) {
 	visto.State = "OPEN"
 	visto.HeadSHA = "sha-que-el-usuario-vio"
 
-	// El estado releído: SHA nuevo.
 	releido := visto
 	releido.HeadSHA = "sha-nuevo-del-refresco"
 

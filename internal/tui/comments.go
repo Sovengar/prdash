@@ -1,7 +1,5 @@
-// The selected item's conversation, inside the detail panel.
-// Comments are not a separate view nor something the user asks for: they are part of the card, which
-// is why they are fetched when the cursor reaches the item. What this file avoids is the other extreme,
-// fetching them with the inbox: N extra calls per cycle for data belonging to a single row.
+// The selected item's conversation, inside the detail panel. Comments are not a separate view the
+// user asks for, so they are fetched when the cursor arrives: N extra calls per cycle otherwise.
 package tui
 
 import (
@@ -37,11 +35,8 @@ func (m *Model) commentsCmd() tea.Cmd {
 	return tea.Tick(commentsPoll, func(time.Time) tea.Msg { return commentsTickMsg{} })
 }
 
-// Does not touch the events channel: the goroutine publishes with sendEvent, which does not consume the
-// reader the bomb has, so the single-reader invariant holds.
-//
-// The re-armed tick comes back either way, so the chain is never cut and the next selection change is
-// noticed without having to remember to re-arm it at the change site.
+// Does not touch the events channel: sendEvent does not consume the bomb's reader, so the
+// single-reader invariant holds and the re-armed tick keeps the chain from being cut.
 func (m *Model) requestComments() tea.Cmd {
 	tick := m.commentsCmd()
 	it, ok := m.selected()
@@ -102,13 +97,9 @@ func (m *Model) applyComments(msg commentsMsg) {
 	m.comments[msg.id] = st
 }
 
-// When there are comments they go in their own titled box rather than as more card fields: a
-// conversation is not data about the PR but what people said about it, and a border says so without
-// needing an explanation. The lone states (loading, error, none) stay as field lines because they are
-// one-line messages, not conversation.
-//
-// The room is shared among the comments instead of going to the first, so all five are always visible
-// and a tall terminal shows more than the first line of each.
+// Comments go in their own titled box rather than as more card fields: a conversation is what
+// people said about the PR, not data about it, and a border says so without an explanation. The room
+// is shared so all five are always visible instead of the first taking it all.
 func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if avail <= 0 {
 		return nil
@@ -135,13 +126,9 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		return []string{label("Comments", styleDim.Render("none"))}
 	}
 
-	// Never painted half: a block with a top border and no bottom one is not a half box, it is noise taking
-	// the same room as the whole block, so if both borders do not fit neither does the conversation.
-	//
-	// And the WHOLE conversation has to fit, not a part of it. The box costs two rows and one of them is a
-	// border: on a 30-row terminal with three comments and a three-row budget, the block would fit three
-	// comments with no box and one with the box. Seeing one and losing the other two is worse than seeing
-	// none, because a clipped box does not look clipped: it looks like the PR only has that comment.
+	// Never painted half: a block with a top border and no bottom one is not a half box, it is noise
+	// in the same room. And the WHOLE conversation has to fit, because a clipped box does not look
+	// clipped: it looks like the PR only has that comment.
 	if avail < commentChrome+len(st.list) {
 		return nil
 	}
@@ -153,11 +140,8 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if len(shown) > forge.CommentLimit {
 		shown = shown[:forge.CommentLimit]
 	}
-	// There is deliberately NO second floor on `len(shown)`. There used to be, and it was unreachable: the
-	// floor above is `avail < commentChrome+len(st.list)` and this one would have been
-	// `avail < commentChrome+len(shown)`, and since `len(shown) <= len(st.list)` by the cap of five the
-	// first always holds whenever the second does. A guard the previous one already covers covers
-	// nothing, and it reads as if the cap's clipping had a room check of its own.
+	// There is deliberately NO second floor on `len(shown)`: it would be `avail < chrome+len(shown)`
+	// and the guard above already implies it, since `len(shown) <= len(st.list)` by the cap of five.
 
 	bodyWidth := commentBodyWidth(inner)
 
@@ -176,25 +160,17 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	// on the border it costs no height, so it is not the first thing to go when the panel is tight.
 	body := make([]string, 0, budget)
 
-	// When they fit whole, each takes what it needs, which is what stops a six-paragraph comment sitting
-	// next to four one-liners truncated to "the timeout is 30x too high…".
-	// When they do not, everyone gets one row — all five present, which is what was asked — and the surplus
-	// goes to whoever has most to lose, which beats handing the panel to the first.
+	// When they fit, each takes what it needs, which stops a six-paragraph comment starving four
+	// one-liners. When they do not, everyone gets one row and the surplus goes to whoever has most to lose.
 	rows := need
 	if total > budget {
 		rows = allocate(need, budget)
 	}
 
 	for i, c := range shown {
-		// There is no safety net here and there used to be. It was unreachable, and the count is short:
-		// the guard above says `avail >= commentChrome+len(st.list)`, so `budget = avail - commentChrome` is
-		// at least `len(st.list)`, and `len(shown)` is at most `len(st.list)` by the cap of five, so
-		// `budget >= len(need)`.
-		// So allocate hands out at most `min(budget, sum(need))`: it distributes `budget - len(need)`
-		// extra rows and stops once everyone reaches their need. The sum never exceeds the budget, and
-		// `max(1, rows[i])` cannot raise it, since allocate already leaves everyone at 1.
-		// A net that cannot fire is worse than none: it makes the allocation look like it has a second
-		// safeguard when what it has is arithmetic you have to read.
+		// No safety net here, and there used to be: `budget >= len(need)` already, so allocate distributes
+		// `budget - len(need)` and stops at each one's need. A net that cannot fire is worse than none: it makes
+		// the allocation look like it has a safeguard when what it has is arithmetic.
 		body = append(body, commentBody(c, rows[i], bodyWidth)...)
 	}
 	return commentBox(body, commentLegend(len(shown), st.total, inner), inner)
@@ -211,16 +187,9 @@ const commentTitle = "Comments"
 // than stepping on the outer border.
 func commentBox(body []string, legend string, outer int) []string {
 	border := bordered.Rounded()
-	// The legend does not sit on the corner: between it and the corner the border keeps a dash of its own.
-	// Without it, a loose "3" with a gap on each side makes the bottom line read as broken rather than as
-	// a border with something written inside it, which is exactly what is lost by writing on a border.
-	//
-	// The dash goes OUTSIDE the count's style: inside it would inherit its grey and the segment closing the
-	// line would be a different colour from the segment that opens it. But outside the style is not unstyled:
-	// the count's style ends with a reset, and a reset does not restore what was there, it takes the border's
-	// grey with it. Without repainting, the dash and its space came out in the terminal's foreground colour,
-	// which on many palettes is a yellowish white: a piece of border in another colour, right on the line
-	// that closes the box.
+	// The legend does not sit on the corner: a loose "3" with a gap each side makes the bottom line
+	// read as broken. The dash goes OUTSIDE the count's style, and outside is not unstyled — a reset does
+	// not restore the border's grey, so without repainting the dash came out in the foreground colour.
 	legend = " " + legend + styleBorder.Render(" "+border.Bottom)
 	lines := strings.Split(bordered.RenderWithTitles(
 		border, borderColor, " "+commentTitle+" ", bordered.AlignLeft,
@@ -244,18 +213,14 @@ func commentBodyWidth(outer int) int {
 	return max(8, commentBoxWidth(outer)-commentBoxBorder)
 }
 
-// Without it the box spans the panel's full width and shares columns with its border: the verticals
-// overlap and every row comes out as `||`. A lighter grey told the two borders apart, but lighter grey
-// goes yellowish on warm palettes, and that was a colour problem covering a shape one: what is needed is
-// for the two borders not to overlap, not for them to look different.
+// Without it the box shares columns with its border and every row comes out as `||`. A lighter
+// grey told them apart but goes yellowish on warm palettes: a colour fix for a shape problem.
 const commentInset = 1
 
 func commentBoxWidth(outer int) int { return max(8, outer-2*commentInset) }
 
-// One at a time rather than filling the neediest first, because that avoids the arbitrariness of order:
-// "the first one keeps it" would let a six-paragraph comment at the top eat the panel while an equally
-// long one at the bottom keeps its first phrase, which depends only on who wrote first. Levelling shares
-// the damage among those who will suffer it, which is the only thing shareable without a better rule.
+// One at a time, not neediest first: levelling shares the damage among those who will suffer it,
+// while "the first keeps it" depends only on who wrote first.
 func allocate(need []int, budget int) []int {
 	rows := make([]int, len(need))
 	for i := range need {
@@ -287,14 +252,9 @@ const commentHint = " · open the PR to read the rest"
 
 const legendGap = 3
 
-// Both numbers are always stated, even with the whole conversation visible. "3 of 3" informs as much
-// as "5 of 23": it says nothing is left out, and the size of the conversation is part of the item's state —
-// 3 comments or 30 is not the same PR. The phrasing that only appeared when there was more was justified
-// by costing a row, and that cost disappeared when it moved to the border: staying silent about the
-// count no longer buys anything.
-//
-// Only the suffix if it fits whole and only when something is hidden: cut in half ("5 of 23 · open the PR
-// to read…") it says less than the short form, and with no hidden comments there is nothing to open.
+// Both numbers are always stated: "3 of 3" says nothing is left out, and 3 comments or 30 is not
+// the same PR. The suffix only when it fits whole and something is hidden — cut in half it says less
+// than the short form.
 func commentLegend(shown, total, outer int) string {
 	legend := fmt.Sprintf("%d of %d", shown, total)
 	room := commentBoxWidth(outer) - commentBoxBorder - legendGap
@@ -304,10 +264,8 @@ func commentLegend(shown, total, outer int) string {
 	return styleCount.Render(legend)
 }
 
-// The whole body and not just its first line: with the first line, a three-paragraph comment took one of
-// the four rows it was given and wasted the other three, which is exactly the room the field grid freed so
-// the comments would fit. Paragraphs are respected as they are (see parse.CommentLines), because wrapping
-// them continuously produces "fix the timeout fix the backoff".
+// The whole body, not its first line: with only the first, a three-paragraph comment took one of
+// four rows and wasted three. Paragraphs are respected so wrapping cannot read as a run-on.
 
 // What does not fit is marked with "…", because a row stopping mid-sentence reads as the comment ending
 // there.
@@ -360,14 +318,9 @@ func commentWidths(inner int, author string) (first, cont int) {
 	return first, cont
 }
 
-// Note that the block below says the opposite: the continuation does NOT line up with the first row's
-// text. The continuation indent is a constant (4 columns) and the first row's text starts at 2 + name + 2,
-// so with a short author the body is staggered to the left. What makes it read as a block is that all
-// the following rows share an indent, not that they line up with the first. Actually aligning them to the
-// author would give a long name a one-column body, and the name is not what says anything.
-//
-// `cut` means there was more text behind. Clipping is not enough: if the last piece fit exactly it would
-// carry no "…", and a row that looks finished says the comment ended there.
+// The continuation does NOT line up with the first row's text: the indent is a constant, and
+// aligning to a long author would leave the name a one-column body. `cut` exists because a row that
+// looks finished says the comment ended there.
 func commentRow(idx int, author, sep, piece string, w int, cut bool) string {
 	indent, prefix := contIndent, ""
 	if idx == 0 {
@@ -404,12 +357,8 @@ func clipRunes(runes []rune, n int) string {
 
 const maxCommentAuthor = 24
 
-// Separates them from the card without needing a blank line, which in an 18-row panel is expensive,
-// and the following rows share a FIXED indent so the body reads as a block.
-//
-// They are NOT aligned with the first row's text: that one carries the author and its width depends on
-// how long the name is, so aligning to it would let a long name eat the body, and the name is not what
-// says anything.
+// They are NOT aligned with the first row's text: that one carries the author, whose width would
+// let a long name eat the body, and the name is not what says anything.
 const (
 	commentIndent = "  "
 	contIndent    = "    "

@@ -10,21 +10,9 @@ import (
 	"testing"
 )
 
-// The suite never inherits the machine's git config. That config is global and mutable and the repos the
-// tests build are real repos, so as soon as part of it reaches a clone the result depends on who ran the
-// suite. Identity is the concrete case: a clone does NOT inherit user.name/user.email from its origin
-// (they live in that repo's local config), so a commit inside a clone ends up with no author — the first
-// prdash CI died on that.
-//
-// Identity goes through GIT_AUTHOR_*/GIT_COMMITTER_* instead of `git config` per repo, so it holds for
-// every repo the test creates, clones included, without each new helper having to remember. Requires git
-// >= 2.32; older builds ignore those variables and the tests still hold, since the identity is in the
-// environment.
-//
-// The location GIT_* are filtered because they beat cmd.Dir: with GIT_DIR set, `git config` writes in
-// THAT repo whatever directory the command runs in, so a suite launched from inside a hook would write
-// the config of a stranger's repo. Same filter as gitcmd.Env() does in production, and a real repo does
-// not need GIT_DIR: cmd.Dir is enough.
+// The suite never inherits the machine's git config: it is global and mutable, and the repos the
+// tests build are real. Identity goes through GIT_AUTHOR_*/GIT_COMMITTER_* because a clone does NOT
+// inherit user.name/user.email from its origin. The GIT_* location vars are filtered as in gitcmd.Env().
 func gitEnv() []string {
 	env := os.Environ()
 	out := env[:0]
@@ -56,26 +44,16 @@ func gitEnv() []string {
 }
 
 // An interface rather than *testing.T because *testing.T CANNOT be DOUBLED: Fatalf ends in
-// runtime.Goexit and testing.common has private fields. Without a double, proving that a helper aborts on
-// a broken fixture means having a failing test, and a red test proves nothing — it reads as a failure of
-// the helper. With the interface the reporting path runs in process against a double that records the
-// call and RETURNS, which is what lets the test carry on and then check that it warned exactly once.
-//
-// Applied only where it is needed, `aborta` and `RunConformance`: widening every helper would change half
-// the package's API for nothing.
+// Goexit and testing.common has private fields, so a red test proves nothing about the helper.
+// Applied only where it is needed; widening every helper would change half the API for nothing.
 type testReport interface {
 	Helper()
 	Fatalf(format string, args ...any)
 	Error(args ...any)
 }
 
-// The only place a helper in this package calls t.Fatal, and one on purpose: with six, "what does a helper
-// do when its fixture does not fit?" has six answers in the file and a test seeing two different messages
-// for the same failure cannot tell two failures from one.
-//
-// The prefix lives here and not at each call site for the same reason: a prefix written six times is
-// forgotten once, and a fixture test seeing `mkdir: permission denied` instead of `testutil: ...` cannot
-// tell whether the failure is the helper's or the system's.
+// The only place a helper here calls t.Fatal, and one on purpose: with six, "what does a helper
+// do when its fixture does not fit?" has six answers. The prefix lives here for the same reason.
 func aborta(t testReport, err error) {
 	t.Helper()
 	if err == nil {
@@ -99,11 +77,9 @@ func RunGit(t *testing.T, dir string, args ...string) string {
 	return out
 }
 
-// A guard that aborts the test cannot be checked without a subprocess, because t.Fatal kills the
-// goroutine and testing.TB makes a poor double (private method). With the core returning an error, the
-// test asserts the reason in process; the wrappers are checked separately, by subprocess.
-// The error carries the args and git's output, since without them an "exit status 128" says neither what
-// failed nor what answered.
+// A guard that aborts cannot be checked without a subprocess, because t.Fatal kills the
+// goroutine. The error carries the args and git's output: without them, "exit status 128" says
+// neither what failed nor what answered.
 func runGit(dir string, args ...string) (string, error) {
 	if err := checkDir(dir); err != nil {
 		return "", fmt.Errorf("testutil: %w", err)
@@ -160,10 +136,8 @@ func CommitFile(t *testing.T, dir, name, content, msg string) {
 	RunGit(t, dir, "commit", "-m", msg)
 }
 
-// Two guards because they fail for different reasons: the parent may not exist (a `name` with a path)
-// or something may sit where the directory should be. The second is the one that sneaks into
-// fixtures, because CommitFile(repo, "blocked/sub.txt", …) with `blocked` being a file compiles,
-// reads well and only fails when run.
+// Two guards because they fail for different reasons: the parent may not exist, or something may
+// sit where the directory should be — and the second sneaks into fixtures unnoticed.
 func commitFile(dir, name, content string) error {
 	path := filepath.Join(dir, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

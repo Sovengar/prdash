@@ -54,7 +54,6 @@ func TestComputeLayoutDegradaSinPerderElCuerpo(t *testing.T) {
 		t.Errorf("detalle = %d, want >= %d", lay.detailLines, minDetailRows)
 	}
 
-	// 10 líneas: tampoco caben hints y cabecera.
 	lay = computeLayout(10, 1, true)
 	if lay.showHeader || lay.showKeybinds {
 		t.Errorf("computeLayout(10) = %+v; en 10 líneas solo caben cuerpo y panel", lay)

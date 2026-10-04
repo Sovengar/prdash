@@ -193,7 +193,6 @@ func TestRenderWithTitleTituloLargo(t *testing.T) {
 	}
 }
 
-// La leyenda inferior se embebe en la línea de borde inferior.
 func TestRenderWithTitlesLeyendaInferior(t *testing.T) {
 	out := RenderWithTitles(Rounded(), nil, " arriba ", AlignLeft, " abajo ", AlignRight, "c", 24)
 	lines := strings.Split(out, "\n")

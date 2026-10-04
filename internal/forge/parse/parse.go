@@ -543,13 +543,9 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	return it
 }
 
-// The enum was renamed across versions (`broken_status` in old ones, `CONFLICT` in new) and REST returns
-// it lowercased while GraphQL returns the enum name, so both are accepted: a conflict that does not
-// exist is a false warning, and a false warning that repeats trains the user to ignore the whole box.
-//
-// `need_rebase` is NOT a conflict: the branch is behind but integrates without touching anything.
-// States that are neither conflict nor mergeable come out known and not-conflicting, because the CI gate
-// already reports those.
+// The enum is accepted in both spellings because REST lowercases it and GraphQL does not: a
+// conflict that does not exist is a false warning, and a false warning that repeats trains the user to
+// ignore the whole box. `need_rebase` is NOT a conflict: the branch integrates without touching anything.
 func mergeableFromGL(v string) model.Mergeability {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "conflict", "broken_status":

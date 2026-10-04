@@ -61,7 +61,6 @@ func TestRgbaDevuelveNilParaLoQueNoSePuedePromediar(t *testing.T) {
 func TestFitCellsConAreaDeCeroNoInventaColumnas(t *testing.T) {
 	img := solid(16, 9, black)
 
-	// Área de cero filas: nada de nada.
 	for _, a := range []medidas{{40, 0}, {1, 0}, {0, 0}, {40, -3}} {
 		cols, rows := FitCells(img, 1, 2, a.w, a.h)
 		if cols != max(a.w, 0) || rows != max(a.h, 0) {

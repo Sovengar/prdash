@@ -123,11 +123,8 @@ var arrancaTUI = func(m tea.Model) error {
 	return err
 }
 
-// Its own function because wiring is where things get forgotten: seven `SetX` calls in a row, and a
-// missing one still compiles and only fails when the user presses the key.
-// Taking the executor as a parameter is what makes it checkable that the simulator, the mounter, the
-// registry and the drafts all share ONE instance: four instances work in tests and break in
-// production, when a merge mounts a review the simulator does not recognise.
+// Its own function because wiring is where things get forgotten: a missing SetX among the
+// seven still compiles. The executor is a parameter so the four consumers are ONE instance.
 func wire(cfg config.Config, adapters []forge.Adapter, ex *executor.Executor) tui.Model {
 	model := tui.New(cfg, adapters)
 	model.SetMounter(ex)

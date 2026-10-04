@@ -67,7 +67,6 @@ func TestLoadDistingueNoExisteDeNoEsImagen(t *testing.T) {
 		t.Errorf("os.IsNotExist dio false con %v: la causa de os.Open no llega", err)
 	}
 
-	// Basura: el error dice "decode" y nombra el fichero.
 	basura := filepath.Join(dir, "basura.png")
 	if err := os.WriteFile(basura, []byte("esto no es una imagen"), 0o644); err != nil {
 		t.Fatal(err)
@@ -115,7 +114,6 @@ func TestElPromedioDeUnBloqueVacioEsElCeroLiteral(t *testing.T) {
 	if got := average(src, 0, 0, 1, 1); got != (color.RGBA{R: 200, G: 200, B: 200, A: 255}) {
 		t.Errorf("un bloque de un pixel dio %+v", got)
 	}
-	// Y un bloque de dos píxeles idénticos no cambia nada: promediar lo mismo da lo mismo.
 	if got := average(src, 0, 0, 2, 2); got != (color.RGBA{R: 200, G: 200, B: 200, A: 255}) {
 		t.Errorf("un bloque uniforme dio %+v", got)
 	}

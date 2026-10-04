@@ -70,7 +70,6 @@ type Worktree struct {
 	Label  string
 }
 
-// argv propio ni un override de `[commands]`.
 const (
 	defaultTuicrBin = "tuicr"
 	defaultHunkBin  = "hunk"
@@ -169,17 +168,13 @@ func Build(pr model.Item, wt Worktree, tools Tools, env Env) Plan {
 	review := Tab{Label: LabelReview}
 	add(&review, KindTuicr, "TUICR", DirReuse, tools.Tuicr, defaultTuicrBin, "pr", ReviewTarget(pr))
 	// The editor is composed without an availability check: unlike the other three its order can be a
-	// shell function or alias (the classic `vi` that expands to `nvim .`) and exist as no binary, so a
-	// check would always remove it and leave the review tab with one pane and no explanation. A
-	// mistyped order is visible in the pane itself, which is when the user is looking at it.
+	// shell function (`vi` expanding to `nvim .`) and exist as no binary, and a check would always remove it.
 	if editor, ok := compose(KindEditor, "Editor", DirRight, tools.Editor, defaultEditBin); ok {
 		review.Panes = append(review.Panes, editor)
 	}
 	edit := Tab{Label: LabelEdit}
 	// `hunk diff` bare reviews the WORKING TREE, which is what a pane sharing a tab with the editor
-	// and the agent should show. The PR/MR diff against the target is a fixed target that does not
-	// move while you edit, so it hides the changes in progress. Still reachable via
-	// `[commands].hunk`.
+	// should show; the PR diff is a fixed target that hides the changes in progress.
 	add(&edit, KindHunk, "Hunk", DirReuse, tools.Hunk, defaultHunkBin, "diff")
 	add(&edit, KindAgent, "Agente", DirRight, tools.Agent, defaultAgentBin)
 	p.Tabs = nonEmpty(review, edit)

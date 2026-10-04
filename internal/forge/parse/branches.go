@@ -10,10 +10,8 @@ func ParseGHBranches(out string) []string {
 	return branchLines(out)
 }
 
-// NDJSON because glab has no `--jq` (gh does) and `--paginate` returns several pages: a decoder
-// reading a single JSON value would swallow the first page and drop the rest, which is the part of
-// the repo that does not fit on a screen. A line that is not an object with a name is skipped rather
-// than fatal, because losing the whole listing to one odd line is worse than returning what parsed.
+// NDJSON because glab has no `--jq`: a single-value decoder would swallow the first page and
+// drop the rest. A line that is not an object with a name is skipped, not fatal.
 func ParseGLBranches(out string) ([]string, error) {
 	var names []string
 	var lastErr error

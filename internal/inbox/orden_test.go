@@ -61,7 +61,6 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 			"want [1 2 3 4]", got)
 	}
 
-	// EL SEGUNDO: misma atención, fechas distintas. Va antes el más reciente.
 	items = []model.Item{
 		item(1, "approved", fecha), item(2, "approved", fecha.Add(time.Hour)),
 		item(3, "approved", fecha.Add(48*time.Hour)),

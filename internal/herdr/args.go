@@ -5,12 +5,9 @@ import (
 	"time"
 )
 
-// An argv is the contract with the CLI, so it is a pure function: a guard written inline can only be
-// checked by running the CLI, and the order matters (Herdr tells `tab create --label` from
-// `tab rename`).
-//
-// The rule for optional flags lives here and nowhere else: a flag with an empty value is NOT sent,
-// because `--cwd ""` tells Herdr "use the empty directory", which is not the same as saying nothing.
+// Pure, because an argv is the contract with the CLI and an inline guard can only be checked
+// by running it. The rule for optional flags lives here and nowhere else: a flag with an empty value
+// is NOT sent, because `--cwd ""` tells Herdr "use the empty directory".
 type args []string
 
 func (a args) with(flag, value string) args {

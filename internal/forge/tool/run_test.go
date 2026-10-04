@@ -35,7 +35,6 @@ func TestRunAplicaElTimeoutPorDefecto(t *testing.T) {
 }
 
 func TestRunUsaElMensajeDeStderrYElDeSuUltimoRespaldo(t *testing.T) {
-	// stderr presente: manda stderr, y solo su primera línea.
 	_, err := shRunner(time.Second).Run(context.Background(), "-c", "echo 'el motivo real' >&2; exit 3")
 	var cerr *Error
 	if !errors.As(err, &cerr) {
@@ -190,8 +189,6 @@ func TestExitCodeLeeElDeLaCadenaYSTecla(t *testing.T) {
 	if got := ExitCode(&Error{ExitCode: 42}); got != 42 {
 		t.Errorf("ExitCode(*Error) = %d, want 42", got)
 	}
-	// Un *Error envuelto en otro error sigue dando su código: es el contrato de
-	// Unwrap, y quien lo envuelve no debe perder la información.
 	if got := ExitCode(errWrap{&Error{ExitCode: 9}}); got != 9 {
 		t.Errorf("ExitCode(envuelto) = %d, want 9", got)
 	}

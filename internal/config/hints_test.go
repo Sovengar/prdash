@@ -9,7 +9,6 @@ import (
 func TestLasPistasDeLaBarraSiguenElOrdenYLoUnico(t *testing.T) {
 	cfg := Defaults()
 
-	// Sin estado: solo teclas y etiquetas fijas, y en el orden declarado.
 	hints := cfg.Hints(nil)
 	if len(hints) == 0 {
 		t.Fatal("Hints sin estado no dio ninguna pista")

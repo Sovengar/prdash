@@ -271,11 +271,9 @@ func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]str
 		return model.RepoRef{}, false
 	}
 
-	// The "@" condition demands something before it: an SCP with an empty user ("@host:a/b") is not a git
-	// remote and normalising it would produce a repo that does not exist.
-	// "://" is accepted at position 0 even with a missing scheme, because that decision is not needed
-	// here: url.Parse rejects it for the absent scheme, so the entry falls on its own. What must not
-	// happen is such an entry slipping through the SCP branch, which a "!= 0" instead of ">= 0" would do.
+	// The "@" condition demands something before it: an SCP with an empty user is not a git remote.
+	// "://" is accepted at position 0 because url.Parse rejects it anyway; what must not happen is such an
+	// entry slipping through the SCP branch, which a "!= 0" instead of ">= 0" would do.
 	var host, path string
 	if i := strings.Index(raw, "://"); i >= 0 {
 		u, err := url.Parse(raw)

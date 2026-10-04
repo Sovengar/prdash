@@ -44,7 +44,6 @@ type Provisioner interface {
 	Audit(ctx context.Context) []Entry
 }
 
-// usada fuera de Herdr.
 type GitDirect struct {
 	// borrados de limpieza.
 	Base string

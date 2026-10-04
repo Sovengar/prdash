@@ -198,13 +198,9 @@ func TestRenderSimCellsSinImagenNoDejaCeldasViejas(t *testing.T) {
 	}
 }
 
-// Not a tautology: it does not restate simBox's formula, it calls it. And `cols-2 > 0` alone is not
-// enough, so extremely vertical images (where FitCells returns one column) and tiny terminals are
-// covered too.
-//
-// This test REPLACES an earlier one whose t.Fatalf never ran: it swept 4,500 terminal
-// combinations without finding a box that did not fit, because simMaxRows and simMaxCols have
-// floors. It passed always while checking nothing.
+// Not a tautology: it calls simBox's formula instead of restating it, and `cols-2 > 0` alone is
+// not enough. This REPLACES an earlier test whose t.Fatalf never ran: it swept 4,500 terminal
+// combinations without finding a box that did not fit, because the floors are there.
 func TestLaCajaDelPopupSiempreTieneHuecoInterior(t *testing.T) {
 	imagenes := []image.Image{
 		imagenParaLaGeometria(), // cuadrada
@@ -236,13 +232,9 @@ func TestLaCajaDelPopupSiempreTieneHuecoInterior(t *testing.T) {
 	}
 }
 
-// Not a counter for counting: a mechanism for INVALIDATING. A result arrives after its request closed
-// or after the popup reopened with another strategy, and applySim drops it on
-// `msg.seq != m.simSeq`. That only works if the number always moves up.
-//
-// The case worth remembering: with `m.simSeq--` instead of `++` starting at 0, closing with `++`
-// lands back on 0, and a request with seq 0 passes the comparison again. An old render paints over
-// the new one, with no error: the popup just looks broken.
+// Not a counter: a mechanism for INVALIDATING, and it works only because the number always moves
+// up. With `m.simSeq--` instead, closing with `++` lands back on 0 and an old render paints over the
+// new one with no error: the popup just looks broken.
 func TestSimSeqSubeYNuncaBaja(t *testing.T) {
 	m := newTestModel(t)
 	m.SetSimulator(simuladorMudo{})

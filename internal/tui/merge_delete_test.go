@@ -93,7 +93,6 @@ func TestDeleteToggleStaysForTheSession(t *testing.T) {
 		t.Fatalf("el primer merge: %d sin borrado, want 1", got)
 	}
 
-	// Segundo merge sin tocar el toggle: hereda el valor apagado.
 	m = press(t, m, "m")
 	if m.deleteBranch {
 		t.Error("el valor debería seguir apagado en el siguiente merge")

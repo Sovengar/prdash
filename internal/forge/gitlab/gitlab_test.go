@@ -163,7 +163,6 @@ func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
 	}
 }
 
-// writeScript crea un binario falso ejecutable y devuelve su ruta.
 func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

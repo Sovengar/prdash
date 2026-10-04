@@ -8,7 +8,6 @@ import (
 )
 
 func TestCallSinRespuestaEsUnErrorDeGraficos(t *testing.T) {
-	// El servidor cierra sin decir nada.
 	silencioso := &fakeSocket{silent: true}
 	g := newTestGraphics(t, silencioso)
 	err := g.call(context.Background(), "pane.graphics.info", nil, nil)

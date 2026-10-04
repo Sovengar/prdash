@@ -140,10 +140,8 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 	return a.action(ctx, "pr", "review", strconv.Itoa(number), "--repo", ref.Project, "--approve")
 }
 
-// Always pinned with `--match-head-commit`: without it gh merges whatever HEAD is at that moment, and
-// between the inbox refresh and the keypress the branch can have advanced, so it would integrate
-// commits nobody reviewed. An empty headSHA refuses the action instead of degrading to an unpinned
-// merge.
+// Always pinned with `--match-head-commit`: without it gh merges whatever HEAD is at that moment,
+// and the branch can have advanced between the refresh and the keypress. An empty headSHA refuses.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	flag, ok := ghMergeFlag(req.Mode)
 	if !ok {
@@ -154,12 +152,8 @@ func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req 
 	}
 	args := []string{"pr", "merge", strconv.Itoa(number), "--repo", ref.Project,
 		flag, "--match-head-commit", req.HeadSHA}
-	// `--delete-branch` goes last because it names the branch, and with `--repo` gh only deletes the
-	// REMOTE, which is what we want: prdash's local branches live in bare clones and worktrees this
-	// call must not touch.
-	// In a repo with a mandatory merge queue gh rejects the whole command with this flag, before
-	// merging. Not filtered on purpose: the confirmation names the delete and the forge's refusal is
-	// the exact answer.
+	// `--delete-branch` goes last because it names the branch, and with `--repo` gh deletes only the
+	// REMOTE. Not filtered: with a merge queue the forge's refusal is the exact answer.
 	if req.DeleteBranch {
 		args = append(args, "--delete-branch")
 	}
@@ -179,15 +173,8 @@ func ghMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
-// An API PATCH, not `gh pr edit --base`, which is what gh documents. `gh pr edit` fails today before
-// touching anything, with a deprecation error on Projects (classic) that only blows up in repos where
-// that field errors: a client failure, not permissions, and no flag avoids it.
-//
-// The reason comes from the response body, not stderr, where only the argv arrives: a missing branch
-// gives 422 with "Proposed base branch 'x' was not found" in the body and "Validation Failed (HTTP
-// 422)" on stderr, and that 422 is what tool.Kind classifies as validation — neither a conflict nor a
-// permission, since a refresh does not fix a branch name that does not exist and recording the item as
-// denied would take the action away for good.
+// A PATCH, not `gh pr edit --base`, which fails today on a Projects (classic) deprecation that no
+// flag avoids. The reason comes from the body, and its 422 is validation: not a conflict, not a perm.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -307,10 +294,8 @@ func qualifierFor(q forge.Query) (string, bool) {
 	}
 }
 
-// `headRefOid` and the three `merge*Allowed` come in the same item query and cost no extra call: the first
-// is what lets the merge be pinned to a commit and the rest filter the modes by what the repo accepts.
-// A repo with squash disabled must not offer squash, and `mergeable` arrives in the same query, which is
-// what lets us warn that the branches collide without spending a call to find out at merge time.
+// `headRefOid` and the three `merge*Allowed` ride in the same item query, so pinning and mode
+// filtering cost no extra call, and so does `mergeable` for the collision warning.
 const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName ` +
 	`headRefOid additions deletions changedFiles ` +
 	`author { login } repository { nameWithOwner name owner { login } ` +

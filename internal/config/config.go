@@ -355,10 +355,8 @@ type hint struct {
 	label  string
 }
 
-// The only source of the hint bar: the UI just joins these and wraps them, so this is the only way a
-// key can appear. The order is not cosmetic, because clipping to maxHintLines cuts the tail, so in a
-// narrow terminal only the head survives. That is why `quit` opens the list: it is the one key you
-// cannot leave without, so it cannot be the first thing to disappear.
+// The only source of the hint bar. The order is not cosmetic: clipping cuts the tail, so in a
+// narrow terminal only the head survives — which is why `quit` opens the list and cannot be first.
 var hintOrder = []hint{
 	{action: "quit", label: "quit"},
 	{action: "section-next", label: "section"},
@@ -371,10 +369,8 @@ var hintOrder = []hint{
 	// Here rather than at the end, because clipping cuts the tail. Not a guarantee: in a 40-column
 	// terminal the mode name goes with it, since "common" is the longest name.
 	{action: "prefix-mode", label: "prefix"},
-	// BEHIND `prefix-mode`, not next to merge where grouping would want it: clipping cuts the tail, so
-	// anything added before the mode makes the mode name the first thing lost. The short label is on
-	// purpose: "edit target branch" does not fit beside "mount review", and the popup title carries
-	// the long name.
+	// BEHIND `prefix-mode`, not next to merge: clipping cuts the tail, so anything added before
+	// the mode makes the mode name the first thing lost. The short label is deliberate; the popup has the long.
 	{action: "retarget", label: "edit base"},
 	{key: "j/k", label: "move"},
 	{key: "pgup/dn", label: "page"},

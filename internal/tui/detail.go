@@ -22,13 +22,9 @@ const labelWidth = 14
 
 const detailGap = 4
 
-// Three blocks: the short fields in a two-column grid, the URL on a full-width row, and the comments
-// below. Always in the grid, not only when the fields do not fit in one column: in a single column the
-// card took 16 of the ~18 lines the 40% gives and not one comment fitted.
-//
-// Pulling the URL out of the grid costs no height, which is what used to look wrong: the 13 fields take
-// 7 rows in two columns, and the remaining 12 plus the full-width URL still take 7. What changes is
-// that the URL reads whole, and a URL that cannot be copied is no use at all.
+// Always in the grid, not only when the fields do not fit one column: in a single column the card
+// took 16 of the ~18 lines the 40% gives. Pulling the URL out costs no height — 13 fields take 7 rows
+// in two columns and 12 plus a full-width URL still take 7 — and a URL you cannot copy is no use.
 func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	if !ok {
 		return []string{styleDim.Render("no selection: move the cursor onto an item")}
@@ -70,16 +66,9 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	avail := commentBudget(rows, len(grid), len(url), len(avisos))
 	comments := m.commentLines(it, avail, inner)
 
-	// What goes first is what can be asked for again, then the most recent. Comments go first because they
-	// are the only thing that can be re-requested with a key (or the next tick) and the only thing that was
-	// not on the card before this section existed; then the gap after the title, which is decorative and
-	// the title's own style compensates for; then the URL row, a whole row sacrificed for a datum that `o`
-	// re-reads; and last the diffstat, on the criterion the grid already had: a datum just lost is worse
-	// than one never painted. Same criterion as the list's DIFF column, which is also last.
-	//
-	// The jump from the fourth to the fifth candidate drops three things at once because there is no
-	// intermediate size: dropping only the URL leaves the same height, and dropping only the diffstat too,
-	// since the grid goes from 13 to 12 fields and both fit in 6 rows.
+	// What goes first is what can be asked for again, then the most recent; the diffstat is last,
+	// because a datum just lost is worse than one never painted. The jump from fourth to fifth drops three
+	// at once, since dropping only the URL leaves the same height.
 	withGap := []string{title, ""}
 	noGap := []string{title}
 	layouts := [][]string{
@@ -123,18 +112,9 @@ func withoutField(fields []detailField, key string) []detailField {
 	return out
 }
 
-// The forge's veto is also sticky: it is remembered per item until a refresh lifts it, so it can still be
-// there after the header stopped warning, which is why it earns a row.
-//
-// The own-approval veto is deliberately NOT painted: it derives from the item and the login, so it
-// would show on every render of every one of your PRs — which is nearly all of "Created by me" — and
-// the card would end with a permanent line repeating what the Role field already says. It is also the
-// only one that can be asked for elsewhere: the reason is delivered on the keypress, in the warning,
-// which is when it can be acted on.
-//
-// An unauthenticated forge IS painted, with its reason, which is exactly what used to get lost: the
-// adapter tells "the token is no good" from "this forge is not implemented", and the generic
-// "not authenticated" label sent the user to authenticate a token that already worked.
+// The forge's veto is sticky until a refresh lifts it, so it earns a row. The own-approval veto is
+// NOT painted: it would repeat the Role field on every render. An unauthenticated forge IS painted with
+// its reason, because the generic label sent users to fix a token that already worked.
 func (m *Model) detailWarnings(it model.Item) []string {
 	if reason := m.denied[it.ID()]; reason != "" {
 		return []string{"", styleWarn.Render("  action disabled: " + reason)}
@@ -154,25 +134,15 @@ func authReason(auth model.AuthState) string {
 	return "not authenticated"
 }
 
-// It exists for the URL, for a concrete reason: a self-managed GitLab URL with a subfolder easily
-// goes past 80 characters, so in half a column you read 40 and get a useless remainder. The full
-// width makes it readable without spending another row, since the 12 short fields still fit in the
-// same 6.
+// It exists for the URL: a self-managed GitLab URL with a subfolder goes past 80 characters, so
+// in half a column you read 40 and get a useless remainder.
 func fullWidthField(f detailField, inner int) string {
 	return label(f.key, styleDiffText(truncate(f.value, max(1, inner-labelWidth))))
 }
 
-// Its own function because it is the arithmetic that decides how much is seen, and inside the composition
-// that arithmetic was hidden: a bigger budget does not give a taller block, it gives a block that
-// clipTop trims at the end, so the trim cancelled out and the last line never changed. As a pure
-// function the number is checked directly and the trim is seen for what it is.
-//
-// The 2 are the card's title and the blank line separating it from the fields: not comment content,
-// but they take rows, so they are discounted. A budget that did not would give one comment row too
-// many and the step below would lose it without warning.
-//
-// It may come out NEGATIVE and that is correct: it says the header does not fit even alone. A negative
-// budget paints no comments rather than trying to paint a negative number of them.
+// Its own function because that arithmetic was hidden in the composition: a bigger budget does
+// not give a taller block, it gives one clipTop trims at the end, so the trim cancelled out. It may
+// come out NEGATIVE, and that is correct: a negative budget paints no comments.
 func commentBudget(rows, gridLines, urlLines, warningLines int) int {
 	return rows - gridLines - urlLines - 2 - warningLines
 }

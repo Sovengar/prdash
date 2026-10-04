@@ -47,8 +47,6 @@ func TestDerive(t *testing.T) {
 	}
 }
 
-// TestScorePrecedence fija el orden de atención: error > changes-requested >
-// review-required > approved > pending > merged/closed > draft.
 func TestScorePrecedence(t *testing.T) {
 	order := []State{
 		StateError,

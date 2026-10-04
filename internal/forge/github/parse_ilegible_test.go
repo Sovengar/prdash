@@ -55,7 +55,6 @@ func TestListarConSalidaQueNoEsJSONAvisaYNoSeRompe(t *testing.T) {
 		if w.Section != model.SectionReview {
 			t.Errorf("%s: el aviso no lleva la sección (lleva %q)", c.nombre, w.Section)
 		}
-		// Y el mensaje dice algo: un aviso vacío es indistinguible de no haber avisado.
 		if strings.TrimSpace(w.Msg) == "" {
 			t.Errorf("%s: el aviso quedó vacío", c.nombre)
 		}
@@ -91,7 +90,6 @@ func TestLeerElEstadoDeUnPRConSalidaIlegibleAvisaYNoDevuelveUnItemFalso(t *testi
 	if w.Kind != "parse" {
 		t.Errorf("aviso de clase %q, want parse", w.Kind)
 	}
-	// Y el ítem devuelto es el valor CERO, no uno a medias.
 	if it.ID() != (model.ID{}) || it.Number != 0 || it.HeadSHA != "" || it.Title != "" {
 		t.Errorf("devolvió un ítem a medias en vez del valor cero: %+v", it)
 	}

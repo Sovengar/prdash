@@ -141,18 +141,16 @@ func (m *Model) releaseReader() {
 	}
 }
 
-// Cycle policy: the re-read item is the most recent state the forge has (it is read AFTER the action), so
-// it always applies, even if the refresh cycle has moved on. Dropping it would revert the item to an
-// older state. The cycle is recorded per item so a page captured before the action cannot overwrite it
-// (see reconcileFirstPage).
+// The re-read item is the most recent state the forge has — it is read AFTER the action — so it
+// always applies; dropping it would revert the item. The cycle is per item so a page captured before
+// the action cannot overwrite it.
 func (m *Model) applyAction(out forge.Outcome, cycle int) tea.Cmd {
 	m.actionBusy = false
 	if out.HasItem {
 		m.actionCycle[out.Item.ID()] = cycle
-		// An action can write to the conversation (an approve leaves a review note), so what was loaded is no
-		// longer what the forge says. This is the ONLY invalidation of that cache: the inbox refresh does
-		// not clear it because a conversation does not change at the rate of a one-minute cycle, and
-		// re-asking every cycle would make the card flicker.
+		// An action can write to the conversation (an approve leaves a review note), and this is the
+		// ONLY invalidation of that cache: the inbox refresh does not clear it because re-asking every cycle
+		// would make the card flicker.
 		delete(m.comments, out.Item.ID())
 		m.applyItemUpdate(out.Item)
 	}
@@ -197,10 +195,9 @@ func triggersReviewCleanup(out forge.Outcome) bool {
 	return out.Kind == forge.ActionMerge && out.OK
 }
 
-// In the background so the Update handler does not block on a git subprocess. Without an injected remover
-// it returns nil (no auto-delete, and the merge is unaffected). The result arrives as reviewCleanupMsg
-// with the base warning already captured, so the notice recomposes on it instead of overwriting what
-// the merge brought.
+// In the background so the Update handler does not block on a git subprocess, and the result
+// arrives with the base warning already captured, so the notice recomposes on it instead of
+// overwriting what the merge brought.
 func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) tea.Cmd {
 	if m.reviewRemover == nil {
 		return nil
@@ -342,10 +339,9 @@ func (m *Model) cyclePrefixMode() {
 	m.syncScroll()
 }
 
-// A hard block (draft, already merged) prevents arming: it is a property of the forge and no key lifts it. A
-// soft block (red CI, requested changes) still arms, and the confirmation says so. No extra key is needed
-// to force it: naming the mode IS the confirmation, because that requires naming a strategy, and an
-// operator who names one having read that the CI is red has decided.
+// A hard block prevents arming: it is a property of the forge and no key lifts it. A soft block
+// still arms, and naming the mode IS the confirmation, because naming a strategy having read that
+// the CI is red is having decided.
 func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	it, _, ok := m.canAction(forge.ActionMerge)
 	if !ok {
@@ -362,17 +358,9 @@ func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// No default mode, so the confirmation and the choice are the same gesture and no path merges with a
-// strategy the user did not name.
-//
-// `tab` is the exception: it picks no mode, toggles the branch delete and does NOT disarm. It is the
-// other decision the merge names and, like the mode, can only be taken here — where the confirmation
-// teaches it — and before the key that fires it.
-//
-// A key that is not a mode CONSUMES the press and cancels. It used to delegate to handleKey, which
-// turned a mis-armed merge into an approve: `m` then `a` approved the PR. The original intent —an
-// out-of-time `m` should not leave the view waiting— is met better this way, since the view stops
-// waiting either way, but without the side effect of firing ANOTHER action.
+// No default mode, so the confirmation and the choice are one gesture. `tab` is the exception: it
+// picks no mode and does NOT disarm, being the other decision the merge names. A key that is not a
+// mode CONSUMES the press and cancels: it used to delegate to handleKey, so `m` then `a` approved.
 func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	var mode forge.MergeMode
 	switch key {
@@ -511,10 +499,9 @@ func (m *Model) startAction(kind forge.ActionKind, req forge.MergeRequest) tea.C
 		})
 }
 
-// What changes between actions — the guard, the warning text and what runs — is the three arguments, which
-// is why it is split out instead of repeated three times. `actionBusy` is set HERE rather than in the
-// caller because that is what stops two actions from stepping on each other, and two functions setting
-// it would forget once.
+// What changes between actions is the three arguments, which is why it is split out. `actionBusy`
+// is set HERE because that is what stops two actions stepping on each other, and two functions
+// setting it would forget once.
 func (m *Model) launchAction(kind forge.ActionKind, it model.Item, a forge.Adapter, notice string, exec func(context.Context) forge.Outcome) tea.Cmd {
 	m.actionBusy = true
 	m.setNotice(notice, levelInfo)
@@ -616,10 +603,9 @@ func (m Model) View() tea.View {
 	lay := m.layout()
 	it, ok := m.selected()
 	v = m.compose(lay, m.listSection(lay), m.detailSection(it, ok, lay.detailLines))
-	// Only landing on the interior of the boxes, so no border is stepped on.
-	// There is no `if len(toasts) > 0` here and there used to be: `overlayToasts` starts with
-	// `if len(boxes) == 0 { return content }`, so calling it with no warnings returns the view intact.
-	// The caller's guard added nothing and only stayed alive in the allowlist.
+	// Only the interior, so no border is stepped on. There is no `if len(toasts) > 0` and there used
+	// to be: overlayToasts returns the view intact with no warnings, so the guard only stayed alive in
+	// the allowlist.
 	v.text = overlayToasts(v.text, m.toast.blocks(m.contentWidth()), m.contentWidth(), v.rows)
 	// The popup goes after the toasts so it ends up above them: it is the layer the user just opened, and
 	// a warning must not cover it.

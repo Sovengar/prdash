@@ -296,8 +296,6 @@ func applyMerge(t *testing.T, remover ReviewRemover) (Model, tea.Cmd) {
 	return m, m.applyAction(out, m.cycle)
 }
 
-// runCleanup ejecuta el comando de limpieza y vuelca su mensaje. Devuelve false
-// si el merge no disparó limpieza (no había comando).
 func runCleanup(t *testing.T, m Model, cmd tea.Cmd) (Model, bool) {
 	t.Helper()
 	if cmd == nil {
@@ -338,8 +336,6 @@ func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
 	}
 }
 
-// TestMergeOKKeepsUnreadableWorktree cubre el fail-safe: si no se pudo leer el
-// estado, se conserva y el aviso lo dice.
 func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
 	remover := &fakeRemover{reason: worktree.KeptUnreadable}
 	m, cmd := applyMerge(t, remover)
@@ -488,8 +484,6 @@ func TestMergeCleanupRemovedKeepsWarnLevel(t *testing.T) {
 	}
 }
 
-// TestTriggersReviewCleanup fija el gatillo de forma determinista: solo un merge
-// OK lo dispara.
 func TestTriggersReviewCleanup(t *testing.T) {
 	yes := []forge.Outcome{
 		{Kind: forge.ActionMerge, OK: true},
@@ -542,8 +536,6 @@ func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 	}
 }
 
-// TestMergeOKWithoutRemoverStillWorks cubre la degradación: sin removedor
-// inyectado el merge funciona igual, no auto-borra y no devuelve comando.
 func TestMergeOKWithoutRemoverStillWorks(t *testing.T) {
 	m, cmd := applyMerge(t, nil)
 	if cmd != nil {
@@ -554,8 +546,6 @@ func TestMergeOKWithoutRemoverStillWorks(t *testing.T) {
 	}
 }
 
-// TestQuitDoesNotRemoveWorktrees cubre el invariante duro: cerrar la app nunca
-// ejecuta un borrado.
 func TestQuitDoesNotRemoveWorktrees(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	remover := &fakeRemover{removed: true}

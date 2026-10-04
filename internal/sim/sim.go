@@ -1,9 +1,5 @@
-// Package sim renders a simulation with git-sim and turns the result into something a terminal can
-// show.
-// git-sim is a renderer, not a simulator: it draws what a git command would do as an image, and the
-// picture is the only trace of that work, so nothing here reads its output to decide anything. What it
-// does give is a real conflict check (it performs the merge in a throwaway clone) and a drawing of the
-// history, which is why the image is the whole deliverable.
+// Package sim renders a simulation with git-sim. It is a renderer, not a simulator, and the picture
+// is the only trace of that work, so nothing here reads its output to decide anything.
 package sim
 
 import (
@@ -91,11 +87,8 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-// The global options go BEFORE the subcommand: git-sim declares them in the root group and the
-// subcommand's group rejects them.
-// `--output-only-path` reduces the output to the image path, which is all we need. `--quiet` cannot be
-// asked together with it: git-sim prints that path only when it is not silent, so both together leave
-// the output empty.
+// The global options go BEFORE the subcommand, whose group rejects them. `--quiet` cannot be asked
+// with `--output-only-path`: the path is printed only when git-sim is not silent.
 func (r *Runner) args(spec Spec, mediaDir string) []string {
 	return []string{
 		"--output-only-path",
@@ -149,10 +142,8 @@ func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec
 	return image, nil
 }
 
-// git_sim_auto_open=false is not optional: git-sim ends by handing the image to the desktop viewer, and
-// without a display that call never returns. The flag has no negative form on the command line, but
-// git-sim's Settings reads git_sim_* from the environment, so that is where it is turned off. The
-// pre-existing ones are filtered out so the last copy is ours and not the user's.
+// git_sim_auto_open=false is not optional: git-sim ends by handing the image to the desktop
+// viewer, which never returns without a display. It has no command-line form, only git_sim_* env vars.
 func env() []string {
 	out := make([]string, 0, len(os.Environ())+1)
 	for _, kv := range os.Environ() {

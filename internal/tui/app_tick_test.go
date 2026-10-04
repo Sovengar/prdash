@@ -26,7 +26,6 @@ func TestMergeItemNoPierdeLaSeccionNiElTipoDeReview(t *testing.T) {
 	if got.ReviewKind != model.ReviewAssigned {
 		t.Errorf("ReviewKind = %q, want %q", got.ReviewKind, model.ReviewAssigned)
 	}
-	// Y el resto de la relectura manda: es estado más fresco.
 	if got.Title != "titulo nuevo" {
 		t.Errorf("Title = %q, want el de la relectura", got.Title)
 	}
@@ -157,7 +156,6 @@ func TestRecomputeBackoffSubeSoloConRateLimitOTimeout(t *testing.T) {
 func TestAppendWarningsNoRepiteElMismoAviso(t *testing.T) {
 	base := []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "network", Msg: "boom"}}
 
-	// El mismo aviso tres veces: uno solo.
 	got := base
 	for range 3 {
 		got = appendWarnings(got, []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "network", Msg: "boom"}})

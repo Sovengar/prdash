@@ -144,10 +144,8 @@ func (g *Graphics) CellSize(ctx context.Context) (cellW, cellH int) {
 	return cellSizeFrom(g.Info(ctx))
 }
 
-// Two distinct degradations: the question failed, or the pane answered with a dimension at or below
-// zero. The second is easy to confuse with the first and for the same reason, since both mean there
-// is no measurement, which is why the condition is an OR and why an exact 0 must fall to the
-// approximation rather than being used as given.
+// Two degradations that mean the same thing —no measurement— so the condition is an OR and an
+// exact 0 must fall to the approximation instead of being used as given.
 func cellSizeFrom(info GraphicsInfo, err error) (cellW, cellH int) {
 	if err != nil || info.CellWidthPx <= 0 || info.CellHeightPx <= 0 {
 		return defaultCellWidthPx, defaultCellHeightPx
@@ -191,8 +189,6 @@ func (g *Graphics) Clear(ctx context.Context, layer string) error {
 	return g.call(ctx, "pane.graphics.clear", map[string]any{"pane_id": g.pane(), "layer_id": layer}, nil)
 }
 
-// One connection per request: the server closes after answering, so reusing it would only produce
-// a pipe error on the second call.
 func (g *Graphics) call(ctx context.Context, method string, params map[string]any, out any) error {
 	socket := g.socket()
 	if !haveGraphicsTarget(socket, g.pane()) {
@@ -263,10 +259,8 @@ func decodeResponse(line []byte, out any) error {
 		return nil
 	}
 	if len(env.Result) == 0 {
-		// For a method that DOES expect a result, none being there is an invalid response, not an empty
-		// result. Without this a socket pointing at another program that answers `{}` to everything
-		// would make `probe()` report the graphics layer as working, and the UI would publish images
-		// that never appear, with no warning at all.
+		// For a method that DOES expect a result, none being there is an invalid response: a socket
+		// pointing at another program answering `{}` would make probe() report the layer as working.
 		return errors.New("herdr: la respuesta no trae campo result")
 	}
 	return json.Unmarshal(env.Result, out)

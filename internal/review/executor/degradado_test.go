@@ -108,7 +108,6 @@ func TestElLayoutAportaSusAvisosYLosDeUnFallounoDeMas(t *testing.T) {
 	wt := worktree.Worktree{Path: "/wt", Branch: "b", Label: "prdash-pr-1"}
 	ctx := context.Background()
 
-	// Camino bueno: monta, avisa, y notifica.
 	falso := &fakeHerdr{available: true}
 	e := &Executor{Herdr: falso}
 	res := Result{}

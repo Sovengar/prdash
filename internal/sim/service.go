@@ -40,18 +40,11 @@ type Service struct {
 	Locator  Locator
 	Runner   *Runner
 	CacheDir string
-	// The third injected field, and the last: the three exist for the same reason, the failures of the
-	// environment cannot be staged in a test, and each of them exposes exactly one operation.
-	// This one is the clearest case: the directory hangs off a `os.MkdirTemp` that just succeeded, so
-	// its `MkdirAll` only fails when the filesystem says so (ENOSPC, EDQUOT, EIO). All three are real — a
-	// `TMPDIR` on a small tmpfs swallows a big repo — and none can be staged without privileges.
+	// The third injected field: the three exist because environment failures cannot be staged in a
+	// test. This one only fails when the filesystem says so (ENOSPC, EDQUOT, EIO) — real, not stageable.
 	Mkdir func(path string, perm fs.FileMode) error
-	// A git-sim runner that behaves is not the interesting half. The other half is git failing — a clone
-	// holding another process's index.lock, a ref that cannot be materialised, a branch removed midway —
-	// and without this field there was no way to provoke it: Runner.Bin lets a test stand up a fake git
-	// that passes everything except the subcommand it wants to fail.
-	// That is the difference between a failure that is reported and one that is swallowed; the three wraps
-	// in stage and materialize are what the user sees in the popup.
+	// git-sim behaving is not the interesting half; git failing is, and without this field there was
+	// no way to provoke it. Runner.Bin stands up a fake git that passes everything but one subcommand.
 	Git *gitcmd.Runner
 }
 
@@ -103,11 +96,8 @@ func (s *Service) cacheDir() (string, error) {
 	return dir, nil
 }
 
-// Everything happens in a temporary clone of the review's refs, never in the user's clone or
-// worktree. git-sim needs a HEAD pointing at a real branch, and the only way to have the base active
-// without touching the review's worktree (which is on the item's branch and is the review's cwd) is to
-// have another directory. Cloned with --shared so no objects are copied, and deleted afterwards, so a
-// crash leaves nothing but a temp directory the system cleans.
+// Everything happens in a temporary clone: git-sim needs a HEAD on a real branch and the
+// review's worktree is the review's cwd. Cloned with --shared and deleted, so a crash leaves nothing.
 func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Result, error) {
 	if s.Locator == nil {
 		return Result{}, errors.New("no local repository is known for this item")
@@ -212,10 +202,8 @@ func (s *Service) keep(image string, it model.Item, kind Kind) (string, error) {
 	return dst, nil
 }
 
-// An interface because Close is the ONLY error of the copy that is not a disk error, and it cannot be
-// provoked any other way: everything written goes through the kernel's page cache, so io.Copy finishes
-// without error even if the disk fills later. Not /dev/full (that fails in write, a different path),
-// not a file on NFS, nothing stageable in a test.
+// An interface because Close is the only copy error that is not a disk error and cannot be
+// provoked: everything written goes through the page cache, so io.Copy finishes even if the disk fills.
 type escritura interface {
 	io.Writer
 	io.Closer
@@ -259,11 +247,8 @@ func copiaPublicando(in io.Reader, dst string, crea func(string) (escritura, err
 	return nil
 }
 
-// The listing is injected for the same reason as the copy's creator: DirEntry.Info is an lstat that
-// only fails if the file disappears between the ReadDir and the lstat. Races cannot be forced, so an
-// entry that is already gone is handed over instead.
-// What is checked is not the obvious `continue` but that the prune carries on: an unreadable entry
-// must not leave the oldest image there forever because the count dropped.
+// The listing is injected because DirEntry.Info only fails if the file vanishes between ReadDir
+// and the lstat, and races cannot be forced. What matters is that the prune CARRIES ON past a dead entry.
 func prune(dir string, keep int) {
 	poda(dir, keep, os.ReadDir)
 }

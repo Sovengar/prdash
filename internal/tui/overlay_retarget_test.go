@@ -103,14 +103,12 @@ func TestElOverlayNoSeSaleNiPorArribaNiPorLaIzquierda(t *testing.T) {
 		t.Fatalf("con una caja de 20 filas en una vista de 4 el overlay dio %d filas, "+
 			"want 4: el popup no puede hacer crecer la vista", len(filas))
 	}
-	// Y cada fila lleva el fondo alrededor: el overlay recorta, no pinta encima de todo.
 	for i, l := range filas {
 		if w := ansi.StringWidth(l); w != 60 {
 			t.Errorf("fila %d mide %d, want 60 con una caja que no cabe", i, w)
 		}
 	}
 
-	// Caja vacía: la vista intacta, byte a byte.
 	base := vista(6, 40)
 	if got := overlayCentered(base, "", 40); got != base {
 		t.Errorf("con caja vacía la vista cambió: %q", got)
@@ -136,7 +134,6 @@ func TestLaSecuenciaDeRamasSubeEnCadaPeticionYEnCadaCierre(t *testing.T) {
 			"valores absolutos", m.branchSeq)
 	}
 
-	// Cada petición suma uno, y lo suma de uno en uno.
 	prev := m.branchSeq
 	for i := range 3 {
 		it := mkItem("github", "github.com", "acme/widget", "uno", i+1, "")

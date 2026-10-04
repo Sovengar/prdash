@@ -157,7 +157,6 @@ func TestDetailWarningsAvisaPorForgeYPorMotivoDeAccion(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	it := mkItem("github", "github.com", "acme/widget", "Uno", 1, "")
 
-	// Forge autenticado y sin motivo de acción: sin avisos.
 	if got := m.detailWarnings(it); len(got) != 0 {
 		t.Errorf("sin nada que avisar: %v", got)
 	}
@@ -174,7 +173,6 @@ func TestDetailWarningsAvisaPorForgeYPorMotivoDeAccion(t *testing.T) {
 		t.Errorf("el aviso debería nombrar el forge y el motivo: %q", stripANSI(got[1]))
 	}
 
-	// Forge no autenticado Y motivo de acción: manda el de la acción.
 	m.denied[it.ID()] = "the branch conflicts with main"
 	got = m.detailWarnings(it)
 	if len(got) != 2 {
@@ -227,8 +225,6 @@ func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
 			t.Errorf("inner %d (celda %d): el campo mide %d columnas, want <= %d: %q",
 				inner, cell, w, cell, ansi.Strip(linea))
 		}
-		// Y el ancho devuelto es el real, en texto plano: la etiqueta más el
-		// valor recortado.
 		want := labelWidth + utf8.RuneCountInString(stripANSI(linea)) - labelWidth
 		if w != want {
 			t.Errorf("inner %d: el ancho devuelto es %d pero el valor mide %d: el padding se calcularía mal",
@@ -320,7 +316,6 @@ func TestOrDashNoDejaUnCampoVacio(t *testing.T) {
 	if got := orDash("valor"); got != "valor" {
 		t.Errorf("orDash(\"valor\") = %q, want el valor intacto", got)
 	}
-	// Un valor de un solo espacio ES dato: no se descarta.
 	if got := orDash(" "); got != " " {
 		t.Errorf("orDash(\" \") = %q, want el espacio intacto", got)
 	}

@@ -21,7 +21,6 @@ func TestGitHelpersNoTocanElRepoReal(t *testing.T) {
 		t.Error("el fixture debería dejar main en refs/heads/main")
 	}
 
-	// Y el remoto se puede poner sin tocar nada de fuera.
 	origin := filepath.Join(t.TempDir(), "origin.git")
 	InitBare(t, origin)
 	SetRemote(t, repo, "origin", origin)

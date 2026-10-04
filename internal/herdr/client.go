@@ -113,10 +113,8 @@ func (c *Client) result(ctx context.Context, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// The message comes from ONE of two sources, never mixed: the server's `message` when the stderr is
-// a Herdr reply, the first stderr line otherwise. It used to start from the first line and be
-// overwritten, so a server sending a code with no message left raw JSON as the explanation.
-// Exclusive because the JSON only holds the code, which already has its own field.
+// The message comes from ONE of two sources, never mixed: the server's `message` when stderr is
+// a Herdr reply, the first stderr line otherwise. It used to start from the line and be overwritten.
 func newError(args []string, err error, stderr []byte) *Error {
 	e := &Error{Args: args, Err: err}
 	var exit *exec.ExitError

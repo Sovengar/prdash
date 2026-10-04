@@ -65,10 +65,8 @@ func TestLoadWrongVersionIsSilent(t *testing.T) {
 	}
 }
 
-// json.Marshal's error is the only one in that sequence that is not a disk error, and it is what
-// makes the helper take `any`.
-// Both halves of the failure are checked: the marshalling error comes back, and no file is
-// left behind —a truncated leftover reads as "no cache" and the symptom is a full refetch.
+// json.Marshal's error is the only non-disk one in the sequence, and it is what makes the helper
+// take `any`. A truncated leftover would read as "no cache" and cost a full refetch.
 func TestGuardarJSONFallaConUnValorQueNoSePuedeSerializarYNoDejaFichero(t *testing.T) {
 	destino := filepath.Join(t.TempDir(), "sub", "cache.json")
 

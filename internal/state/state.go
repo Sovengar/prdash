@@ -106,25 +106,18 @@ func Actionable(it model.Item) (bool, string) {
 	}
 }
 
-// Hard versus soft is what makes the gate worth having. A hard block is a property of the forge (a draft
-// PR cannot be merged because GitHub forbids it, and no confirmation changes that). A soft one is a
-// policy: CI can be red on a flaky check, and requested changes are sometimes ignored by whoever owns the
-// repo. Those are not forbidden —that would turn the tool into a wall— but they are not silent either:
-// they are announced and asked for twice.
+// Hard versus soft is what makes the gate worth having: a hard block is a property of the forge that
+// no confirmation changes, a soft one is policy — announced and asked twice, never forbidden.
 type Block struct {
 	Reason string
 	Hard   bool
 }
 
-// The precedence mirrors Derive's, which already decides the attention order: an item with red CI and
-// requested changes is blocked for the CI, which is what the operator wants to know first. Pending checks
-// count as a SOFT block rather than as ignored: merging while CI runs is exactly the race the head SHA
-// pin does not close, because the CI can pass after the merge.
+// The precedence mirrors Derive's, which already decides the attention order. Pending checks are
+// a SOFT block: merging while CI runs is a race the head SHA pin does not close.
 func MergeBlock(it model.Item) Block {
-	// Draft, merged and closed are read from the item's own fields and not from Derive: Derive orders by
-	// attention to the operator, so a draft that is also approved comes back StateApproved and the draft
-	// is lost. The question here is a different one — can this forge integrate this? — and its answer
-	// does not depend on the review decision.
+	// Read from the item's own fields, not from Derive: Derive orders by attention, so an approved
+	// draft comes back StateApproved and the draft is lost. The question here is a different one.
 	switch normalize(it.State) {
 	case "merged":
 		return Block{Reason: "item is already merged", Hard: true}
@@ -134,12 +127,8 @@ func MergeBlock(it model.Item) Block {
 	if it.IsDraft {
 		return Block{Reason: "item is a draft", Hard: true}
 	}
-	// A branch collision is SOFT, and that is the design decision that matters: GitHub will not integrate
-	// it as it stands, but a rebase fixes it in one command and the gate cannot know whether the user
-	// already did. Forbidding it would leave the PR with no way out from here, so it is announced and the
-	// second keypress decides.
-	// Before the CI on purpose: a colliding PR is not going to pass CI, and saying "CI is failing" when
-	// what is needed is a rebase sends the operator to the wrong place.
+	// A branch collision is SOFT: a rebase fixes it in one command and the gate cannot know whether
+	// the user already did. Before the CI, because a colliding PR is not going to pass CI.
 	if it.Mergeable.Known && it.Mergeable.Conflicted {
 		return Block{Reason: conflictedReason(it.TargetBranch)}
 	}
@@ -177,10 +166,8 @@ func checksFailingReason(c model.Checks) string {
 
 const SelfReviewReason = "you cannot approve your own PR/MR"
 
-// No forge allows approving your own: GitHub rejects it in the API with no option to enable it, and
-// the ones that allow it by configuration still have the repository decide, not the client.
-// Identity uses the viewer's login when both are known, since that is a fact; when either is missing it
-// falls back to the section, which for a forge means "the user wrote it".
+// No forge allows approving your own, and the ones that allow it by configuration still let the
+// repository decide. Identity prefers the viewer's login and falls back to the section when unknown.
 func CanApprove(it model.Item, viewer string) (bool, string) {
 	if viewer != "" && it.Author != "" {
 		if strings.EqualFold(viewer, it.Author) {

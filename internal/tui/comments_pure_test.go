@@ -38,7 +38,6 @@ func TestClipRunesMarcaLoQueSePerdio(t *testing.T) {
 		}
 	}
 
-	// In RUNES, not bytes: "ñáé" is three runes and six bytes.
 	multibyte := []rune("ñáé")
 	if got := clipRunes(multibyte, 3); got != "ñáé" {
 		t.Errorf("clipRunes con 3 runes dio %q, want el texto entero: la cuenta es en runes, no en bytes", got)
@@ -100,14 +99,12 @@ func TestPadRightAlineaPorColumnasNoPorBytes(t *testing.T) {
 			if w := ansi.StringWidth(got); w != max(n, ansi.StringWidth(s)) {
 				t.Errorf("padRight(%q, %d) mide %d columnas, want %d", s, n, w, max(n, ansi.StringWidth(s)))
 			}
-			// El relleno no puede perder ni añadir caracteres visibles.
 			ifTrimmed := strings.TrimRight(got, " ")
 			if ifTrimmed != s {
 				t.Errorf("padRight(%q, %d) = %q, want el mismo texto con relleno", s, n, got)
 			}
 		}
 	}
-	// Multibyte: "ñ" measures 1 column and 2 bytes; padding to 5 by counting bytes would be wrong.
 	if got := padRight("ñ", 5); ansi.StringWidth(got) != 5 {
 		t.Errorf("padRight(%q, 5) mide %d columnas, want 5: el relleno cuenta columnas, no bytes", "ñ", ansi.StringWidth(got))
 	}

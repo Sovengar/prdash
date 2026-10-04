@@ -60,8 +60,6 @@ func TestBuildAllToolsPresent(t *testing.T) {
 		t.Errorf("env sin PRDASH_WORKTREE: %v", tuicr.Env)
 	}
 
-	// El editor acompaña a la review en su tab; el diff y el agente comparten el
-	// de trabajo.
 	if review[1].Kind != KindEditor {
 		t.Errorf("segundo pane de Review = %v, quiero el editor", review[1].Kind)
 	}

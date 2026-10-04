@@ -178,7 +178,6 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 		t.Fatalf("el caso necesita cursor y scroll movidos en Assigned: %+v", assigned)
 	}
 
-	// Assigned → Mentioned (vacía) → Mine.
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionAuthored {

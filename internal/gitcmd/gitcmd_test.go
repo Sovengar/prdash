@@ -265,8 +265,6 @@ func TestElEntornoDeGitNoHeredaelContextoDelShell(t *testing.T) {
 	}
 }
 
-// As in herdr, the timeout has to CUT and not just kill the process, and here the child inheriting
-// the descriptors is even easier to produce.
 func TestElTimeoutDeRunCortaDeVerdad(t *testing.T) {
 	dir := t.TempDir()
 	colgado := filepath.Join(dir, "git-colgado")

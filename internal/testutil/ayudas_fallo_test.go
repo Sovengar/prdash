@@ -44,7 +44,6 @@ type casoDeFallo struct {
 	quiere string
 }
 
-// The guards of the package, each with a fragment of the message it must produce.
 func casosDeFallo() []casoDeFallo {
 	return []casoDeFallo{
 		{"git-falla", "exit status"},

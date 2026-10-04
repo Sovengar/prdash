@@ -209,12 +209,9 @@ type Model struct {
 
 	toast *toastManager
 
-	// Storing the state and not just the list is what lets "this PR has no comments" be told apart from "I
-	// have not asked yet", which are two different lines and one of them cannot be left hanging.
-	//
-	// Cached per item and not cleared on refresh: the inbox reloads every minute and a conversation does not
-	// change at that rate, so re-asking every cycle would only make the card flicker. The single
-	// invalidation is an action on the item, which really can add comments.
+	// Storing the state and not just the list is what tells "this PR has no comments" from "I have
+	// not asked yet". Cached per item and not cleared on refresh: re-asking every cycle would only make
+	// the card flicker, and an action on the item can really add comments.
 	comments map[model.ID]*commentState
 
 	cycle int
@@ -452,10 +449,8 @@ func (m *Model) tickInterval() time.Duration {
 	return base + m.backoff
 }
 
-// Pagination is deliberately NOT consulted here: while it is really paging the cycle is still in flight
-// (`loading`), so it is already paused. A `more` that survives the end of the cycle is residue (the page
-// that closed it was lost, or the forge cut off on a rate limit): consulting it would freeze the tick for
-// good and the inbox would never refresh again.
+// Pagination is deliberately NOT consulted: the cycle is already paused while it pages, and a
+// `more` surviving the end of the cycle is residue whose consultation would freeze the tick for good.
 func (m *Model) paused() bool {
 	return m.loading || m.actionBusy
 }
@@ -873,7 +868,6 @@ func appendWarnings(dst, src []model.Warning) []model.Warning {
 }
 
 // levelNone produces nothing: a warning with no level never gets painted.
-// produce nada: un aviso sin nivel no llega a pintarse.
 func toastForLevel(level noticeLevel) (toastLevel, bool) {
 	switch level {
 	case levelOK:
@@ -901,13 +895,9 @@ func (m *Model) setNotice(text string, level noticeLevel) {
 	}
 }
 
-// Because wiring is seven `SetX` calls in a row and a missing one does NOT break compilation. The model
-// comes up anyway and the failure only surfaces when the user presses the key, with a warning that says
-// "missing dependency" — a diagnosis rather than a failure, and one that does not say which of the seven.
-//
-// Simulator and Mounter are the interfaces rather than a bool: comparing the instance is what lets a test
-// assert that the simulator and the review registry share THE SAME executor, which is the failure four
-// distinct instances produce in production and not in tests.
+// Because wiring is seven `SetX` calls in a row and a missing one does NOT break compilation: the
+// failure only surfaces on the keypress, as a "missing dependency" that names none of the seven. The
+// Simulator and Mounter are interfaces so a test can assert they share THE SAME executor.
 type Wiring struct {
 	Mounter       Mounter
 	Simulator     Simulator

@@ -162,7 +162,6 @@ func TestElClonDeSimulacionEsTemporalYShared(t *testing.T) {
 		t.Errorf("el clon quedó en %q, want dentro de %q: el clon de simulación no puede "+
 			"vivir junto al repo del usuario", filepath.Dir(path), tmp)
 	}
-	// Y no dejó nada en el repo de origen: ni refs nuevas, ni ramas, ni worktrees.
 	ramas := git(t, repo, "branch", "--list")
 	if strings.Contains(ramas, "sim") || strings.Contains(ramas, "tmp") {
 		t.Errorf("la simulación dejó ramas en el repo de origen: %q", ramas)

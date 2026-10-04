@@ -166,7 +166,6 @@ func TestElErrorDeParseDesenvuelveLaCausa(t *testing.T) {
 		t.Errorf("el texto %q no empieza por la herramienta", e.Error())
 	}
 
-	// Sin causa: el texto no lleva un ": <nil>" colgando.
 	sinCausa := &Error{Tool: "gl", Msg: "campo ausente"}
 	if sinCausa.Unwrap() != nil {
 		t.Error("Unwrap devolvió algo sin causa")

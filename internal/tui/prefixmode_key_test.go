@@ -60,7 +60,6 @@ func TestPrefixModeNoLoReiniciaElCambioDeSeccion(t *testing.T) {
 	if m.prefixMode != prefixLeaf {
 		t.Errorf("cambiar de sección reinició el modo: %v, want leaf (es global)", m.prefixMode)
 	}
-	// Y la vuelta completa a la sección original tampoco.
 	for range 2 {
 		m = press(t, m, "tab")
 	}

@@ -18,7 +18,6 @@ func TestRecordarUnaRutaVaciaNoEnsuciaLaMemoria(t *testing.T) {
 	r := New(Options{MemoPath: memoPath})
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/r", Owner: "o", Name: "r"}
 
-	// La ruta vacía no se guarda.
 	r.Remember(ref, "")
 	if _, ok := r.store.Route(repoKey(ref)); ok {
 		t.Error("una ruta vacía se guardó en la memoria: un resolver la creería válida")
@@ -61,7 +60,6 @@ func TestLaRamaDeReviewSeReutilizaYNoSeVuelveACrear(t *testing.T) {
 	it.Number = 7
 	ctx := context.Background()
 
-	// La primera vez: crea la rama.
 	branch, err := r.FetchReviewRef(ctx, repo, it)
 	if err != nil {
 		t.Fatalf("el primer FetchReviewRef: %v", err)

@@ -89,7 +89,6 @@ func respondeNormal(args []string) ([]byte, []byte, error) {
 func TestTabOfDevuelveVacioSinPaneYNoTumbaElLayout(t *testing.T) {
 	ctx := context.Background()
 
-	// Sin pane conocido: vacío sin preguntar a Herdr.
 	vacia := nuevoCLIQueCuenta(nil)
 	if got := vacia.client().tabOf(ctx, "w18", ""); got != "" {
 		t.Errorf("tabOf sin pane dio %q, want vacío", got)
@@ -98,7 +97,6 @@ func TestTabOfDevuelveVacioSinPaneYNoTumbaElLayout(t *testing.T) {
 		t.Error("tabOf sin pane preguntó a Herdr: no tenía con qué")
 	}
 
-	// Y si la lista falla, degrada a vacío SIN tumbar el layout.
 	fallo := nuevoCLIQueCuenta(func(op string, _ []string) bool { return op == "pane list" })
 	fallo.respond = func(args []string) ([]byte, []byte, error) {
 		if args[0] == "pane" && args[1] == "list" {
@@ -114,7 +112,6 @@ func TestTabOfDevuelveVacioSinPaneYNoTumbaElLayout(t *testing.T) {
 		t.Errorf("un tab sin nombre tumbó el layout: %v. Nombrar el tab es cosmético", err)
 	}
 
-	// Y el camino bueno: encuentra el pane y devuelve su tab.
 	ok := nuevoCLIQueCuenta(nil)
 	if got := ok.client().tabOf(ctx, "w18", "w18:p1"); got == "" {
 		t.Error("tabOf no encontró un pane que sí está en la lista")

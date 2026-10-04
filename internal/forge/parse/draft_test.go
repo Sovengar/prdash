@@ -22,7 +22,6 @@ func TestDraftFlagFromEveryPath(t *testing.T) {
 				if len(items) != 2 {
 					t.Fatalf("items = %d, want 2", len(items))
 				}
-				// El fixture trae isDraft:true en el segundo nodo.
 				return items[1].IsDraft, items[1].State, state.MergeBlock(items[1])
 			},
 		},

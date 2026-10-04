@@ -10,7 +10,6 @@ import (
 
 // The runner's host is what is checked, not the struct's.
 func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
-	// Sin nada.
 	a := New("", "")
 	if a.Host() != "gitlab.example.com" {
 		t.Errorf("sin host dio %q, want el self-managed de ejemplo: un default que sea "+
@@ -124,7 +123,6 @@ func TestElLoginSeSacaDelFormatoQueDiceGlab(t *testing.T) {
 		{"sin la palabra as", "algo distinto", ""},
 		{"vacio", "", ""},
 		{"solo espacios", "   \n  ", ""},
-		// Un paréntesis pegado al login: el corte lo deja entero.
 		{"login con parentesis pegado", "as user(GLAB_TOKEN)", "user"},
 	}
 	for _, c := range casos {
@@ -139,7 +137,6 @@ func TestElLoginSeSacaDelFormatoQueDiceGlab(t *testing.T) {
 	}
 }
 
-// scriptDe crea un script ejecutable y devuelve su ruta.
 func scriptDe(t *testing.T, dir, nombre, cuerpo string) string {
 	t.Helper()
 	ruta := filepath.Join(dir, nombre)

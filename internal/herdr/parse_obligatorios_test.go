@@ -163,7 +163,6 @@ func TestParseServerErrorAceptaLasDosFormas(t *testing.T) {
 	}
 }
 
-// A server error with only a code still has to produce readable text.
 func TestElErrorDelRPCSinMensajeEsElCodigo(t *testing.T) {
 	if got := (&rpcError{Code: "timeout"}).Error(); got != "timeout" {
 		t.Errorf("un rpcError sin mensaje dio %q, want timeout", got)

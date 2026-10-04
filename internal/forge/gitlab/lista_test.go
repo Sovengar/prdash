@@ -129,7 +129,6 @@ exit 1
 		t.Errorf("avisos = %+v: con cursor no debería entrar el respaldo", warns)
 	}
 
-	// Y otra sección: tampoco.
 	script, _ = glabQueRegistra(t, cuerpo)
 	a = New("h.example", script)
 	page, warns = a.List(ctx, forge.Query{Section: model.SectionMentions})

@@ -88,10 +88,8 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 	return out.String(), nil
 }
 
-// The location GIT_* vars are stripped because they beat cmd.Dir: with GIT_DIR (or GIT_WORK_TREE,
-// GIT_INDEX_FILE...) set, git works on THAT repo whatever the directory it runs in. Inheriting the
-// caller's git context would make a UI action land in a repo that is not the item's, which is the
-// bug that deletes the wrong branch.
+// The GIT_* vars are stripped because they beat cmd.Dir: inheriting the caller's git context
+// would land a UI action in a repo that is not the item's, which is the bug that deletes a branch.
 func Env() []string {
 	env := os.Environ()
 	out := env[:0]

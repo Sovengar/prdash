@@ -1,14 +1,6 @@
-// The ITEM column: which part of the project path is visible, and at what width.
-//
-// Long project paths (GitLab subgroups like "APPCITTI/vsocial/backend/api-gateway") do not fit a fixed
-// column, and clipping from the head ate exactly what tells one item from another: the repo name and
-// the "#number". So the path is split: the prefix the section's items share lives on a fixed line and
-// the cell only paints the suffix, the column is sized to the longest suffix in the painted section,
-// and whatever still does not fit is clipped at the tail, never at the front.
-//
-// That split is the default (common) rather than the only mode: `p` cycles between common, full and
-// leaf. Outside common there is no prefix line and the width is measured again against what the cell
-// will show.
+// The ITEM column: which part of the project path is visible, and at what width. Long paths do
+// not fit a fixed column, and clipping from the head ate the repo name and the "#number". So the
+// shared prefix lives on its own line and what does not fit is clipped at the tail.
 package tui
 
 import (
@@ -55,15 +47,9 @@ type refLayout struct {
 	mode   prefixMode
 }
 
-// Only the active section is passed in, since it is the only visible one, so no width is spent on
-// suffixes that are not on screen. Clamped so TITLE keeps its room.
-//
-// The gap counts towards the width (textWidth): the longest suffix has to FIT, not fit minus one rune.
-//
-// The mode is asked for explicitly rather than defaulted: every caller has to say what it is painting,
-// which is exactly what changes the width and the label. Only common computes a common prefix; the other
-// two declare none, and that alone is what keeps the prefix line unpainted (see listLines) without a
-// case of its own there.
+// Only the active section is passed in, so no width is spent on suffixes that are not on screen.
+// The mode is asked for explicitly rather than defaulted: every caller has to say what it paints,
+// which is exactly what changes the width and the label.
 func newRefLayout(sections []inbox.Section, mode prefixMode) refLayout {
 	l := refLayout{mode: mode, prefix: make(map[model.Section]string, len(sections))}
 	longest := 0

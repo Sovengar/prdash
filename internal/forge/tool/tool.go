@@ -124,17 +124,9 @@ func HTTPStatus(msg string) int {
 	return 0
 }
 
-// The order of the checks is a precedence table between signals that contradict each other, not an
-// arbitrary order: rate-limit text before the HTTP code, because GitHub uses 403 for both a permission
-// and a rate limit; unmergeable text before it, because 409 means both a rejection and a state a refresh
-// fixes; self-review text before it, because GitHub answers 422 to "you cannot approve your own PR" and
-// 422 is the content-validation class.
-//
-// That last one was in the wrong place for a while, with the comment saying the opposite of the code, so
-// `isSelfReviewText` never fired. Without the "(HTTP 422)" that gh adds the classification was right;
-// with GitHub's real text it came out "validation", which is not a permission, so the UI did not record
-// the denial and retried on every keypress against a PR that can never be approved. The test that pins
-// this is the case WITH the HTTP code, not the one that strips it.
+// The order is a precedence table between contradicting signals: rate-limit before the code
+// (403 means both), unmergeable before it (409 too), self-review before that (422 is validation). The
+// test pins the case WITH gh's "(HTTP 422)" suffix: without it the denial was never recorded.
 func Kind(err error) string {
 	if err == nil {
 		return ""
@@ -229,12 +221,9 @@ func kindForHTTP(code int) string {
 	}
 }
 
-// The forge CLIs do not pass the API's reason on stderr: what arrives there is one line with the whole
-// argv, and the real reason is in the JSON body. Without this the user reads the command that failed
-// instead of why, and on a 422 the difference is enormous.
-//
-// `errors[].message` is preferred over `message` because the APIs use them for different things: GitHub
-// writes "Validation Failed" in the first and which field was wrong in the second.
+// The forge CLIs do not pass the API's reason on stderr: there is one line with the whole argv,
+// and the reason is in the JSON body. `errors[].message` wins over `message`, which GitHub uses for
+// "Validation Failed".
 func APIMessage(body string) string {
 	var payload struct {
 		Message any `json:"message"`

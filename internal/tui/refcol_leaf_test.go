@@ -66,13 +66,11 @@ func TestSectionPrefixConProyectosDeProfundidadDistinta(t *testing.T) {
 		{"uno sin barras", []string{"widget", "acme/a"}, ""},
 		{"uno sin barras primero", []string{"widget", "acme/a"}, ""},
 		{"los dos sin barras", []string{"a", "b"}, ""},
-		// Tres profundidades: el mínimo manda.
 		{"tres profundidades", []string{"x/y/z", "x/y", "x/y"}, "x"},
 		// And the prefix has NO trailing slash: it is a prefix, not a path, and whoever joins it adds the
 		// separator.
 		{"el prefijo no lleva barra final", []string{"a/b/c", "a/b/d"}, "a/b"},
 		{"un solo segmento comun", []string{"a/b", "a/c"}, "a"},
-		// Y sin nada común, prefijo vacío: la celda lleva la referencia entera.
 		{"nada comun", []string{"a/b", "c/d"}, ""},
 	}
 

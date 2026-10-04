@@ -65,16 +65,11 @@ type Adapter interface {
 	Comments(ctx context.Context, ref model.RepoRef, number int) (CommentPage, []model.Warning)
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
 	Merge(ctx context.Context, ref model.RepoRef, number int, req MergeRequest) []model.Warning
-	// Not approve/merge under another name: it changes what the PR integrates against, so from here the
-	// diff, the mergeability and the CI are different and the forge no longer remembers the merge. No
-	// head SHA pin, because moving the base integrates nothing.
-	// An empty branch is an explicit warning, never an argv with an empty flag: the forge would read
-	// that as "leave the item with no target branch".
+	// Not approve/merge under another name: it changes what the PR integrates against, and moving the
+	// base integrates nothing, so there is no SHA to pin. An empty branch warns instead of an empty flag.
 	Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning
-	// From the forge and nowhere else: asking the local clone would only return the refs it fetched,
-	// which are not the ones the forge can integrate.
-	// Free text would let a typo be accepted silently, which is the worst place to find out that the
-	// PR points at `main` instead of `main-2`.
+	// From the forge and nowhere else: the local clone only holds the refs it fetched, which are not
+	// the ones the forge can integrate. Free text would let a typo through silently.
 	Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning)
 }
 
@@ -289,10 +284,8 @@ type Outcome struct {
 	FromBase string
 }
 
-// The executor gets the RE-READ, not the copy the TUI held: it is the read closest to the action and
-// so the one with the smallest window between what was observed and what is applied.
-// It also gets the action's raw warnings, because a post-process must not lose the original reason:
-// the branch delete runs inside the same command as the merge.
+// The executor gets the RE-READ, not the copy the TUI held: it is the read closest to the action.
+// It also gets the action's raw warnings, because a post-process must not lose the original reason.
 func runOn(seed Outcome, ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, exec func(cur model.Item) []model.Warning) (Outcome, []model.Warning) {
 	out := seed
 	out.Kind, out.ID = kind, model.With(ref.Forge, ref.Host, ref.Project, number)
@@ -315,11 +308,8 @@ func runOn(seed Outcome, ctx context.Context, a Adapter, kind ActionKind, ref mo
 }
 
 func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, req MergeRequest) Outcome {
-	// An action that does not exist is NOT dispatched, and the cut is BEFORE `runOn`: `runOn` re-reads the
-	// item, so dispatching an impossible action costs a round trip to GitHub, and the answer is not a
-	// forge response so it does not belong to `classifyAction`. Full reasoning in ADR 0008.
-	// The Outcome carries no flags on purpose: not a conflict (the item did not change) and not a perm
-	// (which records the item as denied forever). It is the caller's bug, not the item's or the session's.
+	// An unknown action is NOT dispatched, and the cut is BEFORE `runOn`, which re-reads and would
+	// cost a round trip. No flags either: not a conflict, not a perm — it is the caller's bug. ADR 0008.
 	if kind != ActionApprove && kind != ActionMerge {
 		return Outcome{
 			Kind:         kind,
@@ -345,10 +335,8 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 		},
 	)
 
-	// The branch delete rides in the SAME command as the merge, so its failure surfaces as the whole
-	// command's even though the integration already happened: no push, a protected branch, or a merge
-	// queue that rejects -d before merging. runOn's re-read tells the two apart without an extra call:
-	// if the item comes back merged, the merge went and the delete did not.
+	// The delete rides in the SAME command, so its failure surfaces as the whole command's even though
+	// the merge happened: runOn's re-read tells them apart without an extra call.
 	if kind == ActionMerge && req.DeleteBranch && out.HasItem {
 		if !out.OK && state.Derive(out.Item) == state.StateMerged {
 			out.OK, out.Conflict, out.Perm, out.Msg = true, false, false, ""
@@ -361,12 +349,8 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	return out
 }
 
-// Shares runOn's path with approve/merge — same guards, same classification, same re-read — instead of
-// having its own: these are the three actions on an open item and they have exactly the same reasons to
-// refuse. The only difference is what the adapter is asked for, and that is what the branch name says.
-//
-// No head SHA pin, and not by oversight: moving the base integrates nothing, it only changes what the
-// comparison is against, so what the pin protects (integrating what nobody reviewed) cannot happen here.
+// Shares runOn's path with approve/merge: same guards, same reasons to refuse, and only the
+// adapter asked for differs. And no SHA pin, not by oversight: moving the base integrates nothing.
 func RunRetarget(ctx context.Context, a Adapter, ref model.RepoRef, number int, branch string) Outcome {
 	if strings.TrimSpace(branch) == "" {
 		return Outcome{
@@ -419,10 +403,8 @@ func classifyAction(warns []model.Warning) (ok, conflict, perm bool, msg string)
 	case hasKind(warns, "selfreview"):
 		return false, false, true, state.SelfReviewReason
 	case hasKind(warns, "unmergeable"):
-		// Not a conflict in the sense of "the item changed": that resolves itself and so warns about a
-		// refresh. Here the branches collide and do not fix themselves, so the reason is the canonical one
-		// (which says what to do) rather than the CLI's English. Not a permission either: recording the item
-		// as denied would cost it the merge for good, and a rebase fixes it.
+		// Not a conflict: colliding branches do not fix themselves, so the canonical reason, not the CLI's
+		// English. Not a permission either: a rebase fixes it, and a denial would cost the merge for good.
 		return false, false, false, state.UnmergeableReason
 	case hasKind(warns, "notfound"), hasKind(warns, "conflict"),
 		hasKind(warns, "ratelimit"), hasKind(warns, "network"), hasKind(warns, "timeout"):
