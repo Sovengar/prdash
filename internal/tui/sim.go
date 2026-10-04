@@ -338,10 +338,31 @@ func (m *Model) publishSimImage(img image.Image) bool {
 	}
 	cols, rows := m.simBox()
 	col, row := m.simBoxOrigin(cols, rows)
+	// El hueco interior NO se comprueba contra cero, y antes se comprobaba. Es
+	// INALCANZABLE en los TRES estados, y aquí la cuenta es una más que en
+	// `renderSimCells` porque esta función también se llama con el selector abierto:
+	//
+	//   - en modo imagen, `simBox` devuelve `cols+2, rows+simChrome` y `FitCells`
+	//     devuelve `max(..., 1)` en las dos dimensiones;
+	//   - en modo selector y en modo renderizando, `simBox` devuelve
+	//     `min(contentWidth(), simChooserWidth), simChrome + 2`, y el suelo de 38 columnas
+	//     de `contentWidth` deja el hueco en 36 columnas por 2 filas;
+	//   - y aquí se resta exactamente `2` y `simChrome`, que es lo que `simBox` añadió.
+	//
+	// Y el suelo que cierra el caso del selector NO es el de `simMaxCols`/`simMaxRows`, que son
+	// del modo imagen y no pasan por aquí: es el de `contentWidth`. Ese es el detalle que hace
+	// falta mirar para no trabajar con la cuenta incompleta, y por eso el invariante está
+	// comprobado en `TestElHuecoInteriorDelPopupNuncaDesaparecePorMuchoQueSeEstrecheLaTerminal`,
+	// que recorre los tres estados con terminales de 0 a 400 columnas.
+	//
+	// Y la comprobación se quita en vez de quedarse, y no es indiferente: un guard que no
+	// puede dispararse lee como si protegiera algo, y quien lo lea creería que sin él
+	// la imagen se publicaría en un rectángulo de tamaño negativo. No se publicaría: `SetImage`
+	// recibe un rectángulo de 36×2 como mínimo. Y `renderSimCells` —la otra mitad de este mismo
+	// popup, que pinta las celdas cuando no hay capa de gráficos— ya dice exactamente esto con
+	// la misma cuenta. Dos caminos del mismo popup con reglas distintas sería peor que no
+	// tener ninguna.
 	innerCols, innerRows := cols-2, rows-simChrome
-	if innerCols <= 0 || innerRows <= 0 {
-		return false
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

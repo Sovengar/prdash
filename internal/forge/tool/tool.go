@@ -19,6 +19,12 @@ import (
 // DefaultTimeout es el límite por invocación de una CLI de forge.
 const DefaultTimeout = 30 * time.Second
 
+// pipeCloseGrace es el margen para cerrar las tuberías de salida tras caducar el
+// contexto. Sin ella el timeout mata al proceso pero `cmd.Run()` sigue esperando a que
+// un hijo que heredó los descriptores suelte la tubería. Mismo motivo y mismo arreglo que
+// en `internal/herdr`.
+const pipeCloseGrace = 250 * time.Millisecond
+
 // Runner ejecuta un binario con timeout y entorno no interactivo.
 type Runner struct {
 	Bin     string
@@ -66,6 +72,8 @@ func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 
 	cmd := exec.CommandContext(cctx, r.Bin, args...)
 	cmd.Env = Env(r.Extra...)
+	// Sin esto el timeout no corta: ver `pipeCloseGrace`.
+	cmd.WaitDelay = pipeCloseGrace
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -138,9 +146,29 @@ func HTTPStatus(msg string) int {
 }
 
 // Kind clasifica un error de CLI en la clase de warning correspondiente.
-// El texto de rate limit se mira antes que el código HTTP porque GitHub usa
-// 403 tanto para permiso como para primary/secondary rate limit; después manda
-// el código HTTP y el texto queda como último recurso.
+//
+// El orden de las comprobaciones es una tabla de precedencias entre señales que se
+// contradicen, y no un orden arbitrario:
+//
+//  1. Texto de rate limit, antes que el código HTTP, porque GitHub usa 403 tanto para
+//     permiso como para rate limit.
+//  2. Texto de no integrable, antes que el código HTTP, por el mismo conflicto: GitHub
+//     responde 409 tanto a un rechazo de merge como a un estado que se resuelve
+//     refrescando.
+//  3. Texto de autorrechazo, antes que el código HTTP, porque GitHub responde 422 a
+//     "no puedes aprobar tu propio PR" y 422 es la clase de validación de contenido.
+//
+// Ese tercer punto estuvo en el sitio equivocado durante un tiempo, con el comentario
+// diciendo lo contrario del código: `isSelfReviewText` se comprobaba DESPUÉS del código
+// HTTP, así que nunca veía nada. Con el texto solo —sin el "(HTTP 422)" que gh añade al
+// stderr— la clasificación era correcta, y con el texto real de GitHub salía
+// "validation". Y "validation" no es permiso, así que la TUI no registraba la denegación
+// y volvía a intentarlo cada vez que se pulsaba la tecla, contra un PR que no se puede
+// aprobar nunca. El aserto que fija esto es el caso con el código HTTP incluido, no el
+// que se lo quita.
+//
+//  4. Código HTTP, que es lo único que queda cuando el texto no dice nada.
+//  5. Texto restante, como último recurso.
 func Kind(err error) string {
 	if err == nil {
 		return ""
@@ -157,17 +185,16 @@ func Kind(err error) string {
 	if isUnmergeableText(msg) {
 		return "unmergeable"
 	}
+	// El rechazo de auto-aprobación es la única razón por la que un forge veta aprobar,
+	// y no es un fallo de red ni un conflicto de estado. Antes que el código HTTP, que
+	// con 422 lo clasificaría como validación —ver el doc de la función.
+	if isSelfReviewText(msg) {
+		return "selfreview"
+	}
 	if code := HTTPStatus(err.Error()); code != 0 {
 		if k := kindForHTTP(code); k != "" {
 			return k
 		}
-	}
-
-	// El rechazo de auto-aprobación se mira antes que el resto: es la única
-	// razón por la que un forge veta aprobar, y no es un fallo de red ni un
-	// conflicto de estado.
-	if isSelfReviewText(msg) {
-		return "selfreview"
 	}
 
 	switch {

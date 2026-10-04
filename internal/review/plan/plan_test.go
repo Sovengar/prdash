@@ -301,3 +301,92 @@ func hasWarning(warns []string, needle string) bool {
 	}
 	return false
 }
+
+// TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro: el `default` de `Tools.Binary`.
+//
+// Y la consecuencia de equivocarse en este `default` es silenciosa: un Kind desconocido que
+// saliera con el binario del editor lanzaría el `vi` donde debía ir el revisor, y el usuario
+// vería un visor en vez de una herramienta de review sin ningún aviso.
+//
+// Y los dos Kind que lo provocan en la práctica son un Kind VACÍO —un pane sin tipo, que es lo
+// que produce un constructor mal escrito— y un Kind al que se le añade un valor sin tocar este
+// switch, que es el caso que hace que un `default` bien escrito deba existir y no ser un
+// {refactor} pendiente.
+//
+// Y el control es que los conocidos SÍ devuelven algo, y DISTINTO entre sí: si dos Kind
+// conocidos devolvieran el mismo binario, un `default` que copiara el de otro no se notaría.
+func TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro(t *testing.T) {
+	tools := Tools{}
+
+	for _, kind := range []Kind{Kind("inventado"), Kind("")} {
+		if got := tools.Binary(kind); got != "" {
+			t.Errorf("el Kind %q dio el binario %q: un pane se lanzaría con la herramienta "+
+				"de otro tipo en vez de con nada", string(kind), got)
+		}
+	}
+
+	// Y los conocidos dan su binario, que es el control que hace que lo anterior no sea
+	// "nunca devuelve nada".
+	conocidos := map[Kind]string{
+		KindTuicr:  "tuicr",
+		KindHunk:   "hunk",
+		KindAgent:  "opencode",
+		KindEditor: "vi",
+	}
+	vistos := map[string]Kind{}
+	for kind, quiere := range conocidos {
+		got := tools.Binary(kind)
+		if got == "" {
+			t.Errorf("el Kind %q dio un binario vacío: ese Kind sí tiene por defecto", string(kind))
+			continue
+		}
+		if got != quiere {
+			t.Errorf("el Kind %q dio %q, want %q", string(kind), got, quiere)
+		}
+		if otro, dup := vistos[got]; dup {
+			t.Errorf("los Kinds %q y %q comparten el binario %q: un `default` que copiara el "+
+				"de otro no se notaría", string(otro), string(kind), got)
+		}
+		vistos[got] = kind
+	}
+
+	// Y un `Argv` configurado sustituye al suyo y no al de otro: es lo que permite tener un
+	// editor distinto por proyecto sin tocar los demás panes.
+	propio := Tools{
+		Tuicr:  Tool{Argv: []string{"/opt/mytui", "pr", "7"}},
+		Editor: Tool{Argv: []string{"nvim"}},
+	}
+	// Lo que se compara es el PRIMER elemento del argv, porque es lo que se busca en el PATH
+	// para decidir si la herramienta está disponible. Comparar el argv entero daría "pr" como
+	// si fuera el binario.
+	if got := propio.Binary(KindTuicr); got != "/opt/mytui" {
+		t.Errorf("el argv de tuicr dio %q, want /opt/mytui: es el primer elemento, que es "+
+			"lo que se comprueba para decidir si está disponible", got)
+	}
+	if got := propio.Binary(KindEditor); got != "nvim" {
+		t.Errorf("el argv del editor dio %q, want nvim", got)
+	}
+	if got := propio.Binary(KindHunk); got != "hunk" {
+		t.Errorf("el Kind de hunk cambió a %q con argv de otros panes puestos", got)
+	}
+
+	// Y `Override` con el argv VACÍO es lo contrario de un override: es una DESACTIVACIÓN
+	// explícita, y devuelve vacío en vez del binario por defecto. Es la pieza que permite
+	// apagar un pane sin quitarlo del plan —un config que pone `agent = []` y quiere que no
+	// se lance nada— y sin ella el pane se lanzaría igual con el agente por defecto.
+	//
+	// Y el orden de las dos comprobaciones es lo que lo hace funcionar: el `Argv` gana sobre
+	// `Override`, así que un pane desactivado que además traiga un argv improbable usa el argv.
+	desactivado := Tools{Agent: Tool{Override: true}}
+	if got := desactivado.Binary(KindAgent); got != "" {
+		t.Errorf("un pane desactivado dio el binario %q: se lanzaría igual que si no estuviera "+
+			"desactivado a propósito", got)
+	}
+	if got := desactivado.Binary(KindEditor); got != "vi" {
+		t.Errorf("desactivar el agente cambió el editor a %q", got)
+	}
+	desactivadoConArgv := Tools{Agent: Tool{Argv: []string{"x"}, Override: true}}
+	if got := desactivadoConArgv.Binary(KindAgent); got != "x" {
+		t.Errorf("con argv presente el `Override` no manda: dio %q, want x", got)
+	}
+}

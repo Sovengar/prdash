@@ -9,7 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -28,7 +28,19 @@ const printTimeout = 60 * time.Second
 // salida solo con la información de F1.
 type reviewLookup func(model.Item) (worktree.Worktree, bool)
 
-func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
+// runPrintTo imprime el inbox en stdout.
+//
+// Y el writer llega por parámetro en vez de ser `os.Stdout` fijo. La razón es que `run` ya
+// recibe los writers inyectados para poder probarse entero, y si esta función escribiera a
+// `os.Stdout` la salida del modo texto se escaparía del test: se podría comprobar el código de
+// salida y los avisos, pero no UNA SOLA LÍNEA de la tabla, que es justo lo que este modo
+// promete.
+//
+// Y no tiene una-envoltura fija a `os.Stdout` porque no la necesita: `run` la llama
+// directamente. Existía una, y sobró en cuanto los tests del modo texto dejaron de necesitar
+// capturadores por fd —una envoltura sin un solo llamador es código que solo se ve en la
+// cobertura.
+func runPrintTo(stdout, stderr io.Writer, adapters []forge.Adapter, reviews reviewLookup) {
 	// Una goroutine por forge con su propio timeout: una forge lenta no
 	// bloquea a las demás. El orden de impresión queda fijado por índice.
 	results := make([]inbox.ForgeResult, len(adapters))
@@ -46,7 +58,7 @@ func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
 
 	box := inbox.Build(results)
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	w := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 	for _, sec := range box.Sections {
 		_, _ = fmt.Fprintf(w, "%s (%d)\n", sec.Kind.String(), len(sec.Items))
 		for _, it := range sec.Items {
@@ -65,7 +77,7 @@ func runPrint(adapters []forge.Adapter, reviews reviewLookup) {
 	_ = w.Flush()
 
 	for _, warning := range box.Warnings {
-		fmt.Fprintf(os.Stderr, "prdash: %s: %s (%s)\n", warning.Forge, warning.Msg, warning.Kind)
+		_, _ = fmt.Fprintf(stderr, "prdash: %s: %s (%s)\n", warning.Forge, warning.Msg, warning.Kind)
 	}
 }
 

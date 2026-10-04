@@ -213,7 +213,16 @@ func shellSafe(s string) bool {
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		case r == '-', r == '_', r == '.', r == '/', r == '@', r == ':', r == '=', r == '+', r == ',', r == '%', r == '#':
+		// `#` NO está en la lista, y su ausencia es deliberada. Dentro de una palabra
+		// el `#` es literal (`foo#bar` sobrevive), pero al PRINCIPIO de una palabra abre
+		// un comentario: `sh -c 'echo #123'` no imprime nada. Y un nombre de rama que
+		// empieza por `#` es perfectamente válido para git —`git checkout -b '#123'`—,
+		// así que sin comillas ese argumento desaparecía del comando y el pane quedaba
+		// con un comando al que le faltaba una palabra, sin error visible.
+		//
+		// Quitar un `#` de la lista de seguros no cuesta nada: el caso raro se cita y el
+		// frecuente ya lo está de todas formas.
+		case r == '-', r == '_', r == '.', r == '/', r == '@', r == ':', r == '=', r == '+', r == ',', r == '%':
 		default:
 			return false
 		}

@@ -11,7 +11,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -24,23 +24,30 @@ import (
 const worktreeTimeout = 30 * time.Second
 
 // runWorktrees despacha `prdash worktrees [list|remove <ruta>…]`.
-func runWorktrees(pr worktree.Provisioner, args []string) int {
+//
+// Y los dos `io.Writer` no son un detalle de estilo: son lo que hace que este comando sea
+// testeable. `listWorktrees` imprimía a `os.Stdout` y `os.Stderr` fijos, así que la única
+// forma de comprobar qué imprime era replacing los ficheros del proceso entero, y eso obliga
+// a un test por proceso —o a no probar la salida— justo en el comando que BORRA ficheros
+// del usuario, donde la salida es la prueba de que borró lo que dijo y nada más. Es el mismo
+// seam que `run` y `runPrintTo` llevan ya, extendido a este subcomando.
+func runWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer, args []string) int {
 	sub := "list"
 	if len(args) > 0 && args[0] != "" {
 		sub = args[0]
 	}
 	switch sub {
 	case "list":
-		return listWorktrees(pr)
+		return listWorktrees(pr, stdout, stderr)
 	case "remove":
 		orphans, dryRun, paths, err := parseRemoveArgs(args[1:])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "prdash worktrees remove: %v\n", err)
 			return 2
 		}
-		return removeWorktrees(pr, orphans, dryRun, paths)
+		return removeWorktrees(pr, stdout, stderr, orphans, dryRun, paths)
 	default:
-		fmt.Fprintf(os.Stderr, "prdash worktrees: unknown subcommand %q (list|remove)\n", sub)
+		_, _ = fmt.Fprintf(stderr, "prdash worktrees: unknown subcommand %q (list|remove)\n", sub)
 		return 2
 	}
 }
@@ -80,17 +87,22 @@ func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err e
 }
 
 // listWorktrees imprime los worktrees propios, marcando los huérfanos.
-func listWorktrees(pr worktree.Provisioner) int {
+//
+// Y la tabla va a stdout y el aviso de huérfano a stderr a propósito, porque son cosas
+// distintas: la tabla es el resultado que un script lee, y el aviso es la explicación de por
+// qué una fila está marcada. Un `2>/dev/null` sobre el listado se lleva la explicación y deja
+// la tabla, que es lo que se quiere; al revés se pierde el resultado y se queda el ruido.
+func listWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), worktreeTimeout)
 	defer cancel()
 
 	entries := pr.Audit(ctx)
 	if len(entries) == 0 {
-		fmt.Println("no prdash review worktrees")
+		_, _ = fmt.Fprintln(stdout, "no prdash review worktrees")
 		return 0
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	w := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "WORKTREE\tRAMA\tESTADO\tRUTA")
 	for _, e := range entries {
 		state := "ok"
@@ -103,7 +115,7 @@ func listWorktrees(pr worktree.Provisioner) int {
 
 	for _, e := range entries {
 		if e.Orphan {
-			fmt.Fprintf(os.Stderr, "prdash: %s is orphaned: %s\n", e.Path, e.Reason)
+			_, _ = fmt.Fprintf(stderr, "prdash: %s is orphaned: %s\n", e.Path, e.Reason)
 		}
 	}
 	return 0
@@ -112,8 +124,9 @@ func listWorktrees(pr worktree.Provisioner) int {
 // removeWorktrees borra las rutas pedidas explícitamente o, con `--orphans`, el
 // lote que el propio Audit marca como huérfano. Cualquier ruta que no sea un
 // worktree propio, o que no exista, se rechaza sin tocarla.
-func removeWorktrees(pr worktree.Provisioner, orphans, dryRun bool, paths []string) int {
-	return removeWorktreesWithin(pr, orphans, dryRun, paths, worktreeTimeout)
+func removeWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer,
+	orphans, dryRun bool, paths []string) int {
+	return removeWorktreesWithin(pr, stdout, stderr, orphans, dryRun, paths, worktreeTimeout)
 }
 
 // removeWorktreesWithin es removeWorktrees con un presupuesto por ítem inyectable:
@@ -122,25 +135,26 @@ func removeWorktrees(pr worktree.Provisioner, orphans, dryRun bool, paths []stri
 // Cada borrado —y el Audit del lote— recibe su propio presupuesto en vez de
 // compartir uno global: un ítem lento que agota el suyo no puede consumir el
 // tiempo de los siguientes ni dejar un borrado parcial por timeout.
-func removeWorktreesWithin(pr worktree.Provisioner, orphans, dryRun bool, paths []string, budget time.Duration) int {
+func removeWorktreesWithin(pr worktree.Provisioner, stdout, stderr io.Writer,
+	orphans, dryRun bool, paths []string, budget time.Duration) int {
 	if orphans {
-		return removeOrphans(pr, dryRun, budget)
+		return removeOrphans(pr, stdout, stderr, dryRun, budget)
 	}
 
 	code := 0
 	for _, raw := range paths {
 		path, err := filepath.Abs(raw)
 		if err != nil || !worktree.Owned("", path) || !worktree.Exists(path) {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s is not a prdash worktree; leaving it alone\n", raw)
+			_, _ = fmt.Fprintf(stderr, "prdash worktrees remove: %s is not a prdash worktree; leaving it alone\n", raw)
 			code = 1
 			continue
 		}
 		if err := removeOne(pr, path, budget); err != nil {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s: %v\n", path, err)
+			_, _ = fmt.Fprintf(stderr, "prdash worktrees remove: %s: %v\n", path, err)
 			code = 1
 			continue
 		}
-		fmt.Printf("worktree removed: %s\n", path)
+		_, _ = fmt.Fprintf(stdout, "worktree removed: %s\n", path)
 	}
 	return code
 }
@@ -148,7 +162,7 @@ func removeWorktreesWithin(pr worktree.Provisioner, orphans, dryRun bool, paths 
 // removeOrphans borra en lote los worktrees que Audit marca como huérfanos, y
 // solo esos. Cero huérfanos es el caso feliz (exit 0): informa y no toca nada.
 // Con dryRun imprime el lote exacto por el mismo camino de código y no borra.
-func removeOrphans(pr worktree.Provisioner, dryRun bool, budget time.Duration) int {
+func removeOrphans(pr worktree.Provisioner, stdout, stderr io.Writer, dryRun bool, budget time.Duration) int {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	entries := pr.Audit(ctx)
 	cancel()
@@ -160,22 +174,22 @@ func removeOrphans(pr worktree.Provisioner, dryRun bool, budget time.Duration) i
 		}
 	}
 	if len(orphans) == 0 {
-		fmt.Println("no orphaned prdash worktrees")
+		_, _ = fmt.Fprintln(stdout, "no orphaned prdash worktrees")
 		return 0
 	}
 
 	code := 0
 	for _, e := range orphans {
 		if dryRun {
-			fmt.Printf("would remove: %s\n", e.Path)
+			_, _ = fmt.Fprintf(stdout, "would remove: %s\n", e.Path)
 			continue
 		}
 		if err := removeOne(pr, e.Path, budget); err != nil {
-			fmt.Fprintf(os.Stderr, "prdash worktrees remove: %s: %v\n", e.Path, err)
+			_, _ = fmt.Fprintf(stderr, "prdash worktrees remove: %s: %v\n", e.Path, err)
 			code = 1
 			continue
 		}
-		fmt.Printf("worktree removed: %s\n", e.Path)
+		_, _ = fmt.Fprintf(stdout, "worktree removed: %s\n", e.Path)
 	}
 	return code
 }

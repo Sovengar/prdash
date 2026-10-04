@@ -1,6 +1,8 @@
 package gitcmd
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,188 +11,439 @@ import (
 	"time"
 )
 
-// TestEnvQuitaLasGitDeLocalizacion fija lo que hace el filtro del entorno.
+// `Run` es la función de la que depende todo lo que hace prdash con git: worktrees, refs,
+// merges, fetch. Y estaba cubierta al 68%, que es una cifra que en un paquete con una
+// sola función ejecutora significa lo que dice: la mitad de lo que hace no se ha probado
+// nunca, y la mitad es justo donde están los caminos que[borrar] cosas.
 //
-// Las variables GIT_* de localización le ganan a cmd.Dir: con GIT_DIR puesto,
-// git opera en ese repo ignorando el directorio de trabajo. prdash elige el repo
-// de cada ítem explícitamente, así que si una de ellas llega al subproceso una
-// operación cae en un repo que no es el del ítem — y la que más duele es borrar
-// la rama de otro proyecto. Aquí no se puede comprobar el efecto con git (eso
-// necesita un repo de verdad, y el filtro es lo que lo impide), así que se
-// comprueba la entrada del entorno, que es lo que el filtro controla.
-func TestEnvQuitaLasGitDeLocalizacion(t *testing.T) {
-	// Se“Weaponizan" las variables que tienen que desaparecer: las que fijan el
-	// repo (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_COMMON_DIR) y las que
-	// reubican objetos o refs.
-	for _, kv := range []string{
-		"GIT_DIR=/tmp/otro/.git",
-		"GIT_WORK_TREE=/tmp/otro",
-		"GIT_INDEX_FILE=/tmp/otro/.git/index",
-		"GIT_COMMON_DIR=/tmp/otro/.git",
-		"GIT_OBJECT_DIRECTORY=/tmp/otro/.git/objects",
-		"GIT_ALTERNATE_OBJECT_DIRECTORIES=/tmp/otro/.git/objects",
-		"GIT_NAMESPACE=otro",
-		"GIT_CEILING_DIRECTORIES=/tmp",
-		"GIT_PREFIX=repo",
-	} {
-		t.Setenv(strings.SplitN(kv, "=", 2)[0], strings.SplitN(kv, "=", 2)[1])
+// Y el reparto de lo que faltaba no era casual. Estaba sin probar el mensaje de error —que
+// es lo que el usuario ve cuando una operación falla— y la función `firstLine` entera, que
+// es la que decide qué parte del stderr de git llega a pantalla. Esa función decide qué se
+// le enseña a la persona, y sin test no había forma de saber qué se le enseñaba.
+
+// TestElMensajeDeErrorTraeLoQueHaceFaltaParaArreglarlo: el mensaje de un fallo de git
+// tiene que decir qué se ejecutó, dónde y cómo terminó.
+//
+// Y son tres datos, no uno, porque cada uno responde a una pregunta distinta de quien
+// está delante de la TUI sin saber git: "¿qué ha hecho prdash?", "¿en qué repo?" y
+// "¿ha sido un rechazo o un fallo?". Con solo el primero —"git rev-parse: exit status
+// 128"— el mensaje es correcto y sirve de nada.
+//
+// Y el código de salida va aparte porque distingue dos fallos que se confunden: git
+// rechazando algo (128) y git no pudiendo arrancar (127, normalmente binario ausente).
+func TestElMensajeDeErrorTraeLoQueHaceFaltaParaArreglarlo(t *testing.T) {
+	casos := []struct {
+		nombre string
+		e      *Error
+		want   string
+	}{
+		{
+			nombre: "con directorio y codigo",
+			e:      &Error{Args: []string{"rev-parse", "HEAD"}, Dir: "/repos/proy", Msg: "fatal: not a git repository", ExitCode: 128},
+			want:   "git -C /repos/proy rev-parse HEAD: fatal: not a git repository (exit 128)",
+		},
+		{
+			// Sin directorio: el `git -C` desaparece entero, no sale un `-C ` vacío que
+			// luego se lee como un argumento.
+			nombre: "sin directorio",
+			e:      &Error{Args: []string{"status"}, Msg: "no changes", ExitCode: 1},
+			want:   "git status: no changes (exit 1)",
+		},
+		{
+			// Código cero con error: es el caso de "matado por una señal", y el mensaje
+			// tiene que ser legible sin el sufijo. Un "(exit 0)" después de un error es
+			// ruido que hace pensar que la operación salió bien.
+			nombre: "error sin codigo",
+			e:      &Error{Args: []string{"log"}, Msg: "interrumpido"},
+			want:   "git log: interrumpido",
+		},
+		{
+			// Sin argumentos: se leen los nombres de `Error` en la TUI, así que la
+			// estructura tiene que sobrevivir al caso degenerado.
+			nombre: "sin argumentos",
+			e:      &Error{Msg: "algo"},
+			want:   "git : algo",
+		},
+		{
+			nombre: "varios argumentos",
+			e:      &Error{Args: []string{"worktree", "add", "-b", "b", "/r"}, Msg: "ya existe"},
+			want:   "git worktree add -b b /r: ya existe",
+		},
+	}
+	for _, c := range casos {
+		if got := c.e.Error(); got != c.want {
+			t.Errorf("%s: Error() dio %q, want %q", c.nombre, got, c.want)
+		}
+	}
+}
+
+// TestElErrorDesenvuelveLaCausa: `Unwrap` es lo que permite decir "esto no ha salido
+// decir que no es el error de git".
+//
+// Y el caso que lo justifica es `errors.As(err, &exit)`: sin `Unwrap`, un `*Error` que
+// envuelve un `*exec.ExitError` no dejaría reachedlo, y la consecuencia sería que
+// `ExitCode` saldría 0 en todos los fallos —porque nunca se llega a leerlo—. El código de
+// salida es lo que distingue "git rechazó esto" de "git no se pudo ejecutar", y los dos
+// avisos que ve el usuario son distintos.
+//
+// O sea: este test no prueba un método trivial. Prueba que la cadena de `errors` está
+// montada, y si alguien la rompe el código de salida se queda a cero sin que nada falle.
+func TestElErrorDesenvuelveLaCausa(t *testing.T) {
+	// Un error que NO es de git: nil underneath.
+	sinCausa := &Error{Args: []string{"x"}, Msg: "m"}
+	if sinCausa.Unwrap() != nil {
+		t.Error("Unwrap devolvio algo en un Error sin causa")
+	}
+	if errors.Unwrap(sinCausa) != nil {
+		t.Error("errors.Unwrap devolvio algo en un Error sin causa")
+	}
+
+	// Con causa de git: se llega a ella por `errors.As`.
+	cmd := exec.Command("sh", "-c", "exit 42")
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("esperaba que sh -c 'exit 42' fallara")
+	}
+	conCausa := &Error{Args: []string{"x"}, Msg: "m", Err: err}
+
+	if !errors.Is(conCausa, err) {
+		t.Error("errors.Is no llega a la causa")
+	}
+	var exit *exec.ExitError
+	if !errors.As(conCausa, &exit) {
+		t.Fatal("errors.As no llega al *exec.ExitError: sin esto ExitCode es 0 siempre")
+	}
+	if exit.ExitCode() != 42 {
+		t.Errorf("ExitCode = %d, want 42", exit.ExitCode())
+	}
+	// Y la cadena sigue siendo imprimible sin perder nada.
+	if !strings.Contains(conCausa.Error(), "m") {
+		t.Errorf("el mensaje perdió el texto propio: %q", conCausa.Error())
+	}
+}
+
+// TestRunTraeElErrorRealDeGit: `Run` sobre un repo de verdad, fallando de verdad.
+//
+// Y el repo lo monta `testutil`, que es lo que permite esto sin depender de que haya git
+// instalado con una config concreta. El fallo que se provoca es un comando que existe y
+// se niega: así el stderr es de git y no del shell.
+func TestRunTraeElErrorRealDeGit(t *testing.T) {
+	dir := repoVacio(t)
+
+	// Un comando que git rechaza. El stderr de git es lo que tiene que llegar.
+	_, err := New().Run(context.Background(), dir, "cat-file", "-p", "no-existe")
+	if err == nil {
+		t.Fatal("git cat-file sobre un objeto inexistente dio nil")
+	}
+	gerr, ok := err.(*Error)
+	if !ok {
+		t.Fatalf("Run devolvió %T, want *Error", err)
+	}
+	if gerr.ExitCode == 0 {
+		t.Error("ExitCode = 0 en un fallo de git: el código de salida no se leyó")
+	}
+	// Y el mensaje trae la primera línea de stderr, no el `err.Error()` del proceso. La
+	// diferencia se ve: `err.Error()` es "exit status 128", que no explica nada.
+	if strings.HasPrefix(gerr.Msg, "exit status") {
+		t.Errorf("el mensaje es %q: se cogió el error del proceso en vez de su stderr", gerr.Msg)
+	}
+	if strings.TrimSpace(gerr.Msg) == "" {
+		t.Error("el mensaje quedó vacío")
+	}
+	// Y una sola línea: el stderr de git puede traer varias, y el toast solo cabe una.
+	if strings.Contains(gerr.Msg, "\n") {
+		t.Errorf("el mensaje tiene saltos de línea: %q", gerr.Msg)
+	}
+	// Y el error trae contexto para el mensaje final.
+	if !strings.Contains(gerr.Error(), "cat-file") {
+		t.Errorf("Error() no nombra el comando: %q", gerr.Error())
+	}
+	if !strings.Contains(gerr.Error(), dir) {
+		t.Errorf("Error() no nombra el directorio: %q", gerr.Error())
+	}
+}
+
+// TestRunDevuelveLaSalidaParcialCuandoFalla: lo que se escribió antes del fallo, se
+// devuelve.
+//
+// Y es el comportamiento correcto para lo que prdash hace con git: un `git log` que
+// escribe veinte commits y falla en el veintiuno ha dado información útil, y tirar la
+// salida deja al usuario con un error y nada que mirar. Además, `out` y el error van
+// juntos, así que quien los recibe puede usar lo uno o lo otro.
+//
+// Y para probarlo hace falta un binario que escriba y LUEGO falle, porque un comando de
+// git real no hace eso: o sale limpio o no imprime nada. La primera versión de este test
+// buscaba ese comando y no existe, así que la conclusión "no se puede probar" era falsa —
+// lo que no se puede esprovocar con git— y la forma de probarlo es un binario falso que
+// haga las dos cosas, que es justo el caso que `Run` tiene que sostener.
+func TestRunDevuelveLaSalidaParcialCuandoFalla(t *testing.T) {
+	dir := t.TempDir()
+	parcial := filepath.Join(dir, "git-parcial")
+	if err := os.WriteFile(parcial, []byte("#!/bin/sh\necho 'linea buena'\necho 'fatal: se rompio' >&2\nexit 7\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := (&Runner{Bin: parcial}).Run(context.Background(), dir, "log")
+	if err == nil {
+		t.Fatal("un binario que sale con 7 dio nil")
+	}
+	// La salida.good line se conserva.
+	if !strings.Contains(out, "linea buena") {
+		t.Errorf("la salida anterior al fallo se perdió: %q", out)
+	}
+	gerr, ok := err.(*Error)
+	if !ok {
+		t.Fatalf("Run devolvió %T, want *Error", err)
+	}
+	if gerr.ExitCode != 7 {
+		t.Errorf("ExitCode = %d, want 7", gerr.ExitCode)
+	}
+	if !strings.Contains(gerr.Msg, "se rompio") {
+		t.Errorf("el mensaje no trae el stderr: %q", gerr.Msg)
+	}
+
+	// Y el caso de "no escribió nada": la salida vacía con error no es un acierto. Con
+	// `echo ""` en vez de una línea buena, `out` sale vacía y el error sigue estar.
+	if err := os.WriteFile(parcial, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, err = (&Runner{Bin: parcial}).Run(context.Background(), dir, "log")
+	if err == nil {
+		t.Fatal("un binario que sale con 7 dio nil")
+	}
+	if out != "" {
+		t.Errorf("un binario que no escribió devolvió %q", out)
+	}
+	// Y el mensaje, al no haber stderr, cae al error del proceso. Es feo pero es lo que
+	// hay, y lo importante es que no quede vacío.
+	if strings.TrimSpace(gerr.Msg) == "" {
+		t.Error("el mensaje del primer caso quedó vacío")
+	}
+}
+
+// TestElCaminoFelizTraeLaSalidaEntera: el contraste, para que el test anterior no_valga
+// por el caso de que `Run` devuelva siempre vacío.
+func TestElCaminoFelizTraeLaSalidaEntera(t *testing.T) {
+	dir := repoVacio(t)
+	r := New()
+
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hola\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), dir, "add", "a.txt"); err != nil {
+		t.Fatalf("git add: %v", err)
+	}
+	out, err := r.Run(context.Background(), dir, "diff", "--cached", "--stat")
+	if err != nil {
+		t.Fatalf("git diff --cached: %v", err)
+	}
+	if !strings.Contains(out, "a.txt") {
+		t.Errorf("la salida de git no llegó intacta: %q", out)
+	}
+}
+
+// TestFirstLineCortaLoQueNoCabeEnElToast: qué parte de un stderr multilínea ve el usuario.
+//
+// Y el orden importa: primero el recorte de la derecha, luego el corte de la primera
+// línea. Al revés, un stderr que empieza con un espacio deja el toast empezando por un
+// espacio y el texto descentrado.
+//
+// Y el caso sin salto de línea es el que devuelve la cadena entera, que es lo que pasa con
+// el stderr de una sola línea —que es el de la mayoría de errores de git—.
+func TestFirstLineCortaLoQueNoCabeEnElToast(t *testing.T) {
+	casos := []struct {
+		entrada string
+		want    string
+	}{
+		{"primera\nsegunda\ntercera", "primera"},
+		{"  con espacios  \nsegunda", "  con espacios  "},
+		{"una sola linea", "una sola linea"},
+		{"", ""},
+		{"\nempieza con salto", ""},
+		{"con\n", "con"},
+		{"trailing  \n", "trailing  "},
+	}
+	for _, c := range casos {
+		if got := firstLine(c.entrada); got != c.want {
+			t.Errorf("firstLine(%q) dio %q, want %q", c.entrada, got, c.want)
+		}
+		// Y nunca sale más de una línea, que es la propiedad entera de la función.
+		if strings.ContainsAny(firstLine(c.entrada), "\n") {
+			t.Errorf("firstLine(%q) devolvio texto con salto", c.entrada)
+		}
+	}
+}
+
+// TestElEntornoDeGitNoHeredaelContextoDelShell: `Env` quita las GIT_* de localización y
+// las del contexto de git, y pone las suyas.
+//
+// Y esto es lo más importante que hace el paquete, y por eso la comprobación no es de
+// contenido sino de AUSENCIA. Con GIT_DIR o GIT_WORK_TREE en el entorno, git opera en
+// ESE repo y da igual el `-C` que se le pase. prdash elige el repo de cada ítem por su
+// cuenta, así que heredar el contexto de git de quien lo lanzó haría que una operación de
+// la TUI cayera en otro repo —que es el fallo que borra la rama equivocada—.
+//
+// Y el `LC_ALL=C` va por la razón contraria: sin él, un usuario con el locale en español
+// recibe los errores de git traducidos, y los mensajes que prdash compara con texto fijo
+// dejan de casar.
+func TestElEntornoDeGitNoHeredaelContextoDelShell(t *testing.T) {
+	// Montar un entorno hostil: cada variable que tiene que desaparecer.
+	hostiles := map[string]string{
+		"GIT_DIR":                          "/otro/repo/.git",
+		"GIT_WORK_TREE":                    "/otro/repo",
+		"GIT_INDEX_FILE":                   "/otro/index",
+		"GIT_COMMON_DIR":                   "/otro/common",
+		"GIT_OBJECT_DIRECTORY":             "/otro/objs",
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES": "/otro/alt",
+		"GIT_NAMESPACE":                    "otro",
+		"GIT_CEILING_DIRECTORIES":          "/otro/techo",
+		"GIT_PREFIX":                       "src/",
+		"LC_ALL":                           "es_ES.UTF-8",
+		"LANG":                             "es_ES.UTF-8",
+		"LANGUAGE":                         "es",
+		"LC_MESSAGES":                      "es_ES.UTF-8",
+	}
+	for k, v := range hostiles {
+		t.Setenv(k, v)
 	}
 
 	env := Env()
+	vistos := map[string]string{}
 	for _, kv := range env {
-		for _, key := range []string{
-			"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
-			"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-			"GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_PREFIX",
-		} {
-			if strings.HasPrefix(kv, key+"=") {
-				t.Errorf("Env() = %q, want sin %s: fija el repo y le gana a cmd.Dir", kv, key)
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			vistos[kv[:i]] = kv[i+1:]
+		}
+	}
+
+	for k := range hostiles {
+		if _, sigue := vistos[k]; sigue {
+			// LC_ALL y LANG tienen que estar, pero con el valor forzado. El resto no
+			// puede estar.
+			if k == "LC_ALL" || k == "LANG" {
+				continue
 			}
+			t.Errorf("%s sigue en el entorno con el valor %q: git operaría en ese "+
+				"contexto en vez del que se le pide", k, vistos[k])
 		}
 	}
 
-	// Y lo que sí tiene que estar: el modo no interactivo y el locale inglés.
-	for _, want := range []string{"GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "NO_COLOR=1", "LC_ALL=C"} {
-		if !contains(env, want) {
-			t.Errorf("Env() no trae %q", want)
+	// Y lo que se pone, con los valores exactos.
+	for k, want := range map[string]string{
+		"LC_ALL":              "C",
+		"GIT_TERMINAL_PROMPT": "0",
+		"GIT_PAGER":           "cat",
+		"NO_COLOR":            "1",
+	} {
+		if vistos[k] != want {
+			t.Errorf("%s = %q, want %q", k, vistos[k], want)
 		}
 	}
-}
+	// Y LANG se quita pero LC_ALL se queda: `LC_ALL` gana sobre `LANG`, y como se pone
+	// explícitamente a C, da igual lo que diga LANG. Por eso se quita LANG —para que no
+	// haya dos variables compitiendo— y no hace falta ponerla.
+	if _, sigue := vistos["LANG"]; sigue {
+		t.Error("LANG sigue presente: compite con el LC_ALL que se pone")
+	}
 
-// TestNewUsaGitYElTimeoutPorDefecto: un Runner construido a mano con el binario
-// vacío tiene que hablar con `git` del PATH, no fallar. Y el timeout es un
-// contrato: un Runner sin timeout no puede quedarse colgado esperando un clon.
-func TestNewUsaGitYElTimeoutPorDefecto(t *testing.T) {
-	r := New()
-	if r.Bin != "git" {
-		t.Errorf("Bin = %q, want git", r.Bin)
-	}
-	if r.Timeout != DefaultTimeout {
-		t.Errorf("Timeout = %v, want %v", r.Timeout, DefaultTimeout)
-	}
-	// Un Runner con Timeout=0 usa el default en cada Run, y no lo muta. La
-	// prueba es sobre un repo de verdad: con Timeout=0 el plazo nace vencido, así
-	// que sin el default el comando se cancelaría antes de arrancar y el fallo
-	// sería de plazo, no de git.
-	repo := t.TempDir()
-	if out, err := exec.Command("git", "init", "-b", "main", repo).CombinedOutput(); err != nil {
-		t.Fatalf("init: %v\n%s", err, out)
-	}
-	cero := &Runner{}
-	if _, err := cero.Run(t.Context(), repo, "rev-parse", "--is-bare-repository"); err != nil {
-		t.Errorf("timeout=0 debería usar el default, pero falló: %v", err)
-	}
-	if cero.Timeout != 0 {
-		t.Errorf("Run mutó el Timeout del Runner: %v", cero.Timeout)
-	}
-	// Y con un timeout negativo pasa lo mismo que con cero: el default lo arregla.
-	neg := &Runner{Timeout: -time.Second}
-	if _, err := neg.Run(t.Context(), repo, "rev-parse", "--is-bare-repository"); err != nil {
-		t.Errorf("timeout negativo debería usar el default, pero falló: %v", err)
-	}
-	if neg.Timeout != -time.Second {
-		t.Errorf("Run mutó el Timeout del Runner: %v", neg.Timeout)
-	}
-	// Un Runner con Bin vacío habla con el `git` del PATH, no con una cadena
-	// vacía: sin esto, ningún Runner construido a mano funcionaría.
-	conBin := &Runner{Bin: "git", Timeout: time.Second}
-	if _, err := conBin.Run(t.Context(), repo, "rev-parse", "--is-bare-repository"); err != nil {
-		t.Errorf("con Bin=git explícito: %v", err)
-	}
-}
-
-// TestEnvQuitaElLocale: el idioma de los mensajes de git es parte del contrato,
-// porque el clasificador de errores de los adapters busca texto en inglés.
-func TestEnvQuitaElLocale(t *testing.T) {
-	t.Setenv("LANG", "es_ES.UTF-8")
-	t.Setenv("LC_ALL", "es_ES.UTF-8")
-	t.Setenv("LANGUAGE", "es_ES")
-	t.Setenv("LC_MESSAGES", "es_ES")
-
-	env := Env()
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "LANG=") || strings.HasPrefix(kv, "LANGUAGE=") || strings.HasPrefix(kv, "LC_MESSAGES=") {
-			t.Errorf("Env() = %q, want el locale del usuario fuera", kv)
+	// Y una variable que no tiene nada que ver se conserva. Si `Env` filtrara de más, un
+	// PATH vacío o un HOME equivocado rompería git de una forma difícil de ver.
+	t.Setenv("PRDASH_TEST_QUE_SI_SE_CONSERVA", "valor")
+	vistos = map[string]string{}
+	for _, kv := range Env() {
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			vistos[kv[:i]] = kv[i+1:]
 		}
 	}
-	if !contains(env, "LC_ALL=C") {
-		t.Error("Env() debería fijar LC_ALL=C")
+	if vistos["PRDASH_TEST_QUE_SI_SE_CONSERVA"] != "valor" {
+		t.Error("Env tiró una variable que no debía: el entorno se filtra de más")
 	}
 }
 
-// TestEnvConservaLoQueNoToca: un filtro que se pasa de celoso rompería el acceso
-// a credenciales y a la configuración del usuario, que es justo lo que la TUI
-// necesita para hablar con el forge. Solo se quitan lo que estorba.
-func TestEnvConservaLoQueNoToca(t *testing.T) {
-	t.Setenv("PRTEST_MARKER", "se-que-debe-conservar")
-	if !contains(Env(), "PRTEST_MARKER=se-que-debe-conservar") {
-		t.Error("Env() tiró una variable que no debía tocar")
+// TestElTimeoutDeRunCortaDeVerdad: como en herdr, el timeout tiene que cortar y no solo
+// matar al proceso.
+//
+// Y aquí el hijo que hereda los descriptores es aún más fácil que en el caso de herdr,
+// porque git los lanza de serie: un `git fetch` abre un proceso de transporte, y un
+// `git commit` lanza un hook. Un hook que se quede con el stdout abierto es un caso real,
+// no uno inventado, y sin `WaitDelay` la TUI se queda esperando al hook.
+//
+// Y el suelo por defecto se comprueba en la dirección contraria al primer caso, por lo
+// mismo que en herdr: con el suelo de 60s y un binario que duerme un segundo, lo
+// correcto es que tarde un segundo.
+func TestElTimeoutDeRunCortaDeVerdad(t *testing.T) {
+	dir := t.TempDir()
+	// Un "git" que se cuelga dejando un hijo vivo con los descriptores abiertos: el
+	// patrón que hacía que `cmd.Run()` no volviera.
+	colgado := filepath.Join(dir, "git-colgado")
+	script := "#!/bin/sh\nsh -c 'sleep 5' &\nsleep 5\n"
+	if err := os.WriteFile(colgado, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &Runner{Bin: colgado, Timeout: 50 * time.Millisecond}
+	inicio := time.Now()
+	_, err := r.Run(context.Background(), dir, "status")
+	elapsed := time.Since(inicio)
+
+	if err == nil {
+		t.Error("un git colgado dio nil")
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("Run tardó %s con un timeout de 50ms: el contexto no corta la llamada, "+
+			"solo mata al proceso", elapsed)
+	}
+
+	// Y con el Timeout vacío se aplica el suelo por defecto, que no es el timeout del
+	// caso anterior.
+	corto := filepath.Join(dir, "git-corto")
+	if err := os.WriteFile(corto, []byte("#!/bin/sh\nsleep 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r = &Runner{Bin: corto}
+	inicio = time.Now()
+	if _, err := r.Run(context.Background(), dir, "status"); err != nil {
+		t.Errorf("con el suelo por defecto y un binario sano dio error: %v", err)
+	}
+	if elapsed := time.Since(inicio); elapsed < 900*time.Millisecond {
+		t.Errorf("con Timeout vacío tardó %s: se aplicó un timeout corto en vez del suelo",
+			elapsed)
 	}
 }
 
-// TestGitEnRepoRealIgnoraElGITDirHeredado es la prueba de efecto, con git de
-// verdad. Se monta un repo "víctima" fuera del fixture y se exporta su GIT_DIR
-// como si quien lanzara la suite viniera de dentro de él. Run tiene que operar
-// en el repo del fixture, no en la víctima: si el filtro de Env() no estuviera,
-// `git config` de abajo escribiría en la config de la víctima.
-func TestGitEnRepoRealIgnoraElGITDirHeredado(t *testing.T) {
-	victima := filepath.Join(t.TempDir(), "victima.git")
-	if err := os.MkdirAll(victima, 0o755); err != nil {
-		t.Fatal(err)
+// TestElBinarioPorDefectoEsGitYNoElCampoVacio: sin `Bin` puesto se usa "git".
+//
+// Y el motivo de que sea un nombre y no una ruta resuelta está en que el Runner lo
+// normalize al construirse en `New`; aquí solo se comprueba que el camino vacío no rompe.
+func TestElBinarioPorDefectoEsGitYNoElCampoVacio(t *testing.T) {
+	dir := repoVacio(t)
+	// Sin Bin: sale "git". Con un repo de verdad detrás, la operación tiene que funcionar,
+	// así que si no llegara al binario real fallaría.
+	if _, err := (&Runner{}).Run(context.Background(), dir, "rev-parse", "--git-dir"); err != nil {
+		t.Fatalf("sin Bin, Run falló: %v", err)
 	}
-	if out, err := exec.Command("git", "init", "--bare", "-b", "main", victima).CombinedOutput(); err != nil {
-		t.Fatalf("init --bare: %v\n%s", err, out)
+	// Y `New` lo pone explícito.
+	if got := New().Bin; got != "git" {
+		t.Errorf("New().Bin = %q, want git", got)
 	}
-	marker := filepath.Join(victima, "config")
-	if err := os.WriteFile(marker, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// El repo del fixture, en otro árbol y sin relación con la víctima.
-	repo := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := exec.Command("git", "init", "-b", "main", repo).CombinedOutput(); err != nil {
-		t.Fatalf("init: %v\n%s", err, out)
-	}
-
-	t.Setenv("GIT_DIR", filepath.Join(victima, ".git"))
-	r := New()
-	if _, err := r.Run(t.Context(), repo, "config", "prdash.test", "escrito-en-el-fixture"); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	// Lo escrito tiene que estar en el repo del fixture... Las comprobaciones
-	// van con un entorno limpio a propósito: si heredaran el GIT_DIR de este
-	// test, serían ellas las que miraran en la víctima y pasarían por buena
-	// la configuración que hay que comprobar.
-	if out, err := gitLimpio(t, "-C", repo, "config", "--get", "prdash.test").CombinedOutput(); err != nil {
-		t.Errorf("la config no quedó en el repo del fixture: %v\n%s", err, out)
-	} else if got := strings.TrimSpace(string(out)); got != "escrito-en-el-fixture" {
-		t.Errorf("valor = %q, want escrito-en-el-fixture", got)
-	}
-
-	// ...y NO en la víctima, que es de donde no debía salir nada.
-	if out, _ := gitLimpio(t, "--git-dir="+victima, "config", "--get", "prdash.test").CombinedOutput(); strings.TrimSpace(string(out)) != "" {
-		t.Errorf("la config de la víctima se modificó: %q — GIT_DIR le ganó a cmd.Dir", out)
+	// Y con un Timeout ya puesto, que es lo que hace `New`.
+	if got := New().Timeout; got != DefaultTimeout {
+		t.Errorf("New().Timeout = %v, want DefaultTimeout", got)
 	}
 }
 
-// gitLimpio ejecuta git sin las GIT_* de localización del entorno del test, que
-// es justo lo que la prueba está comprobando que Run() ya no propaga.
-func gitLimpio(t *testing.T, args ...string) *exec.Cmd {
+// repoVacio crea un repo git sin commits bajo t.TempDir().
+func repoVacio(t *testing.T) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Env = Env()
-	return cmd
-}
-
-func contains(env []string, want string) bool {
-	for _, kv := range env {
-		if kv == want {
-			return true
+	dir := t.TempDir()
+	r := New()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "t@example.com"},
+		{"config", "user.name", "Test"},
+	} {
+		if _, err := r.Run(context.Background(), dir, args...); err != nil {
+			t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 		}
 	}
-	return false
+	return dir
 }

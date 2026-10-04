@@ -464,18 +464,52 @@ func runOn(seed Outcome, ctx context.Context, a Adapter, kind ActionKind, ref mo
 // req solo aplica a ActionMerge; approve lo ignora. Se pasa siempre para que la
 // firma no dependa de la acción, que es lo que permite dispatchar con un switch.
 func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, req MergeRequest) Outcome {
+	// Una acción que no existe NO se despacha, y el corte va ANTES de `runOn`.
+	//
+	// Antes, el `default` del switch de abajo devolvía nil, y nil es exactamente lo que
+	// `classifyAction` lee como "no hubo ningún warning" —que es su forma de decir que la
+	// acción salió bien—. El resultado era que `RunAction` con una acción desconocida
+	// devolvía `OK: true` sin haber hecho nada, y el aviso de la cabecera —que se compone de
+	// `OK`— decía lo contrario de lo que pasó.
+	//
+	// Hoy no se ve porque la TUI filtra por `canActionOn` y solo deja pasar approve y merge,
+	// y el retarget tiene su propio camino. Pero una contención que informa de éxito no
+	// contiene: el día que un Kind nuevo se enrute por aquí sin añadir su rama, el usuario
+	// ve "hecho" sobre una acción que no ocurrió.
+	//
+	// Y el corte va antes de `runOn` y no dentro del `exec` por dos razones que se pagan en
+	// cada llamada equivocada: `runOn` relee el ítem del forge, así que despachar una acción
+	// imposible cuesta un viaje de ida y vuelta a GitHub para nada; y la respuesta no viene
+	// de un forge, así que pasarla por `classifyAction` —que clasifica respuestas de forge—
+	// sería meterla en una categoría que no le corresponde.
+	//
+	// El `Outcome` sale sin banderas a propósito: no es conflicto —el ítem no ha cambiado— ni
+	// permiso —que en la TUI registra el ítem como denegado y no lo vuelve a intentar—. Es un
+	// fallo de quién llamó, no del ítem ni de la sesión.
+	// Ver `docs/adr/0008-dispatch-de-accion-desconocida.md`.
+	if kind != ActionApprove && kind != ActionMerge {
+		return Outcome{
+			Kind:         kind,
+			ID:           model.With(ref.Forge, ref.Host, ref.Project, number),
+			Mode:         req.Mode,
+			DeleteBranch: req.DeleteBranch,
+			Msg:          "prdash does not implement the " + string(kind) + " action",
+		}
+	}
+
 	out, actionWarns := runOn(
 		Outcome{Mode: req.Mode, DeleteBranch: req.DeleteBranch},
 		ctx, a, kind, ref, number,
 		func(cur model.Item) []model.Warning {
-			switch kind {
-			case ActionApprove:
+			// El `default` que antes hacía de contención para un Kind desconocido ya no
+			// está: `RunAction` corta antes de llegar aquí. Dejarlo sería un segundo sitio
+			// donde un Kind nuevo se despacha en silencio, y dos sitios que dicen lo mismo
+			// divergen.
+			if kind == ActionApprove {
 				return a.Approve(ctx, ref, number)
-			case ActionMerge:
-				req.HeadSHA = cur.HeadSHA
-				return a.Merge(ctx, ref, number, req)
 			}
-			return nil
+			req.HeadSHA = cur.HeadSHA
+			return a.Merge(ctx, ref, number, req)
 		},
 	)
 

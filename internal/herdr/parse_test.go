@@ -288,3 +288,84 @@ func TestParseServerErrorVariants(t *testing.T) {
 		t.Fatalf("texto sin json = %q %q", code, msg)
 	}
 }
+
+// TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa: el final de
+// `parseServerError`.
+//
+// Y es el caso más común de todos y el que más se cuela: `herdr` no devuelve siempre JSON. Para
+// una operación que no conoce —un pane inexistente, una capa que no está— escribe texto plano en
+// stderr, y el texto no es ni un código ni un motivo.
+//
+// Y lo que hay que comprobar es que el `default` NO se invente nada. Un parser que devolviera el
+// texto como `msg` haría que el aviso fuera legible, pero devolvería `code` con un valor
+// inventado y eso es peor: `code` es lo que la TUI usa para clasificar, y un código falso
+// clasifica la operación como algo que no es —permiso, conflicto, no encontrado— sin que nadie
+// pueda corregir el dato.
+//
+// Y el caso es el de la línea 265, que es el único camino que queda después de los tres
+// `Unmarshal`: texto que no es un mapa, o que es un mapa sin `error` y sin `code`/`message`.
+func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testing.T) {
+	for _, c := range []struct {
+		nombre string
+		stderr string
+	}{
+		// Y el caso que se da de verdad: texto plano de una CLI.
+		{"texto plano de una CLI", "workspace_limit\n"},
+		{"texto plano con espacios", "pane w18:p1 not found"},
+		{"ayuda de uso", "usage: herdr pane graphics set [--pane ID]"},
+		// Y los JSON que no traen lo que se busca. Un `error` sin `message` NO está aquí:
+		// el código sí se lee, y es lo que la TUI necesita para clasificar, así que
+		// devolver el código con el motivo vacío es lo correcto. Mi primera versión lo puso
+		// en la lista de ilegibles y el código hacía bien.
+		{"error que no es un objeto", `{"error":"algo"}`},
+		{"mapa sin error ni code", `{"other":"value"}`},
+		// Y el caso que de verdad llega al final de la cadena: el `code` de JSON-RPC es un
+		// NÚMERO —`{"code":-32601,"message":"..."}`—, así que el `Unmarshal` al struct de
+		// cadenas falla y no hay ni código ni motivo.
+		//
+		// Y merece la pena decirlo porque es la forma estándar de un error de JSON-RPC y la
+		// que se traga sin que se note: el mensaje se lee bien pero el código se pierde, y el
+		// código es lo que clasifica. Con eso, un "pane no encontrado" de JSON-RPC saldría
+		// sin código y la TUI lo trataría como un error sin clasificar —sin conflicto, sin
+		// permiso— en vez de como algo que se resuelve refrescando.
+		{"code de JSON-RPC, que es numérico", `{"code":-32601,"message":"method not found"}`},
+		{"code numérico suelto", `{"code":42}`},
+		{"array", `[1,2,3]`},
+		{"json con trailing", `{"code":"x"} basura`},
+	} {
+		code, msg := parseServerError([]byte(c.stderr))
+		if code != "" || msg != "" {
+			t.Errorf("%s: dio code=%q msg=%q, y un texto que no se sabe leer tiene que salir "+
+				"vacío: un código inventado clasifica la operación como algo que no es",
+				c.nombre, code, msg)
+		}
+	}
+
+	// Y el contraste, que es lo que hace que lo anterior sea "el parser funciona" y no "el
+	// parser devuelve siempre vacío": las formas que sí entiende.
+	for _, c := range []struct {
+		stderr   string
+		wantCode string
+		wantMsg  string
+	}{
+		{`{"error":{"code":"pane_not_found","message":"no such pane"}}`, "pane_not_found", "no such pane"},
+		{`{"code":"rate_limited","message":"slow down"}`, "rate_limited", "slow down"},
+		// Y el caso donde el código se lee pero el motivo no: se devuelve el código con el
+		// motivo vacío, porque el código es lo que clasifica y el motivo es lo que se lee.
+		{`{"error":{"code":"workspace_limit"}}`, "workspace_limit", ""},
+		// Y el caso donde el JSON parsea pero no trae nada: eso SÍ es el 265.
+		{`{"other":"value"}`, "", ""},
+	} {
+		code, msg := parseServerError([]byte(c.stderr))
+		if code != c.wantCode || msg != c.wantMsg {
+			t.Errorf("%s: dio (%q, %q), want (%q, %q)", c.stderr, code, msg, c.wantCode, c.wantMsg)
+		}
+	}
+
+	// Y el vacío explícito, que es el caso más frecuente de todos y el primer `return`.
+	for _, vacio := range []string{"", "   ", "\n\n"} {
+		if code, msg := parseServerError([]byte(vacio)); code != "" || msg != "" {
+			t.Errorf("un stderr vacío dio (%q, %q)", code, msg)
+		}
+	}
+}

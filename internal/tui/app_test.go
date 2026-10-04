@@ -75,6 +75,25 @@ func send(t *testing.T, m Model, msg tea.Msg) Model {
 // el terminal nunca produce.
 func press(t *testing.T, m Model, key string) Model {
 	t.Helper()
+	out, _ := m.Update(keyMsg(t, key))
+	return out.(Model)
+}
+
+// pulsar es `press` devolviendo también el comando, que es lo que hay que comprobar cuando
+// una tecla tiene que lanzar algo —un render, un `tea.Quit`— y no solo cambiar el estado.
+//
+// Y pasa por `Update`, no por el manejador concreto: el camino real de una tecla es el
+// `switch` de `handleKey`, y saltar a `handleSimKey` se saltaría justo la pregunta de si el
+// overlay captura el teclado. Esa pregunta es parte de lo que se está probando.
+func pulsar(t *testing.T, m Model, key string) (Model, tea.Cmd) {
+	t.Helper()
+	out, cmd := m.Update(keyMsg(t, key))
+	return out.(Model), cmd
+}
+
+// keyMsg construye el mensaje de tecla como lo construye el decoder de verdad.
+func keyMsg(t *testing.T, key string) tea.KeyPressMsg {
+	t.Helper()
 	km := tea.KeyPressMsg{Code: []rune(key)[0], Text: key}
 	switch key {
 	case "tab":
@@ -106,8 +125,7 @@ func press(t *testing.T, m Model, key string) Model {
 			km = tea.KeyPressMsg{Code: unicode.ToLower(rune(key[0])), Mod: tea.ModShift, Text: key}
 		}
 	}
-	out, _ := m.Update(km)
-	return out.(Model)
+	return km
 }
 
 // toastTexts devuelve los mensajes de los avisos vivos.

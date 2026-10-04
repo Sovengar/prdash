@@ -65,10 +65,27 @@ func Load(path string) (File, bool) {
 // Save persiste el snapshot (best-effort: el llamador puede ignorar el error).
 func Save(path string, f File) error {
 	f.Version = version
+	return guardaJSON(path, f)
+}
+
+// guardaJSON escribe `v` como JSON indentado en `path`, creando el directorio.
+//
+// Y hay UNO solo para el snapshot y para la memoria porque los dos hacían la misma secuencia de
+// tres pasos —`MkdirAll`, `MarshalIndent`, `WriteFile`— y dos copias de una secuencia divergen:
+// el día que uno aprenda a escribir con permiso de grupo, el otro se queda escribiendo a 0644 y
+// el síntoma es un fichero que un usuario no puede tocar.
+//
+// Y el paso de `MarshalIndent` es el único que devuelve un error que NO es de disco, y eso es
+// lo que hace que la función tome `any` y no el tipo concreto. Con el tipo concreto, `v` sería
+// siempre un struct de cadenas y de slices, y `json.Marshal` de eso no falla nunca —el error solo
+// sale con un canal, una función o un NaN—, así que la comprobación sería código muerto y nadie
+// podría probarlo. Tomando `any`, el error es real, se puede provocar, y los dos llamadores
+// siguen siendo seguros por construcción.
+func guardaJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	raw, err := json.MarshalIndent(f, "", "  ")
+	raw, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}

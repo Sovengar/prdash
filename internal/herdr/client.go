@@ -15,6 +15,18 @@ import (
 // DefaultTimeout es el límite por invocación de la CLI de Herdr.
 const DefaultTimeout = 30 * time.Second
 
+// pipeCloseGrace es el margen que se le da a las tuberías de salida después de que el
+// contexto caduca. No es el timeout —ese lo da el contexto—: es la gracia para que un
+// proceso que YA está cerrando sus tuberías termine de hacerlo. Sin ella, un hijo que
+// hereda los descriptores mantiene `cmd.Run()` esperando (ver `run`).
+//
+// Y son 250 ms a propósito, no un segundo. Es una TUI: lo que no responde al teclado se
+// lee como cuelgue, y medio segundo de gracia para cerrar una tubería es de sobra —un
+// proceso que no ha cerrado en 250 ms ya no va a cerrar—. Con 2 s el corte funcionaba pero
+// la TUI seguía sin responder dos segundos, que es exactamente la mitad del problema que se
+// quería arreglar.
+const pipeCloseGrace = 250 * time.Millisecond
+
 // execFunc es la firma de ejecución de la CLI, inyectable en tests.
 type execFunc func(ctx context.Context, args ...string) (stdout, stderr []byte, err error)
 
@@ -101,6 +113,26 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, []byte, error
 	}
 	cmd := exec.CommandContext(cctx, bin, args...)
 	cmd.Env = os.Environ()
+
+	// WaitDelay es lo que hace que el timeout CORTE DE VERDAD, y sin él el timeout no
+	// corta: solo mata el proceso.
+	//
+	// El motivo es cómo funciona `exec` cuando stdout y stderr no son ficheros sino
+	// buffers: `exec` crea una tubería del sistema por cada una y copia en una goroutine.
+	// El contexto caducado mata el proceso, pero el proceso tiene un HIJO —la CLI de
+	// Herdr puede lanzar un pane que hereda sus descriptores—, y ese hijo sigue vivo
+	// sujetando el extremo de escritura de la tubería. La goroutine de copia no termina,
+	// la tubería no se cierra y `cmd.Run()` no vuelve.
+	//
+	// Medido antes de ponerlo: un binario que duerme cinco segundos con un timeout de
+	// 50ms hacía que `run` tardara 5,00 segundos. Es decir, el timeout no hacía nada, y un
+	// Herdr con el socket atascado dejaba la TUI sin responder al teclado hasta que el
+	// proceso soltara —que es justo el fallo que el timeout existe para evitar—.
+	//
+	// El valor es un margen de gracia para los procesos que SÍ están cerrando sus
+	// tuberías, no el timeout: el corte ya lo hace el contexto.
+	cmd.WaitDelay = pipeCloseGrace
+
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb

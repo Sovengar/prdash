@@ -2,11 +2,11 @@ package main
 
 import (
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"bytes"
 	"prdash/internal/config"
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
@@ -48,7 +48,7 @@ func TestRunPrint(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
+	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
 	for _, want := range []string{"Created by me", "github@github.com", "acme/widget#7", "Add widget"} {
 		if !strings.Contains(out, want) {
@@ -71,8 +71,8 @@ func TestRunPrintKeepsOrder(t *testing.T) {
 			},
 		}
 	}
-	out := captureStdout(t, func() {
-		runPrint([]forge.Adapter{mk("github"), mk("gitlab")}, nil)
+	out := imprimeABuffer(t, func(w io.Writer) {
+		runPrintTo(w, w, []forge.Adapter{mk("github"), mk("gitlab")}, nil)
 	})
 	if strings.Index(out, "T-github") > strings.Index(out, "T-gitlab") {
 		t.Errorf("el orden de impresión debe seguir el de los adapters:\n%s", out)
@@ -99,7 +99,7 @@ func TestRunPrintShowsActiveReview(t *testing.T) {
 		return worktree.Worktree{}, false
 	}
 
-	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, lookup) })
+	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, lookup) })
 
 	if !strings.Contains(out, "review:"+wtPath) {
 		t.Errorf("la salida no integra la ruta del review activo:\n%s", out)
@@ -119,7 +119,7 @@ func TestRunPrintWithoutReviewsKeepsF1(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
+	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
 	if strings.Contains(out, "review:") {
 		t.Errorf("sin reviews activos no debería aparecer la marca de F2:\n%s", out)
@@ -135,24 +135,6 @@ func names(adapters []forge.Adapter) []string {
 		out = append(out, a.Forge())
 	}
 	return out
-}
-
-// captureStdout ejecuta fn capturando lo que escriba en stdout.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
-	fn()
-	_ = w.Close()
-	os.Stdout = old
-
-	data, _ := io.ReadAll(r)
-	_ = r.Close()
-	return string(data)
 }
 
 // TestRunPrintNoAplicaElModoDePrefijo fija la independencia de --print respecto
@@ -185,7 +167,7 @@ func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { runPrint([]forge.Adapter{fake}, nil) })
+	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
 	// La ruta completa, sin recortar y sin línea de prefijo.
 	for _, want := range []string{
@@ -207,4 +189,23 @@ func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 			t.Errorf("--print pintó una línea de prefijo: %q", line)
 		}
 	}
+}
+
+// imprimeABuffer ejecuta fn pasándole un buffer como stdout y stderr, y devuelve lo que
+// salió por stdout.
+//
+// Y sustituye a los dos capturadores por fd que había antes, y el motivo no es que
+// `bytes.Buffer` sea más limpio: es que **`os.Pipe` tiene un búfer de 64 KiB**. Un
+// capturador por fd solo devuelve si lo escrito cabe; en cuanto `fn` pasa de 64 KiB se
+// bloquea escribiendo en una tubería que nadie lee hasta que `fn` vuelva, y `fn` no vuelve
+// porque está bloqueado. Un test que pasa con la tabla del inbox entera y se cuelga cuando la
+// tabla crece es un test que falla por la razón equivocada.
+//
+// Y con un buffer no hay límite ni carrera: `fn` escribe en memoria y el contenido se lee
+// después.
+func imprimeABuffer(t *testing.T, fn func(w io.Writer)) string {
+	t.Helper()
+	var buf bytes.Buffer
+	fn(&buf)
+	return buf.String()
 }

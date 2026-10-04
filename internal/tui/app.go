@@ -284,6 +284,12 @@ type Model struct {
 	// graphics publica la imagen del popup en la capa de gráficos del pane;
 	// nil = sin Herdr, y la imagen se pinta con half-blocks.
 	graphics Graphics
+	// openURL es el seam del abridor del navegador, y existe por un motivo concreto: sin
+	// él, probar el camino bueno de `openBrowserCmd` —que es el que devuelve "abriendo <url>"—
+	// obliga a EJECUTAR el comando, y eso lanza el navegador de verdad en la máquina de quien
+	// corre los tests. Un `tea.Cmd` es una función: se devuelve y se llama, así que "mirar el
+	// cmd sin llamarlo" no es una opción. nil usa el abridor real del sistema.
+	openURL func(url string) error
 	// sim es el estado del overlay de simulación y simSeq el número de la
 	// petición en vuelo, que es lo que invalida un render tardío.
 	sim    simPanel
@@ -1056,5 +1062,39 @@ func (m *Model) setNoticeReplacing(prev, text string, level noticeLevel) {
 func (m *Model) setNotice(text string, level noticeLevel) {
 	if lvl, ok := toastForLevel(level); ok {
 		m.toast.show(text, lvl)
+	}
+}
+
+// Wiring resume qué dependencias tiene inyectadas el modelo.
+//
+// Y existe por una razón concreta: el cableado son siete `SetX` seguidos, y uno que falte
+// NO rompe la compilación. El modelo arranca igual y el fallo sale solo cuando el usuario
+// pulsa la tecla correspondiente, con un aviso que dice "falta la dependencia" —que es un
+// diagnóstico, no un fallo, y que no dice cuál de las siete falta.
+//
+// Con esto, el cableado se puede comprobar entero desde fuera del paquete, que es lo que
+// hace que `cmd/prdash`'s `wire` sea una función testeable en vez de un bloque de código
+// que solo se ejecuta de verdad.
+//
+// Y `Simulator` y `Mounter` son las interfaces, no un `bool`: comparar la instancia es lo
+// que permite afirmar que el simulador y el registro de reviews usan EL MISMO ejecutor, que
+// es el fallo que cuatro instancias distintas producen en producción y no en los tests.
+type Wiring struct {
+	Mounter       Mounter
+	Simulator     Simulator
+	Graphics      Graphics
+	ReviewLookup  ReviewLookup
+	ReviewRemover ReviewRemover
+}
+
+// Wiring devuelve qué dependencias tiene inyectadas el modelo. nil es una dependencia
+// ausente, que es exactamente lo que el modelo trata como "pide instalar X".
+func (m *Model) Wiring() Wiring {
+	return Wiring{
+		Mounter:       m.mounter,
+		Simulator:     m.simulator,
+		Graphics:      m.graphics,
+		ReviewLookup:  m.reviewLookup,
+		ReviewRemover: m.reviewRemover,
 	}
 }

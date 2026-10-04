@@ -19,6 +19,16 @@ import (
 // DefaultTimeout es el límite por invocación de git (fetch/clone pueden tardar).
 const DefaultTimeout = 60 * time.Second
 
+// pipeCloseGrace es el margen para cerrar las tuberías de salida después de que el
+// contexto caduca. No es el timeout —ese lo da el contexto—: es la gracia para que un
+// proceso que YA está cerrando sus tuberías termine de hacerlo.
+//
+// Sin ella el timeout no corta, solo mata al proceso: con stdout y stderr en buffers,
+// `exec` copia en goroutines sobre tuberías del sistema, y un hijo que hereda los
+// descriptores las mantiene abiertas, así que `cmd.Run()` no vuelve. Es el mismo motivo y
+// el mismo arreglo que en `internal/herdr`; ver `pipeCloseGrace` allí para la medición.
+const pipeCloseGrace = 250 * time.Millisecond
+
 // Runner ejecuta git.
 type Runner struct {
 	// Bin es el binario de git; vacío usa "git".
@@ -74,6 +84,8 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 		cmd.Dir = dir
 	}
 	cmd.Env = Env()
+	// Sin esto el timeout no corta: ver `pipeCloseGrace`.
+	cmd.WaitDelay = pipeCloseGrace
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb

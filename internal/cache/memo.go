@@ -57,14 +57,7 @@ func LoadMemo(path string) (Memo, bool) {
 func SaveMemo(path string, m Memo) error {
 	m.Version = memoVersion
 	m = normalize(m)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, raw, 0o644)
+	return guardaJSON(path, m)
 }
 
 // Store es un acceso seguro en proceso a la memoria persistida. Serializa los

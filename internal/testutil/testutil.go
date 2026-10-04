@@ -5,10 +5,10 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
-	"testing"
 
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
@@ -296,67 +296,116 @@ type ConformanceOptions struct {
 	MissingBinary bool // el CLI no existe: los listados deben avisar, no romper
 }
 
-// RunConformance ejecuta la suite de contrato compartida por todos los
-// adapters. Con MissingBinary usa un binario inexistente, de modo que no hay
-// ninguna llamada de red; con Unsupported comprueba el adapter inerte.
-func RunConformance(t *testing.T, a forge.Adapter, opts ConformanceOptions) {
+// RunConformance ejecuta la suite de contrato compartida por todos los adapters y
+// registra cada incumplimiento como fallo del test.
+//
+// Lo que hay aquí es solo elickness de imprimir: las comprobaciones viven en
+// `ConformanceViolations`, que devuelve la lista y no toca el test. La razón es que una
+// suite que solo se puede ejecutar con un `*testing.T` de verdad no se puede PROBAR —y una
+// puerta que no se puede probar no distingue una puerta de un cartel—. Con la separación,
+// los tests pueden darle un adapter roto y comprobar que la lista sale como tiene que
+// salir, que es la única forma de saber que la puerta cierra.
+func RunConformance(t testReport, a forge.Adapter, opts ConformanceOptions) {
 	t.Helper()
+	reportaIncumplimientos(a, opts, func(v string) { t.Error(v) })
+}
+
+// reportaIncumplimientos entrega cada incumplimiento a `informa`.
+//
+// Y la función de informe inyectada es lo que hace que este bucle sea comprobable en proceso:
+// `t.Error` es un método de `*testing.T`, que no se puede doblear —tiene un método privado— y
+// además no detiene la ejecución, así que probarlo "en verde" solo se puede haciendo que el test
+// falle. Con el informe fuera, el bucle se comprueba contando lo que entrega y contando cuántas
+// veces.
+//
+// Y `t.Error` y no `t.Fatalf` a propósito: la suite quiere REPORTAR todos los incumplimientos de
+// una vez, porque un adapter roto suele romper más de una regla y ver solo la primera obliga a
+// arreglar, correr, y volver a encontrar la siguiente.
+func reportaIncumplimientos(a forge.Adapter, opts ConformanceOptions, informa func(string)) {
+	for _, v := range ConformanceViolations(a, opts) {
+		informa(v)
+	}
+}
+
+// ConformanceViolations devuelve una línea por cada regla del contrato que el adapter
+// incumple. Vacía significa conforme.
+//
+// Y el detalle de por qué una lista y no `error` es que hay varios incumplimientos
+// independientes, y reportar solo el primero obliga a arreglar y volver a ejecutar para
+// descubrir el siguiente. Con un adapter roto son cinco o seis.
+func ConformanceViolations(a forge.Adapter, opts ConformanceOptions) []string {
+	var fuera []string
+	// Forge y host vacíos no son un incumplimiento menor: sin ellos el resto de los
+	// mensajes de la app salen sin nombre, y los avisos de degradación no dicen de qué
+	// forge hablan.
 	if a.Forge() == "" {
-		t.Error("Forge() vacío")
+		fuera = append(fuera, "Forge() vacío")
 	}
 	if a.Host() == "" {
-		t.Error("Host() vacío")
+		fuera = append(fuera, "Host() vacío")
 	}
 	ctx := context.Background()
 
 	for _, q := range forge.Streams {
 		page, warns := a.List(ctx, q)
+		// `More` sin `Next` es la incoherencia que más caro sale: la TUI pide la página
+		// siguiente con un cursor vacío, recibe la primera otra vez, y el inbox entra en
+		// un bucle que consume red sin mostrar nada nuevo.
 		if page.More && page.Next == "" {
-			t.Errorf("%s: List(%v) More=true sin Next", a.Forge(), q)
+			fuera = append(fuera, fmt.Sprintf("%s: List(%v) More=true sin Next", a.Forge(), q))
 		}
 		if opts.Unsupported {
 			if !hasKind(warns, "unsupported") {
-				t.Errorf("%s: List(%v) debería reportar unsupported", a.Forge(), q)
+				fuera = append(fuera, fmt.Sprintf("%s: List(%v) debería reportar unsupported", a.Forge(), q))
 			}
 			if len(page.Items) != 0 {
-				t.Errorf("%s: List(%v) no debería devolver ítems", a.Forge(), q)
+				fuera = append(fuera, fmt.Sprintf("%s: List(%v) no debería devolver ítems", a.Forge(), q))
 			}
 		}
 		if opts.MissingBinary {
 			if len(page.Items) != 0 {
-				t.Errorf("%s: List(%v) sin binario no debería devolver ítems", a.Forge(), q)
+				fuera = append(fuera, fmt.Sprintf("%s: List(%v) sin binario no debería devolver ítems", a.Forge(), q))
 			}
+			// Sin aviso, el inbox aparece vacío sin explicación. Es peor que un error
+			// visible: el usuario ve que no tiene trabajo y no tiene por qué.
 			if len(warns) == 0 {
-				t.Errorf("%s: List(%v) sin binario debería devolver un warning", a.Forge(), q)
+				fuera = append(fuera, fmt.Sprintf("%s: List(%v) sin binario debería devolver un warning", a.Forge(), q))
 			}
 		}
 	}
 
+	// Las cinco acciones, con el mismo criterio: un adapter inerte lo dice en todo. Y son
+	// las que más se olvidan en una suite —una que solo mirara los listados dejaría sin
+	// comprobar approve, merge, retarget y branches, que son las que modifican algo—.
 	ref := model.RepoRef{Forge: a.Forge(), Host: a.Host(), Project: "o/r", Owner: "o", Name: "r"}
 	if _, warns := a.ItemState(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
-		t.Errorf("%s: ItemState debería reportar unsupported", a.Forge())
+		fuera = append(fuera, fmt.Sprintf("%s: ItemState debería reportar unsupported", a.Forge()))
 	}
 	if _, warns := a.Comments(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
-		t.Errorf("%s: Comments debería reportar unsupported", a.Forge())
+		fuera = append(fuera, fmt.Sprintf("%s: Comments debería reportar unsupported", a.Forge()))
 	}
 	if warns := a.Approve(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
-		t.Errorf("%s: Approve debería reportar unsupported", a.Forge())
+		fuera = append(fuera, fmt.Sprintf("%s: Approve debería reportar unsupported", a.Forge()))
 	}
 	if warns := a.Merge(ctx, ref, 1, forge.MergeRequest{Mode: forge.Squash, HeadSHA: "deadbeef"}); opts.Unsupported && !hasKind(warns, "unsupported") {
-		t.Errorf("%s: Merge debería reportar unsupported", a.Forge())
+		fuera = append(fuera, fmt.Sprintf("%s: Merge debería reportar unsupported", a.Forge()))
 	}
 	if warns := a.Retarget(ctx, ref, 1, "release/2.0"); opts.Unsupported && !hasKind(warns, "unsupported") {
-		t.Errorf("%s: Retarget debería reportar unsupported", a.Forge())
+		fuera = append(fuera, fmt.Sprintf("%s: Retarget debería reportar unsupported", a.Forge()))
 	}
-	// El buscador se abre aunque el listado venga vacío: por eso lo que se
-	// comprueba es el aviso, no que la lista tenga algo. Un adapter que devolviera
-	// la lista vacía sin decir nada haría que el buscador pareciera un repo sin
-	// ramas.
+	// El buscador se abre aunque el listado venga vacío: por eso lo que se comprueba es
+	// el aviso y que la lista no tenga ramas. Un adapter que devolviera la lista vacía
+	// sin decir nada haría que el buscador pareciera un repo sin ramas, que es un
+	// diagnóstico distinto del correcto.
+	//
+	// Y la asimetría con el listado es deliberada: para un listado, "no puedo" quiere
+	// decir lista vacía; para el buscador, quiere decir "avisa y abre".
 	if names, warns := a.Branches(ctx, ref); opts.Unsupported && !hasKind(warns, "unsupported") {
-		t.Errorf("%s: Branches debería reportar unsupported", a.Forge())
+		fuera = append(fuera, fmt.Sprintf("%s: Branches debería reportar unsupported", a.Forge()))
 	} else if len(names) != 0 {
-		t.Errorf("%s: Branches no debería devolver ramas (%v)", a.Forge(), names)
+		fuera = append(fuera, fmt.Sprintf("%s: Branches no debería devolver ramas (%v)", a.Forge(), names))
 	}
+	return fuera
 }
 
 func hasKind(warns []model.Warning, kind string) bool {

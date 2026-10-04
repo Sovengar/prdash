@@ -51,6 +51,11 @@ const (
 	// límite existe para el modo de fallo en el que git-sim se queda pegado al
 	// entregar la imagen al visor del escritorio, que sin display no vuelve.
 	DefaultTimeout = 60 * time.Second
+
+	// pipeCloseGrace es el margen para cerrar las tuberías de salida tras caducar el
+	// contexto, para que el timeout corte de verdad y no solo mate al proceso. Mismo
+	// motivo y mismo arreglo que en `internal/herdr`.
+	pipeCloseGrace = 250 * time.Millisecond
 )
 
 // Runner ejecuta git-sim.
@@ -153,6 +158,10 @@ func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec
 	cmd := exec.CommandContext(cctx, r.bin(), args...)
 	cmd.Dir = workdir
 	cmd.Env = env()
+	// Sin esto el timeout no corta, solo mata al proceso: un render que deja un hijo
+	// con los descriptores abiertos mantiene `cmd.Run()` esperando. Mismo motivo y mismo
+	// arreglo que en `internal/herdr`.
+	cmd.WaitDelay = pipeCloseGrace
 
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out

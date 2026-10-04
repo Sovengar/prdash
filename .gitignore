@@ -12,3 +12,6 @@ report.json
 .gremlins*
 # Local Pi runtime state
 .atl/
+
+# Cobertura local (la regenera `go test -coverprofile`)
+coverage.out

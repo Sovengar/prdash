@@ -339,8 +339,21 @@ func decodeResponse(line []byte, out any) error {
 	if env.Error != nil {
 		return env.Error
 	}
-	if out == nil || len(env.Result) == 0 {
+	if out == nil {
+		// Un método sin resultado no espera uno: `pane.graphics.clear` contesta `{}` y ya
+		// está. Pedirlo aquí rechazaría la respuesta buena de los métodos sin retorno.
 		return nil
+	}
+	if len(env.Result) == 0 {
+		// Y para un método que SÍ espera resultado, que no haya ninguno es una respuesta
+		// inválida, no un resultado vacío. Sin esta comprobación, un socket apuntando a otro
+		// programa que conteste `{}` a todo haría que `probe()` dijera que la capa de
+		// gráficos funciona —porque solo mira si hay error— y la TUI publicaría imágenes
+		// que no aparecerían nunca, sin un solo aviso.
+		//
+		// Y `Info` devuelve su valor junto al error, así que el que se lleva los ceros de las
+		// medidas es el que se lleva la respuesta vacía, no este.
+		return errors.New("herdr: la respuesta no trae campo result")
 	}
 	return json.Unmarshal(env.Result, out)
 }
