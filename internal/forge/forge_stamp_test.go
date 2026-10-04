@@ -6,19 +6,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestElSelladoNoPisaLaSeccionQueYaLaTiene: un warning que ya trae sección se queda con
-// la suya, y solo se sella el que no la trae.
-//
-// Y la razón de que la comprobación exista es que los warnings viajan por la cadena sin
-// saber de dónde vienen. Uno lo pone el adapter al parsear y sabe si es de list, de item o
-// de comentarios; otro lo pone el TUI, que ya sabe en qué sección está mirando. Sellar los
-// dos por igual significa que un warning de comentarios acaba con la sección de list pegada
-// encima, y el usuario ve el aviso junto a una sección donde no ocurrió.
-//
-// Y el caso que distingue es el de los dos: un warning CON sección y otro SIN ella en la
-// misma llamada. Si solo se probara el que no la tiene, la condición podría ir al revés y
-// nada lo notaría —porque sellar uno sin sección da el mismo resultado con las dos
-// condiciones—.
 func TestElSelladoNoPisaLaSeccionQueYaLaTiene(t *testing.T) {
 	const (
 		listado    = model.SectionReview
@@ -48,8 +35,6 @@ func TestElSelladoNoPisaLaSeccionQueYaLaTiene(t *testing.T) {
 		}
 	}
 
-	// Y la mezcla que es el caso de verdad: sellar una lista donde uno ya trae sección y
-	// otro no. Solo el que no la trae cambia, y el otro se queda como estaba.
 	warns := StampSection([]model.Warning{
 		{Msg: "el primero ya sabe de donde viene", Section: menciones},
 		{Msg: "el segundo no"},
@@ -67,7 +52,6 @@ func TestElSelladoNoPisaLaSeccionQueYaLaTiene(t *testing.T) {
 			warns[1].Section, listado)
 	}
 
-	// Y una lista vacía no inventa nada, que es el caso de un adapter que no avisó.
 	if got := StampSection(nil, listado); len(got) != 0 {
 		t.Errorf("una lista vacía devolvió %d warnings", len(got))
 	}

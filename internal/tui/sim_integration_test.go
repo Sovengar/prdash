@@ -11,14 +11,10 @@ import (
 	"prdash/internal/testutil"
 )
 
-// realLocator apunta al repo de un fixture de git de verdad, que es lo que hace
-// el cableado de producción con el review activo.
 type realLocator struct{ place sim.Place }
 
 func (l realLocator) Locate(model.Item) (sim.Place, bool) { return l.place, true }
 
-// simFixture monta un repo con base y rama de PR, como el que deja el executor
-// después de montar la review.
 func simFixture(t *testing.T) (sim.Place, model.Item) {
 	t.Helper()
 	dir := t.TempDir()
@@ -41,8 +37,6 @@ func simFixture(t *testing.T) (sim.Place, model.Item) {
 	return sim.Place{Repo: bare, Branch: "prdash/pr-7"}, it
 }
 
-// waitSim entrega el resultado de una simulación como lo haría la bomba de
-// eventos: se lee del canal hasta que llegue un simMsg.
 func waitSim(t *testing.T, m Model) (Model, simMsg) {
 	t.Helper()
 	deadline := time.After(60 * time.Second)
@@ -60,10 +54,6 @@ func waitSim(t *testing.T, m Model) (Model, simMsg) {
 	}
 }
 
-// TestSimulateEndToEndWithRealGitSim recorre la cadena entera con la herramienta
-// de verdad: la tecla, el popup, el clon temporal, el render, el JPEG y las
-// celdas en la vista. Las piezas sueltas ya tienen tests; lo que esto comprueba es
-// que encajan, que es justo lo que ningún doble puede demostrar.
 func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	if !sim.NewRunner().Available() {
 		t.Skip("git-sim no está instalado")
@@ -94,7 +84,6 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 		t.Fatalf("state = %v, want simShowing", m.sim.state)
 	}
 
-	// La imagen del render tiene que estar en pantalla, y el fondo detrás.
 	view := viewText(m)
 	if !strings.Contains(view, "simulate: merge") {
 		t.Errorf("la vista no muestra el título del popup:\n%s", view)
@@ -105,8 +94,8 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	if len(m.sim.cells) != m.sim.cellH {
 		t.Errorf("celdas = %d líneas, want %d", len(m.sim.cells), m.sim.cellH)
 	}
-	// Las celdas van al centro de la caja, no en la primera línea: si el overlay
-	// no calculó bien la posición, el grafo saldría pegado al borde superior.
+	// The cells go to the middle of the box, not the first line: the overlay's arithmetic
+	// owns that.
 	block := strings.Index(view, "▀")
 	if block < 0 {
 		t.Fatalf("la vista no contiene ni un half-block:\n%s", view)
@@ -115,7 +104,6 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 		t.Errorf("el popup se pegó al borde superior (fila %d)", row)
 	}
 
-	// Cerrar devuelve la vista a su estado normal.
 	m = press(t, m, "esc")
 	if m.sim.state != simClosed {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
@@ -125,9 +113,6 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	}
 }
 
-// TestSimulateOverAnArmedMergeDoesNotOpen: la `v` con el merge armado desarma y se
-// consume, como cualquier otra tecla. Es lo que evita que una pulsación a
-// destiempo abra un modal encima de una Confirmación.
 func TestSimulateOverAnArmedMergeDoesNotOpen(t *testing.T) {
 	place, it := simFixture(t)
 	m := newTestModel(t, ghAdapter())
@@ -145,8 +130,6 @@ func TestSimulateOverAnArmedMergeDoesNotOpen(t *testing.T) {
 	}
 }
 
-// simAvailableInPath documenta la dependencia sin la que la acción solo avisa: si
-// esto dejara de ser cierto, Available() mentiría y el popup se abriría para nada.
 func TestSimulatorAvailabilityFollowsTheBinary(t *testing.T) {
 	place, _ := simFixture(t)
 	svc := sim.New(realLocator{place: place})

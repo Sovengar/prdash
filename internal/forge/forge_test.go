@@ -15,8 +15,6 @@ func mkItem(forgeName, host, project string, number int) model.Item {
 	return model.NewItem(model.RepoRef{Forge: forgeName, Host: host, Project: project, Owner: "acme", Name: "widget"}, number)
 }
 
-// TestCollectPagesThroughAllStreams cubre la paginación sin tope: agota las
-// páginas de una lista y consulta las cuatro listas.
 func TestCollectPagesThroughAllStreams(t *testing.T) {
 	key := testutil.FakeKey{Section: model.SectionAuthored}
 	fake := &testutil.FakeAdapter{
@@ -58,8 +56,6 @@ func TestCollectAuthFailureDoesNotDropData(t *testing.T) {
 	assertKind(t, res.Warnings, "auth")
 }
 
-// TestStreamEmitsPages cubre la carga progresiva: la primera página llega
-// marcada como First y las siguientes como continuación.
 func TestStreamEmitsPages(t *testing.T) {
 	key := testutil.FakeKey{Section: model.SectionReview, Kind: model.ReviewRequested}
 	fake := &testutil.FakeAdapter{
@@ -94,8 +90,6 @@ func TestStreamEmitsPages(t *testing.T) {
 	}
 }
 
-// TestStreamStopsWhenEmitReturnsFalse cubre el corte del refresco incremental:
-// si emit pide parar tras la primera página, no se piden más.
 func TestStreamStopsWhenEmitReturnsFalse(t *testing.T) {
 	key := testutil.FakeKey{Section: model.SectionAuthored}
 	fake := &testutil.FakeAdapter{
@@ -136,9 +130,6 @@ func TestRunActionApproveOK(t *testing.T) {
 	}
 }
 
-// TestRunActionConflictWhenMerged cubre "el ítem cambió en el forge entre
-// refresco y acción": si ya está mergeado, no se ejecuta acción y se reporta
-// conflicto con el estado releído.
 func TestRunActionConflictWhenMerged(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 2)
 	item.State = "MERGED"
@@ -201,10 +192,7 @@ func TestRunActionUnsupportedDisabled(t *testing.T) {
 	}
 }
 
-// TestRunActionSelfReviewDenied cubre el rechazo de aprobar lo propio cuando
-// llega del forge (red de seguridad para cuando el veto local no se ve, p. ej.
-// en ítems re-leídos sin sección). Debe llegar como denegación permanente con
-// el motivo canónico, no como conflicto ni con el stderr crudo de la CLI.
+// The safety net for when the local veto is not visible, e.g. on items the user did not author.
 func TestRunActionSelfReviewDenied(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 6)
 	fake := &testutil.FakeAdapter{
@@ -226,13 +214,8 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 	}
 }
 
-// TestRunActionUnmergeableIsNotAConflict: el rechazo por ramas que se pisan no
-// es un conflicto de estado, y confundirlos es lo que hacía que la TUI prometiese
-// un refresco que no arregla un rebase.
-//
-// Tiene que llegar con el motivo canónico —que dice lo que hay que hacer— y sin
-// registrarse como denegación: un rebase lo deja integrable, y marcar el ítem
-// como denegado lo dejaría sin merge para siempre.
+// A rejection because the branches collide is not a state conflict, and confusing them is what made
+// the UI promise a refresh that fixes nothing.
 func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 7)
 	item.HeadSHA = "abc1234" // sin pin el merge no sale, y esto no es lo que se prueba
@@ -261,9 +244,6 @@ func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
 	}
 }
 
-// TestRunActionConflictStaysAConflict: el otro lado de la separación. Un ítem que
-// se mergeó mientras lo mirabas se resuelve solo con refrescar, así que sigue
-// siendo conflicto y no "no integrable".
 func TestRunActionConflictStaysAConflict(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 8)
 	item.HeadSHA = "abc1234"
@@ -295,8 +275,6 @@ func assertKind(t *testing.T, warns []model.Warning, kind string) {
 	t.Fatalf("no hay warning de tipo %q en %+v", kind, warns)
 }
 
-// TestCollectStopsOnRateLimit: ante un warning de rate limit, no se insiste con
-// la página siguiente.
 func TestCollectStopsOnRateLimit(t *testing.T) {
 	key := testutil.FakeKey{Section: model.SectionAuthored}
 	fake := &testutil.FakeAdapter{
@@ -321,7 +299,6 @@ func TestCollectStopsOnRateLimit(t *testing.T) {
 	assertKind(t, res.Warnings, "ratelimit")
 }
 
-// TestEscapeGraphQL comprueba que el escapado también cubre saltos de línea.
 func TestEscapeGraphQL(t *testing.T) {
 	in := "x\"y\\z\nw\tv\ru"
 	out := forge.EscapeGraphQL(in)

@@ -7,11 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestChecksFailingReasonDistingueConteoDeSinConteo separa las dos frases de
-// checks. Con recuento, el aviso dice cuántos de cuántos fallan, que es lo que
-// distingue un CI roto de un check inestable. Sin datos de checks, no puede
-// inventar un denominador: un "(0 of 0 checks)" affirmaría que se consultó y
-// que no había ninguno, que es una afirmación distinta de "no se sabe".
 func TestChecksFailingReasonDistingueConteoDeSinConteo(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -32,10 +27,7 @@ func TestChecksFailingReasonDistingueConteoDeSinConteo(t *testing.T) {
 	}
 }
 
-// TestChecksFailingReasonLlegaAlAvisoDelGate comprueba que el conteo no se pierde
-// por el camino: MergeBlock es lo que la TUI enseña y lo que el gate consulta, y
-// si aquí el número se perdiera, el usuario vería un "no puedes" sin el dato que
-// le dice si su CI tiene un test inestable o está entero roto.
+// That the count survives the trip: MergeBlock carries it to the warning.
 func TestChecksFailingReasonLlegaAlAvisoDelGate(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 1)
 	it.State = "OPEN"
@@ -49,7 +41,6 @@ func TestChecksFailingReasonLlegaAlAvisoDelGate(t *testing.T) {
 		t.Errorf("el motivo = %q, want el recuento de checks", block.Reason)
 	}
 
-	// Y sin datos de checks el bloque sigue existiendo pero sin inventar cifras.
 	sinChecks := it
 	sinChecks.Checks = model.Checks{State: model.ChecksFailing}
 	block = MergeBlock(sinChecks)
@@ -61,15 +52,7 @@ func TestChecksFailingReasonLlegaAlAvisoDelGate(t *testing.T) {
 	}
 }
 
-// TestNormalizeComparaSinMayusculasNiSeparadores es el contrato de normalize:
-// los enums de los forges llegan con mayúsculas y guiones ("CHANGES-REQUESTED",
-// "in progress"), y la comparación tiene que ser insensible a las dos cosas.
-//
-// El caso de la 'Z' es el que importa de verdad: si el rango de mayúsculas
-// dejara fuera la última letra del alfabeto, "BUZZ" no normalizaría a
-// "buzz" y cualquier estado o decisión que lo contenga se compararía contra una
-// cadena que nunca puede coincidir. La comparación se queda en silencio y el
-// ítem cae en el caso por defecto, que es el peor sitio: ni error ni aviso.
+// normalize's contract: the forges' enums arrive in different conventions.
 func TestNormalizeComparaSinMayusculasNiSeparadores(t *testing.T) {
 	cases := map[string]string{
 		"OPEN":              "open",
@@ -79,13 +62,11 @@ func TestNormalizeComparaSinMayusculasNiSeparadores(t *testing.T) {
 		"changes requested": "changes_requested",
 		"  OPEN\t":          "__open_",
 		"":                  "",
-		// La Z es la última mayúscula del rango: es la que un `<=` mal puesto
-		// deja fuera.
-		"BUZZ": "buzz",
-		"Z":    "z",
-		"AZ":   "az",
-		"ZZ":   "zz",
-		// Y lo que no es mayúscula se queda como estaba.
+		// The Z is the last uppercase of the range, the one a misplaced `<=` leaves out.
+		"BUZZ":   "buzz",
+		"Z":      "z",
+		"AZ":     "az",
+		"ZZ":     "zz",
 		"año2":   "año2",
 		"9lives": "9lives",
 	}
@@ -96,10 +77,7 @@ func TestNormalizeComparaSinMayusculasNiSeparadores(t *testing.T) {
 	}
 }
 
-// TestDeriveConElZDelRango: el comportamiento observable de esa 'Z' es que un
-// estado con Z se reconoce. Aunque hoy ningún enum de forge lleve Z, el
-// predicado se usa sobre el texto que venga, y un valor no reconocido degenera en
-// StatePending sin decir nada.
+// A state with Z is recognised even though it is out of range.
 func TestDeriveNormalizaEstadosConZ(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 1)
 	it.State = "BUZZ"

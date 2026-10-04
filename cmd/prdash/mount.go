@@ -1,6 +1,3 @@
-// Cableado del orquestador de review: junta el resolutor de repos, la provisión
-// de worktree (nativa dentro de Herdr, git directo fuera) y el puerto de layout
-// en un executor listo para la TUI.
 package main
 
 import (
@@ -18,14 +15,8 @@ import (
 	"prdash/internal/worktree"
 )
 
-// simLocator expone el review activo de un ítem como el puerto que quiere la
-// simulación. El orquestador sabe de repos y de rutas; sim solo necesita que le
-// digan dónde está el clon y el worktree, y no tiene por qué conocer el
-// orquestador para eso.
 type simLocator struct{ ex *executor.Executor }
 
-// Locate devuelve el clon y el worktree del review ya montado del ítem. Sin
-// review montado no hay refs locales, y la simulación lo dice en vez de adivinar.
 func (l simLocator) Locate(it model.Item) (sim.Place, bool) {
 	wt, ok := l.ex.ActiveReview(it)
 	if !ok || wt.Repo == "" {
@@ -34,7 +25,6 @@ func (l simLocator) Locate(it model.Item) (sim.Place, bool) {
 	return sim.Place{Repo: wt.Repo, Branch: wt.Branch}, true
 }
 
-// buildSimulator arma el servicio de simulación sobre el ejecutor.
 func buildSimulator(cfg config.Config, ex *executor.Executor) *sim.Service {
 	svc := sim.New(simLocator{ex: ex})
 	if dir, err := sim.DefaultCacheDir(); err == nil {
@@ -43,8 +33,7 @@ func buildSimulator(cfg config.Config, ex *executor.Executor) *sim.Service {
 	return svc
 }
 
-// buildExecutor arma el orquestador de review sobre la config. La selección del
-// provisioner la decide worktree.Select: el llamador no sabe cuál corre.
+// Provisioner choice belongs to worktree.Select; the caller does not know which one runs.
 func buildExecutor(cfg config.Config) *executor.Executor {
 	client := herdr.New()
 	tools := plan.Tools{
@@ -68,7 +57,6 @@ func buildExecutor(cfg config.Config) *executor.Executor {
 	}
 }
 
-// hostsOf mapea host → nombre de forge para normalizar remotos y URLs.
 func hostsOf(cfg config.Config) map[string]string {
 	hosts := map[string]string{}
 	if h := cfg.Forges.GitHub.Host; h != "" {
@@ -80,9 +68,6 @@ func hostsOf(cfg config.Config) map[string]string {
 	return hosts
 }
 
-// clonePrefixesOf mapea host → relative URL root de clonado/web, para que el
-// resolutor construya y normalice URLs de instancias servidas en subcarpeta
-// (p. ej. GitLab self-managed con api_base "/git/api/v4/" → "git").
 func clonePrefixesOf(cfg config.Config) map[string]string {
 	prefixes := map[string]string{}
 	if h := cfg.Forges.GitHub.Host; h != "" {
@@ -98,9 +83,6 @@ func clonePrefixesOf(cfg config.Config) map[string]string {
 	return prefixes
 }
 
-// paneTool resuelve el argv de un pane: si `[commands]` define la clave, ese
-// argv se usa verbatim como comando completo del pane; si no, el binario/base de
-// `[tools]` (o el default del propio plan).
 func paneTool(cfg config.Config, name string) plan.Tool {
 	if argv, ok := cfg.PaneOverride(name); ok {
 		return plan.Tool{Argv: argv, Override: true}
@@ -108,13 +90,6 @@ func paneTool(cfg config.Config, name string) plan.Tool {
 	return plan.Tool{Argv: cfg.ToolArgs(name)}
 }
 
-// toolAvailability comprueba qué binarios del plan están instalados, de modo
-// que un pane ausente se omita con aviso en vez de tumbar el layout.
-//
-// El editor no aparece en el mapa a propósito: su orden puede ser una función o
-// un alias del shell (el `vi` que expande a `nvim .`), que no existe como
-// binario, y buscarlo en el PATH lo declararía ausente siempre. El plan no lo
-// omite por eso. Ver plan.Build.
 func toolAvailability(tools plan.Tools) map[string]bool {
 	return map[string]bool{
 		string(plan.KindTuicr): binaryAvailable(tools.Binary(plan.KindTuicr)),
@@ -123,8 +98,6 @@ func toolAvailability(tools plan.Tools) map[string]bool {
 	}
 }
 
-// binaryAvailable informa si el binario de una herramienta se puede ejecutar.
-// Un nombre vacío se considera no disponible (pane omitido).
 func binaryAvailable(name string) bool {
 	if strings.TrimSpace(name) == "" {
 		return false

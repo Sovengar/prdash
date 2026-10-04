@@ -23,8 +23,6 @@ type stubLocator struct {
 
 func (l stubLocator) Locate(model.Item) (Place, bool) { return l.place, l.ok }
 
-// fixture arma un repo con una rama base y una de la PR, más un clon bare que
-// hace de repo local, y devuelve un ítem que apunta a él.
 func fixture(t *testing.T) (repo, review string, it model.Item) {
 	t.Helper()
 	dir := t.TempDir()
@@ -36,16 +34,11 @@ func fixture(t *testing.T) (repo, review string, it model.Item) {
 	testutil.RunGit(t, src, "checkout", "-b", "prdash/pr-7")
 	testutil.CommitFile(t, src, "f.txt", "pr", "pr")
 
-	// El clon bare es el "repo local" que guarda los refs, igual que el que
-	// provisiona el resolutor; los refs se replican a mano porque el test no
-	// necesita un remoto.
 	repo = filepath.Join(dir, "remote.git")
 	testutil.InitBare(t, repo)
 	testutil.RunGit(t, src, "remote", "add", "origin", repo)
 	testutil.Push(t, src, "origin", "main", "prdash/pr-7")
 
-	// El worktree del review es un checkout real de la rama de la PR. src vuelve
-	// a la base antes, porque una rama no puede estar en dos worktrees a la vez.
 	review = filepath.Join(dir, "review")
 	testutil.RunGit(t, src, "checkout", "--quiet", "main")
 	testutil.RunGit(t, src, "worktree", "add", "--quiet", review, "prdash/pr-7")
@@ -56,8 +49,6 @@ func fixture(t *testing.T) (repo, review string, it model.Item) {
 	return repo, review, it
 }
 
-// fakeSim escribe un git-sim que copia una imagen real a su --media-dir e
-// imprime la ruta, que es el contrato que el runner espera.
 func fakeSim(t *testing.T, srcJPEG string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -102,11 +93,6 @@ func newService(t *testing.T, loc Locator, bin string) *Service {
 	return svc
 }
 
-// TestSimulateLeavesNoTraceInTheLocalRepo: la simulación necesita un HEAD
-// enganchado a una rama, y la única forma de tenerlo sin tocar el worktree del
-// review es otro directorio. Lo que no puede ser es que ese directorio se convierta
-// en deuda: ni un worktree registrado, ni una rama nueva, ni un cambio sin
-// commitear en el repo del usuario.
 func TestSimulateLeavesNoTraceInTheLocalRepo(t *testing.T) {
 	repo, review, it := fixture(t)
 	before := testutil.RunGit(t, repo, "branch", "--format=%(refname)")
@@ -129,7 +115,6 @@ func TestSimulateLeavesNoTraceInTheLocalRepo(t *testing.T) {
 	if n := strings.Count(testutil.RunGit(t, repo, "worktree", "list"), "\n"); n != 0 {
 		t.Errorf("quedan %d worktrees en el repo", n)
 	}
-	// El worktree del review sigue siendo suyo, en su rama y limpio.
 	if got := strings.TrimSpace(testutil.RunGit(t, review, "rev-parse", "--abbrev-ref", "HEAD")); got != "prdash/pr-7" {
 		t.Errorf("el worktree del review quedó en %q", got)
 	}
@@ -138,12 +123,8 @@ func TestSimulateLeavesNoTraceInTheLocalRepo(t *testing.T) {
 	}
 }
 
-// TestRebaseRunsFromTheItemBranch: el rebase parte de la rama del ítem, así que
-// es la que debe quedar activa en el clon de la simulación, y el ref contra el
-// que corre es la base. Invertirlo dibujaría el grafo al revés.
 func TestRebaseRunsFromTheItemBranch(t *testing.T) {
 	repo, _, it := fixture(t)
-	// Un runner que registra el directorio y el comando con el que se llamó.
 	dir := t.TempDir()
 	bin := writeScript(t, dir, "git-sim", "#!/bin/sh\n"+
 		"echo \"$PWD|$*|$(git rev-parse --abbrev-ref HEAD)\" > "+filepath.Join(dir, "cwd")+"\n"+
@@ -172,15 +153,12 @@ func TestRebaseRunsFromTheItemBranch(t *testing.T) {
 	if !strings.HasSuffix(args, " rebase main") {
 		t.Errorf("argv = %q, want un rebase contra main", args)
 	}
-	// La rama activa tiene que ser la del ítem: de ahí es de donde se rebasa, y
-	// git-sim dibuja desde donde está HEAD.
+	// The active branch has to be the item's: that is what is rebased from.
 	if head != "prdash/pr-7" {
 		t.Errorf("HEAD = %q, want prdash/pr-7", head)
 	}
 }
 
-// TestSimulateNeedsAMountedReview: sin review montado no hay refs locales, y la
-// simulación lo dice en vez de clonar o adivinar una ruta.
 func TestSimulateNeedsAMountedReview(t *testing.T) {
 	_, _, it := fixture(t)
 	svc := newService(t, stubLocator{}, fakeSim(t, writeJPEG(t)))
@@ -191,8 +169,6 @@ func TestSimulateNeedsAMountedReview(t *testing.T) {
 	}
 }
 
-// TestSimulateNeedsATargetBranch: sin base no hay contra qué comparar, y un
-// destino inventado sería una simulación de otra cosa.
 func TestSimulateNeedsATargetBranch(t *testing.T) {
 	repo, _, it := fixture(t)
 	it.TargetBranch = ""
@@ -203,10 +179,7 @@ func TestSimulateNeedsATargetBranch(t *testing.T) {
 	}
 }
 
-// TestSimulateFailsWhenTheBaseIsNotInTheClone: una base que no está en el clon no
-// se puede comparar, y decirlo es mejor que renderizar un grafo vacío. El aviso
-// tiene que nombrar la base que falta: sin ella, "no se pudo simular" obligaría a
-// ir a mirar a mano qué rama era.
+// A base that is not in the clone cannot be compared, and saying so is the point.
 func TestSimulateFailsWhenTheBaseIsNotInTheClone(t *testing.T) {
 	repo, _, it := fixture(t)
 	it.TargetBranch = "release/9"
@@ -218,15 +191,11 @@ func TestSimulateFailsWhenTheBaseIsNotInTheClone(t *testing.T) {
 	}
 }
 
-// TestMaterializeFallsBackToTheRemoteRef: un clon con la base solo como ref
-// remoto sigue siendo utilizable, porque lo que importa es comparar contra el
-// mismo commit que tiene el destino. Es el caso real cuando el resolutor apuntó
-// al clon local del usuario y la rama se borró allí.
+// A clone with the base only as a remote ref is still usable.
 func TestMaterializeFallsBackToTheRemoteRef(t *testing.T) {
 	repo, _, it := fixture(t)
 	clone := filepath.Join(t.TempDir(), "clone")
 	testutil.RunGit(t, t.TempDir(), "clone", "--quiet", repo, clone)
-	// La rama base desaparece del clon, pero sigue estando en el remoto.
 	testutil.RunGit(t, clone, "update-ref", "-d", "refs/heads/main")
 
 	svc := newService(t, stubLocator{place: Place{Repo: clone}, ok: true}, fakeSim(t, writeJPEG(t)))
@@ -238,9 +207,6 @@ func TestMaterializeFallsBackToTheRemoteRef(t *testing.T) {
 	}
 }
 
-// TestMaterializePrefersTheLocalBranch: si el clon tiene la base local, es esa la
-// que hay que comparar, aunque el remoto vaya por delante. Usar la del remoto
-// dibujaría un grafo que no es el de la review.
 func TestMaterializePrefersTheLocalBranch(t *testing.T) {
 	repo, _, it := fixture(t)
 	clone := filepath.Join(t.TempDir(), "clone")
@@ -264,9 +230,6 @@ func TestMaterializePrefersTheLocalBranch(t *testing.T) {
 	}
 }
 
-// TestPruneKeepsTheNewest: el caché no se limpia solo y un popup que se puede
-// abrir con el visor hace que valga la pena conservar las imágenes, pero no
-// todas para siempre.
 func TestPruneKeepsTheNewest(t *testing.T) {
 	dir := t.TempDir()
 	for i, name := range []string{"a.jpg", "b.jpg", "c.jpg"} {
@@ -294,7 +257,6 @@ func TestPruneKeepsTheNewest(t *testing.T) {
 	}
 }
 
-// timeAt construye una marca de tiempo para agear ficheros en el test.
 func timeAt(offset int64) time.Time {
 	return time.Unix(1_700_000_000+offset*60, 0)
 }

@@ -9,7 +9,6 @@ import (
 	"prdash/internal/review/plan"
 )
 
-// fakeLayout responde a las operaciones de layout con ids incrementales.
 type fakeLayout struct {
 	fakeCLI
 	splits int
@@ -41,8 +40,6 @@ func newFakeLayout() *fakeLayout {
 	return f
 }
 
-// testPlan es el layout de dos tabs: Review (review + editor) sobre el tab que
-// ya trae el contenedor, y Edit (diff + agente) en un tab nuevo.
 func testPlan() plan.Plan {
 	return plan.Plan{Tabs: []plan.Tab{
 		{Label: plan.LabelReview, Panes: []plan.Pane{
@@ -56,9 +53,6 @@ func testPlan() plan.Plan {
 	}}
 }
 
-// TestMountLayoutRenamesRootTabAndCreatesTheRest: el primer tab se monta sobre el
-// que ya trae el contenedor y toma su nombre, así que el workspace no queda con
-// una pestaña raíz huérfana; el segundo lo crea Herdr etiquetado y sin foco.
 func TestMountLayoutRenamesRootTabAndCreatesTheRest(t *testing.T) {
 	f := newFakeLayout()
 	c := f.client()
@@ -74,7 +68,6 @@ func TestMountLayoutRenamesRootTabAndCreatesTheRest(t *testing.T) {
 		t.Fatal("con root pane no debería crear otro workspace")
 	}
 
-	// El tab del contenedor se renombra a la etiqueta del primer tab.
 	if !f.called("tab", "rename", "w18:t1", plan.LabelReview) {
 		t.Fatalf("el tab raíz debería renombrarse a %q: %v", plan.LabelReview, f.calls)
 	}
@@ -86,8 +79,6 @@ func TestMountLayoutRenamesRootTabAndCreatesTheRest(t *testing.T) {
 	}
 }
 
-// TestMountLayoutFillsEachTabIndependently: cada tab divide su propio pane base
-// hacia la derecha, no el del tab anterior.
 func TestMountLayoutFillsEachTabIndependently(t *testing.T) {
 	f := newFakeLayout()
 	c := f.client()
@@ -96,11 +87,9 @@ func TestMountLayoutFillsEachTabIndependently(t *testing.T) {
 		t.Fatalf("MountLayout: %v", err)
 	}
 
-	// Review: TUICR sobre el root, Editor a su derecha.
 	if !f.called("pane", "run", "w18:p1") || !f.called("pane", "rename", "w18:p1", "TUICR") {
 		t.Fatalf("el primer pane debería lanzarse sobre el root pane: %v", f.calls)
 	}
-	// Edit: Hunk sobre el root pane del tab nuevo, Agente a su derecha.
 	if !f.called("pane", "run", "w18:p2") || !f.called("pane", "rename", "w18:p2", "Hunk") {
 		t.Fatalf("el segundo tab debería poblarse desde su propio root pane: %v", f.calls)
 	}
@@ -113,8 +102,6 @@ func TestMountLayoutFillsEachTabIndependently(t *testing.T) {
 	t.Fatalf("cada tab debería dividir a la derecha desde su base: %v", f.calls)
 }
 
-// TestMountLayoutUsesRootPaneAndSplits comprueba el envío de cwd y env del plan
-// en cada división.
 func TestMountLayoutSendsCwdAndEnvToEverySplit(t *testing.T) {
 	f := newFakeLayout()
 	c := f.client()
@@ -137,10 +124,7 @@ func TestMountLayoutSendsCwdAndEnvToEverySplit(t *testing.T) {
 	}
 }
 
-// TestMountLayoutFailsOnDeadWorkspace: si el contenedor apunta a un workspace que
-// Herdr ya no conoce, el montaje debe fallar nombrándolo. Fabricar otro workspace
-// es lo que hacía que el review apareciera como un workspace suelto, sin relación
-// con el worktree y sin ningún aviso.
+// If the container points at a workspace Herdr no longer knows, the mount must fail naming it.
 func TestMountLayoutFailsOnDeadWorkspace(t *testing.T) {
 	f := newFakeLayout()
 	base := f.respond
@@ -191,8 +175,6 @@ func TestMountLayoutEmptyPlanIsNoop(t *testing.T) {
 	}
 }
 
-// TestMountLayoutTabFailureIsWarning: un tab que no se puede abrir no tumba el
-// que ya está montado; el review queda utilizable y el aviso explica el hueco.
 func TestMountLayoutTabFailureIsWarning(t *testing.T) {
 	f := newFakeLayout()
 	base := f.respond
@@ -256,9 +238,6 @@ func hasSplit(calls [][]string, parent, direction string) bool {
 	return false
 }
 
-// hasCall exige que la invocación empiece por sub (sus primeros elementos, tal
-// cual) y que lleve el resto de flags en cualquier orden: el orden de los flags
-// en la línea de comandos no es un contrato de prdash, su presencia sí.
 func hasCall(calls [][]string, sub string, flags ...string) bool {
 	for _, c := range calls {
 		if len(c) == 0 || c[0] != sub {

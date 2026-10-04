@@ -1,6 +1,5 @@
-// Package github implementa el adapter del forge GitHub hablando con la CLI
-// `gh` por subproceso. El inbox rico (reviewDecision + checks) se consulta por
-// GraphQL paginando por cursor; la búsqueda REST queda como respaldo.
+// Package github implements the GitHub forge over the `gh` CLI. The rich inbox (reviewDecision plus
+// checks) comes from paginated GraphQL; the REST search is the fallback.
 package github
 
 import (
@@ -16,28 +15,21 @@ import (
 	"prdash/internal/forge/tool"
 )
 
-// ForgeName es el identificador del forge.
 const ForgeName = "github"
 
-// pageSize es el número de resultados por página que se pide a GraphQL.
 const pageSize = 50
 
-// commentFetch es cuántos nodos de comentarios se piden por consulta. Se pide
-// más de los que la ficha muestra (forge.CommentLimit) para que un PR con
-// boilerplate de bots no se quede corto: lo que se devuelve ya viene filtrado y
-// recortado al tope, así que el margen no cuesta nada al usuario.
+// More than the pane shows (forge.CommentLimit), so a PR full of bot boilerplate does not come up
+// short. The margin costs the user nothing because the reply is already filtered and trimmed.
 const commentFetch = 3 * forge.CommentLimit
 
-// Adapter implementa forge.Adapter sobre la CLI `gh`.
 type Adapter struct {
 	host   string
 	runner *tool.Runner
 }
 
-// Aseguramos en compilación que el adapter cumple el contrato.
 var _ forge.Adapter = (*Adapter)(nil)
 
-// New construye el adapter para un host y un binario de `gh`.
 func New(host, bin string) *Adapter {
 	if bin == "" {
 		bin = "gh"
@@ -48,13 +40,10 @@ func New(host, bin string) *Adapter {
 	return &Adapter{host: host, runner: tool.New(bin, "GH_PROMPT_DISABLED=1")}
 }
 
-// Forge devuelve el nombre del forge.
 func (a *Adapter) Forge() string { return ForgeName }
 
-// Host devuelve el host configurado.
 func (a *Adapter) Host() string { return a.host }
 
-// Auth comprueba la sesión de `gh` contra el host.
 func (a *Adapter) Auth(ctx context.Context) model.AuthState {
 	out, err := a.runner.Run(ctx, "auth", "status", "--hostname", a.host)
 	if err != nil {
@@ -63,9 +52,6 @@ func (a *Adapter) Auth(ctx context.Context) model.AuthState {
 	return model.AuthState{Forge: ForgeName, OK: true, Login: loginFromAuthStatus(out)}
 }
 
-// loginFromAuthStatus extrae el login de la sesión de la salida de
-// `gh auth status`, que ya se pedía para comprobar la sesión y se descartaba.
-// Así el viewer se conoce sin ninguna llamada extra.
 func loginFromAuthStatus(out string) string {
 	m := loginRe.FindStringSubmatch(out)
 	if m == nil {
@@ -74,12 +60,9 @@ func loginFromAuthStatus(out string) string {
 	return m[1]
 }
 
-// loginRe captura el login de "Logged in to <host> account <login> (<path>)".
-// El grupo exige un espacio tras "account" para no confundirlo con la línea
-// "Active account: true", que también contiene la palabra.
+// The group demands a space after "account" so it cannot match the "Active account: true" line.
 var loginRe = regexp.MustCompile(`account ([^(\s]+)`)
 
-// List devuelve una página de la lista pedida.
 func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
 	qualifier, ok := qualifierFor(q)
 	if !ok {
@@ -88,7 +71,6 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 
 	raw, err := a.runner.Run(ctx, "api", "graphql", "-f", "query="+searchQuery(qualifier, q.Cursor))
 	if err != nil {
-		// Respaldo REST solo para la primera página de los PRs propios.
 		if q.Section == model.SectionAuthored && q.Cursor == "" {
 			if p, ok := a.restAuthored(ctx); ok {
 				return p, []model.Warning{a.degraded(q.Section, err)}
@@ -105,19 +87,11 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 	return forge.Page{Items: items, Next: page.Next, More: page.More}, nil
 }
 
-// ItemState relee el estado rich de un PR concreto (decisión de review y
-// checks) para refrescarlo tras una acción o un cambio en el forge.
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	owner, name := splitProject(ref.Project)
-	// Solo hace falta mirar el dueño. El nombre vacío NO puede darse con dueño
-	// puesto: splitProject recorta las barras de los dos extremos, así que el
-	// proyecto no acaba nunca en "/", y con barra en algún sitio el nombre es todo lo
-	// que va detrás. Sin barra no hay dueño. O sea, "nombre vacío" implica "dueño
-	// vacío", y la segunda mitad de la condición era ruido.
-	//
-	// Y es mejor que sea una sola condición: un "|| name == \"\"" que no puede
-	// cumplirse es una condición que alguien va a creer que sí, y el día que se relaje
-	// el recorte de barras la guarda deja de cubrir el caso que dice cubrir.
+	// Only the owner matters, and an empty name cannot happen with an owner set, so the second half
+	// of the condition was noise. A guard that reads as reachable when it is not is one someone will
+	// believe and later relax.
 	if owner == "" {
 		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("invalid repo reference: %q", ref.Project))}
 	}
@@ -142,11 +116,9 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 	return it, nil
 }
 
-// Comments devuelve los últimos comentarios de la conversación del PR, del más
-// antiguo de esos al más reciente. La conversación se pide aparte de la búsqueda
-// porque los comentarios son un detalle del ítem seleccionado y no un dato del
-// inbox: pedirlos con cada lista multiplicaría las consultas por el número de PRs
-// que nadie está mirando.
+// The conversation is fetched apart from the search: comments are a detail of the selected item,
+// not inbox data, and asking with every list multiplies the queries by the number of PRs nobody is
+// looking at.
 func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
 	owner, name := splitProject(ref.Project)
 	if owner == "" || name == "" {
@@ -161,26 +133,17 @@ func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (
 	if perr != nil {
 		return forge.CommentPage{}, []model.Warning{a.warn("", "parse", perr)}
 	}
-	// Se recorta a los últimos CommentLimit y se conserva el total que dice el
-	// forge: el recorte es de lo que se pinta, no de lo que existe.
 	return forge.CommentPage{Comments: comments, Total: total}.KeepLast(), nil
 }
 
-// Approve aprueba un PR con `gh pr review --approve`.
 func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
 	return a.action(ctx, "pr", "review", strconv.Itoa(number), "--repo", ref.Project, "--approve")
 }
 
-// Merge mergea un PR con `gh pr merge` y el flag de estrategia que toque. Los
-// tres modos tienen flag propio en gh, así que siempre se pasa uno: sin
-// estrategia, gh abre un prompt interactivo que en un subproceso no
-// interactivo se queda colgado.
-//
-// El merge va SIEMPRE pineado a headSHA con `--match-head-commit`. Sin ese flag
-// gh integra el HEAD que haya en ese momento, y entre el refresco del inbox y
-// la pulsación la rama puede haber avanzado: se integratearían commits que nadie
-// revisó, que es el peor resultado posible de una acción irreversible. Por eso
-// un headSHA vacío no degrada a un merge sin pin sino que se niega.
+// Always pinned with `--match-head-commit`: without it gh merges whatever HEAD is at that moment, and
+// between the inbox refresh and the keypress the branch can have advanced, so it would integrate
+// commits nobody reviewed. An empty headSHA refuses the action instead of degrading to an unpinned
+// merge.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	flag, ok := ghMergeFlag(req.Mode)
 	if !ok {
@@ -191,22 +154,18 @@ func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req 
 	}
 	args := []string{"pr", "merge", strconv.Itoa(number), "--repo", ref.Project,
 		flag, "--match-head-commit", req.HeadSHA}
-	// `--delete-branch` va al final porque nombra la rama, pero con `--repo` gh
-	// solo borra la REMOTA: la parte local está condicionada a no pasar `--repo`
-	// (CanDeleteLocalBranch en su merge.go). Que sea lo que queremos, porque las
-	// ramas locales de prdash viven en clones bare y worktrees que esta llamada
-	// no debe tocar.
-	//
-	// En un repo con merge queue obligatorio gh RECHAZA el comando entero con
-	// este flag, antes de mergear. No se filtra aquí a propósito: la Confirmación
-	// nombra el borrado y el rechazo del forge es la respuesta exacta.
+	// `--delete-branch` goes last because it names the branch, and with `--repo` gh only deletes the
+	// REMOTE, which is what we want: prdash's local branches live in bare clones and worktrees this
+	// call must not touch.
+	// In a repo with a mandatory merge queue gh rejects the whole command with this flag, before
+	// merging. Not filtered on purpose: the confirmation names the delete and the forge's refusal is
+	// the exact answer.
 	if req.DeleteBranch {
 		args = append(args, "--delete-branch")
 	}
 	return a.action(ctx, args...)
 }
 
-// ghMergeFlag traduce el modo al flag de `gh pr merge`.
 func ghMergeFlag(mode forge.MergeMode) (string, bool) {
 	switch mode {
 	case forge.MergeCommit:
@@ -220,24 +179,15 @@ func ghMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
-// Retarget cambia la rama destino del PR con un PATCH de la API y no con `gh pr
-// edit --base`, que es lo que gh documenta para esto.
+// An API PATCH, not `gh pr edit --base`, which is what gh documents. `gh pr edit` fails today before
+// touching anything, with a deprecation error on Projects (classic) that only blows up in repos where
+// that field errors: a client failure, not permissions, and no flag avoids it.
 //
-// No es una preferencia de estilo: `gh pr edit` falla hoy antes de tocar nada con
-// `GraphQL: Projects (classic) is being deprecated... (repository.pullRequest.
-// projectCards)`. Es la query con la que gh mira si el PR está en un proyecto, y
-// revienta en los repos donde ese campo da error. El fallo es del cliente, no de
-// permisos ni del PR, y no se esquiva con ningún flag. El PATCH hace lo mismo en
-// una petición, sin campos que se puedan retirar.
-//
-// El motivo del rechazo se saca del cuerpo de la respuesta y no de stderr, que es
-// donde solo llega el argv. Aquí la diferencia es la que separa un mensaje
-// accionable de uno que no: si la rama no existe, GitHub contesta 422 con
-// `Proposed base branch 'x' was not found` en el cuerpo, y a stderr solo
-// `gh: Validation Failed (HTTP 422)`. Ese 422 lo clasifica tool.Kind como
-// "validation", que no es conflicto ni permiso: un refresco no arregla un nombre
-// de rama que no existe, y registrar el ítem como denegado le quitaría la acción
-// para siempre.
+// The reason comes from the response body, not stderr, where only the argv arrives: a missing branch
+// gives 422 with "Proposed base branch 'x' was not found" in the body and "Validation Failed (HTTP
+// 422)" on stderr, and that 422 is what tool.Kind classifies as validation — neither a conflict nor a
+// permission, since a refresh does not fix a branch name that does not exist and recording the item as
+// denied would take the action away for good.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -249,15 +199,12 @@ func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, b
 	return []model.Warning{{Forge: ForgeName, Kind: tool.Kind(err), Msg: failureMsg(out, err)}}
 }
 
-// Branches lista las ramas del repositorio para el buscador de la base destino.
 func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning) {
 	if strings.TrimSpace(ref.Project) == "" {
 		return nil, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
 	}
-	// per_page=100 con --paginate: la API pagina con 30 por defecto y gh sigue los
-	// enlaces hasta el final, así que un repo con 200 ramas serían siete llamadas
-	// con el default. El jq se queda en la CLI y lo que vuelve es un nombre por
-	// línea, que es lo único que el buscador necesita.
+	// per_page=100 with --paginate: the API defaults to 30 and gh follows the links, so a 200-branch
+	// repo would be seven calls at the default.
 	raw, err := a.runner.Run(ctx, "api", "repos/"+ref.Project+"/branches?per_page=100",
 		"--paginate", "--jq", ".[].name")
 	if err != nil {
@@ -266,19 +213,12 @@ func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []
 	return parse.ParseGHBranches(raw), nil
 }
 
-// pullsEndpoint compone la ruta REST de un PR. Vive en una función porque
-// Retarget es la única parte del adapter que habla REST: el resto lee por
-// GraphQL.
 func pullsEndpoint(project string, number int) string {
 	return "repos/" + project + "/pulls/" + strconv.Itoa(number)
 }
 
-// failureMsg compone el motivo de un fallo: el que dice la API si lo dice, y el de
-// la CLI si no.
-//
-// El de la CLI incluye el argv entero, que es ruido y además sale con los tokens
-// dentro de la orden. Se usa solo cuando el cuerpo no traía un motivo legible,
-// porque en ese caso es lo único que hay.
+// The CLI's message embeds the whole argv, tokens included, so it is only used when the body had
+// nothing readable.
 func failureMsg(body string, err error) string {
 	if msg := tool.APIMessage(body); msg != "" {
 		return msg
@@ -293,9 +233,8 @@ func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
 	return nil
 }
 
-// checks consulta el estado de los checks del PR. `gh pr checks` sale con
-// exit 8 (pendiente) o 1 (fallo) trayendo el JSON igualmente: si la salida es
-// parseable cuenta como estado válido, no como error.
+// `gh pr checks` exits 8 (pending) or 1 (failing) and still prints the JSON, so a parseable output
+// counts as a valid state, not as an error.
 func (a *Adapter) checks(ctx context.Context, project string, number int) (model.Checks, []model.Warning) {
 	raw, err := a.runner.Run(ctx, "pr", "checks", strconv.Itoa(number),
 		"--repo", project, "--json", "name,state,bucket")
@@ -308,7 +247,6 @@ func (a *Adapter) checks(ctx context.Context, project string, number int) (model
 	return model.Checks{}, []model.Warning{a.warn("", "parse", fmt.Errorf("unreadable checks output"))}
 }
 
-// restAuthored consulta el respaldo REST (una sola página) de los PRs propios.
 func (a *Adapter) restAuthored(ctx context.Context) (forge.Page, bool) {
 	raw, err := a.runner.Run(ctx, "api", "-X", "GET", "search/issues",
 		"-f", "q=is:pr is:open author:@me", "-f", "per_page="+strconv.Itoa(pageSize))
@@ -323,7 +261,6 @@ func (a *Adapter) restAuthored(ctx context.Context) (forge.Page, bool) {
 	return forge.Page{Items: items}, true
 }
 
-// stamp fija la sección, el tipo de review y la identidad de forge/host.
 func (a *Adapter) stamp(items []model.Item, q forge.Query) {
 	for i := range items {
 		items[i].Section = q.Section
@@ -334,7 +271,6 @@ func (a *Adapter) stamp(items []model.Item, q forge.Query) {
 	}
 }
 
-// identity normaliza forge y host del ítem.
 func (a *Adapter) identity(it *model.Item) {
 	it.Forge = ForgeName
 	it.Host = a.host
@@ -346,8 +282,6 @@ func (a *Adapter) warn(section model.Section, kind string, err error) model.Warn
 	return model.Warning{Forge: ForgeName, Section: section, Kind: kind, Msg: err.Error()}
 }
 
-// degraded avisa de datos parciales procedentes del respaldo REST: no trae
-// ramas ni decisión de review.
 func (a *Adapter) degraded(section model.Section, err error) model.Warning {
 	return model.Warning{
 		Forge:   ForgeName,
@@ -357,7 +291,6 @@ func (a *Adapter) degraded(section model.Section, err error) model.Warning {
 	}
 }
 
-// qualifierFor traduce una lista del inbox al qualifier de búsqueda de GitHub.
 func qualifierFor(q forge.Query) (string, bool) {
 	switch q.Section {
 	case model.SectionAuthored:
@@ -374,28 +307,16 @@ func qualifierFor(q forge.Query) (string, bool) {
 	}
 }
 
-// ghPRFields son los campos GraphQL de un pull request que el inbox consume.
-// `statusCheckRollup.contexts.nodes` es la unión StatusCheckRollupContext
-// (CheckRun | StatusContext): cada rama pide sus campos reales.
-//
-// `additions`/`deletions`/`changedFiles` son escalares que la búsqueda ya
-// pagina, así que el diffstat no cuesta ninguna llamada extra.
-// `headRefOid` y los tres `merge*Allowed` vienen en la misma consulta del ítem
-// y no cuestan una llamada extra: el primero es lo que permite pinear el merge
-// a un commit concreto y los segundos filtran los modos por lo que el
-// repositorio admite. Un repositorio con squash desactivado no debe ofrecer
-// squash, y sin esto lo haría. `mergeable` viene en la MISMA consulta por lo mismo:
-// es lo que permite avisar de que las ramas se pisan sin gastarse una llamada en
-// descubrirlo al mergear.
+// `headRefOid` and the three `merge*Allowed` come in the same item query and cost no extra call: the first
+// is what lets the merge be pinned to a commit and the rest filter the modes by what the repo accepts.
+// A repo with squash disabled must not offer squash, and `mergeable` arrives in the same query, which is
+// what lets us warn that the branches collide without spending a call to find out at merge time.
 const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName ` +
 	`headRefOid additions deletions changedFiles ` +
 	`author { login } repository { nameWithOwner name owner { login } ` +
 	`mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } ` +
 	`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
 
-// searchQuery compone la query GraphQL de búsqueda, con paginación por cursor y
-// los campos ricos que el inbox necesita. `search.nodes` es la unión
-// SearchResultItem, así que los campos del PR van en un fragmento PullRequest.
 func searchQuery(qualifier, cursor string) string {
 	after := ""
 	if cursor != "" {
@@ -409,7 +330,6 @@ func searchQuery(qualifier, cursor string) string {
 	)
 }
 
-// prQuery compone la query GraphQL de un PR concreto.
 func prQuery(owner, name string, number int) string {
 	return fmt.Sprintf(
 		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { %s } } }`,
@@ -417,16 +337,9 @@ func prQuery(owner, name string, number int) string {
 	)
 }
 
-// commentsQuery compone la query de la conversación de un PR concreto.
-//
-// Se pide `last` y no `first`: la ficha enseña el final de la conversación, que es
-// donde está lo último que se dijo del PR y dónde está el estado actual de la
-// discusión. `totalCount` viene en la misma conexión para no gastar una segunda
-// consulta en saber que hay más.
-//
-// `last` devuelve los nodos en orden cronológico, no invertido: el más antiguo de
-// los últimos va primero. Así se leen hacia abajo como se escribieron, que es como
-// se sigue una discusión.
+// `last`, not `first`: the pane shows the end of the conversation, which is where the current state
+// of the discussion is. It returns nodes in chronological order, not reversed, so a thread reads
+// downwards as it was written.
 func commentsQuery(owner, name string, number, last int) string {
 	return fmt.Sprintf(
 		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { `+
@@ -435,10 +348,8 @@ func commentsQuery(owner, name string, number, last int) string {
 	)
 }
 
-// escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL.
 func escapeGraphQL(s string) string { return forge.EscapeGraphQL(s) }
 
-// splitProject separa "owner/repo" en sus dos partes.
 func splitProject(project string) (string, string) {
 	project = strings.Trim(project, "/")
 	if i := strings.Index(project, "/"); i >= 0 {

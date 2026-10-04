@@ -8,21 +8,11 @@ import (
 	"prdash/internal/review/plan"
 )
 
-// splitRatio es la fracción que se lleva el pane nuevo en cada división.
 const splitRatio = 0.5
 
-// MountLayout abre el plan sobre el workspace del contenedor y devuelve los
-// avisos no fatales.
-//
-// El primer tab reutiliza el tab que ya trae el contenedor (el del root pane del
-// worktree) y lo renombra a su etiqueta, para no dejar una pestaña huérfana que
-// el usuario tendría que cerrar a mano; los siguientes se crean con
-// `tab create --no-focus`. Dentro de cada tab, el primer pane reutiliza el pane
-// base y los demás se abren con `pane split` en la dirección que fija el plan.
-//
-// Es tolerante: un tab o un pane que no se puede abrir o lanzar no tumba el
-// resto, se reporta como aviso. Solo falla si no hay forma de obtener un pane
-// base.
+// The first tab reuses the container's (the worktree's root pane) and renames it, instead of leaving
+// an orphan tab for the user to close. Only the absence of a base pane is fatal; anything else is a
+// warning.
 func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.Plan) ([]string, error) {
 	if len(pl.Tabs) == 0 {
 		return nil, nil
@@ -37,7 +27,6 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 	}
 
 	var warnings []string
-	// Primer tab: el que ya viene con el contenedor, renombrado a su etiqueta.
 	first := pl.Tabs[0]
 	if id := c.tabOf(ctx, workspaceID, anchor); id != "" && first.Label != "" {
 		if err := c.TabRename(ctx, id, first.Label); err != nil {
@@ -46,8 +35,6 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 	}
 	c.fillTab(ctx, first, anchor, &warnings)
 
-	// Tabs siguientes: los crea Herdr, siempre sin foco para que el montaje no
-	// robe la vista a medio hacer.
 	for _, tab := range pl.Tabs[1:] {
 		info, err := c.TabCreate(ctx, TabSpec{
 			WorkspaceID: workspaceID,
@@ -68,22 +55,17 @@ func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.P
 	return warnings, nil
 }
 
-// basePane resuelve el workspace y el pane base del montaje. Devolver el workspace
-// junto al pane es lo que permite abrir los tabs siguientes en él.
 func (c *Client) basePane(ctx context.Context, container Container, tab plan.Tab) (workspaceID, anchor string, err error) {
 	if container.PaneID != "" {
 		return container.WorkspaceID, container.PaneID, nil
 	}
 	if container.WorkspaceID == "" {
-		// Sin contenedor (provisión con git directo, o worktree ya cerrado): el
-		// layout abre su propio workspace. Es el camino previsto.
 		return c.newWorkspace(ctx, tab)
 	}
-	// El llamador cree que este worktree vive en un workspace de Herdr. Si no sale
-	// un pane de él, el id está obsoleto —Herdr lo guarda en su sesión persistida
-	// y un workspace cerrado lo deja apuntando a nada— y abrir otro workspace
-	// produciría un review desligado del worktree que lo contiene, sin avisar de
-	// nada. Mejor fallar con el id en el mensaje que fingir un montaje correcto.
+	// The caller believes this worktree lives in a Herdr workspace. If no pane comes out, the id is
+	// stale — Herdr keeps it in its persisted session and a closed workspace leaves it pointing at
+	// nothing — and opening another workspace would produce a review detached from the worktree that
+	// contains it, with no warning. Failing with the id in the message beats faking a good mount.
 	panes, listErr := c.PaneList(ctx, container.WorkspaceID)
 	if listErr != nil {
 		return "", "", fmt.Errorf("the workspace %s of this worktree is gone: %w", container.WorkspaceID, listErr)
@@ -94,7 +76,6 @@ func (c *Client) basePane(ctx context.Context, container Container, tab plan.Tab
 	return container.WorkspaceID, panes[0].PaneID, nil
 }
 
-// newWorkspace abre el workspace del layout cuando no hay ninguno que reutilizar.
 func (c *Client) newWorkspace(ctx context.Context, tab plan.Tab) (string, string, error) {
 	ws, err := c.WorkspaceCreate(ctx, WorkspaceSpec{
 		Cwd:     tab.Cwd(),
@@ -110,9 +91,6 @@ func (c *Client) newWorkspace(ctx context.Context, tab plan.Tab) (string, string
 	return ws.WorkspaceID, ws.RootPaneID, nil
 }
 
-// fillTab puebla un tab ya abierto: el primer pane reutiliza el pane base y los
-// siguientes se dividen encadenados (cada uno sobre el último creado) en la
-// dirección que fija el plan.
 func (c *Client) fillTab(ctx context.Context, tab plan.Tab, rootPaneID string, warnings *[]string) {
 	parent := rootPaneID
 	for i, p := range tab.Panes {
@@ -140,9 +118,6 @@ func (c *Client) fillTab(ctx context.Context, tab plan.Tab, rootPaneID string, w
 	}
 }
 
-// tabOf devuelve el id del tab que contiene un pane. Herdr no tiene "el tab de
-// este pane", así que se lista el workspace y se busca. Vacío si no se puede
-// resolver: nombrar el tab es cosmético y no debe tumbar un layout ya montado.
 func (c *Client) tabOf(ctx context.Context, workspaceID, paneID string) string {
 	if paneID == "" {
 		return ""
@@ -159,8 +134,6 @@ func (c *Client) tabOf(ctx context.Context, workspaceID, paneID string) string {
 	return ""
 }
 
-// direction es la dirección de división del pane. Un plan que no la fija se
-// abre a la derecha, que es la lectura de un diff junto a lo que lo comenta.
 func direction(p plan.Pane) string {
 	if p.Dir == "" {
 		return plan.DirRight
@@ -168,8 +141,6 @@ func direction(p plan.Pane) string {
 	return p.Dir
 }
 
-// paneCommand compone la línea de shell que se envía al pane: sitúa el cwd,
-// inyecta el entorno del plan y ejecuta el argv con `exec`.
 func paneCommand(p plan.Pane) string {
 	var b strings.Builder
 	if p.Cwd != "" {
@@ -197,7 +168,6 @@ func paneCommand(p plan.Pane) string {
 	return b.String()
 }
 
-// shellQuote cita un argumento para que el shell del pane lo trate literal.
 func shellQuote(s string) string {
 	if s == "" {
 		return "''"
@@ -208,20 +178,14 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// shellSafe informa si un texto no necesita comillas.
 func shellSafe(s string) bool {
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		// `#` NO está en la lista, y su ausencia es deliberada. Dentro de una palabra
-		// el `#` es literal (`foo#bar` sobrevive), pero al PRINCIPIO de una palabra abre
-		// un comentario: `sh -c 'echo #123'` no imprime nada. Y un nombre de rama que
-		// empieza por `#` es perfectamente válido para git —`git checkout -b '#123'`—,
-		// así que sin comillas ese argumento desaparecía del comando y el pane quedaba
-		// con un comando al que le faltaba una palabra, sin error visible.
-		//
-		// Quitar un `#` de la lista de seguros no cuesta nada: el caso raro se cita y el
-		// frecuente ya lo está de todas formas.
+		// `#` is deliberately absent from the safe list: inside a word it is literal (`foo#bar` survives),
+		// but at the START of a word it opens a comment, so `sh -c 'echo #123'` prints nothing. A branch
+		// starting with `#` is valid git, and unquoted that argument vanished from the command.
+		// Dropping `#` from the safe set costs nothing: the rare case gets quoted.
 		case r == '-', r == '_', r == '.', r == '/', r == '@', r == ':', r == '=', r == '+', r == ',', r == '%':
 		default:
 			return false

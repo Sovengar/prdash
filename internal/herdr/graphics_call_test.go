@@ -7,18 +7,6 @@ import (
 	"time"
 )
 
-// TestCallSinRespuestaEsUnErrorDeGraficos: cuando el socket se cierra sin contestar,
-// la petición se declara fallida en vez de intentar descodificar la nada.
-//
-// El borde es que hay algo leído o no hay nada. Con una línea entera, da igual que
-// venga con error de lectura: la línea es la respuesta y se usa. Con cero bytes, no
-// hay respuesta que usar, y meter un error vacío en el descodificador daría un fallo
-// de JSON que no dice nada de qué pasó realmente.
-//
-// Y el caso de "media línea sin salto" es el que de verdad importa: el servidor se
-// murió a mitad. Ahí SÍ hay algo, y no es poco, así que el error de lectura tiene que
-// llegar al usuario en vez de tragarse el error y decir "JSON inválido". Omitir el
-// texto ya escrito sería tirar el único dato que hay.
 func TestCallSinRespuestaEsUnErrorDeGraficos(t *testing.T) {
 	// El servidor cierra sin decir nada.
 	silencioso := &fakeSocket{silent: true}
@@ -28,11 +16,8 @@ func TestCallSinRespuestaEsUnErrorDeGraficos(t *testing.T) {
 		t.Errorf("con el socket cerrado en silencio dio %v, want ErrNoGraphics", err)
 	}
 
-	// El servidor manda media respuesta y se muere. NO es ErrNoGraphics, y esa es la
-	// diferencia que importa: algo llegó, así que lo que se rompe es el protocolo, no
-	// la disponibilidad de la capa. Decir "no hay capa de gráficos" cuando lo que pasó
-	// es que el servidor se calló a mitad sería mandar al usuario a mirar un sitio
-	// donde no está el problema.
+	// The server sends half a reply and dies. NOT ErrNoGraphics, and that is the difference that matters:
+	//something arrived, so the PROTOCOL is what broke.
 	medio := &fakeSocket{halfLine: true, response: `{"id":"x","result":{"cell_width_px":9}}`}
 	g = newTestGraphics(t, medio)
 	err = g.call(context.Background(), "pane.graphics.info", nil, nil)
@@ -43,8 +28,6 @@ func TestCallSinRespuestaEsUnErrorDeGraficos(t *testing.T) {
 		t.Errorf("con media respuesta dio ErrNoGraphics: algo llegó, así que el fallo es de protocolo (%v)", err)
 	}
 
-	// Y una respuesta entera funciona, que es el caso bueno y el que no hay que
-	// romper. Es la otra mitad del borde: con línea, se usa la línea.
 	entero := &fakeSocket{response: graphicsInfoJSON(9, 19, true)}
 	g = newTestGraphics(t, entero)
 	info, err := g.Info(context.Background())
@@ -56,14 +39,7 @@ func TestCallSinRespuestaEsUnErrorDeGraficos(t *testing.T) {
 	}
 }
 
-// TestCallUsaElPlazoPedidoYElDePorDefecto: el plazo viaja en el contexto que se pasa
-// al dial, así que se puede mirar sin esperar.
-//
-// Y el punto es el otro: un plazo no positivo se sustituye por el de por defecto.
-// Con un plazo de cero, la petición se cortaría ANTES de enviarse, y el socket vería
-// una conexión que se abre y se cierra sin escribir. Eso se lee como "Herdr no
-// responde" en vez de "el cliente no mandó nada", que son fallos opuestos con la misma
-// causa.
+// The deadline travels in the context passed to dial, so it can be checked without waiting.
 func TestCallUsaElPlazoPedidoYElDePorDefecto(t *testing.T) {
 	for _, c := range []struct {
 		nombre  string
@@ -85,22 +61,17 @@ func TestCallUsaElPlazoPedidoYElDePorDefecto(t *testing.T) {
 			t.Errorf("%s: la conexión se abrió sin plazo: se perdería al primer bloqueo", c.nombre)
 			continue
 		}
-		// El plazo tiene que estar en el futuro, o la petición se corta antes de
-		// enviarse. Y tiene que estar cerca del pedido, o se pierde tiempo.
+		// The deadline has to be in the future, or the request is cut before being sent.
 		if !f.deadline.After(antes) {
 			t.Errorf("%s: el plazo ya estaba vencido (%v): la petición se corta antes de enviarse",
 				c.nombre, f.deadline.Sub(antes))
 		}
 		if c.timeout > 0 {
-			// Con plazo propio se respeta el suyo.
 			if restante := f.deadline.Sub(antes); restante > c.timeout+time.Second {
 				t.Errorf("%s: el plazo es de %v, want unos %v", c.nombre, restante, c.timeout)
 			}
 		}
 	}
-	// Y el de por defecto es el que entra cuando no hay plazo. Se comprueba con dos
-	// timeouts que degradan al mismo: uno a cero y otro a menos, y el plazo que sale
-	// es el de por defecto en los dos casos, no uno distinto cada vez.
 	f1, f2 := &fakeSocket{response: graphicsInfoJSON(9, 19, true)}, &fakeSocket{response: graphicsInfoJSON(9, 19, true)}
 	g1, g2 := newTestGraphics(t, f1), newTestGraphics(t, f2)
 	g1.Timeout, g2.Timeout = 0, -time.Hour
@@ -115,15 +86,11 @@ func TestCallUsaElPlazoPedidoYElDePorDefecto(t *testing.T) {
 	if dif := f1.deadline.Sub(f2.deadline); dif > time.Second || dif < -time.Second {
 		t.Errorf("los plazos de por defecto difieren en %v: deberían ser el mismo", dif)
 	}
-	// Y ambos son el de por defecto de verdad, no un residuo del anterior.
 	if graphicsTimeout <= 0 {
 		t.Error("el plazo por defecto no es un plazo")
 	}
 }
 
-// TestCallAbreUnaConexionPorPeticion: el servidor cierra después de responder, así
-// que reutilizar la conexión solo produciría un error de tubería en la segunda
-// llamada. Por eso es una por petición, y eso es observable contando conexiones.
 func TestCallAbreUnaConexionPorPeticion(t *testing.T) {
 	f := &fakeSocket{response: graphicsInfoJSON(9, 19, true)}
 	g := newTestGraphics(t, f)

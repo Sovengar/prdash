@@ -13,30 +13,17 @@ import (
 	"time"
 )
 
-// fakeSocket sirve el protocolo de Herdr en memoria: acepta una conexión, lee una
-// línea, responde y cierra. Es exactamente lo que hace el servidor real, y por eso
-// el cliente abre una conexión por petición.
 type fakeSocket struct {
-	// response es lo que se contesta tras leer la petición.
-	response string
-	// lastRequest es la petición ya leída, para poder afirmar sobre ella.
+	response    string
 	lastRequest map[string]any
 	served      int
-	// fail hace que la escritura falle, para probar el camino de error.
-	fail bool
-	// silent cierra la conexión SIN contestar nada, que es como se comporta un
-	// servidor que se cae a mitad. Es distinto de fail (que ni siquiera acepta) y
-	// llega hasta ReadBytes, así que es lo que separa "no hay línea" de "hay línea
-	// y además un error".
-	silent bool
-	// halfLine manda la mitad de la respuesta y cierra, para el caso de que haya
-	// algo leído pero no una línea entera.
+	fail        bool
+	// silent closes the connection WITHOUT answering, like a server that dies midway; distinct from fail
+	//(which does not even accept).
+	silent   bool
 	halfLine bool
-	// deadline es la fecha del contexto con el que se abrió la conexión, para
-	// poder afirmar sobre el plazo sin tener que esperarlo.
 	deadline time.Time
-	// dials cuenta las conexiones aceptadas.
-	dials int
+	dials    int
 }
 
 func (f *fakeSocket) dial(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -62,15 +49,11 @@ func (f *fakeSocket) dial(ctx context.Context, _, _ string) (net.Conn, error) {
 		f.lastRequest = req.Params
 		f.served++
 		if f.silent {
-			// Cierra sin contestar. El cliente se queda con una lectura vacía y un
-			// error, que es el caso que hay que distinguir de "hay línea y además
-			// error".
+			// Closes without answering: the client is left with an empty read and an error.
 			return
 		}
 		if f.halfLine {
-			// Escribe media respuesta y cierra: ReadBytes lee algo pero no una línea
-			// entera, así que devuelve datos con error. Un servidor vivo añadiría el
-			// salto; uno que se muere a mitad, no.
+			// Writes half a response and closes: ReadBytes reads something but not a whole line.
 			_, _ = server.Write([]byte(f.response[:len(f.response)/2]))
 			return
 		}
@@ -115,9 +98,6 @@ func boolJSON(v bool) string {
 	return "false"
 }
 
-// TestInfoLeeElTamanoDeCelda: el tamaño de celda es lo que permite no deformar la
-// imagen, y en kitty no es 2:1 sino 9:19. Suponerlo introducía un error del 5% en
-// el tamaño final.
 func TestInfoLeeElTamanoDeCelda(t *testing.T) {
 	f := &fakeSocket{response: graphicsInfoJSON(9, 19, true)}
 	g := newTestGraphics(t, f)
@@ -137,9 +117,6 @@ func TestInfoLeeElTamanoDeCelda(t *testing.T) {
 	}
 }
 
-// TestCellSizeUsaLaMedidaYCaenEnElHabitual: 9x19 es lo que mide el pane de verdad;
-// si no se puede preguntar, 1x2 es lo habitual en un terminal y es mejor que no
-// pintar imagen.
 func TestCellSizeUsaLaMedidaYCaenEnElHabitual(t *testing.T) {
 	g := newTestGraphics(t, &fakeSocket{response: graphicsInfoJSON(9, 19, true)})
 	w, h := g.CellSize(context.Background())
@@ -154,9 +131,6 @@ func TestCellSizeUsaLaMedidaYCaenEnElHabitual(t *testing.T) {
 	}
 }
 
-// TestSetImageMandaLaColocacionEnCeldas: la colocación va en celdas del viewport,
-// que es como Herdr la entiende. Si se mandara en píxeles, la imagen caería en otro
-// sitio y solo se notaría porque no se ve.
 func TestSetImageMandaLaColocacionEnCeldas(t *testing.T) {
 	f := &fakeSocket{response: `{"id":"x","result":{"type":"ok"}}`}
 	g := newTestGraphics(t, f)
@@ -192,8 +166,6 @@ func TestSetImageMandaLaColocacionEnCeldas(t *testing.T) {
 	}
 }
 
-// TestSetImageRechazaLoQueNoDibuja: una imagen nil o un rectángulo vacío no se
-// envían. Mandar una capa sin nada que dibujar gasta una capa de las 16 del pane.
 func TestSetImageRechazaLoQueNoDibuja(t *testing.T) {
 	f := &fakeSocket{response: `{"id":"x","result":{"type":"ok"}}`}
 	g := newTestGraphics(t, f)
@@ -209,8 +181,6 @@ func TestSetImageRechazaLoQueNoDibuja(t *testing.T) {
 	}
 }
 
-// TestClearQuitaLaCapa: la capa vive por encima del contenido del pane, así que si
-// no se quita al cerrar el popup, la imagen tapa la TUI.
 func TestClearQuitaLaCapa(t *testing.T) {
 	f := &fakeSocket{response: `{"id":"x","result":{"type":"ok"}}`}
 	g := newTestGraphics(t, f)
@@ -223,9 +193,6 @@ func TestClearQuitaLaCapa(t *testing.T) {
 	}
 }
 
-// TestElErrorDelServidorSePropaga: un rechazo de Herdr tiene que llegar como error
-// con su código, no como un "algo falló" que no dice nada. Es lo que decide si el
-// popup cae a half-blocks o se queda sin imagen.
 func TestElErrorDelServidorSePropaga(t *testing.T) {
 	f := &fakeSocket{response: `{"error":{"code":"pane_graphics_disabled","message":"pane graphics are disabled by terminal.kitty_graphics"}}`}
 	g := newTestGraphics(t, f)
@@ -246,8 +213,6 @@ func TestElErrorDelServidorSePropaga(t *testing.T) {
 	}
 }
 
-// TestAvailableSinHerdrEsFalse: fuera de Herdr no hay socket ni pane, y el popup tiene
-// que caer a half-blocks sin preguntar a nadie.
 func TestAvailableSinHerdrEsFalse(t *testing.T) {
 	g := &Graphics{getenv: func(string) string { return "" }}
 	if g.Available() {
@@ -264,8 +229,6 @@ func TestAvailableSinHerdrEsFalse(t *testing.T) {
 	}
 }
 
-// TestSocketCaidoNoRompe: si el socket no está, es el camino de los half-blocks, no
-// un fallo que pare la TUI.
 func TestSocketCaidoNoRompe(t *testing.T) {
 	f := &fakeSocket{fail: true}
 	g := newTestGraphics(t, f)

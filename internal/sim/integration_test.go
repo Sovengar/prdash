@@ -12,13 +12,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// TestSimulateWithRealGitSimMerge es la prueba de integración con la herramienta de
-// verdad: el argv, el apagado del auto-open, el --media-dir y el formato de la
-// salida son cosas que solo se comprueban contra el binario real, y son
-// justamente las que un doble de test dejaría pasar.
-//
-// Se salta si git-sim no está instalado: no es una dependencia de prdash, así que
-// su ausencia no puede ser un fallo de la suite.
 func TestSimulateWithRealGitSimMerge(t *testing.T) {
 	if !NewRunner().Available() {
 		t.Skip("git-sim no está instalado")
@@ -43,9 +36,7 @@ func TestSimulateWithRealGitSimMerge(t *testing.T) {
 	}
 	t.Logf("merge -> %s", filepath.Base(res.Path))
 
-	// El render real no puede dejar rastros: ni worktrees, ni ramas, ni refs
-	// nuevas en el repo del usuario. Es un clon bare, así que el inventario se
-	// saca de las ramas y no de `git status`, que no corre ahí.
+	// The real render must leave no traces: no worktrees, no branches, no new refs.
 	if n := strings.Count(testutil.RunGit(t, repo, "worktree", "list"), "\n"); n != 0 {
 		t.Errorf("quedan %d worktrees en el repo", n)
 	}
@@ -54,9 +45,6 @@ func TestSimulateWithRealGitSimMerge(t *testing.T) {
 	}
 }
 
-// TestRenderDoesNotHangWithoutDisplay: el modo de fallo que justificaba el
-// apagado del auto-open. Sin este test, un git-sim que intenta volver al visor
-// partiría en un timeout de 60s por cada simulación.
 func TestRenderDoesNotHangWithoutDisplay(t *testing.T) {
 	if !NewRunner().Available() {
 		t.Skip("git-sim no está instalado")
@@ -71,13 +59,9 @@ func TestRenderDoesNotHangWithoutDisplay(t *testing.T) {
 	}
 }
 
-// simIntegrationBudget es un techo holgado para el render real: si se supera, el
-// problema es que git-sim se cuelga, no que render sea lento.
+// A loose ceiling for the real render: exceeding it means the problem is the render.
 const simIntegrationBudget = 30 * time.Second
 
-// TestPruneNoBorraLoQueNoDebe comprueba el contrato del que depende el popup:
-// la imagen que se conserva se puede abrir con un visor, así que tiene que
-// existir en disco y ser un JPEG legible.
 func TestKeptImageIsUsable(t *testing.T) {
 	path := writeJPEG(t)
 	dir := t.TempDir()

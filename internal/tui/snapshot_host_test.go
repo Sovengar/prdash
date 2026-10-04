@@ -8,24 +8,11 @@ import (
 	"prdash/internal/testutil"
 )
 
-// TestElSnapshotGuardaElHostDeCadaForge: cada stream se guarda con el host del forge al
-// que pertenece, y no con un host vacío.
-//
-// Y esto no es un detalle de formato. El host es lo que separa dos streams que son el
-// mismo forge en dos instancias: un GitHub.com y un GitHub self-hosted se numeran igual,
-// y sin el host guardado no se puede saber cuál es cuál al releer el snapshot. Con la
-// condición al revés, el host no se guarda NUNCA —porque con `st != nil` es justo cuando
-// hay un estado— y la apertura siguiente lee streams sin instancia.
-//
-// Y el caso que lo distingue tiene que llevar las dos mitades: un forge CON host, que es
-// lo que la condición debe dejar pasar, y uno SIN estado, que es lo que la guarda cubre. El
-// segundo es alcanzable: un stream puede venir de un forge que ya no está en la
-// configuración, y su estado no existe.
+// Each stream is saved with its forge's host.
 func TestElSnapshotGuardaElHostDeCadaForge(t *testing.T) {
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(t, adapt)
 
-	// Un forge con host conocido: es el que la condición tiene que cubrir.
 	if st := m.statuses["github"]; st == nil {
 		t.Fatal("el adapter registrado no tiene estado, y el test necesita uno con host")
 	}
@@ -54,9 +41,6 @@ func TestElSnapshotGuardaElHostDeCadaForge(t *testing.T) {
 		t.Error("el snapshot no tiene stream de github")
 	}
 
-	// Y el caso del otro lado: un stream de un forge SIN estado tiene que guardarse con el
-	// host vacío, sin reventar. Un stream puede llegar de un forge que el usuario quitó
-	// de la configuración, y perderlo entero sería peor que guardarlo sin host.
 	m.applySnapshot(cache.File{Streams: []cache.Stream{{
 		Forge:   "gitlab",
 		Host:    "gitlab.com",
@@ -85,36 +69,12 @@ func TestElSnapshotGuardaElHostDeCadaForge(t *testing.T) {
 	}
 }
 
-// TestElSnapshotVaOrdenadoPorForgeSeccionYTipo: el snapshot sale ordenado por forge, y
-// dentro de cada forge por sección y tipo, y el orden es el de las letras.
-//
-// Y la primera versión de este test miraba lo que NO se puede mirar: que el orden fuera
-// COHERENTE consigo mismo, comparando contra la primera pasada. Con esa forma el test pasa
-// con el comparador invertido, porque un orden invertido también es coherente consigo
-// mismo —solo que al revés—. Un assert de estabilidad solo mira que no haya itertools, y
-// eso lo cumple cualquier orden.
-//
-// Lo que hay que afirmar es el ORDEN, y aquí se calcula aparte: la lista de claves que se
-// mete a propósito desordenada, y la lista de la misma clave ordenada por las tres columnas.
-// Comparar las dos es comparar contra un dato escrito en el test, no contra el resultado de
-// una vuelta anterior.
-//
-// Y los tres niveles de comparación hacen falta, no solo el primero: forge, sección y tipo
-// son tres desempates en cascada, y `sort.Slice` con un solo nivel dejaría el resto sin
-// ordenar. Y el `!=` del desempate importa: puesto al revés declara ordenados los dos
-// sentidos para todo lo que no sea idéntico, y el resultado deja de ser un orden.
+// The snapshot comes out sorted by forge.
 func TestElSnapshotVaOrdenadoPorForgeSeccionYTipo(t *testing.T) {
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(t, adapt)
 
-	// Las claves, escritas en un orden que NO es el ordenado.
-	//
-	// Y hay VARIOS tipos por grupo de forge y sección a propósito. El tercer nivel del
-	// desempate es `kind`, y hace falta más de un par por grupo para que se vea: con dos
-	// por grupo el `sort` acierta igual con un `!=` en el comparador, porque con tan pocos
-	// elementos usa orden por inserción y el resultado sale bien por casualidad. Con cinco
-	// por grupo el `!=` declara que todo par del grupo está ordenado en los dos sentidos a
-	// la vez, y la salida deja de ser un orden.
+	// The keys are written in an order that is NOT the sorted one, and there are SEVERAL kinds.
 	claves := []struct{ forge, section, kind string }{
 		{"github", "authored", "commented"},
 		{"gitlab", "review", "assigned"},
@@ -139,8 +99,6 @@ func TestElSnapshotVaOrdenadoPorForgeSeccionYTipo(t *testing.T) {
 	}
 	m.rebuild()
 
-	// El orden esperado, escrito en el test y NO derivado de una pasada anterior: forge
-	// por letras, y dentro de cada forge sección por letras y tipo por letras.
 	want := []string{
 		"bitbucket/review/assigned",
 		"github/authored/approved",

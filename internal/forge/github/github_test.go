@@ -12,9 +12,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// TestAuthExposesLogin: `gh auth status` ya se lanzaba para comprobar la sesión
-// y su salida se descartaba; esa línea trae la cuenta, así que el viewer se
-// conoce sin llamadas extra.
 func TestAuthExposesLogin(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", `#!/bin/sh
@@ -35,8 +32,6 @@ OUT
 	}
 }
 
-// TestAuthLoginEmptyWhenUnknown: sin login en la salida, AuthState.Login queda
-// vacío para que la decisión la tome la sección y no una suposición.
 func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho 'github.com'\n")
@@ -100,8 +95,6 @@ func TestSplitProject(t *testing.T) {
 	}
 }
 
-// TestConformanceMissingBinary pasa la suite de contrato con un binario
-// inexistente: no hay ninguna llamada de red.
 func TestConformanceMissingBinary(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "no-gh")
 	testutil.RunConformance(t, New("github.com", bin), testutil.ConformanceOptions{MissingBinary: true})
@@ -129,8 +122,6 @@ func TestSearchQueryUsesUnionFragments(t *testing.T) {
 	}
 }
 
-// TestListAuthoredFallsBackToRESTDegraded cubre C7/M3: el respaldo REST real no
-// trae ramas; debe avisarse como degradado.
 func TestListAuthoredFallsBackToRESTDegraded(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", `#!/bin/sh
@@ -183,10 +174,7 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-// TestCommentsQueryShape: la conversación se pide aparte del inbox y con `last`,
-// porque la ficha enseña el final de la conversación: lo último que se dijo del PR
-// y el estado actual de la discusión. `totalCount` va en la misma conexión para no
-// gastar una segunda consulta.
+// The conversation is asked apart from the inbox and with `last`, because the card shows the end.
 func TestCommentsQueryShape(t *testing.T) {
 	q := commentsQuery("acme", "widget", 42, commentFetch)
 	for _, want := range []string{
@@ -205,15 +193,12 @@ func TestCommentsQueryShape(t *testing.T) {
 	if strings.Contains(q, "first:") {
 		t.Errorf("commentsQuery no debería pedir el principio de la conversación:\n%s", q)
 	}
-	// El margen sobre el tope de la ficha es lo que hace que un PR con boilerplate
-	// de bots no llegue corto tras filtrar.
+	// The margin over the card's limit is what keeps a PR full of bot boilerplate out.
 	if commentFetch <= forge.CommentLimit {
 		t.Errorf("commentFetch = %d, want > %d para absorber el ruido", commentFetch, forge.CommentLimit)
 	}
 }
 
-// TestCommentsEscapesRepoNames: owner y name van como literales, así que un
-// nombre con comillas rompería la query entera.
 func TestCommentsEscapesRepoNames(t *testing.T) {
 	if q := commentsQuery(`ac"me`, "wid\\get", 1, 5); !strings.Contains(q, `owner: "ac\"me"`) {
 		t.Errorf("no escapó el owner:\n%s", q)
@@ -223,11 +208,7 @@ func TestCommentsEscapesRepoNames(t *testing.T) {
 	}
 }
 
-// TestCommentsKeepLastAtFichaLimitKeepingTotal: la consulta trae más de los que la
-// ficha enseña, así que se recorta a CommentLimit. El recorte es por la COLA: la
-// conexión llega al revés y lo que sobra por delante es justo lo que no se iba a
-// enseñar. El total se conserva entero: es lo que permite decir "5 de 23" y saber que
-// la ficha se está perdiendo conversación, que es justo lo que decide abrir el PR.
+// The query brings more than the card shows and it is trimmed to CommentLimit, by the TAIL.
 func TestCommentsCapsAtFichaLimitKeepingTotal(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", `#!/bin/sh
@@ -254,8 +235,7 @@ OUT
 	if page.Total != 23 {
 		t.Errorf("total = %d, want 23 (no se recorta)", page.Total)
 	}
-	// La conexión devuelve los 7 en orden cronológico, y el recorte se queda con
-	// los últimos 5 sin invertirlos: primero el más antiguo de esos.
+	// The connection returns all 7 in chronological order and the trim keeps the LAST 5.
 	want := []string{"c2", "c3", "c4", "c5", "c6"}
 	for i, w := range want {
 		if page.Comments[i].Body != w {
@@ -264,8 +244,6 @@ OUT
 	}
 }
 
-// TestCommentsInvalidRepo: sin owner/repo no hay query que componer, así que se
-// avisa en vez de golpear la API con un literal vacío.
 func TestCommentsInvalidRepo(t *testing.T) {
 	_, warns := New("github.com", writeScript(t, t.TempDir(), "gh", "#!/bin/sh\nexit 1\n")).
 		Comments(context.Background(), model.RepoRef{Project: "widget"}, 42)
@@ -274,8 +252,6 @@ func TestCommentsInvalidRepo(t *testing.T) {
 	}
 }
 
-// TestCommentsFailureIsWarning: un fallo del forge avisa y no lanza. La ficha
-// muestra el aviso y el resto del panel sigue siendo cierto.
 func TestCommentsFailureIsWarning(t *testing.T) {
 	script := writeScript(t, t.TempDir(), "gh", "#!/bin/sh\necho 'boom' >&2\nexit 1\n")
 	page, warns := New("github.com", script).Comments(context.Background(),

@@ -30,8 +30,6 @@ func TestGraphQLArgsPinHost(t *testing.T) {
 	}
 }
 
-// TestRESTArgsUseGetAndRelativeEndpoint cubre C3 y C4: recurso relativo y GET
-// explícito (con campos, glab haría POST).
 func TestRESTArgsUseGetAndRelativeEndpoint(t *testing.T) {
 	a := New("h.example", "glab")
 	joined := strings.Join(a.getArgs("todos", "action=mentioned"), " ")
@@ -52,7 +50,6 @@ func TestMRActionArgs(t *testing.T) {
 	}
 }
 
-// TestRunnerEnvPinsHost cubre C2 para `glab mr`, que no acepta --hostname.
 func TestRunnerEnvPinsHost(t *testing.T) {
 	a := New("h.example", "glab")
 	if joined := strings.Join(a.runner.Extra, " "); !strings.Contains(joined, "GITLAB_HOST=h.example") {
@@ -69,8 +66,6 @@ func TestRESTEndpointRelative(t *testing.T) {
 	}
 }
 
-// TestQueryBuilders cubre C5: la instancia CE rechaza approvalsLeft, así que no
-// se pide.
 func TestQueryBuilders(t *testing.T) {
 	if q := glAuthoredQuery(""); !strings.Contains(q, "authoredMergeRequests") || !strings.Contains(q, "pageInfo") {
 		t.Errorf("glAuthoredQuery = %s", q)
@@ -84,8 +79,8 @@ func TestQueryBuilders(t *testing.T) {
 	if q := glAuthoredQuery("CUR"); !strings.Contains(q, `after: "CUR"`) {
 		t.Errorf("la query paginada debería llevar el cursor: %s", q)
 	}
-	// El iid es un literal de cadena: el schema lo declara `String!` y GraphQL no
-	// coacciona Int -> String, así que sin comillas la query entera se rechaza.
+	// The iid is a string literal: the schema declares String! and GraphQL does not coerce Int to
+	// it.
 	if q := glMRQuery("grp/proj", 7); !strings.Contains(q, `project(fullPath: "grp/proj")`) || !strings.Contains(q, `mergeRequest(iid: "7")`) {
 		t.Errorf("glMRQuery = %s", q)
 	}
@@ -110,9 +105,6 @@ func TestListUnknownSectionReportsUnsupported(t *testing.T) {
 	}
 }
 
-// TestListAuthoredFallsBackToREST cubre C7/M3: si GraphQL falla, el respaldo
-// REST devuelve datos parciales marcados como degradados (sin red real: un
-// `glab` falso en un script).
 func TestListAuthoredFallsBackToREST(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args.log")
@@ -143,9 +135,6 @@ exit 1
 	}
 }
 
-// TestAuthExposesLogin: la salida de `glab auth status` que ya se pedía para
-// comprobar la sesión trae el usuario; se reutiliza para reconocer los ítems
-// propios sin ninguna llamada extra.
 func TestAuthExposesLogin(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "glab", `#!/bin/sh
@@ -166,8 +155,6 @@ OUT
 	}
 }
 
-// TestAuthLoginEmptyWhenUnknown: si la salida no trae login, se deja vacío y
-// quien decide es la regla de sección, no una suposición.
 func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "glab", "#!/bin/sh\necho 'glab: logged in'\n")
@@ -186,10 +173,8 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-// TestNotesQueryShape: las notas se piden aparte del inbox, con `last` (la ficha
-// enseña el final de la conversación) y con `system`, que es lo único que distingue
-// una nota escrita de una que dejó el MR al abrirse. El iid va como literal de string
-// porque el schema lo declara `String!`.
+// The notes are asked apart from the inbox, with `last` and with `system`, which is the only thing
+// telling a note written by a person from one the MR left when it opened.
 func TestNotesQueryShape(t *testing.T) {
 	q := glNotesQuery("grupo/sub/proy", 42, commentFetch)
 	for _, want := range []string{
@@ -213,9 +198,6 @@ func TestNotesQueryShape(t *testing.T) {
 	}
 }
 
-// TestCommentsDropsSystemNotesAndCaps: las notas de sistema se descartan y el resto
-// se recorta por la cola al tope de la ficha. El total es el de las leídas: GitLab
-// no expone recuento, así que nunca hay "5 de N" y la línea del total no engaña.
 func TestCommentsDropsSystemNotesAndCaps(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "glab", `#!/bin/sh
@@ -240,8 +222,6 @@ OUT
 	if len(page.Comments) != forge.CommentLimit {
 		t.Fatalf("comments = %d, want %d", len(page.Comments), forge.CommentLimit)
 	}
-	// Ni la nota de sistema ni las humanas más antiguas se colan: la conexión
-	// pedía las 15 últimas notas y el recorte se queda con las 5 últimas humanas.
 	for _, c := range page.Comments {
 		if c.Body == "added 56 commits" {
 			t.Errorf("coló una nota de sistema: %q", c.Body)
@@ -253,16 +233,12 @@ OUT
 			t.Errorf("comments[%d] = %q, want %q (los últimos, en orden)", i, page.Comments[i].Body, w)
 		}
 	}
-	// GitLab no expone recuento: el total es lo leído (7), no lo pintado (5). Es
-	// una cota inferior, que es justo lo que hace falta para insinuar que hay más
-	// conversación. Ver CommentPage.Total.
+	// GitLab exposes no count: the total is what was read (7), not what was painted (5).
 	if page.Total != 7 {
 		t.Errorf("total = %d, want 7 (las notas leídas, no las pintadas)", page.Total)
 	}
 }
 
-// TestCommentsEmptyRepo: sin proyecto no hay query que componer, así que avisa en
-// vez de golpear la API con un literal vacío.
 func TestCommentsEmptyRepo(t *testing.T) {
 	script := writeScript(t, t.TempDir(), "glab", "#!/bin/sh\nexit 1\n")
 	_, warns := New("gitlab.example.com", script).Comments(context.Background(), model.RepoRef{}, 42)
@@ -271,7 +247,6 @@ func TestCommentsEmptyRepo(t *testing.T) {
 	}
 }
 
-// TestCommentsFailureIsWarning: un fallo del forge avisa y no lanza.
 func TestCommentsFailureIsWarning(t *testing.T) {
 	script := writeScript(t, t.TempDir(), "glab", "#!/bin/sh\necho boom >&2\nexit 1\n")
 	page, warns := New("gitlab.example.com", script).Comments(context.Background(),

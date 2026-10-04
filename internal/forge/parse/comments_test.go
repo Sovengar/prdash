@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// TestParseGHComments: la conversación de GitHub llega en la conexión que se
-// pidió, con el total aparte para poder decir "5 de 23".
 func TestParseGHComments(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"comments":{
 		"totalCount":23,
@@ -36,9 +34,6 @@ func TestParseGHComments(t *testing.T) {
 	}
 }
 
-// TestParseGHCommentsDeletedAuthor: una cuenta borrada deja el autor a null. Se
-// dice "unknown" en vez de dejar el hueco en blanco, que en la ficha se leería
-// como un comentario sin autor.
 func TestParseGHCommentsDeletedAuthor(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"comments":{
 		"totalCount":1,
@@ -54,9 +49,6 @@ func TestParseGHCommentsDeletedAuthor(t *testing.T) {
 	}
 }
 
-// TestParseGHCommentsErrors: una respuesta sin la conexión de comentarios no es
-// "este PR no tiene comentarios", es una respuesta que no se entiende. Sin
-// distinguirlas, un cambio en la query se paintaría como una conversación vacía.
 func TestParseGHCommentsErrors(t *testing.T) {
 	cases := []struct {
 		name string
@@ -85,8 +77,6 @@ func TestParseGHCommentsErrors(t *testing.T) {
 	}
 }
 
-// TestParseGLComments: las notas de GitLab traen el autor como `username` y una
-// marca `system` que no existe en GitHub.
 func TestParseGLComments(t *testing.T) {
 	raw := `{"data":{"project":{"mergeRequest":{"notes":{"nodes":[
 		{"author":{"username":"alice"},"body":"ok for me","createdAt":"2026-09-20T10:00:00Z","system":false},
@@ -105,9 +95,6 @@ func TestParseGLComments(t *testing.T) {
 	}
 }
 
-// TestParseGLCommentsDropsSystemNotes: "assigned to @x" y "added 3 commits" son
-// el historial de acciones del MR, no conversación. Si se colaran, se comerían las
-// cinco filas de la ficha con ruido que ya está en otra parte del detalle.
 func TestParseGLCommentsDropsSystemNotes(t *testing.T) {
 	raw := `{"data":{"project":{"mergeRequest":{"notes":{"nodes":[
 		{"author":{"username":null},"body":"mentioned in commit abc","createdAt":"2026-09-20T10:00:00Z","system":true},
@@ -129,9 +116,6 @@ func TestParseGLCommentsDropsSystemNotes(t *testing.T) {
 	}
 }
 
-// TestParseGLCommentsKeepsEmptySystemFlag: GitHub no manda `system` y el campo
-// llega ausente, que es su cero. El filtro compartido no debe confundir ausente
-// con system=true y tirar los comentarios de GitHub.
 func TestParseGLCommentsKeepsEmptySystemFlag(t *testing.T) {
 	raw := `{"data":{"project":{"mergeRequest":{"notes":{"nodes":[
 		{"author":{"username":"alice"},"body":"sin el campo system","createdAt":"2026-09-20T10:00:00Z"}
@@ -166,10 +150,7 @@ func TestParseGLCommentsErrors(t *testing.T) {
 	}
 }
 
-// TestCommentLines: el cuerpo se parte en las líneas con contenido, en el orden
-// del autor. Los bots de GitHub abren con un comentario HTML invisible y los blancos
-// de separación son filas enteras en un panel, así que los dos se van. Los párrafos
-// NO se pegan entre sí: "fix the timeout fix the backoff" no dice nada.
+// GitHub's bots open with an HTML comment.
 func TestCommentLines(t *testing.T) {
 	cases := []struct {
 		name string

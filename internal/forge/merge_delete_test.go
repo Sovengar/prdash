@@ -9,10 +9,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// TestRunActionMergeAsksTheAdapterToDeleteTheBranch: lo que la Confirmación
-// nombra tiene que llegar al adapter. Un toggle que se ve en pantalla y no
-// cambia el argv es un toggle decorativo, y el borrado de una rama es de las
-// pocas cosas de las que nadie se da cuenta hasta que es tarde.
 func TestRunActionMergeAsksTheAdapterToDeleteTheBranch(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		item := mkItem("github", "github.com", "acme/widget", 10)
@@ -38,13 +34,7 @@ func TestRunActionMergeAsksTheAdapterToDeleteTheBranch(t *testing.T) {
 	}
 }
 
-// TestRunActionKeepsTheMergeWhenOnlyTheDeleteFails es el caso que hace
-// necesario el pin de la relectura. El borrado va en el MISMO comando que el
-// merge, así que cuando el forge lo rechaza la CLI sale con error aunque la
-// integración ya esté hecha: sin push, con la rama protegida, o contra un repo
-// con merge queue. Si eso se reportara como "merge falló", el usuario buscaría
-// un cambio de estado del forge que no ocurrió, y la rama seguiría ahí sin que
-// nadie lo dijera.
+// The case that makes the re-read's pin necessary: the delete rides in the SAME command.
 func TestRunActionKeepsTheMergeWhenOnlyTheDeleteFails(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 11)
 	item.State = "OPEN"
@@ -57,9 +47,6 @@ func TestRunActionKeepsTheMergeWhenOnlyTheDeleteFails(t *testing.T) {
 			"merge:acme/widget#11": {{Forge: "github", Kind: "permission", Msg: "Resource not accessible by integration"}},
 		},
 	}
-	// El merge sí salió: el ítem releído después viene mergeado, y eso es
-	// justamente lo que separa "no se pudo mergear" de "se mergeó y la rama no se
-	// borró".
 	fake.OnMerge = func(it *model.Item) { it.State = "MERGED" }
 
 	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 11,
@@ -75,12 +62,8 @@ func TestRunActionKeepsTheMergeWhenOnlyTheDeleteFails(t *testing.T) {
 	}
 }
 
-// TestRunActionSaysNothingAboutTheBranchWithoutThePin: sin headSHA el merge no
-// sale, así que no hay rama que borrar y no hay nada que decir sobre ella. Un
-// aviso de borrado ahí sería ruido sobre una acción que no ocurrió.
 func TestRunActionSaysNothingAboutTheBranchWithoutThePin(t *testing.T) {
-	// Sin HeadSHA el adapter real se niega (los dos lo hacen), y el fake copia
-	// esa negativa: sin pin no hay merge, y por tanto no hay rama que borrar.
+	// Without a HeadSHA the real adapter refuses, and the fake copies that refusal.
 	item := mkItem("github", "github.com", "acme/widget", 12)
 	item.State = "OPEN"
 	fake := &testutil.FakeAdapter{
@@ -99,10 +82,7 @@ func TestRunActionSaysNothingAboutTheBranchWithoutThePin(t *testing.T) {
 	}
 }
 
-// TestRunActionDoesNotBlamTheBranchOnAForkPR: un PR de fork no tiene rama que
-// borrar en el repo destino y el forge no protesta —lo da por hecho y sale con
-// éxito—, así que el aviso tiene que decirlo. Sin esto, "branch deleted" sería
-// mentira en exactamente los PRs de los que más conviene fiarse.
+// A fork PR has no branch to delete in the target repo and the forge does not complain.
 func TestRunActionDoesNotBlamTheBranchOnAForkPR(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 13)
 	item.State = "OPEN"

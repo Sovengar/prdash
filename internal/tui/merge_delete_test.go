@@ -1,9 +1,3 @@
-// Tests del toggle de borrado de rama en la Confirmación de merge: dónde se ve,
-// quién lo cambia y qué llega al adapter.
-//
-// El borrado es la segunda de las dos cosas que el merge nombra, así que se
-// comporta como el modo: solo se puede decidir en la Confirmación, se ve en la
-// caja (no en un toast que caduca) y lo que se ve es lo que sale.
 package tui
 
 import (
@@ -13,9 +7,6 @@ import (
 	"prdash/internal/forge"
 )
 
-// TestDeleteBranchShowsInTheArmedConfirm: el valor se ve con el merge armado y
-// solo entonces. Fuera de ahí no es una decisión que se pueda tomar, así que
-// anunciarlo sería ruido.
 func TestDeleteBranchShowsInTheArmedConfirm(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 
@@ -33,10 +24,7 @@ func TestDeleteBranchShowsInTheArmedConfirm(t *testing.T) {
 	}
 }
 
-// TestDeleteBranchIsOnByDefault: el merge borra la rama salvo que se apague. Es
-// lo que hacen los forges por su cuenta y lo que espera quien limpia detrás de
-// un PR; exigir un gesto para hallmark de más sería pedir confirmaciones de las
-// que la gente se cansa.
+// The merge deletes the branch unless turned off, which is what the forges do on their own.
 func TestDeleteBranchIsOnByDefault(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -54,10 +42,7 @@ func TestDeleteBranchIsOnByDefault(t *testing.T) {
 	}
 }
 
-// TestTabTogglesTheDeleteWithoutDisarming: `tab` cambia el valor y NO ejecuta
-// nada. Si desarmara, apagar el borrado sería una forma de cancelar el merge, y
-// la tecla que ejecuta pasaría a ser la tercera pulsación en un camino y la
-// segunda en el otro.
+// tab changes the value and executes NOTHING. Disarming would make the keypress pointless.
 func TestTabTogglesTheDeleteWithoutDisarming(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -77,8 +62,6 @@ func TestTabTogglesTheDeleteWithoutDisarming(t *testing.T) {
 	}
 }
 
-// TestTabToggleReachesTheAdapter: el toggle no es decorativo. Lo que la caja
-// dice es lo que el argv tiene que llevar.
 func TestTabToggleReachesTheAdapter(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -97,17 +80,13 @@ func TestTabToggleReachesTheAdapter(t *testing.T) {
 	}
 }
 
-// TestDeleteToggleStaysForTheSession: apagarlo una vez lo apaga para los merges
-// siguientes, no solo para el que está en pantalla. Re-pulsarlo lo devuelve a
-// `yes`, así que la sesión se puede dejar como se quiera sin salir de la TUI.
 func TestDeleteToggleStaysForTheSession(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 
 	m := press(t, f.m, "m")
 	m = press(t, m, "tab")
 	m = press(t, m, "s")
-	// El resultado se aplica al modelo: sin eso la acción sigue marcada como en
-	// curso y la segunda pulsación no sale.
+	// The result reaches the model: without it the action stays marked as in progress.
 	m = send(t, m, actionMsg{cycle: m.cycle, outcome: waitOutcome(t, m)})
 
 	if got := f.adp.MergeDeleteCount(false); got != 1 {
@@ -127,10 +106,7 @@ func TestDeleteToggleStaysForTheSession(t *testing.T) {
 	}
 }
 
-// TestTabOutsideTheArmedMergeCyclesSections: `tab` con el merge armado es el
-// toggle, y FUERA de ahí sigue siendo lo que siempre fue, la sección
-// siguiente. Un estado que se quedara con la tecla entera rompería la
-// navegación.
+// With the merge armed tab is the toggle; OUTSIDE it cycles sections.
 func TestTabOutsideTheArmedMergeCyclesSections(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	before := f.m.activeSection
@@ -145,8 +121,6 @@ func TestTabOutsideTheArmedMergeCyclesSections(t *testing.T) {
 	}
 }
 
-// TestDeleteOnlyTravelsWithAMerge: approve no lleva la housekeeping del merge. Es
-// lo único que hace que el aviso de approve no hable de ramas.
 func TestDeleteOnlyTravelsWithAMerge(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "a")
@@ -160,10 +134,7 @@ func TestDeleteOnlyTravelsWithAMerge(t *testing.T) {
 	}
 }
 
-// TestMergeNoticeNamesTheBranch: el resultado dice qué pasó con la rama, no solo
-// que el merge salió. Un "merge ok" a secas deja en suspense lo que pasó con la
-// rama que el usuario pidió borrar, que es justo lo que se pierde después
-// porque en el siguiente refresco ya no está.
+// The result says what happened to the branch, not only that the merge worked.
 func TestMergeNoticeNamesTheBranch(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -177,9 +148,6 @@ func TestMergeNoticeNamesTheBranch(t *testing.T) {
 	}
 }
 
-// TestMergeNoticeSaysWhenTheBranchSurvived: cuando el borrado falla tras un merge
-// que sí salió, el aviso lo dice y NO dice "merge falló". Reportarlo como fallo
-// haría que el usuario buscara un cambio de estado del forge que no ocurrió.
 func TestMergeNoticeSaysWhenTheBranchSurvived(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")

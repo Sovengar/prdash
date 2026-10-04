@@ -7,9 +7,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// viewOf es una vista de fondo reconocible: cada fila lleva su número al final y
-// ocupa exactamente el ancho del terminal, como las cajas reales, para poder
-// comprobar fila a fila qué sobrevivió al popup.
 func viewOf(rows, width int) string {
 	lines := make([]string, 0, rows)
 	for i := range rows {
@@ -19,13 +16,8 @@ func viewOf(rows, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// plain deja solo el texto visible de una línea, para comparar sin que estorben
-// los códigos de color.
 func plain(s string) string { return ansi.Strip(s) }
 
-// TestOverlayKeepsTheBackgroundAroundThePopup: el popup se superpone, no
-// sustituye. Si las filas de arriba y de abajo desaparecieran, la TUI habría
-// perdido el contexto en el momento justo en que se está leyendo.
 func TestOverlayKeepsTheBackgroundAroundThePopup(t *testing.T) {
 	content := viewOf(9, 20)
 	box := "AAA\nBBB\nCCC"
@@ -52,8 +44,6 @@ func TestOverlayKeepsTheBackgroundAroundThePopup(t *testing.T) {
 	}
 }
 
-// TestOverlayCentersHorizontally: un popup descentrado se lee como pegado a un
-// borde, que es donde no se mira.
 func TestOverlayCentersHorizontally(t *testing.T) {
 	got := plain(overlayCentered(strings.Repeat("x", 21), "MID", 21))
 	row := strings.Split(got, "\n")[0]
@@ -65,9 +55,6 @@ func TestOverlayCentersHorizontally(t *testing.T) {
 	}
 }
 
-// TestOverlayPreservesLineWidth: si la línea resultara más ancha o más estrecha
-// que antes, el popup se desplazaría un carácter en cada fila y la vista entera
-// bailaría.
 func TestOverlayPreservesLineWidth(t *testing.T) {
 	content := viewOf(7, 20)
 	for _, box := range []string{"A", "AAA\nBBB\nCCC", strings.Repeat("W", 40)} {
@@ -80,8 +67,6 @@ func TestOverlayPreservesLineWidth(t *testing.T) {
 	}
 }
 
-// TestOverlayCropsABoxTallerThanTheView: una ventana más alta que la pantalla
-// tiene que recortarse, no empujar la vista hacia abajo ni desbordarla.
 func TestOverlayCropsABoxTallerThanTheView(t *testing.T) {
 	content := viewOf(3, 20)
 	box := "1\n2\n3\n4\n5"
@@ -95,8 +80,6 @@ func TestOverlayCropsABoxTallerThanTheView(t *testing.T) {
 	}
 }
 
-// TestOverlayWithoutBoxIsIdentity: sin popup la vista tiene que volver idéntica,
-// byte a byte, porque es la salida más frecuente.
 func TestOverlayWithoutBoxIsIdentity(t *testing.T) {
 	content := viewOf(5, 20)
 	if got := overlayCentered(content, "", 20); got != content {
@@ -104,10 +87,7 @@ func TestOverlayWithoutBoxIsIdentity(t *testing.T) {
 	}
 }
 
-// TestOverlayKeepsBaseColorsRightOfThePopup: la línea de base va recortada con
-// ansi, no concatenada por índices: si el recorte no fuera consciente del color,
-// lo que queda a la derecha saldría con el color por defecto del terminal y en
-// scroll horizontal se vería el salto.
+// The base line is clipped with ansi, not with byte indexes.
 func TestOverlayKeepsBaseColorsRightOfThePopup(t *testing.T) {
 	base := "\x1b[31m" + strings.Repeat("r", 20) + "\x1b[0m"
 	got := overlayCentered(base, "PP", 20)

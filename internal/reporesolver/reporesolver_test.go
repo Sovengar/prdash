@@ -117,7 +117,6 @@ func TestCloneURLParseRemoteRoundTrip(t *testing.T) {
 	}
 }
 
-// fixture crea un bare origin y un clon local con `main` pusheada.
 func fixture(t *testing.T) (origin, repo string) {
 	t.Helper()
 	origin = filepath.Join(t.TempDir(), "origin.git")
@@ -130,7 +129,6 @@ func fixture(t *testing.T) (origin, repo string) {
 	return origin, repo
 }
 
-// pushReviewRef publica un commit como ref de review en el origin.
 func pushReviewRef(t *testing.T, origin, srcRef string) {
 	t.Helper()
 	work := filepath.Join(t.TempDir(), "work")
@@ -159,7 +157,6 @@ func TestResolveLocalIndexesRoots(t *testing.T) {
 	origin, repo := fixture(t)
 	ref := ghRef()
 	r := newResolver(t, origin, ref)
-	// El clon local es el repo vecino del origin; apuntamos el root a su padre.
 	r.roots = []string{filepath.Dir(repo)}
 
 	got, ok := r.ResolveLocal(ref)
@@ -197,7 +194,6 @@ func TestResolveLocalUsesRememberedRoute(t *testing.T) {
 	r := New(Options{MemoPath: memoPath})
 	r.Remember(ref, repo)
 
-	// Un resolver nuevo, sin roots, resuelve por la memoria persistida.
 	r2 := New(Options{MemoPath: memoPath})
 	got, ok := r2.ResolveLocal(ref)
 	if !ok || got != repo {
@@ -242,9 +238,6 @@ func TestEnsureBareClonesAndIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestEnsureBareClonesWithPrefixedCloneURL comprueba de punta a punta que el
-// clon bare usa la URL por defecto con el prefijo de subcarpeta del host: el
-// `insteadOf` de git redirige la URL https prefijada al origin local (sin red).
 func TestEnsureBareClonesWithPrefixedCloneURL(t *testing.T) {
 	base := t.TempDir()
 	origin := filepath.Join(base, "grupo", "proy.git")
@@ -373,8 +366,6 @@ func TestRecordReviewPersists(t *testing.T) {
 	}
 }
 
-// TestForgetReviewRemovesRecord cubre el olvido del review activo cuando su
-// worktree se borra: ActiveReview deja de reportarlo y el olvido persiste.
 func TestForgetReviewRemovesRecord(t *testing.T) {
 	memoPath := filepath.Join(t.TempDir(), "memo.json")
 	r := New(Options{MemoPath: memoPath})

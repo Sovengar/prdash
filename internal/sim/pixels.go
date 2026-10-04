@@ -11,14 +11,10 @@ import (
 	"strings"
 )
 
-// halfBlock dibuja la mitad superior de una celda: con el foreground y el
-// background truecolor se Gets dos píxeles por celda, el doble de resolución
-// vertical que un bloque entero, que es lo que hace legible un grafo de commits.
+// Two vertical pixels per cell, which is what makes a commit graph readable.
 const halfBlock = "▀"
 
-// Load abre y decodifica una imagen. Acepta lo que git-sim produce (JPEG por
-// defecto, PNG si se le pidió): el decodificador va por el contenido, no por la
-// extensión, así que un nombre con el sufijo equivocado no lo rompe.
+// Decoded by content rather than by extension, so a file with the wrong suffix still loads.
 func Load(path string) (image.Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -32,13 +28,9 @@ func Load(path string) (image.Image, error) {
 	return img, nil
 }
 
-// Cells dibuja la imagen en w columnas y h líneas de terminal, dos píxeles
-// verticales por celda.
-//
-// Reduce por promedio de caja, no por vecino más cercano: una muestra puntual
-// deja los trazos finos de un grafo rotos en un mullón, que es justo el detalle
-// que se viene a mirar. Cada celda es autocontenida (fija sus dos colores y
-// reinicia al final), así que el texto de alrededor no se ensucia.
+// Box average, not nearest neighbour: a point sample breaks the thin strokes of a commit graph,
+// which is the detail being looked at. Each cell is self-contained (sets both colours and resets), so
+// the text around it is not smudged.
 func Cells(img image.Image, w, h int) []string {
 	if img == nil || w <= 0 || h <= 0 {
 		return nil
@@ -55,7 +47,6 @@ func Cells(img image.Image, w, h int) []string {
 		for x := range w {
 			tr, tg, tb, _ := small.At(x, 2*y).RGBA()
 			br, bg, bb, _ := small.At(x, 2*y+1).RGBA()
-			// El rango de At es 0..65535 y el de las celdas 0..255.
 			fmt.Fprintf(&b, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm%s\x1b[0m",
 				tr>>8, tg>>8, tb>>8, br>>8, bg>>8, bb>>8, halfBlock)
 		}
@@ -64,27 +55,15 @@ func Cells(img image.Image, w, h int) []string {
 	return lines
 }
 
-// Fit calcula de cuántas columnas y líneas se puede dibujar la imagen sin
-// deformarla dentro de un área de maxCols × maxRows celdas, y devuelve el mayor
-// tamaño que cabe. Asume celdas 1×2; para el ratio real del terminal está
-// FitCells.
+// Assumes 1x2 cells; for the terminal's real ratio see FitCells.
 func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
 	return FitCells(img, 1, 2, maxCols, maxRows)
 }
 
-// FitCells es Fit con la relación de aspecto real de la celda, que es lo que
-// decide cuántas columnas por línea necesita la imagen. No es 2:1 sino lo que
-// mida el terminal —en kitty con la fuente por defecto son 9×19 px— y suponerlo
-// introduce un error de un 5% en el tamaño, que es justo el tipo de error que hace
-// que algo "casi cuadre".
-//
-// El alto se paga a double: una imagen 16:9 con celdas 1×2 necesita 3,56 columnas
-// por línea, no 1,78. Sin el factor, un grafo se estiraría a lo ancho y los dos
-// commits de una fila se verían como una tira de elipses en vez de dos círculos.
-//
-// Se usa el mayor tamaño que cabe en lugar de rellenar el área: una celda vacía a
-// un lado de la imagen es del borde del popup, que es donde se lee que la imagen
-// termina.
+// The height is paid double: a 16:9 image with 1x2 cells needs 3.56 columns per row, not 1.78. Without the
+// factor a graph stretches wide and two commits in a row read as a strip of ellipses instead of two
+// circles. The largest size that fits is used rather than filling the area, because empty cells beside
+// the image are what makes the image read as finished.
 func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows int) {
 	if img == nil || maxCols <= 0 || maxRows <= 0 {
 		return max(maxCols, 0), max(maxRows, 0)
@@ -100,42 +79,21 @@ func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows i
 		cellH = 2
 	}
 
-	// cols por línea: la imagen es imgW/imgH de ancha, y una celda es cellH/cellW
-	// de alta, así que cada fila de celdas "consume" imgW/imgH * cellH/cellW
-	// columnas.
-	//
-	// Aquí no hay guarda, y antes la había (`perRow <= 0`), y era INALCANZABLE: los
-	// cuatro factores son positivos por lo de arriba. Dx y Dy son mayores que cero
-	// porque se acaba de comprobar, y cellW y cellH también, porque sus suelos son 1
-	// y 2. Un producto de positivos no es ni cero ni negativo, y una división de
-	// positivos tampoco.
-	//
-	// Se quita porque una guarda que no puede llegar es dos cosas malas a la vez:
-	// esconde la aritmética de verdad —que es la relación de aspecto, lo único que
-	// decide el tamaño— y da la sensación de que esa aritmética está protegida
-	// cuando lo que está protegida es una condición imposible.
 	perRow := float64(b.Dx()) / float64(b.Dy()) * float64(cellH) / float64(cellW)
 
 	if float64(maxRows)*perRow <= float64(maxCols) {
-		// El alto manda: se usan todas las líneas disponibles.
 		return max(int(float64(maxRows)*perRow), 1), maxRows
 	}
-	// La anchura manda: se llena de alto lo que la imagen permita.
 	return maxCols, max(int(float64(maxCols)/perRow), 1)
 }
 
-// Resize devuelve la imagen ajustada a w × h píxeles por promedio de caja, en
-// RGBA. Es el mismo reescalado que usan las celdas del half-block, expuesto para
-// el camino de la capa de gráficos: mandar la imagen a Herdr sin ajustarla sería
-// mandar 1920×1080 para pintar un rectángulo de 800 px y wasting 5× el ancho de
-// banda base64.
+// Sending the image to Herdr unresized would send 1920x1080 to paint an 800px rectangle.
 func Resize(img image.Image, w, h int) *image.RGBA {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	// El nil y la imagen de tamaño cero se descartan dentro de rgba, no con un
-	// `img == nil` propio: pedirse los bounds de un nil es un panic, así que un
-	// comprobante aquí, DESPUÉS de la llamada, no cubría nada.
+	// The nil and the zero-sized image are dropped inside rgba, not by a check here: asking a nil for
+	// its bounds panics, so a check AFTER the call covered nothing.
 	src := rgba(img)
 	if src == nil {
 		return nil
@@ -143,10 +101,6 @@ func Resize(img image.Image, w, h int) *image.RGBA {
 	return shrink(src, w, h)
 }
 
-// rgba normaliza a *image.RGBA para poder leer píxeles por índice. Devuelve nil
-// para lo que no se puede promediar: una imagen inexistente (pedirle los bounds
-// sería un panic) y una vacía (bounds de tamaño cero), que no tiene nada que
-// dibujar.
 func rgba(img image.Image) *image.RGBA {
 	if img == nil {
 		return nil
@@ -160,15 +114,11 @@ func rgba(img image.Image) *image.RGBA {
 	return out
 }
 
-// shrink promedia el rectángulo de origen de cada píxel destino. Las fracciones
-// enteras pueden quedar vacías en destino muy grande respecto del original, y
-// ahí se copia el píxel de la esquina en vez de dejar el negro: un píxel de
-// ruido en una imagen diminuta se lee como una mota que el render sí tenía.
-//
-// `src` siempre viene de rgba, que deja los bounds en el origen: por eso los
-// índices no suman el Min. Sumarlo no costaba nada, pero era aritmética que ya no
-// podía cambiar el resultado, y es exactamente la clase de valor que se puede
-// mutar sin que ninguna prueba se entere.
+// Integer fractions can land empty on a destination much larger than the source, and there the
+// corner pixel is copied instead of leaving black: noise in a tiny image reads as a speck the render
+// really had.
+// `src` always comes from rgba, which leaves the bounds at the origin, which is why the indices do
+// not add Min.
 func shrink(src *image.RGBA, w, h int) *image.RGBA {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	sb := src.Bounds()
@@ -190,7 +140,6 @@ func shrink(src *image.RGBA, w, h int) *image.RGBA {
 	return dst
 }
 
-// average promedia el bloque [x0,x1) × [y0,y1) en un solo píxel.
 func average(src *image.RGBA, x0, y0, x1, y1 int) color.RGBA {
 	var rs, gs, bs, as, n uint64
 	for y := y0; y < y1; y++ {

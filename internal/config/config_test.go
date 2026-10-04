@@ -30,9 +30,6 @@ func TestLoadFromMissingFileReturnsDefaultsSilently(t *testing.T) {
 	}
 }
 
-// escribirConfig deja un config.toml en path. Los tests de merge necesitan un
-// fichero de verdad porque el parseo del TOML es parte de lo que se prueba: un
-// mapa a mano saltaría justo la parte donde un valor mal formado se degrada.
 func escribirConfig(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -196,8 +193,7 @@ clone_base = "repo"
 }
 
 func TestDefaultsClonePrefix(t *testing.T) {
-	// El default de APIBase es "/api/v4/" (GitLab estándar en la raíz): no
-	// debe derivar prefijo, para no clonar mal un GitLab en raíz.
+	// APIBase's default is "/api/v4/", with the trailing slash: no prefix must be derived.
 	if got := Defaults().Forges.GitLab.ClonePrefix(); got != "" {
 		t.Fatalf("gitlab default ClonePrefix = %q, quiero vacío (raíz)", got)
 	}
@@ -240,15 +236,7 @@ func TestExpandAll(t *testing.T) {
 	}
 }
 
-// TestLasRutasVaciasNoBorranLosDefaults: el patrón de merge del config trata
-// "no puesto" y "puesto a vacío" como cosas distintas a propósito, y en las rutas
-// esa diferencia se nota. Un puntero nil (la clave no está en el TOML) no toca
-// nada. Un puntero a "" SÍ se aplica… salvo en las rutas, donde una cadena
-// vacía no es "usa la ruta por defecto" sino "no hay ruta", que deja al resolver
-// de repos y al de worktrees sin sitio donde escribir y rompe en runtime.
-//
-// Se afirma en los dos sentidos: nil conserva, "" conserva en las rutas. Lo
-// segundo es una decisión de diseño, no un accidente, y por eso tiene test.
+// The merge treats "not set" and "set to empty" as different things on purpose.
 func TestLasRutasVaciasNoBorranLosDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -272,8 +260,6 @@ roots = [""]
 	if cfg.WorktreeDir != def.WorktreeDir {
 		t.Errorf("worktree_dir vacío no debería pisar el default: %q vs %q", cfg.WorktreeDir, def.WorktreeDir)
 	}
-	// Y una ruta de verdad sí se aplica, para que el caso anterior no se lea
-	// como "las rutas del config se ignoran siempre".
 	otro := t.TempDir()
 	path2 := filepath.Join(dir, "otro.toml")
 	escribirConfig(t, path2, "data_dir = \""+otro+"\"\n")
@@ -283,16 +269,9 @@ roots = [""]
 	}
 }
 
-// TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque: los tres forges no se
-// mergean igual. GitHub y GitLab tienen bloque propio, así que la condición
-// es "el bloque está". Bitbucket solo tiene `enabled`, y la condición es doble
-// (`bloque != nil && enabled != nil`) porque sin la segunda mitad un
-// `[forge.bitbucket]` sin `enabled` pondría el forge a false sin que el usuario
-// lo pidiera. Afirmar el `false` explícito es lo que distingue una cosa de la
-// otra.
+// The three forges do not merge alike: GitHub and GitLab have their own block.
 func TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque(t *testing.T) {
 	dir := t.TempDir()
-	// Con `enabled = false` explícito: el forge se apaga.
 	path := filepath.Join(dir, "off.toml")
 	escribirConfig(t, path, "[forge.bitbucket]\nenabled = false\n")
 	cfg, _ := LoadFrom(path)
@@ -300,7 +279,6 @@ func TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque(t *testing.T) {
 		t.Error("enabled = false debería apagar bitbucket")
 	}
 
-	// Con `enabled = true`: se enciende.
 	path = filepath.Join(dir, "on.toml")
 	escribirConfig(t, path, "[forge.bitbucket]\nenabled = true\n")
 	cfg, _ = LoadFrom(path)
@@ -308,17 +286,14 @@ func TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque(t *testing.T) {
 		t.Error("enabled = true debería encender bitbucket")
 	}
 
-	// Con el bloque pero sin `enabled`: el default se queda, que es false. Sin el
-	// segundo `&&` de la condición, un bloque a secas desreferenciaría un puntero
-	// nil y el arranque de prdash acabaría en un panic por config ausente.
+	// The block without `enabled`: the default stays false, which is what the second `&&` is for.
 	path = filepath.Join(dir, "bare.toml")
 	escribirConfig(t, path, "[forge.bitbucket]\n")
 	cfg, _ = LoadFrom(path)
 	if cfg.Forges.Bitbucket.Enabled {
 		t.Error("un bloque sin enabled no debería encender el forge")
 	}
-	// Y un bloque con otros campos tampoco: la condición es sobre `enabled`, no
-	// sobre "hay bloque de bitbucket".
+	// A block with other fields neither: the condition is about `enabled`, not about the block existing.
 	path = filepath.Join(dir, "vacio.toml")
 	escribirConfig(t, path, "[forge.bitbucket]\nclone_base = \"https://bitbucket.example.com\"\n")
 	cfg, warn := LoadFrom(path)
@@ -330,14 +305,8 @@ func TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque(t *testing.T) {
 	}
 }
 
-// TestLosKeybindingsVaciosNoDesactivanAtajos: el merge de keybindings ignora el
-// valor vacío a propósito. Un mapa de atajos se escribe porDelta —"quiero otra
-// tecla"— y un valor vacío no significa "sin tecla" sino "no he cambiado esto":
-// aceptarlo borraría el atajo por defecto de la acción, que es un item que
-// disappears de la TUI sin que nadie lo haya pedido. Es la diferencia entre un
-// config que degrada y uno que desactiva.
-//
-// Y un valor de verdad sí sobreescribe: si no, el filtro no haría nada.
+// The keybindings merge ignores an empty value on purpose: a keys map is written per action, and
+// an empty one would delete the shortcut.
 func TestLosKeybindingsVaciosNoDesactivanAtajos(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kb.toml")
@@ -351,7 +320,6 @@ func TestLosKeybindingsVaciosNoDesactivanAtajos(t *testing.T) {
 		t.Fatalf("config roto: %s", warn)
 	}
 	def := DefaultKeybindings()
-	// El vacío conserva el atajo por defecto de esa acción.
 	if cfg.Keybindings["quit"] != def["quit"] {
 		t.Errorf("quit = %q, want el default %q: un valor vacío no desactiva el atajo", cfg.Keybindings["quit"], def["quit"])
 	}
@@ -359,7 +327,6 @@ func TestLosKeybindingsVaciosNoDesactivanAtajos(t *testing.T) {
 	if cfg.Keybindings["merge"] != "x" {
 		t.Errorf("merge = %q, want \"x\"", cfg.Keybindings["merge"])
 	}
-	// Y ninguna acción se queda sin tecla.
 	for accion, tecla := range cfg.Keybindings {
 		if tecla == "" {
 			t.Errorf("la acción %q quedó sin tecla: %v", accion, cfg.Keybindings)
@@ -367,19 +334,7 @@ func TestLosKeybindingsVaciosNoDesactivanAtajos(t *testing.T) {
 	}
 }
 
-// TestExpandSoloTocaElTilDEInicial: expand solo debe convertir un `~/` de
-// verdad. Los casos que NO toca son la mitad del contrato y los que más
-// duelen al romperse:
-//
-//   - "~" a secas es el home, no un prefijo: convertirlo daría home + "" y
-//     una ruta que parece la del home pero no lo es.
-//   - "~user/dev" es el home de OTRO usuario, que expand() no sabe resolver y
-//     no debe tocar: tocarlo lo convertiría en un path del home actual con un
-//     directorio "user" dentro, que es un path válido y por tanto silencioso.
-//   - "~x" tampoco: la segunda letra tiene que ser un separador, o un
-//     directorio que empieza por ~ se convierte sin querer.
-//   - Una "~" al final o en medio no es prefijo: "a~b" y "/a~/b" son rutas
-//     literales.
+// expand must only convert a real `~/`. The cases it does NOT touch are half the contract.
 func TestExpandSoloTocaElTilDEInicial(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -406,12 +361,9 @@ func TestExpandSoloTocaElTilDEInicial(t *testing.T) {
 			t.Errorf("expand(%q) = %q, want %q", in, got, want)
 		}
 	}
-	// Un "~/" de dos caracteres es el caso mínimo que sí se convierte: el borde
-	// de len(p) < 2.
 	if got := expand("~/"); got != filepath.Join(home) {
 		t.Errorf(`expand("~/") = %q, want %q`, got, filepath.Join(home))
 	}
-	// Y un solo carácter no puede ser prefijo: no hay segunda letra que mirar.
 	if got := expand("~"); got != "~" {
 		t.Errorf(`expand("~") = %q, want "~"`, got)
 	}
@@ -459,7 +411,6 @@ func TestPaneOverride(t *testing.T) {
 	}
 }
 
-// Un `[commands]` del fichero XDG llega verbatim a las tres claves de pane.
 func TestLoadFromReadsPaneCommands(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	body := "[commands]\ntuicr = \"tuicr pr\"\nhunk = \"hunk diff main...HEAD\"\nagent = \"claude --model opus\"\n"
@@ -485,9 +436,7 @@ func TestLoadFromReadsPaneCommands(t *testing.T) {
 	}
 }
 
-// `[tools].editor` fija la orden del editor; `[commands].editor` la sustituye
-// entera. El default es `vi` porque es un comando de shell (típicamente el que
-// expande a `nvim .`), no un binario que prdash pueda localizar.
+// `[tools].editor` sets the editor's ORDER; `[commands].editor` replaces it entirely.
 func TestEditorToolAndOverride(t *testing.T) {
 	if got := strings.Join(Defaults().ToolArgs("editor"), " "); got != "vi" {
 		t.Fatalf("editor por defecto = %q, quiero %q", got, "vi")
@@ -523,11 +472,6 @@ func TestHints(t *testing.T) {
 	}
 }
 
-// TestHintsConEstadoDinamico fija la costura por la que la barra nombra el modo
-// de prefijo actual. Sin estado, la entrada sale como cualquier otra ("p
-// prefix"); con estado, la etiqueta lo nombra. El fragmento lo pone quien tiene
-// el estado —la TUI— pero lo une y decide el formato la config, que es quien
-// sabe qué etiqueta tiene cada acción.
 func TestHintsConEstadoDinamico(t *testing.T) {
 	cfg := Defaults()
 	bar := strings.Join(cfg.Hints(HintState{"prefix-mode": "full"}), " ")
@@ -535,15 +479,11 @@ func TestHintsConEstadoDinamico(t *testing.T) {
 		t.Errorf("la barra no nombra el modo actual: %v", cfg.Hints(HintState{"prefix-mode": "full"}))
 	}
 
-	// Un fragmento de una acción que no está en la barra no puede inventar una
-	// entrada nueva: hintOrder sigue siendo la única fuente de la lista.
 	bar = strings.Join(cfg.Hints(HintState{"no-existe": "algo"}), " ")
 	if strings.Contains(bar, "algo") {
 		t.Errorf("un estado de una acción ausente añadió una entrada: %v", cfg.Hints(HintState{"no-existe": "algo"}))
 	}
 
-	// El rebind y el estado se combinan: la tecla sale de [keybindings] y el
-	// nombre del modo, del estado de la vista.
 	cfg.Keybindings["prefix-mode"] = "P"
 	bar = strings.Join(cfg.Hints(HintState{"prefix-mode": "leaf"}), " ")
 	if !strings.Contains(bar, "P prefix: leaf") {
@@ -554,10 +494,8 @@ func TestHintsConEstadoDinamico(t *testing.T) {
 	}
 }
 
-// TestHintsCubrenTodosLosKeybindings es el guard anti-drift: si se añade una
-// acción a DefaultKeybindings() y no se mete en hintOrder, la barra deja de
-// decir la verdad sobre qué teclas existen y nadie se entera hasta que alguien
-// prueba la tecla y no pasa nada.
+// The anti-drift guard: an action added to DefaultKeybindings and not to hintOrder makes the bar
+// lie.
 func TestHintsCubrenTodosLosKeybindings(t *testing.T) {
 	bar := strings.Join(Defaults().Hints(nil), " ")
 	for action, key := range DefaultKeybindings() {
@@ -567,8 +505,6 @@ func TestHintsCubrenTodosLosKeybindings(t *testing.T) {
 	}
 }
 
-// TestHintsSiguenElRebind: la barra se deriva de [keybindings], no de una lista
-// de teclas fija escrita a mano.
 func TestHintsSiguenElRebind(t *testing.T) {
 	cfg := Defaults()
 	cfg.Keybindings["open-browser"] = "b"
@@ -591,13 +527,8 @@ func TestDefaultKeybindingsCoverActions(t *testing.T) {
 	}
 }
 
-// TestDefaultKeybindingsNoSeRepiten vigila que dos acciones no compartan tecla. Es
-// un fallo silencioso: `ActionForKey` resuelve por orden alfabético de acción, así
-// que la colisión no rompe nada visible, solo deja una de las dos acciones
-// imposible de alcanzar y sin que nada diga cuál.
-//
-// No lo había y lo pediu `retarget`: elegir `e` fue mirar la lista entera, y nada
-// impedía que mañana otra acción elija la misma.
+// Two actions sharing a key is a silent failure: ActionForKey resolves alphabetically by
+// action, so which one wins is arbitrary.
 func TestDefaultKeybindingsNoSeRepiten(t *testing.T) {
 	owner := map[string]string{}
 	for action, key := range DefaultKeybindings() {
@@ -630,10 +561,6 @@ func TestActionForKey(t *testing.T) {
 	}
 }
 
-// TestDefaultKeybindingsNoColisionan es el invariante que hace legible el
-// esquema r=review / R=refresh / m=merge: si dos acciones comparten tecla,
-// ActionForKey resuelve una por orden alfabético y la otra queda muerta sin que
-// nada lo diga.
 func TestDefaultKeybindingsNoColisionan(t *testing.T) {
 	kb := DefaultKeybindings()
 	owner := map[string]string{}

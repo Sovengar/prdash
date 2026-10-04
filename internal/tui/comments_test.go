@@ -1,5 +1,3 @@
-// Tests de la conversación dentro del panel de detalle: qué se pinta, cuánto, en
-// qué orden y cuándo se consulta al forge.
 package tui
 
 import (
@@ -14,13 +12,10 @@ import (
 	"prdash/internal/testutil"
 )
 
-// conv es un atajo para montar una conversación de pruebas.
 func conv(author, body string) model.Comment {
 	return model.Comment{Author: author, Body: body}
 }
 
-// modelWithComments deja un modelo con un ítem seleccionado y su conversación ya
-// resuelta, para poder pintar la ficha sin pasar por el sondeo.
 func modelWithComments(t *testing.T, height int, list []model.Comment, total int) Model {
 	t.Helper()
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
@@ -35,8 +30,6 @@ func modelWithComments(t *testing.T, height int, list []model.Comment, total int
 	return withConversation(t, m, it, forge.CommentPage{Comments: list, Total: total})
 }
 
-// withConversation resuelve la conversación de un ítem sin esperar al tick, que es
-// lo que hace el sondeo cuando su goroutine publica el resultado.
 func withConversation(t *testing.T, m Model, it model.Item, p forge.CommentPage) Model {
 	t.Helper()
 	id := it.ID()
@@ -46,7 +39,6 @@ func withConversation(t *testing.T, m Model, it model.Item, p forge.CommentPage)
 	return send(t, m, commentsMsg{id: id, page: p})
 }
 
-// detailText es el texto plano del panel de detalle, que es lo que lee el usuario.
 func detailText(t *testing.T, m Model) string {
 	t.Helper()
 	rows := m.layout().detailLines
@@ -65,9 +57,6 @@ func mustSelected(t *testing.T, m Model) model.Item {
 	return it
 }
 
-// waitFor espera a que se cumpla una condición. La consulta de comentarios va en
-// una goroutine, así que contar llamadas sin esperar es medir el planificador, no
-// el código.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -80,14 +69,11 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("no se cumplió a tiempo: %s", what)
 }
 
-// detailLabels son las etiquetas de campo de la ficha. El URL va aparte porque no
-// está en la rejilla, así que se comprueba por separado.
 var detailLabels = []string{
 	"Item:", "Forge:", "Author:", "Source:", "Target:",
 	"State:", "Draft:", "Checks:", "Diff:", "Updated:", "Review:", "Role:",
 }
 
-// rowWithField devuelve el índice de la primera fila que lleva `label`, o -1.
 func rowWithField(rows []string, label string) int {
 	for i, l := range rows {
 		if strings.Contains(stripANSI(l), label) {
@@ -97,15 +83,10 @@ func rowWithField(rows []string, label string) int {
 	return -1
 }
 
-// hasCommentBox dice si el texto pintado trae la caja de comentarios, busca el
-// título embebido en el borde (dentro de la caja el nombre ya no va como etiqueta).
 func hasCommentBox(text string) bool {
 	return strings.Contains(text, " "+commentTitle+" ")
 }
 
-// rowWithCommentBox devuelve el índice de la fila del borde de arriba de la caja de
-// comentarios, o -1. Busca el título embebido, no una etiqueta: dentro de la caja
-// el nombre va en el borde.
 func rowWithCommentBox(rows []string) int {
 	for i, l := range rows {
 		if strings.Contains(stripANSI(l), " "+commentTitle+" ") {
@@ -115,10 +96,6 @@ func rowWithCommentBox(rows []string) int {
 	return -1
 }
 
-// TestURLGetsItsOwnFullWidthRow: el URL sale de la rejilla a una fila a todo el
-// ancho. En media columna se leen 40 caracteres de una URL de 80 y queda un resto
-// inútil, y una URL que no se puede copiar entera no sirve para nada, que es para
-// lo que está en la ficha.
 func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 	const long = "https://umane.emeal.nttdata.com/git/APPCTTI/vsocial/backend/vsocial-api-accions/-/merge_requests/1234"
 	it := mkItem("gitlab", "gitlab.example.com", "APPCTTI/vsocial/backend/vsocial-api-accions", "MR", 1234, "")
@@ -140,20 +117,15 @@ func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 		t.Fatalf("no hay fila de URL:\n%s", strings.Join(rows, "\n"))
 	}
 
-	// En la fila del URL no cabe medio panel de campos al lado, así que el valor
-	// tiene que haber salido entero, sin recortar.
 	plain := stripANSI(rows[urlRow])
 	if !strings.Contains(plain, long) {
 		t.Errorf("el URL debería salir entero, no recortado:\n%s", plain)
 	}
-	// Y no comparte fila con ningún otro campo: eso es lo que distingue "fila propia
-	// a ancho completo" de "la primera celda de la rejilla".
 	for _, label := range detailLabels {
 		if strings.Contains(plain, label) {
 			t.Errorf("la fila del URL comparte fila con %q:\n%s", label, plain)
 		}
 	}
-	// Sale antes de los comentarios, que van debajo de toda la ficha.
 	iComment := rowWithCommentBox(rows)
 	if iComment < 0 {
 		t.Fatalf("los comentarios deberían caber a esta altura:\n%s", strings.Join(rows, "\n"))
@@ -163,13 +135,8 @@ func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 	}
 }
 
-// TestSelfDenyTakesNoRoomInTheDetail: el veto de aprobar lo propio no ocupa ni una
-// fila de la ficha, aunque esté activo. Se deriva del ítem y del login, así que
-// saldría en todos los renders de todos tus PRs —casi todos los de "Created by
-// me"— y repetiría lo que el campo Role ya dice. La razón llega en el aviso al
-// pulsar la tecla, que es cuando se puede actuar sobre ella.
-//
-// El veto del forge (`denied`) sí se pinta: es pegajoso y el aviso caduca.
+// It derives from the item and the login, so it would show on every render of every one of your PRs
+// and repeat what the Role field already says.
 func TestSelfDenyTakesNoRoomInTheDetail(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 45
@@ -186,19 +153,15 @@ func TestSelfDenyTakesNoRoomInTheDetail(t *testing.T) {
 	if strings.Contains(detail, "approve unavailable") {
 		t.Errorf("el veto no debería pintar nada en la ficha:\n%s", detail)
 	}
-	// Y el rol sigue ahí, que es la información que sí importa sin pulsar nada.
 	if !strings.Contains(detail, "Role:") || !strings.Contains(detail, "own") {
 		t.Errorf("el campo Role debería seguir diciendo que es propio:\n%s", detail)
 	}
-	// La denegación del forge, en cambio, sí ocupa filas: es pegajosa.
 	m.denied[it.ID()] = "the forge refused the action"
 	if !strings.Contains(detailText(t, m), "action disabled") {
 		t.Error("el aviso de denegación del forge debería seguir en la ficha")
 	}
 }
 
-// con "Comments" en el borde, no como campos más de la ficha. Un borde dice "esto no
-// es un dato del PR" sin tener que explicarlo, que es justo lo que la distingue.
 func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
@@ -213,8 +176,6 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 			t.Errorf("el borde de arriba debería llevar %q:\n%s", want, first)
 		}
 	}
-	// La caja se cierra por abajo, pero no es la última fila del detalle: detrás
-	// vienen los avisos de acción, si los hay.
 	bottom := -1
 	for i := top + 1; i < len(rows); i++ {
 		if strings.HasPrefix(strings.TrimSpace(stripANSI(rows[i])), "╰") {
@@ -225,16 +186,12 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 	if bottom < 0 {
 		t.Fatalf("la caja no se cierra por abajo:\n%s", strings.Join(rows, "\n"))
 	}
-	// Todas las líneas de la caja miden el ancho útil del panel: si no, se salen
-	// del borde de la de fuera.
 	width := m.contentWidth()
 	for i := top; i <= bottom; i++ {
 		if n := len([]rune(stripANSI(rows[i]))); n != width {
 			t.Errorf("línea %d de la caja mide %d, want %d (el ancho del panel)", i, n, width)
 		}
 	}
-	// Dentro de la caja el nombre ya no va como etiqueta de campo: el título está en
-	// el borde y repetirlo dentro sería el ruido de una fila entera.
 	for i := top; i <= bottom; i++ {
 		if strings.Contains(stripANSI(rows[i]), "Comments:") {
 			t.Errorf("dentro de la caja no debería repetirse la etiqueta:\n%s", stripANSI(rows[i]))
@@ -242,12 +199,8 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 	}
 }
 
-// TestBoxIsInsetSoNestingReadsByShape: la caja de comentarios va sangrada una columna
-// a cada lado, y con eso el anidamiento se lee por la forma. Pegada al borde del
-// panel, sus verticales se solapan con las de fuera y cada fila sale `││`; y como
-// las dos llevan el mismo color, los dos bordes se leerían como un trazo gordo. Un
-// tono de gris más claro los separaba, pero salía amarillento en las paletas
-// cálidas: era un problema de color tapando uno de forma.
+// Against the panel's border its verticals overlap and every row comes out as `||`; a lighter grey
+// told them apart but goes yellowish on warm palettes.
 func TestBoxIsInsetSoNestingReadsByShape(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
@@ -271,23 +224,13 @@ func TestBoxIsInsetSoNestingReadsByShape(t *testing.T) {
 	}
 }
 
-// TestCommentBoxSharesTheBorderColor: la caja de comentarios se pinta con el mismo
-// color de borde que las demás cajas de la pantalla. Antes llevaba un tono más claro
-// para desdoblar el anidamiento, y en paletas cálidas ese tono sale amarillento; con
-// el sangrado ya no hace falta. Un borde de otro color se nota, y no es algo que se
-// pueda dejar "porque así se veía antes".
 func TestCommentBoxSharesTheBorderColor(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
-	// El panel de detalle con su caja, que es donde está el borde de referencia: el
-	// detalle son filas de contenido, la caja la pone la sección. Sin quitar los
-	// escapes, que es justo lo que se quiere comparar.
 	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
 	top := rowWithCommentBox(rows)
 	if top < 0 {
 		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
 	}
-	// La primera fila es el borde de arriba del panel de detalle: la referencia de "el
-	// color del resto".
 	panel, box := ansiColors(rows[0]), ansiColors(rows[top])
 	if panel != box {
 		t.Errorf("la caja de comentarios se pinta con %q y el panel con %q, y deben ser el mismo",
@@ -298,8 +241,6 @@ func TestCommentBoxSharesTheBorderColor(t *testing.T) {
 	}
 }
 
-// ansiColors son los códigos de color de una línea, en orden y sin repetir. Es lo
-// que responde a "con qué paleta se pinta esto" sin mirar a qué se aplica cada uno.
 func ansiColors(line string) string {
 	seen := map[string]bool{}
 	var out []string
@@ -312,13 +253,8 @@ func ansiColors(line string) string {
 	return strings.Join(out, " ")
 }
 
-// TestEveryBorderGlyphIsPainted: todo glifo de borde va pintado con el color del
-// borde. Lo que rompía la raya que cierra la línea de abajo al escribir la leyenda
-// encima es que el estilo del recuento se cierra con `\x1b[0m`, y ese reset no
-// restaura lo anterior: se lleva por delante el gris del borde y lo que va detrás
-// queda con el color de primer plano del terminal, que en muchas paletas es un
-// blanco amarillento. Con esta comprobación, un tramo de borde sin pintar sale aquí en
-// vez de en la captura del usuario.
+// What broke the dash closing the bottom line is that the count's style ends with a reset, and a reset
+// does not restore what was there: it takes the border's grey with it.
 func TestEveryBorderGlyphIsPainted(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 3)
 	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
@@ -330,10 +266,8 @@ func TestEveryBorderGlyphIsPainted(t *testing.T) {
 	}
 }
 
-// unpaintedBorderGlyphs son los glifos de borde de una línea que quedan con el color
-// de primer plano del terminal, es decir, en un tramo que va tras un reset y antes de
-// que otro estilo lo repinte. Los glifos son multibyte, así que la línea se parte en
-// tramos de escapes y de texto y se mira el texto rune a rune.
+// The glyphs are multibyte, so the line is split into escape runs and text runs; what is looked for is a
+// glyph in a run that follows a reset and precedes another style.
 func unpaintedBorderGlyphs(line string) string {
 	const glyphs = "─│╭╮╰╯"
 	seg := regexp.MustCompile(`\x1b\[[0-9;]*m|[^\x1b]+`)
@@ -356,10 +290,6 @@ func unpaintedBorderGlyphs(line string) string {
 	return string(out)
 }
 
-// TestNoBoxWhenThereAreNoComments: sin conversación no hay caja. Una caja alrededor
-// de la palabra "none" no separa nada, y es además el estado de todos los PRs sin
-// comentarios, así que un borde apareciendo y desapareciendo en cada movimiento del
-// cursor es ruido puro.
 func TestNoBoxWhenThereAreNoComments(t *testing.T) {
 	m := modelWithComments(t, 45, nil, 0)
 	detail := stripANSI(strings.Join(m.detailLines(mustSelected(t, m), true, m.layout().detailLines), "\n"))
@@ -371,10 +301,8 @@ func TestNoBoxWhenThereAreNoComments(t *testing.T) {
 	}
 }
 
-// TestBoxIsAllOrNothing: la caja se come dos filas, y una de las dos es borde. Si el
-// presupuesto no da para los dos bordes más una fila por comentario, la caja no se
-// pinta: dar la ficha completa es mejor que una caja con un solo comentario, que
-// parece que el PR solo tiene ese.
+// One of the box's two rows is a border, and a clipped box does not look clipped: it looks like the
+// PR only has that comment.
 func TestBoxIsAllOrNothing(t *testing.T) {
 	list := []model.Comment{conv("alice", "one"), conv("bob", "two"), conv("carol", "three")}
 	for _, tc := range []struct {
@@ -404,10 +332,6 @@ func TestBoxIsAllOrNothing(t *testing.T) {
 	}
 }
 
-// TestBoxNeverOverflowsItsBudget: con cualquier número de comentarios, a cualquier
-// alto y con o sin avisos de acción, el bloque no se pasa de las filas que le
-// dieron. Es la invariante que sostiene el layout: la suma de las cajas tiene que dar
-// la altura del terminal.
 func TestBoxNeverOverflowsItsBudget(t *testing.T) {
 	for _, height := range []int{24, 30, 40, 45, 60, 80} {
 		for _, n := range []int{1, 3, 5} {
@@ -432,9 +356,6 @@ func TestBoxNeverOverflowsItsBudget(t *testing.T) {
 	}
 }
 
-// Los 13 campos ocupaban 7; los 12 que quedan más el URL a ancho completo tienen que
-// seguir siendo 7. Si esto falla, la decisión de darle al URL su fila se está
-// pagando con el espacio de los comentarios.
 func TestURLRowDoesNotCostHeight(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
@@ -462,7 +383,6 @@ func TestURLRowDoesNotCostHeight(t *testing.T) {
 		}
 	}
 
-	// 12 campos en dos columnas son 6 filas, y el URL una más.
 	gridRows := 0
 	for i, l := range rows {
 		if i == urlRow {
@@ -482,10 +402,6 @@ func TestURLRowDoesNotCostHeight(t *testing.T) {
 	}
 }
 
-// TestLastGridRowCarriesTheActionFields: al recortarse el panel, lo único que
-// sobrevive es la última fila de la rejilla. Review y Role van allí a propósito,
-// porque son los dos que dicen si la acción procede: una ficha recortada que no
-// los enseña deja de responder a la pregunta para la que está.
 func TestLastGridRowCarriesTheActionFields(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 45
@@ -495,7 +411,6 @@ func TestLastGridRowCarriesTheActionFields(t *testing.T) {
 	m = showSection(m, model.SectionAuthored)
 	it := mustSelected(t, m)
 
-	// Un panel de 4 filas solo deja la última fila de la rejilla y los avisos.
 	joined := stripANSI(strings.Join(m.detailLines(it, true, 4), "\n"))
 	for _, want := range []string{"Review:", "changes requested", "Role:"} {
 		if !strings.Contains(joined, want) {
@@ -504,11 +419,6 @@ func TestLastGridRowCarriesTheActionFields(t *testing.T) {
 	}
 }
 
-// TestAllocateGivesTheLeftoverToWhoseNeedsIt: cuando no caben los comentarios
-// enteros, todos reciben una fila —para que los cinco estén, que es lo pedido— y
-// el sobrante va a quien más tiene que perder. Sin esto, el reparto a ciegas daba la
-// misma cuota a todos y un comentario de seis párrafos quedaba en "the timeout is
-// 30x too high…" al lado de cuatro de una línea, con una fila sin usar.
 func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -535,9 +445,6 @@ func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 					t.Errorf("cuota %d = %d, want %d (reparto completo: %v)", i, got[i], tc.want[i], got)
 				}
 			}
-			// Nadie recibe más de lo que necesita, y la suma no pasa del presupuesto
-			// cuando hay presupuesto para todos. Con menos filas que comentarios no
-			// caben todos, y eso lo recorta quien compone el bloque.
 			sum := 0
 			for i, n := range got {
 				if n > tc.need[i] {
@@ -555,9 +462,6 @@ func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 	}
 }
 
-// TestAllocateIsDeterministic: el mismo reparto tiene que salir igual cada vez. Si
-// dependiera del recorrido de un mapa, el mismo PR se pintaría distinto en cada
-// refresco y la ficha bailaría sin que nada hubiera cambiado.
 func TestAllocateIsDeterministic(t *testing.T) {
 	first := allocate([]int{2, 2, 2}, 4)
 	if first[0] != 2 || first[1] != 1 || first[2] != 1 {
@@ -573,14 +477,6 @@ func TestAllocateIsDeterministic(t *testing.T) {
 	}
 }
 
-// TestLongCommentKeepsItsRowsWhenOthersAreShort: el caso que motiva el reparto. Con
-// cuatro comentarios de una línea y uno de varios párrafos, el largo no puede
-// quedarse en su primera frase mientras sobran filas.
-//
-// El viewer se declara para que el ítem NO sea propio y no se pinten los dos avisos
-// de "approve unavailable": esos dos avisos son filas reales del panel, y lo que se
-// quiere comprobar aquí es el reparto entre comentarios, no cómo se come el espacio
-// un aviso de acción. El caso con avisos está cubierto por TestDetailAlwaysFitsThePanel.
 func TestLongCommentKeepsItsRowsWhenOthersAreShort(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
 		conv("alice", "one liner"),
@@ -617,10 +513,6 @@ func TestLongCommentKeepsItsRowsWhenOthersAreShort(t *testing.T) {
 	}
 }
 
-// TestCommentsShowBelowTheFields: los comentarios van DEBAJO de la ficha, y la
-// ficha se lee en dos columnas. Es lo que hace que quepan: en una columna la ficha
-// ocupa 16 de las 18 líneas que da el 40% de un terminal de 45, y no cabría ni
-// uno.
 func TestCommentsShowBelowTheFields(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
 		conv("alice", "please add a test for the retry path"),
@@ -643,17 +535,11 @@ func TestCommentsShowBelowTheFields(t *testing.T) {
 	}
 }
 
-// TestFieldsStayInTwoColumns: la rejilla dejó de ser el modo de emergencia para
-// terminales bajos. Si volviera a la columna única en un terminal alto, los
-// comentarios no tendrían sitio y esta feature no existiría.
 func TestFieldsStayInTwoColumns(t *testing.T) {
 	m := modelWithComments(t, 60, []model.Comment{conv("alice", "one")}, 1)
 	lines := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
 	joined := stripANSI(strings.Join(lines, "\n"))
 
-	// La rejilla empareja los campos por posición: (Item|Forge) y (Author|Source).
-	// Que Item y Forge caigan en la MISMA línea es lo que prueba que la rejilla está
-	// activa; en columna una quedaría cada uno en su propia fila.
 	if !strings.Contains(joined, "Item:") {
 		t.Fatalf("no está la fila de la rejilla:\n%s", joined)
 	}
@@ -667,7 +553,6 @@ func TestFieldsStayInTwoColumns(t *testing.T) {
 	if !strings.Contains(row, "Forge:") {
 		t.Errorf("Item y Forge deberían ir en la misma fila de la rejilla, no apilados:\n%s", row)
 	}
-	// En columna única los 13 campos ocuparían 13 filas; en rejilla, 7.
 	if fields := strings.Count(joined, ":"); fields < 13 {
 		t.Errorf("se perdieron campos en la rejilla (%d etiquetas):\n%s", fields, joined)
 	}
@@ -676,8 +561,6 @@ func TestFieldsStayInTwoColumns(t *testing.T) {
 	}
 }
 
-// TestCommentsCapAtFive: la ficha enseña como mucho CommentLimit, aunque la
-// consulta trajera más.
 func TestCommentsCapAtFive(t *testing.T) {
 	var many []model.Comment
 	for i := 0; i < 9; i++ {
@@ -694,18 +577,13 @@ func TestCommentsCapAtFive(t *testing.T) {
 	}
 }
 
-// TestCommentsAnnounceThereAreMore: el total es lo que dice que la ficha se está
-// perdiendo conversación, que es el momento de abrir el PR. Sin él, cinco
-// comentarios se leerían como cinco comentarios y nadie iría a mirar los otros.
 func TestCommentsAnnounceThereAreMore(t *testing.T) {
 	list := []model.Comment{
 		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
 		conv("dave", "four"), conv("erin", "five"),
 	}
-	// Con viewer conocido el ítem no es propio y no hay avisos de acción, que es lo
-	// que hace falta para que el panel tenga hueco de verdad: entre los dos bordes
-	// de la caja, la línea del recuento y los cinco comentarios, un panel corto se
-	// queda sin sitio y el recuento es lo primero que cae.
+	// A known viewer means the item is not the user's and there are no action warnings, which is what
+	// actually leaves the panel room: the own-approval veto no longer takes rows.
 	m := modelWithComments(t, 45, list, 23)
 	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "reviewer"}})
 	it := mustSelected(t, m)
@@ -718,11 +596,7 @@ func TestCommentsAnnounceThereAreMore(t *testing.T) {
 	}
 }
 
-// TestCountLivesInTheBorder: el recuento va embebido en el borde de abajo, a la
-// derecha, y no como una fila suelta del cuerpo. No solo se lee mejor —el cuerpo son
-// las filas que dijo la gente, y una de recuento es una que no es de nadie— sino que
-// además sale gratis: en el borde no hay presupuesto que repartir, así que con el
-// panel justo ya no es lo primero que se cae.
+// Free on the border, so it is not the first thing lost when the panel is tight.
 func TestCountLivesInTheBorder(t *testing.T) {
 	list := []model.Comment{
 		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
@@ -730,11 +604,8 @@ func TestCountLivesInTheBorder(t *testing.T) {
 	}
 	m := modelWithComments(t, 45, list, 23)
 	it := mustSelected(t, m)
-	// El aviso del forge aprieta el panel (blanco + texto) para comprobar lo de que
-	// el recuento ya no depende del presupuesto. Es el aviso que la ficha sigue
-	// pintando: el veto de aprobar lo propio ya no ocupa filas, así que hay que
-	// apretar por la vía que queda. No hace falta mandarla después de la página
-	// porque modelWithComments ya la envió, y applyPage borraría el denied del ítem.
+	// The forge's warning tightens the panel (a blank line plus text) to check that the count no longer
+	// depends on the budget. The own-approval veto no longer takes rows, so this is the only way to squeeze.
 	m.denied[it.ID()] = "the forge refused the action"
 	m = withConversation(t, m, it, forge.CommentPage{Comments: list, Total: 23})
 
@@ -757,16 +628,12 @@ func TestCountLivesInTheBorder(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimSpace(row), "╯") {
 		t.Fatalf("el recuento debería ir en el borde de abajo de la caja:\n%s", detail)
 	}
-	// Y el borde tiene que llegar a la esquina: si entre el recuento y la esquina
-	// solo hay huecos, la línea de abajo se lee como partida en vez de como un borde
-	// con algo escrito dentro, que es lo que se pierde al escribir sobre un borde.
 	if !strings.HasSuffix(strings.TrimRight(row, " ╯"), "─") {
 		t.Errorf("el borde debería seguir después del recuento, no dejarlo suelto:\n%s", row)
 	}
 	if !strings.Contains(row, "5 of 23") {
 		t.Errorf("el borde de abajo debería llevar el recuento, no el cuerpo:\n%s", row)
 	}
-	// Con el panel justo el recuento no puede caerse, y los cinco tampoco.
 	for _, want := range []string{"alice:", "bob:", "carol:", "dave:", "erin:"} {
 		if !strings.Contains(detail, want) {
 			t.Errorf("no debería caerse %q:\n%s", want, detail)
@@ -774,18 +641,12 @@ func TestCountLivesInTheBorder(t *testing.T) {
 	}
 }
 
-// TestCountAlwaysSaysHowManyOfHowMany: la leyenda dice los dos números siempre, también
-// con toda la conversación a la vista. "3 de 3" informa igual que "5 of 23": dice que
-// no queda nada fuera, y el tamaño de la conversación es parte del estado del PR. La
-// frase que antes solo salía al haber más estaba justificada por su coste de una fila,
-// y ese coste se fue con ella al borde.
 func TestCountAlwaysSaysHowManyOfHowMany(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", "one"), conv("bob", "two")}, 2)
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "2 of 2") {
 		t.Errorf("con todo a la vista el recuento también dice el total:\n%s", detail)
 	}
-	// Y sin la coletilla: no hay nada escondido que ir a abrir.
 	if strings.Contains(detail, commentHint) {
 		t.Errorf("sin comentarios fuera no hay nada que abrir:\n%s", detail)
 	}
@@ -794,9 +655,6 @@ func TestCountAlwaysSaysHowManyOfHowMany(t *testing.T) {
 	}
 }
 
-// TestCommentHeadlineSkipsBotBoilerplate: los bots de GitHub abren con un
-// comentario HTML invisible. Si se picturara, la ficha enseñaría metadata
-// invisible en vez de lo que dijo la persona.
 func TestCommentHeadlineSkipsBotBoilerplate(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
 		conv("ssf-bot", "<!-- ssf: origin=acme/widget#553 -->\n\nattached the agent to the session"),
@@ -810,9 +668,6 @@ func TestCommentHeadlineSkipsBotBoilerplate(t *testing.T) {
 	}
 }
 
-// TestCommentBodySplitsOverAvailableRows: en un terminal alto sobra sitio y el
-// cuerpo se lee entero; el autor va en la primera fila y el resto alineado debajo
-// para que se lea como un bloque.
 func TestCommentBodySplitsOverAvailableRows(t *testing.T) {
 	body := "el reintento no tiene backoff y por eso el servicio se cae cuando " +
 		"la dependencia tarda, y ademas el timeout esta a treinta veces lo que " +
@@ -827,7 +682,6 @@ func TestCommentBodySplitsOverAvailableRows(t *testing.T) {
 	if strings.Count(detail, "alice:") != 1 {
 		t.Errorf("el autor debería salir una sola vez:\n%s", detail)
 	}
-	// Con mucho sitio el cuerpo debe ocupar más de una fila.
 	rows := 0
 	for _, l := range strings.Split(detail, "\n") {
 		if strings.Contains(l, "backoff") || strings.Contains(l, "dependencia") ||
@@ -838,8 +692,6 @@ func TestCommentBodySplitsOverAvailableRows(t *testing.T) {
 	if rows < 2 {
 		t.Errorf("con un terminal alto el cuerpo debería ocupar varias filas, ocupó %d:\n%s", rows, detail)
 	}
-	// Y ninguna fila debe rebasar el ancho: lo que no cabe se corta con "…", no se
-	// desborda sobre el borde de la caja.
 	for _, l := range strings.Split(detail, "\n") {
 		if n := len([]rune(l)); n > m.contentWidth() {
 			t.Errorf("fila de %d runes, más que el ancho útil %d:\n%q", n, m.contentWidth(), l)
@@ -847,11 +699,7 @@ func TestCommentBodySplitsOverAvailableRows(t *testing.T) {
 	}
 }
 
-// TestCommentCutIsMarked: lo que no cabe de un comentario se anuncia con "…". Una
-// fila que para en mitad de una frase se lee como si el comentario fuera corto, y
-// esa es justo la decisión que se pierde. Hace falta un terminal alto para que el
-// bloque entre (a 24 filas la rejilla de campos ya llena el panel) y, aun así, un
-// cuerpo que no cabe en las filas que le tocan.
+// A tall terminal is needed for the block to fit: at 24 rows the grid already takes the panel.
 func TestCommentCutIsMarked(t *testing.T) {
 	long := strings.Repeat("palabra ", 400)
 	m := modelWithComments(t, 45, []model.Comment{conv("alice", long)}, 1)
@@ -862,7 +710,6 @@ func TestCommentCutIsMarked(t *testing.T) {
 	if !strings.Contains(detail, "…") {
 		t.Errorf("un comentario que no cabe debería acabar en …:\n%s", detail)
 	}
-	// Y el recorte no puede desbordar el ancho de la caja: eso rompería el borde.
 	for _, l := range strings.Split(detail, "\n") {
 		if n := len([]rune(l)); n > m.contentWidth() {
 			t.Errorf("fila de %d runes, más que el ancho útil %d:\n%q", n, m.contentWidth(), l)
@@ -870,10 +717,6 @@ func TestCommentCutIsMarked(t *testing.T) {
 	}
 }
 
-// TestCommentsAreFirstToGo: cuando el panel es diminuto, los comentarios se caen
-// antes que la ficha. Son lo único que se puede volver a pedir en un instante y lo
-// único que no estaba ahí antes de existir esta sección; su ausencia se nota menos
-// que la de un campo, y un campo que se va no vuelve.
 func TestCommentsAreFirstToGo(t *testing.T) {
 	list := []model.Comment{conv("alice", "one"), conv("bob", "two"), conv("carol", "three")}
 	gh := ghAdapter()
@@ -884,8 +727,6 @@ func TestCommentsAreFirstToGo(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
 	m = withConversation(t, m, it, forge.CommentPage{Comments: list, Total: 3})
 
-	// A 9 filas (el 40% de 24) la rejilla de campos ya llena el panel: los
-	// comentarios no caben y la ficha entera se conserva.
 	detail := stripANSI(strings.Join(m.detailLines(it, true, 9), "\n"))
 	if strings.Contains(detail, "alice:") {
 		t.Errorf("a 9 filas los comentarios deberían caerse:\n%s", detail)
@@ -897,9 +738,6 @@ func TestCommentsAreFirstToGo(t *testing.T) {
 	}
 }
 
-// TestDetailAlwaysFitsThePanel: el bloque de comentarios nunca hace que la caja
-// se pase de su alto. Es la invariante que sostiene el layout: la suma de las cajas
-// tiene que dar la altura del terminal.
 func TestDetailAlwaysFitsThePanel(t *testing.T) {
 	for _, height := range []int{20, 24, 30, 40, 45, 60, 80} {
 		t.Run(fmt.Sprintf("alto %d", height), func(t *testing.T) {
@@ -910,7 +748,6 @@ func TestDetailAlwaysFitsThePanel(t *testing.T) {
 			m := modelWithComments(t, height, list, 12)
 			rows := m.layout().detailLines
 			it := mustSelected(t, m)
-			// Con y sin avisos de acción, que son filas que también compiten.
 			for _, denied := range []bool{false, true} {
 				if denied {
 					m.denied[it.ID()] = "no permission"
@@ -925,9 +762,6 @@ func TestDetailAlwaysFitsThePanel(t *testing.T) {
 	}
 }
 
-// TestCommentsStates: los tres estados tienen que decir cosas distintas. "No hay
-// comentarios" y "todavía no lo he preguntado" con la misma línea harían que un
-// ítem sin consultar pareciera un PR sin conversación.
 func TestCommentsStates(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
 
@@ -938,9 +772,6 @@ func TestCommentsStates(t *testing.T) {
 		not  string
 	}{
 		{
-			// En vuelo es una entrada marcada y sin resolver, no la ausencia de
-			// entrada: esa es la diferencia entre "lo estoy preguntando" y "no lo he
-			// preguntado", y por eso tienen que ser dos casos y no uno.
 			name: "en vuelo",
 			set: func(m *Model) {
 				m.comments[it.ID()] = &commentState{}
@@ -984,9 +815,6 @@ func TestCommentsStates(t *testing.T) {
 	}
 }
 
-// TestCommentFailIsNotCachedAsEmpty: un fallo deja el estado en error y se dice, no
-// una lista vacía. Si se cacheara como "sin comentarios", un rate limit se
-// convertiría en la mentira de que el PR no tiene conversación.
 func TestCommentFailIsNotCachedAsEmpty(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
 	gh := ghAdapter()
@@ -1008,9 +836,6 @@ func TestCommentFailIsNotCachedAsEmpty(t *testing.T) {
 	}
 }
 
-// TestCommentsFetchedOnceForTheSelectedItem: la conversación se pide al llegar el
-// cursor al ítem y se cachea. Preguntarla en cada render convertiría la navegación
-// en una ráfaga de subprocesos.
 func TestCommentsFetchedOnceForTheSelectedItem(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 45
@@ -1021,10 +846,7 @@ func TestCommentsFetchedOnceForTheSelectedItem(t *testing.T) {
 	m = showSection(m, model.SectionAuthored)
 	gh := m.byForge["github"].(*testutil.FakeAdapter)
 
-	// Tres ticks seguidos sin respuesta: el primero abre la consulta y los otros
-	// dos no deben abrir nada más, porque el ítem ya está marcado como pedido. Por
-	// eso se espera a la primera llamada antes de contar: si no, se estaría
-	// midiendo el planificador.
+	// The first call is awaited before counting, or the test would be measuring the scheduler.
 	for range 3 {
 		m.requestComments()
 	}
@@ -1033,7 +855,6 @@ func TestCommentsFetchedOnceForTheSelectedItem(t *testing.T) {
 		t.Fatalf("Comments llamado %d veces, want 1 (los ticks no pueden duplicar la consulta)", got)
 	}
 
-	// Llega la respuesta y el siguiente tick ya no pregunta de nuevo.
 	m = send(t, m, commentsMsg{id: mustSelected(t, m).ID(), page: forge.CommentPage{
 		Comments: []model.Comment{conv("alice", "hi")}, Total: 1,
 	}})
@@ -1043,9 +864,6 @@ func TestCommentsFetchedOnceForTheSelectedItem(t *testing.T) {
 	}
 }
 
-// TestCommentsNotAskedWithoutSession: sin sesión la consulta solo puede fallar, y
-// la cabecera ya lo dice. Gastar un subproceso en volver a fallar no le informa de
-// nada nuevo al usuario.
 func TestCommentsNotAskedWithoutSession(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 45
@@ -1053,9 +871,6 @@ func TestCommentsNotAskedWithoutSession(t *testing.T) {
 		mkItem("github", "github.com", "acme/widget", "One", 1, ""),
 	}, false))
 	m = showSection(m, model.SectionAuthored)
-	// El estado de sesión no lo fija New(): lo deja optimista en true hasta que
-	// llega el authMsg del refresco. Por eso hay que inyectarlo aquí, que es como
-	// está en pantalla cuando la cabecera avisa de que no hay sesión.
 	m.statuses["github"].auth = model.AuthState{Forge: "github", OK: false, Reason: "bad token"}
 	gh := m.byForge["github"].(*testutil.FakeAdapter)
 
@@ -1063,8 +878,6 @@ func TestCommentsNotAskedWithoutSession(t *testing.T) {
 	if got := gh.CommentCallCount(); got != 0 {
 		t.Errorf("Comments llamado %d veces sin sesión, want 0", got)
 	}
-	// Y la ficha no se queda fingiendo que los está cargando: si no se pregunta,
-	// no hay nada en vuelo que pintar.
 	if _, marked := m.comments[mustSelected(t, m).ID()]; marked {
 		t.Error("no se debería marcar como pedida una consulta que no se lanza")
 	}
@@ -1073,9 +886,6 @@ func TestCommentsNotAskedWithoutSession(t *testing.T) {
 	}
 }
 
-// TestCommentsInvalidatedByAction: una acción puede escribir en la conversación
-// (un approve deja nota de review), así que lo cacheado deja de ser verdad y hay
-// que volver a preguntarlo.
 func TestCommentsInvalidatedByAction(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
 	gh := ghAdapter()
@@ -1094,7 +904,6 @@ func TestCommentsInvalidatedByAction(t *testing.T) {
 	if _, ok := m.comments[it.ID()]; ok {
 		t.Error("una acción debería invalidar la conversación cacheada del ítem")
 	}
-	// Y el siguiente tick vuelve a preguntar por ella.
 	_ = m.requestComments()
 	waitFor(t, "la consulta tras invalidar", func() bool { return gh.CommentCallCount() >= 1 })
 	if got := gh.CommentCallCount(); got != 1 {
@@ -1102,9 +911,6 @@ func TestCommentsInvalidatedByAction(t *testing.T) {
 	}
 }
 
-// TestCommentsSurviveRefresh: el inbox se recarga cada minuto y la conversación no
-// cambia a ese ritmo. Repreguntarla en cada ciclo solo haría parpadear la ficha,
-// así que la cache sobrevive al refresco.
 func TestCommentsSurviveRefresh(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
 	m := newTestModel(t, ghAdapter())
@@ -1121,8 +927,6 @@ func TestCommentsSurviveRefresh(t *testing.T) {
 	}
 }
 
-// TestCommentTotalNeverBelowShown: un total menor que lo mostrado se leería como
-// que la ficha enseña comentarios que no existen.
 func TestCommentTotalNeverBelowShown(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 42, "")
 	m := newTestModel(t, ghAdapter())

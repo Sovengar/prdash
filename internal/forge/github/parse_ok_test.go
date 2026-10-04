@@ -8,23 +8,10 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso: cuando el parseo va bien, el item sale
-// y no hay aviso.
-//
-// Y la condición invertida hace lo que peor se puede hacer con una comprobación de error:
-// devuelve un aviso cuando NO hay error. O sea que no rompe el camino malo, rompe el
-// BUENO, y de una forma silenciosa: el PR sale vacío con un aviso de parseo, y el usuario ve
-// "no encontrado" cuando lo que pasó es que se leyó bien.
-//
-// Y el caso que lo distingue es el que devuelve un GraphQL con un PR dentro. La respuesta
-// más corta que parsea es un objeto con la forma que espera el parser, y sin ella el aviso
-// es legítimo —eso también se afirma—.
+// The INVERTED condition makes this work.
 func TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso(t *testing.T) {
 	dir := t.TempDir()
 
-	// Un PR dentro de la respuesta de búsqueda. La forma es la que
-	// `ParseGHGraphQLSearch` entiende; con un PR dentro, `items` sale no vacío y el item
-	// existe.
 	conPR := `{"data":{"search":{"issueCount":1,"nodes":[{"__typename":"PullRequest","number":7,"title":"uno","state":"OPEN","updatedAt":"2026-03-17T10:00:00Z","url":"https://github.com/acme/widget/pull/7","author":{"login":"alice"},"headRefName":"feat/x","baseRefName":"main","mergeable":"MERGEABLE"}]}}}`
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+conPR+"'\n")
 	a := New("github.com", script)
@@ -45,10 +32,8 @@ func TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso(t *testing.T) {
 		t.Errorf("el item salió con título %q, want %q", it.Title, "uno")
 	}
 
-	// Y el otro lado: una respuesta que NO se parsea SÍ tiene que dar aviso. Sin esta
-	// mitad, el assert de arriba pasa igual con la condición al revés, porque quitar el
-	// aviso del camino bueno y ponerlo en el malo son el mismo cambio visto desde un
-	// lado.
+	// The other half: a response that does NOT parse MUST give a warning. Without it the assertion above
+	//passes with the condition reversed.
 	vacio := `{"data":{"search":{"issueCount":0,"nodes":[]}}}`
 	scriptVacio := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+vacio+"'\n")
 	aVacio := New("github.com", scriptVacio)
@@ -63,14 +48,7 @@ func TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso(t *testing.T) {
 		t.Errorf("el aviso salió de tipo %q, y aquí lo esperable es notfound o parse", warns[0].Kind)
 	}
 
-	// Y lo que SÍ se ve, que es lo que faltaba: una respuesta que no se puede deserializar
-	// tiene que dar un aviso de PARSEO, y es el único camino que lo produce.
-	//
-	// La primera versión de este test solo afirmaba la respuesta buena y la lista vacía, y
-	// con eso el mutante de quitar el aviso entero pasaba: ninguna de las dos respuestas
-	// llegan a la rama de parseo, la buena porque parsea y la vacía porque devuelve cero
-	// ítems. Lo que hace falta es un JSON que no se pueda leer, y eso solo se ve con
-	// basura en la salida del binario.
+	// An undeserialisable response has to give a PARSE warning, the only path that reaches it.
 	basura := writeScript(t, dir, "gh", "#!/bin/sh\necho 'esto no es json'\n")
 	aBasura := New("github.com", basura)
 	it, warns = aBasura.ItemState(context.Background(),
@@ -92,8 +70,6 @@ func TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso(t *testing.T) {
 	}
 }
 
-// TestElHostPorDefTampocoSePisa: el suelo del host es el mismo que en el resto, y un
-// host propio se respeta. Es la misma regla del adapter inerte, escrita donde se usa.
 func TestElHostPorDefTampocoSePisa(t *testing.T) {
 	for _, c := range []struct{ entra, want string }{
 		{"", "github.com"},

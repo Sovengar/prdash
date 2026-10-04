@@ -1,6 +1,3 @@
-// Parseo puro de la salida de la CLI de Herdr. Todas las respuestas JSON son
-// {"id":...,"result":{...}}: aquí se extrae y tipa `.result` por comando, con
-// fixtures string en los tests. No toca red, disco ni subproceso.
 package herdr
 
 import (
@@ -11,12 +8,10 @@ import (
 	"strings"
 )
 
-// envelope es el sobre común de toda respuesta de la CLI.
 type envelope[T any] struct {
 	Result T `json:"result"`
 }
 
-// decodeResult extrae `.result` del sobre y lo deserializa en T.
 func decodeResult[T any](raw []byte) (T, error) {
 	var e envelope[T]
 	if err := json.Unmarshal(raw, &e); err != nil {
@@ -25,7 +20,6 @@ func decodeResult[T any](raw []byte) (T, error) {
 	return e.Result, nil
 }
 
-// worktreeCreatedResult refleja `worktree_created`.
 type worktreeCreatedResult struct {
 	Workspace struct {
 		WorkspaceID string `json:"workspace_id"`
@@ -46,7 +40,6 @@ type worktreeCreatedResult struct {
 	} `json:"worktree"`
 }
 
-// parseWorktreeCreated tipa la respuesta de `worktree create`.
 func parseWorktreeCreated(raw []byte) (WorktreeInfo, error) {
 	r, err := decodeResult[worktreeCreatedResult](raw)
 	if err != nil {
@@ -68,7 +61,6 @@ func parseWorktreeCreated(raw []byte) (WorktreeInfo, error) {
 	}, nil
 }
 
-// worktreeListResult refleja `worktree_list`.
 type worktreeListResult struct {
 	Source struct {
 		RepoKey           string `json:"repo_key"`
@@ -86,14 +78,12 @@ type worktreeListResult struct {
 	} `json:"worktrees"`
 }
 
-// worktreeList es la lista tipada de worktrees con su origen.
 type worktreeList struct {
 	RepoRoot          string
 	SourceWorkspaceID string
 	Worktrees         []WorktreeInfo
 }
 
-// parseWorktreeList tipa la respuesta de `worktree list`.
 func parseWorktreeList(raw []byte) (worktreeList, error) {
 	r, err := decodeResult[worktreeListResult](raw)
 	if err != nil {
@@ -112,7 +102,6 @@ func parseWorktreeList(raw []byte) (worktreeList, error) {
 	return out, nil
 }
 
-// workspaceCreatedResult refleja `workspace_created`.
 type workspaceCreatedResult struct {
 	Workspace struct {
 		WorkspaceID string `json:"workspace_id"`
@@ -125,7 +114,6 @@ type workspaceCreatedResult struct {
 	} `json:"root_pane"`
 }
 
-// parseWorkspaceCreated tipa la respuesta de `workspace create`.
 func parseWorkspaceCreated(raw []byte) (WorkspaceInfo, error) {
 	r, err := decodeResult[workspaceCreatedResult](raw)
 	if err != nil {
@@ -137,7 +125,6 @@ func parseWorkspaceCreated(raw []byte) (WorkspaceInfo, error) {
 	return WorkspaceInfo{WorkspaceID: r.Workspace.WorkspaceID, TabID: r.Tab.TabID, RootPaneID: r.RootPane.PaneID}, nil
 }
 
-// tabCreatedResult refleja `tab_created`.
 type tabCreatedResult struct {
 	Tab struct {
 		TabID string `json:"tab_id"`
@@ -147,7 +134,6 @@ type tabCreatedResult struct {
 	} `json:"root_pane"`
 }
 
-// parseTabCreated tipa la respuesta de `tab create`.
 func parseTabCreated(raw []byte) (TabInfo, error) {
 	r, err := decodeResult[tabCreatedResult](raw)
 	if err != nil {
@@ -156,7 +142,6 @@ func parseTabCreated(raw []byte) (TabInfo, error) {
 	return TabInfo{TabID: r.Tab.TabID, RootPaneID: r.RootPane.PaneID}, nil
 }
 
-// paneSplitResult refleja la respuesta de `pane split` (tipo pane_info).
 type paneSplitResult struct {
 	Pane struct {
 		PaneID      string `json:"pane_id"`
@@ -167,7 +152,6 @@ type paneSplitResult struct {
 	} `json:"pane"`
 }
 
-// parsePaneSplit tipa la respuesta de `pane split`.
 func parsePaneSplit(raw []byte) (PaneInfo, error) {
 	r, err := decodeResult[paneSplitResult](raw)
 	if err != nil {
@@ -179,7 +163,6 @@ func parsePaneSplit(raw []byte) (PaneInfo, error) {
 	return PaneInfo{PaneID: r.Pane.PaneID, WorkspaceID: r.Pane.WorkspaceID, TabID: r.Pane.TabID, Cwd: r.Pane.Cwd, Label: r.Pane.Label}, nil
 }
 
-// paneListResult refleja `pane_list`.
 type paneListResult struct {
 	Panes []struct {
 		PaneID      string `json:"pane_id"`
@@ -190,7 +173,6 @@ type paneListResult struct {
 	} `json:"panes"`
 }
 
-// parsePaneList tipa la respuesta de `pane list`.
 func parsePaneList(raw []byte) ([]PaneInfo, error) {
 	r, err := decodeResult[paneListResult](raw)
 	if err != nil {
@@ -203,13 +185,11 @@ func parsePaneList(raw []byte) ([]PaneInfo, error) {
 	return out, nil
 }
 
-// notificationResult refleja `notification_show`.
 type notificationResult struct {
 	Shown  bool   `json:"shown"`
 	Reason string `json:"reason"`
 }
 
-// parseNotification tipa la respuesta de `notification show`.
 func parseNotification(raw []byte) (bool, string, error) {
 	r, err := decodeResult[notificationResult](raw)
 	if err != nil {
@@ -218,10 +198,8 @@ func parseNotification(raw []byte) (bool, string, error) {
 	return r.Shown, r.Reason, nil
 }
 
-// versionRe reconoce el token semver del texto de `herdr --version`.
 var versionRe = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
 
-// parseVersion extrae la versión de la salida de `herdr --version`
 // ("herdr 0.9.1-preview.…").
 func parseVersion(raw []byte) (Version, bool) {
 	m := versionRe.FindSubmatch(raw)
@@ -234,9 +212,7 @@ func parseVersion(raw []byte) (Version, bool) {
 	return Version{Major: major, Minor: minor, Patch: patch, Raw: strings.TrimSpace(string(raw))}, true
 }
 
-// parseServerError intenta extraer (code, message) de un error JSON de
-// servidor. Es best-effort: la forma exacta no está verificada, así que se
-// aceptan las variantes {"error":{"code","message"}} y {"code","message"}.
+// Best-effort: the exact server shape is unverified, so both variants are accepted.
 func parseServerError(stderr []byte) (code, msg string) {
 	text := strings.TrimSpace(string(stderr))
 	if text == "" {
@@ -265,7 +241,6 @@ func parseServerError(stderr []byte) (code, msg string) {
 	return "", ""
 }
 
-// firstLine devuelve la primera línea no vacía de un texto.
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

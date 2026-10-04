@@ -14,10 +14,7 @@ func item(state, decision string, checks model.Checks) model.Item {
 	return it
 }
 
-// draft construye un PR en borrador como lo construye un adapter de verdad:
-// State es el enum del forge ("OPEN") y el hecho de ser borrador va aparte, en
-// IsDraft. Poner State="draft" aquí sería probar un valor que ningún forge
-// emite, que es justo lo que dejó este gate muerto sin que ningún test lo viera.
+// A draft built as a real adapter builds it: State is the forge's enum ("OPEN").
 func draft(decision string, checks model.Checks) model.Item {
 	it := item("OPEN", decision, checks)
 	it.IsDraft = true
@@ -37,10 +34,7 @@ func TestDerive(t *testing.T) {
 		{"review required", item("OPEN", "REVIEW_REQUIRED", model.Checks{}), StateReviewRequired},
 		{"approved", item("OPEN", "APPROVED", model.Checks{}), StateApproved},
 		{"draft", draft("", model.Checks{}), StateDraft},
-		// La precedencia de Derive manda sobre el borrador a propósito: la
-		// columna ordena por atención, así que un borrador con cambios pedidos
-		// sale como changes requested. MergeBlock sí lo ve siempre, porque ahí la
-		// pregunta es si el forge lo integra, no a quién mira el operador primero.
+		// Derive's precedence beats the draft on purpose: the column orders by attention.
 		{"draft con cambios pedidos", draft("CHANGES_REQUESTED", model.Checks{}), StateChangesRequested},
 		{"abierto sin decisión", item("OPEN", "", model.Checks{}), StatePending},
 	}
@@ -114,8 +108,6 @@ func TestStateString(t *testing.T) {
 	}
 }
 
-// TestCanApprove cubre el veto de aprobar lo propio: con login conocido decide
-// por identidad, y si falta alguno cae a la sección sin bloquear de más.
 func TestCanApprove(t *testing.T) {
 	own := func(section model.Section, author string) model.Item {
 		it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 4)

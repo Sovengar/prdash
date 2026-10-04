@@ -27,7 +27,6 @@ func item(ref model.RepoRef, number int) model.Item {
 	return it
 }
 
-// baseFixture crea un bare origin y un clon local conectado.
 func baseFixture(t *testing.T) (origin, repo string) {
 	t.Helper()
 	origin = filepath.Join(t.TempDir(), "origin.git")
@@ -40,7 +39,6 @@ func baseFixture(t *testing.T) (origin, repo string) {
 	return origin, repo
 }
 
-// pushPR publica un commit como ref de review `refs/pull/<n>/head` en el origin.
 func pushPR(t *testing.T, origin string, number int, content string) {
 	t.Helper()
 	work := filepath.Join(t.TempDir(), "pr")
@@ -49,8 +47,6 @@ func pushPR(t *testing.T, origin string, number int, content string) {
 	testutil.Push(t, work, origin, fmt.Sprintf("HEAD:refs/pull/%d/head", number))
 }
 
-// harness junta un executor real (resolutor + worktree git directo) sobre
-// repos locales, sin red.
 type harness struct {
 	origin   string
 	ref      model.RepoRef
@@ -107,7 +103,6 @@ func newHarness(t *testing.T, opts harnessOpts) *harness {
 	return &harness{origin: opts.origin, ref: ref, cloneDir: cloneDir, wtDir: wtDir, resolver: resolver, pr: pr, ex: ex}
 }
 
-// Scenario: Worktree desde un repo ya local.
 func TestMountFromLocalRepoRegistersActiveReview(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 7, "uno")
@@ -138,7 +133,6 @@ func TestMountFromLocalRepoRegistersActiveReview(t *testing.T) {
 	}
 }
 
-// Scenario: Repo no clonado se clona en bare y se saca el worktree del clon.
 func TestMountClonesBareWhenRepoNotLocal(t *testing.T) {
 	origin, _ := baseFixture(t)
 	pushPR(t, origin, 8, "ocho")
@@ -164,7 +158,6 @@ func TestMountClonesBareWhenRepoNotLocal(t *testing.T) {
 	}
 }
 
-// Scenario: PR de fork cuya rama no existe en origin.
 func TestMountForkFetchesReviewRef(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 9, "del fork")
@@ -184,13 +177,11 @@ func TestMountForkFetchesReviewRef(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(res.Worktree.Path, "pr-9.txt")); err != nil {
 		t.Fatalf("el worktree no trae el contenido del ref de fork: %v", err)
 	}
-	// La rama de origen sigue sin existir en origin: se trabajó sobre el ref de review.
 	if testutil.RefExists(t, origin, "refs/heads/feature") {
 		t.Fatal("no debería haberse creado una rama de origin")
 	}
 }
 
-// Scenario: Reusar el worktree existente de un ítem.
 func TestMountReusesExistingWorktree(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 7, "uno")
@@ -217,7 +208,6 @@ func TestMountReusesExistingWorktree(t *testing.T) {
 	}
 }
 
-// Scenario: Varios PRs del mismo repo no chocan.
 func TestMountTwoPRsSameRepoCoexist(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 1, "uno")
@@ -244,7 +234,6 @@ func TestMountTwoPRsSameRepoCoexist(t *testing.T) {
 	}
 }
 
-// Scenario: Sin permisos de clon o fetch, el fallo es claro y no deja basura.
 func TestMountCloneFailureLeavesNoGarbage(t *testing.T) {
 	h := newHarness(t, harnessOpts{
 		origin: filepath.Join(t.TempDir(), "privado.git"), // no existe / sin acceso
@@ -288,7 +277,6 @@ func TestMountFetchFailureCleansNewBare(t *testing.T) {
 	}
 }
 
-// Scenario: Una herramienta ausente no tumba el layout (seam del puerto Herdr).
 func TestMountWithoutHerdrStillProvisionsWorktree(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 3, "tres")
@@ -331,8 +319,6 @@ func TestMountWithHerdrAppliesPlan(t *testing.T) {
 	}
 }
 
-// TestMountPassesNativeContainerToLayout comprueba que el contenedor que
-// devuelve la provisión nativa (workspace + root pane) llega al puerto Herdr.
 func TestMountPassesNativeContainerToLayout(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 6, "seis")
@@ -351,8 +337,6 @@ func TestMountPassesNativeContainerToLayout(t *testing.T) {
 	}
 }
 
-// fakeProvisioner devuelve un worktree fijo (contenedor nativo simulado) y
-// permite simular el candado "solo si limpio" del auto-borrado.
 type fakeProvisioner struct {
 	wt worktree.Worktree
 
@@ -373,7 +357,6 @@ func (f *fakeProvisioner) RemoveIfClean(_ context.Context, id string) (bool, str
 func (f *fakeProvisioner) List(context.Context) []worktree.Worktree { return nil }
 func (f *fakeProvisioner) Audit(context.Context) []worktree.Entry   { return nil }
 
-// fakeHerdr es un doble en memoria del puerto Herdr.
 type fakeHerdr struct {
 	available bool
 	mounted   bool
@@ -410,7 +393,6 @@ func leftoverTemps(dir string) int {
 	return n
 }
 
-// mountReview monta el review del ítem de número dado y devuelve el harness.
 func mountReview(t *testing.T, number int) (*harness, model.Item) {
 	t.Helper()
 	origin, repo := baseFixture(t)
@@ -423,8 +405,6 @@ func mountReview(t *testing.T, number int) (*harness, model.Item) {
 	return h, it
 }
 
-// TestRemoveReviewRemovesCleanAndForgets cubre el caso feliz de B en el executor:
-// con review activo, delega en RemoveIfClean y solo entonces olvida el registro.
 func TestRemoveReviewRemovesCleanAndForgets(t *testing.T) {
 	h, it := mountReview(t, 5)
 	fake := &fakeProvisioner{removeIfCleanRemoved: true}
@@ -442,8 +422,6 @@ func TestRemoveReviewRemovesCleanAndForgets(t *testing.T) {
 	}
 }
 
-// TestRemoveReviewKeepsAndDoesNotForget: si el worktree se conserva, el registro
-// sigue vivo (la ruta sigue existiendo).
 func TestRemoveReviewKeepsAndDoesNotForget(t *testing.T) {
 	h, it := mountReview(t, 5)
 	h.ex.Worktrees = &fakeProvisioner{removeIfCleanReason: worktree.KeptUncommitted}
@@ -457,8 +435,6 @@ func TestRemoveReviewKeepsAndDoesNotForget(t *testing.T) {
 	}
 }
 
-// TestRemoveReviewWithoutActiveReviewIsNoop: sin review montado no se toca el
-// provisioner y no hay error.
 func TestRemoveReviewWithoutActiveReviewIsNoop(t *testing.T) {
 	origin, repo := baseFixture(t)
 	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
@@ -474,8 +450,6 @@ func TestRemoveReviewWithoutActiveReviewIsNoop(t *testing.T) {
 	}
 }
 
-// TestRemoveReviewPropagatesError: un fallo del provisioner no se disfraza de
-// borrado.
 func TestRemoveReviewPropagatesError(t *testing.T) {
 	h, it := mountReview(t, 5)
 	h.ex.Worktrees = &fakeProvisioner{removeIfCleanErr: errors.New("boom")}

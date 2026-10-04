@@ -8,25 +8,7 @@ import (
 	"testing"
 )
 
-// `New` es donde se decide de dónde sale el host, y por qué importa.
-//
-// Y la decisión es doble, y las dos mitades están en el mismo cuerpo:
-//
-//   - El binario vacío cae a "glab". Un runner con el binario vacío intentaría ejecutar la
-//     cadena vacía, que falla con un error que no dice nada de qué CLI falta.
-//   - El host vacío cae a "gitlab.example.com", NO al GitLab público. Y eso es una
-//     decisión, no un default cómodo: los defaults del proyecto apuntan a un GitLab
-//     self-managed, y un host vacío que se resolviera a gitlab.com mandaría las llamadas a
-//     un sitio que el usuario no ha configurado.
-//
-// Y lo segundo —`GITLAB_HOST` como variable, no como `--hostname`— es la razón por la que el
-// host tiene que fijarse aquí y no en cada llamada: las de `glab mr` no aceptan `--hostname`,
-// así que la variable es el único sitio donde puede quedar.
-
-// TestNewCaenLosDefaultsYElHostSePoneEnElEntorno: los tres valores.
-//
-// Y el host del runner es el que se comprueba, no el del struct: son dos copias del mismo
-// dato, y si divergieran el adapter mandaría `GITLAB_HOST` de un host y `--hostname` de otro.
+// The runner's host is what is checked, not the struct's.
 func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
 	// Sin nada.
 	a := New("", "")
@@ -38,7 +20,6 @@ func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
 	if a.Forge() != ForgeName {
 		t.Errorf("Forge dio %q, want %q", a.Forge(), ForgeName)
 	}
-	// El runner tiene que llevar el binario y el host.
 	if a.runner == nil {
 		t.Fatal("New dejo el runner a nil")
 	}
@@ -50,7 +31,6 @@ func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
 			"en un proceso sin terminal y quedarse colgado: %v", got)
 	}
 
-	// Con host self-managed.
 	selfManaged := New("git.umane.example", "")
 	if selfManaged.Host() != "git.umane.example" {
 		t.Errorf("con host dio %q", selfManaged.Host())
@@ -59,7 +39,6 @@ func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
 		t.Errorf("el runner no lleva el host configurado: %v", got)
 	}
 
-	// Con binario explícito.
 	propio := New("", "/opt/glab")
 	if got := propio.runner.Bin; got != "/opt/glab" {
 		t.Errorf("con binario dio %q", got)
@@ -70,23 +49,10 @@ func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
 	}
 }
 
-// TestAuthDistingueSesionYTokenMalo: las dos mitades de `Auth`.
-//
-// Y lo que se comprueba con más cuidado es la del fallo: el `Reason` es el texto de la CLI,
-// sin traducir ni recortar, porque es lo único que dice por qué falló. Un "no autenticado"
-// de invención taparía las tres razones que importan —token caducado, sin token, `glab` no
-// instalado— y las tres piden cosas distintas.
-//
-// Y el camino bueno trae el login, que es lo que evita una llamada extra para saber quién
-// es el usuario. Un login vacío ahí no es un dato malo: es un parseo que no vio el formato
-// que esperaba, y aun así la sesión vale.
 func TestAuthDistingueSesionYTokenMalo(t *testing.T) {
 	dir := t.TempDir()
 
-	// Sesión buena: OK y login leído de la salida.
-	// Y el formato de GitLab es "as <login>", no el "account <login>" de GitHub. Son dos
-	// regex distintos y lo son a propósito: cada CLI dice lo suyo, y un regex común sería
-	// un regex que no casa con ninguno de los dos formatos completos.
+	// GitLab's format is "as <login>", not GitHub's "account <login>".
 	good := scriptDe(t, dir, "glab-ok", `#!/bin/sh
 echo "Logged in to git.umane.example as glab (GLAB_TOKEN)"
 exit 0
@@ -103,10 +69,7 @@ exit 0
 		t.Errorf("login %q, want glab", auth.Login)
 	}
 
-	// Sesión mala: OK=false y el motivo con texto.
-	// El motivo es la PRIMERA línea de stderr, no la última ni todas: con dos líneas, lo
-	// que se ve es la primera. Por eso el motivo de verifia el orden de este script, y
-	// ponerlo al revés haría el test pasar por el motivo equivocado.
+	// The reason is the FIRST line of stderr, not the last and not all of them.
 	bad := scriptDe(t, dir, "glab-ko", `#!/bin/sh
 echo "401 Unauthorized" >&2
 echo "detalle que no se ve" >&2
@@ -122,13 +85,10 @@ exit 1
 	if !strings.Contains(auth.Reason, "401") {
 		t.Errorf("el motivo %q no trae lo que dijo la CLI", auth.Reason)
 	}
-	// Y el login vacío en un fallo no molesta: lo que importa es el motivo.
 	if auth.Login != "" {
 		t.Errorf("sesion mala trae login %q", auth.Login)
 	}
 
-	// Binario inexistente: OK=false con el error de la CLI, no un panic. Es el caso de una
-	// máquina sin `glab`, que es la degradación que el proyecto promete.
 	auth = New("git.umane.example", filepath.Join(dir, "no-existe")).Auth(context.Background())
 	if auth.OK {
 		t.Error("un binario inexistente dio OK=true")
@@ -137,9 +97,8 @@ exit 1
 		t.Error("un binario inexistente dio Reason vacío")
 	}
 
-	// Y sesión buena con una salida que no es la esperada: OK=true y login vacío. Es un caso
-	// real —`glab` cambia el formato de `auth status` entre versiones— y tratarlo como
-	// sesión inválida dejaría el inbox entero marcado como degradado.
+	// A good session with unexpected output: OK=true and an empty login, and that is the honest
+	// answer.
 	raro := scriptDe(t, dir, "glab-raro", "#!/bin/sh\necho 'algo distinto'\nexit 0\n")
 	auth = New("git.umane.example", raro).Auth(context.Background())
 	if !auth.OK {
@@ -150,16 +109,7 @@ exit 1
 	}
 }
 
-// TestElLoginSeSacaDelFormatoQueDiceGlab: `loginFromAuthStatus` del adapter de GitLab.
-//
-// Y el regex apunta a "Logged in to <host> as <login> (<path>)". Es DISTINTO del de
-// GitHub, que busca "account <login>", y lo es porque las dos CLIs dicen la cosa de forma
-// distinta. La primera versión de este test usaba el formato de GitHub contra el regex de
-// GitLab, y fallaba en los tres casos con formato.
-//
-// Y el regex exige un espacio y corta en la parenthesis, que es lo que impide que el login
-// salga con el `(GLAB_TOKEN)` pegado. Un login con el token dentro no casa con ningún autor
-// del inbox, así que ningún ítem aparecería como propio.
+// The regex points at "Logged in to <host> as <login>".
 func TestElLoginSeSacaDelFormatoQueDiceGlab(t *testing.T) {
 	casos := []struct {
 		nombre string
@@ -170,7 +120,6 @@ func TestElLoginSeSacaDelFormatoQueDiceGlab(t *testing.T) {
 		{"con puntos en el login", "as j.perez (GLAB_TOKEN)", "j.perez"},
 		{"con guion en el login", "as mi-usuario (GLAB_TOKEN)", "mi-usuario"},
 		{"sin la ruta del token", "Logged in to git.umane.example as glab", "glab"},
-		// Y la línea que NO es el login, con una palabra parecida delante.
 		{"active account", "  Active account: true\n  Logged in to x as glab (Y)", "glab"},
 		{"sin la palabra as", "algo distinto", ""},
 		{"vacio", "", ""},
@@ -183,8 +132,7 @@ func TestElLoginSeSacaDelFormatoQueDiceGlab(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s: dio %q, want %q", c.nombre, got, c.want)
 		}
-		// Y nunca sale un texto con el token dentro, que es lo que rompería la comparación
-		// con los autores.
+		// It never prints text containing the token, which is what would break the comparison.
 		if strings.ContainsAny(got, "()") {
 			t.Errorf("%s: el login trae parentesis: %q", c.nombre, got)
 		}
@@ -201,8 +149,6 @@ func scriptDe(t *testing.T, dir, nombre, cuerpo string) string {
 	return ruta
 }
 
-// contains mira si un slice de strings tiene un elemento exacto, para no importar slices
-// solo para esto.
 func contains(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {

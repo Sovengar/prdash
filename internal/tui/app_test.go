@@ -1,6 +1,3 @@
-// Tests del modelo TUI con adapters falsos: se construye el Model, se le
-// envían mensajes y se inspecciona el estado y la vista, sin teatest y sin
-// tocar ninguna CLI.
 package tui
 
 import (
@@ -39,9 +36,7 @@ func mkItem(forgeName, host, project, title string, number int, decision string)
 	it.URL = "https://" + host + "/" + project + "/" + strconv.Itoa(number)
 	it.ReviewDecision = decision
 	it.State = "OPEN"
-	// Un forge real siempre reporta el commit de la rama origen, y sin él el
-	// adapter se niega a mergear. Un fixture sin HeadSHA haría que todos los
-	// tests de merge estuvieran probando un camino que producción no tiene.
+	// A real forge always reports the source branch's commit, and without it the adapter refuses.
 	it.HeadSHA = "head-" + project + "-" + strconv.Itoa(number)
 	it.Merge = model.MergeRulesAll()
 	it.UpdatedAt = time.Now()
@@ -69,29 +64,18 @@ func send(t *testing.T, m Model, msg tea.Msg) Model {
 	return out.(Model)
 }
 
-// press pulsa una tecla. Las mayúsculas se construyen como las construye el
-// decoder de verdad —Code en minúscula, Mod shift y Text en mayúscula— porque
-// Key.String() prioriza Text: montar el Code en mayúscula probaría un camino que
-// el terminal nunca produce.
 func press(t *testing.T, m Model, key string) Model {
 	t.Helper()
 	out, _ := m.Update(keyMsg(t, key))
 	return out.(Model)
 }
 
-// pulsar es `press` devolviendo también el comando, que es lo que hay que comprobar cuando
-// una tecla tiene que lanzar algo —un render, un `tea.Quit`— y no solo cambiar el estado.
-//
-// Y pasa por `Update`, no por el manejador concreto: el camino real de una tecla es el
-// `switch` de `handleKey`, y saltar a `handleSimKey` se saltaría justo la pregunta de si el
-// overlay captura el teclado. Esa pregunta es parte de lo que se está probando.
 func pulsar(t *testing.T, m Model, key string) (Model, tea.Cmd) {
 	t.Helper()
 	out, cmd := m.Update(keyMsg(t, key))
 	return out.(Model), cmd
 }
 
-// keyMsg construye el mensaje de tecla como lo construye el decoder de verdad.
 func keyMsg(t *testing.T, key string) tea.KeyPressMsg {
 	t.Helper()
 	km := tea.KeyPressMsg{Code: []rune(key)[0], Text: key}
@@ -117,8 +101,6 @@ func keyMsg(t *testing.T, key string) tea.KeyPressMsg {
 	case "backspace":
 		km = tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "ctrl+u":
-		// Text vacío a propósito: es lo que hace el decoder con una combinación
-		// con modificador, y el popup filtra lo que se escribe por ahí.
 		km = tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
 	default:
 		if len(key) == 1 && unicode.IsUpper(rune(key[0])) {
@@ -128,14 +110,10 @@ func keyMsg(t *testing.T, key string) tea.KeyPressMsg {
 	return km
 }
 
-// toastTexts devuelve los mensajes de los avisos vivos.
 func toastTexts(m Model) []string { return m.toast.texts() }
 
-// lastToast es el mensaje del último aviso lanzado.
 func lastToast(m Model) string { return m.toast.last() }
 
-// lastToastLevel es el nivel del último aviso lanzado, para poder asertar la
-// gravedad (no solo el texto) de un aviso compuesto.
 func lastToastLevel(m Model) toastLevel {
 	if len(m.toast.toasts) == 0 {
 		return toastInfo
@@ -143,7 +121,6 @@ func lastToastLevel(m Model) toastLevel {
 	return m.toast.toasts[len(m.toast.toasts)-1].level
 }
 
-// assertToast falla si ningún aviso vivo contiene want.
 func assertToast(t *testing.T, m Model, want string) {
 	t.Helper()
 	if !strings.Contains(lastToast(m), want) {
@@ -155,17 +132,11 @@ func ghAdapter() *testutil.FakeAdapter {
 	return &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 }
 
-// showSection activa la sección dada y recalcula lo derivado de ella (veto de
-// approve, cursor y scroll). Los tests que colocan sus ítems fuera de Assigned
-// —la sección que se ve al abrir— la usan para que el cursor y el detalle miren
-// a esos ítems.
 func showSection(m Model, kind model.Section) Model {
 	m.setActiveSection(kind)
 	return m
 }
 
-// TestLegendCountsBothForgesAndListShowsActiveOnly cubre la leyenda de conteos
-// con datos de ambos forges y que la lista pinta solo la sección activa.
 func TestLegendCountsBothForgesAndListShowsActiveOnly(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
 
@@ -190,8 +161,6 @@ func TestLegendCountsBothForgesAndListShowsActiveOnly(t *testing.T) {
 	}
 }
 
-// TestSectionEmptyVsError cubre "distinguir sección vacía de no se pudo
-// consultar", ahora sobre la sección activa.
 func TestSectionEmptyVsError(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "github", section: model.SectionReview}, warnings: []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "network", Msg: "boom"}}})
@@ -200,7 +169,6 @@ func TestSectionEmptyVsError(t *testing.T) {
 	if !strings.Contains(view, "could not be queried") {
 		t.Errorf("la sección fallida debería decirlo\n%s", view)
 	}
-	// La activa falló y no tiene ítems: se muestra el aviso, no "(empty)".
 	if strings.Contains(view, "(empty)") {
 		t.Errorf("una sección con aviso no debería decir que está vacía\n%s", view)
 	}
@@ -209,8 +177,6 @@ func TestSectionEmptyVsError(t *testing.T) {
 	}
 }
 
-// TestDegradationKeepsOtherForges cubre "una forge caída o sin auth no vacía el
-// inbox".
 func TestDegradationKeepsOtherForges(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/widget", "Sigue visible", 1, "")}, false))
@@ -226,8 +192,6 @@ func TestDegradationKeepsOtherForges(t *testing.T) {
 	}
 }
 
-// TestPaginationIndicator cubre el indicador "loading more…" de la sección
-// activa: es de ella y no de la que pagina en segundo plano.
 func TestPaginationIndicator(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
@@ -240,7 +204,6 @@ func TestPaginationIndicator(t *testing.T) {
 	}
 }
 
-// TestIncrementalPages: la primera página reemplaza y las siguientes acumulan.
 func TestIncrementalPages(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
@@ -253,7 +216,6 @@ func TestIncrementalPages(t *testing.T) {
 		t.Fatalf("authored = %d, want 2", got)
 	}
 
-	// Una nueva primera página reemplaza la lista (refresco incremental).
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Nuevo", 3, "")}, false))
 	items := m.sectionItems(model.SectionAuthored)
 	if len(items) != 1 || items[0].Title != "Nuevo" {
@@ -284,8 +246,6 @@ func TestAutoRefreshTick(t *testing.T) {
 	}
 }
 
-// TestAutoRefreshPausedDuringAction cubre "un refresco no pisa una acción en
-// curso": con una acción en curso, el tick no arranca refresco.
 func TestAutoRefreshPausedDuringAction(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.actionBusy = true
@@ -302,8 +262,6 @@ func TestAutoRefreshPausedDuringAction(t *testing.T) {
 	}
 }
 
-// TestRefreshUpdatesOtherItemsDuringAction: aunque haya acción en curso, un
-// refresco sí actualiza el resto de ítems.
 func TestRefreshUpdatesOtherItemsDuringAction(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.actionBusy = true
@@ -313,9 +271,7 @@ func TestRefreshUpdatesOtherItemsDuringAction(t *testing.T) {
 	}
 }
 
-// detailPanel acota el texto de la vista a la caja del panel de detalle, desde
-// su borde superior. La lista de arriba menciona también el resto de ítems, así
-// que sin acotar, "el panel no se ha actualizado" daría falsos positivos.
+// detailPanel clips the view's text to the detail panel's box, from its border.
 func detailPanel(view string) string {
 	lines := strings.Split(stripANSI(view), "\n")
 	for i, l := range lines {
@@ -326,9 +282,6 @@ func detailPanel(view string) string {
 	return ""
 }
 
-// TestDetailPanelFollowsCursor: la ficha del ítem vive en el panel inferior y no
-// hay que abrirla. Se ve desde el primer momento y cambia con el cursor, así que
-// no existe ningún estado "abierto/cerrado" que conservar.
 func TestDetailPanelFollowsCursor(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -358,7 +311,6 @@ func TestDetailPanelFollowsCursor(t *testing.T) {
 	}
 }
 
-// TestApproveOKUpdatesNotice cubre "approve/merge desde el inbox".
 func TestApproveOKUpdatesNotice(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	m := newTestModel(t, ghAdapter())
@@ -373,9 +325,6 @@ func TestApproveOKUpdatesNotice(t *testing.T) {
 	}
 }
 
-// TestApproveOwnPulledBeforeForge: aprobar lo propio no lo admite ningún
-// forge, así que la TUI lo corta antes de gastar la llamada. Lo cubre el veto
-// con login conocido y, sin login, por sección propia.
 func TestApproveOwnPulledBeforeForge(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -384,8 +333,6 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 		author  string
 		login   string
 	}{
-		// Las listas de review siempre llegan con kind (son las dos queries que
-		// emite el registry); authored y menciones van sin kind.
 		{"login coincide", model.SectionAuthored, "", "Sovengar", "Sovengar"},
 		{"otro autor con login", model.SectionReview, model.ReviewRequested, "otra", "Sovengar"},
 		{"sin login, seccion propia", model.SectionAuthored, "", "quien sea", ""},
@@ -429,13 +376,6 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 	}
 }
 
-// TestOwnItemShowsRoleAndDetail: la fila marca el rol, y el veto de approve sobre
-// un PR propio lo explica el aviso al pulsar la tecla, no la ficha.
-//
-// Que el veto este solo en el aviso es una decision y no un olvido: la ficha lo
-// repetiria en todos los renders de todos tus PRs -casi todos los de "Created by
-// me"- y el campo Role ya dice que es tuyo. Serian filas para repetir lo que el
-// campo de al lado ya enseña.
 func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 	own := mkItem("github", "github.com", "acme/widget", "Mío", 12, "")
 	own.Author = "Sovengar"
@@ -457,14 +397,10 @@ func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 		t.Errorf("el veto de aprobar lo propio no debería ocupar una fila de la ficha:\n%s", view)
 	}
 
-	// Y la razón llega cuando se puede hacer algo con ella: al pulsar la tecla.
 	m = press(t, m, "a")
 	assertToast(t, m, state.SelfReviewReason)
 }
 
-// TestSelfDenySurvivesRefresh: el veto se deriva del ítem y del login, no es
-// un estado que un refresco pueda borrar. Un refresco que trae el ítem de nuevo
-// lo deja igual de vetado.
 func TestSelfDenySurvivesRefresh(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 14, "")
 	m := newTestModel(t, ghAdapter())
@@ -479,7 +415,6 @@ func TestSelfDenySurvivesRefresh(t *testing.T) {
 	}
 }
 
-// TestConflictRefreshesItem cubre "el ítem cambió entre refresco y acción".
 func TestConflictRefreshesItem(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 7, "")
 	m := newTestModel(t, ghAdapter())
@@ -502,7 +437,6 @@ func TestConflictRefreshesItem(t *testing.T) {
 	}
 }
 
-// TestPermissionRecordsDenial cubre "acción deshabilitada con motivo".
 func TestPermissionRecordsDenial(t *testing.T) {
 	item := mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR", 4, "")
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
@@ -524,10 +458,7 @@ func TestPermissionRecordsDenial(t *testing.T) {
 	}
 }
 
-// TestActionDisabledWhenForgeDown: sin auth, la acción queda deshabilitada y el
-// aviso lleva el MOTIVO del adapter, no una etiqueta genérica. "401" e "not
-// implemented" piden acciones opuestas, y confundirlas manda a la persona a la
-// autenticación a buscar un token que ya funciona.
+// Without auth the action is disabled and the warning carries the REASON.
 func TestActionDisabledWhenForgeDown(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{
 		ForgeName: "gitlab", HostName: "gitlab.example.com",
@@ -550,7 +481,6 @@ func TestActionDisabledWhenForgeDown(t *testing.T) {
 	}
 }
 
-// TestSnapshotPaintsInstantly cubre el uso del cache al arrancar.
 func TestSnapshotPaintsInstantly(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	path, err := cache.Path()
@@ -573,8 +503,6 @@ func TestSnapshotPaintsInstantly(t *testing.T) {
 	}
 }
 
-// TestPerForgeUpdateIndicator cubre el indicador "última actualización" por
-// forge: una forge lenta no debe mentir sobre el resto.
 func TestPerForgeUpdateIndicator(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, false))
@@ -588,8 +516,6 @@ func TestPerForgeUpdateIndicator(t *testing.T) {
 	}
 }
 
-// TestUnsupportedForgeShowsReason cubre "Bitbucket está presente pero no
-// operativo": la sección dice que no se pudo consultar por no soportado.
 func TestUnsupportedForgeShowsReason(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{
 		ForgeName: "bitbucket", HostName: "bitbucket.org",
@@ -607,7 +533,6 @@ func TestUnsupportedForgeShowsReason(t *testing.T) {
 	}
 }
 
-// TestUnchangedHead fija la decisión del refresco incremental por cursor.
 func TestUnchangedHead(t *testing.T) {
 	cases := []struct {
 		name string
@@ -652,8 +577,6 @@ func TestIncrementalUnchangedKeepsItems(t *testing.T) {
 	}
 }
 
-// TestBackoffOnRateLimit cubre el backoff del auto-refresco ante límite de
-// peticiones.
 func TestBackoffOnRateLimit(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	base := m.tickInterval()
@@ -674,7 +597,6 @@ func TestBackoffOnRateLimit(t *testing.T) {
 	}
 }
 
-// TestManualOnlyRefreshHasNoTick: con intervalo 0, no hay auto-refresco.
 func TestManualOnlyRefreshHasNoTick(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.cfg.RefreshInterval = 0
@@ -686,8 +608,6 @@ func TestManualOnlyRefreshHasNoTick(t *testing.T) {
 	}
 }
 
-// TestCurrentCycleDrainsLoading cubre H1 con ciclo único (M-1): el ciclo
-// vigente siempre emite su refreshDone, que baja loading y rearma el tick.
 func TestCurrentCycleDrainsLoading(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = press(t, m, "R")
@@ -734,7 +654,6 @@ func TestObsoleteRefreshDoneIsInert(t *testing.T) {
 	}
 }
 
-// TestArmTickSingleChain cubre M-1: una sola cadena de ticks.
 func TestArmTickSingleChain(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.tickPending = false
@@ -746,8 +665,6 @@ func TestArmTickSingleChain(t *testing.T) {
 	}
 }
 
-// TestSingleChannelReader cubre M-2: ticks y refrescos locales no añaden
-// lectores del canal (invariante: exactamente uno).
 func TestSingleChannelReader(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	if m.readers != 1 {
@@ -761,7 +678,7 @@ func TestSingleChannelReader(t *testing.T) {
 	m = press(t, m, "R")
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 
-	// Un evento del canal consume un lector y rearma exactamente uno.
+	// An event from the channel consumes a reader and re-arms exactly one.
 	m = send(t, m, authMsg{cycle: m.cycle, forge: "github", auth: model.AuthState{Forge: "github", OK: true}})
 
 	if m.readers != 1 {
@@ -769,7 +686,6 @@ func TestSingleChannelReader(t *testing.T) {
 	}
 }
 
-// TestDetailReflectsActionUpdate cubre H2: el detalle se deriva del estado vivo.
 func TestDetailReflectsActionUpdate(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	m := newTestModel(t, ghAdapter())
@@ -788,8 +704,6 @@ func TestDetailReflectsActionUpdate(t *testing.T) {
 	}
 }
 
-// TestStaleActionAppliesReread cubre M6: el ítem releído es el estado más
-// reciente y se aplica aunque el ciclo haya avanzado (no se revierte).
 func TestStaleActionAppliesReread(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	m := newTestModel(t, ghAdapter())
@@ -819,8 +733,6 @@ func TestRefreshClearsDenied(t *testing.T) {
 	}
 }
 
-// TestDegradedDoesNotComplete cubre M3: un fallback degradado no marca el
-// stream como completo (no se congela en el refresco incremental).
 func TestDegradedDoesNotComplete(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, pageMsg{
@@ -840,7 +752,6 @@ func TestDegradedDoesNotComplete(t *testing.T) {
 	}
 }
 
-// TestBrowserCommand cubre M1: el abridor se elige por plataforma.
 func TestBrowserCommand(t *testing.T) {
 	cases := map[string]string{
 		"linux":   "xdg-open",

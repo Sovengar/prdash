@@ -13,9 +13,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// worktreeRepoFixture crea un repo real con dos worktrees bajo la misma raíz:
-// uno propio de prdash y otro ajeno. Devuelve también el repo para poder
-// simular huérfanos.
 func worktreeRepoFixture(t *testing.T) (repo, base, owned, foreign string) {
 	t.Helper()
 	repo = filepath.Join(t.TempDir(), "repo")
@@ -32,15 +29,12 @@ func worktreeRepoFixture(t *testing.T) (repo, base, owned, foreign string) {
 	return repo, base, owned, foreign
 }
 
-// worktreeFixture es el caso habitual: solo la raíz y los worktrees.
 func worktreeFixture(t *testing.T) (base, owned, foreign string) {
 	t.Helper()
 	_, base, owned, foreign = worktreeRepoFixture(t)
 	return base, owned, foreign
 }
 
-// worktreeOrphanFixture crea una raíz con dos worktrees propios huérfanos (su
-// repo de origen se borra), un worktree propio sano y uno ajeno.
 func worktreeOrphanFixture(t *testing.T) (base string, orphans []string, healthy, foreign string) {
 	t.Helper()
 	base = t.TempDir()
@@ -65,15 +59,12 @@ func worktreeOrphanFixture(t *testing.T) (base string, orphans []string, healthy
 	testutil.RunGit(t, repoHealthy, "worktree", "add", "--quiet", healthy, "sana")
 	testutil.RunGit(t, repoHealthy, "worktree", "add", "--quiet", foreign, "ajena")
 
-	// El repo de los dos primeros desaparece: sus checkouts quedan huérfanos.
 	if err := os.RemoveAll(repoOrphans); err != nil {
 		t.Fatal(err)
 	}
 	return base, []string{o1, o2}, healthy, foreign
 }
 
-// fakeProvisioner es un Provisioner en memoria para los tests que necesitan
-// simular lentitud de un borrado sin tocar git.
 type fakeProvisioner struct {
 	entries []worktree.Entry
 	delays  map[string]time.Duration
@@ -100,9 +91,7 @@ func (f *fakeProvisioner) Remove(ctx context.Context, id string) error {
 	return nil
 }
 
-// TestRunWorktreesRemoveOrphansPerItemBudget fija que cada borrado del lote tiene
-// su propio presupuesto: un ítem lento que agota el suyo no arrastra a los demás
-// ni produce un borrado parcial por un plazo global compartido.
+// Each deletion in the batch has its own budget.
 func TestRunWorktreesRemoveOrphansPerItemBudget(t *testing.T) {
 	const (
 		slow = "/base/prdash-pr-1"
@@ -130,8 +119,6 @@ func TestRunWorktreesRemoveOrphansPerItemBudget(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesListsOnlyOwned comprueba que el listado muestra los worktrees
-// de prdash y nunca los ajenos que conviven con ellos.
 func TestRunWorktreesListsOnlyOwned(t *testing.T) {
 	base, owned, foreign := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -152,7 +139,6 @@ func TestRunWorktreesListsOnlyOwned(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesDefaultsToList comprueba que sin subcomando se lista.
 func TestRunWorktreesDefaultsToList(t *testing.T) {
 	base, _, _ := worktreeFixture(t)
 	var stdout, stderr bytes.Buffer
@@ -163,8 +149,6 @@ func TestRunWorktreesDefaultsToList(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveRefusesForeign comprueba que un borrado explícito sobre
-// un worktree ajeno se rechaza sin tocarlo.
 func TestRunWorktreesRemoveRefusesForeign(t *testing.T) {
 	base, owned, foreign := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -181,8 +165,6 @@ func TestRunWorktreesRemoveRefusesForeign(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOwned comprueba que un borrado explícito de un worktree
-// propio sí lo quita, dejando intactos los ajenos.
 func TestRunWorktreesRemoveOwned(t *testing.T) {
 	base, owned, foreign := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -199,8 +181,6 @@ func TestRunWorktreesRemoveOwned(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphan comprueba que la CLI puede limpiar un worktree
-// huérfano (repo de origen desaparecido) que listó como tal.
 func TestRunWorktreesRemoveOrphan(t *testing.T) {
 	repo, base, owned, _ := worktreeRepoFixture(t)
 	if err := os.RemoveAll(repo); err != nil {
@@ -217,7 +197,6 @@ func TestRunWorktreesRemoveOrphan(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesUsageErrors cubre los usos inválidos del subcomando.
 func TestRunWorktreesUsageErrors(t *testing.T) {
 	base, _, _ := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -231,8 +210,6 @@ func TestRunWorktreesUsageErrors(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveNonexistentRefused: una ruta inexistente se rechaza sin
-// tocar nada ni crear worktrees.
 func TestRunWorktreesRemoveNonexistentRefused(t *testing.T) {
 	base, owned, foreign := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -254,9 +231,6 @@ func TestRunWorktreesRemoveNonexistentRefused(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphansMalformedGitDoesNotBreakBatch cubre el huérfano
-// cuyo `.git` no declara un gitdir: Audit lo marca huérfano pero no hay repo que
-// resolver. No debe tumbar el lote: se borra su checkout y el resto sigue.
 func TestRunWorktreesRemoveOrphansMalformedGitDoesNotBreakBatch(t *testing.T) {
 	base, orphans, healthy, _ := worktreeOrphanFixture(t)
 	malformed := orphans[0]
@@ -284,8 +258,6 @@ func TestRunWorktreesRemoveOrphansMalformedGitDoesNotBreakBatch(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveTwoExplicitPaths cubre el borrado explícito de varias
-// rutas propias en una sola invocación, dejando intacto lo ajeno.
 func TestRunWorktreesRemoveTwoExplicitPaths(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	testutil.InitRepo(t, repo)
@@ -317,8 +289,6 @@ func TestRunWorktreesRemoveTwoExplicitPaths(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphansDryRunExcludesOthers fija que el lote impreso por
-// --dry-run no incluye ni el worktree sano ni el ajeno.
 func TestRunWorktreesRemoveOrphansDryRunExcludesOthers(t *testing.T) {
 	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -342,9 +312,6 @@ func TestRunWorktreesRemoveOrphansDryRunExcludesOthers(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveMalformedGitOrphanByPath cubre por ruta explícita, a
-// nivel CLI, el escenario L8: un huérfano con .git irresoluble se borra sin tocar
-// los demás.
 func TestRunWorktreesRemoveMalformedGitOrphanByPath(t *testing.T) {
 	base, orphans, healthy, _ := worktreeOrphanFixture(t)
 	malformed := orphans[0]
@@ -371,8 +338,6 @@ func TestRunWorktreesRemoveMalformedGitOrphanByPath(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphans borra en lote todos los huérfanos propios y solo
-// esos: el sano y el ajeno quedan intactos.
 func TestRunWorktreesRemoveOrphans(t *testing.T) {
 	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -399,7 +364,6 @@ func TestRunWorktreesRemoveOrphans(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphansDryRun imprime el lote exacto y no borra nada.
 func TestRunWorktreesRemoveOrphansDryRun(t *testing.T) {
 	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -423,8 +387,6 @@ func TestRunWorktreesRemoveOrphansDryRun(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphansNoneIsSuccess fija que cero huérfanos es el caso
-// feliz, no un error, y que no escribe nada en stderr.
 func TestRunWorktreesRemoveOrphansNoneIsSuccess(t *testing.T) {
 	base, _, _ := worktreeFixture(t) // sano + ajeno, sin huérfanos
 	pr := worktree.NewGitDirect(base)
@@ -443,8 +405,6 @@ func TestRunWorktreesRemoveOrphansNoneIsSuccess(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphansDryRunNoneIsSuccess cubre el mismo caso feliz con
-// --dry-run.
 func TestRunWorktreesRemoveOrphansDryRunNoneIsSuccess(t *testing.T) {
 	base, _, _ := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -463,8 +423,6 @@ func TestRunWorktreesRemoveOrphansDryRunNoneIsSuccess(t *testing.T) {
 	}
 }
 
-// TestRunWorktreesRemoveOrphansUsageErrors cubre los usos inválidos: exit 2 por
-// stderr y cero borrados.
 func TestRunWorktreesRemoveOrphansUsageErrors(t *testing.T) {
 	base, orphans, healthy, _ := worktreeOrphanFixture(t)
 	pr := worktree.NewGitDirect(base)

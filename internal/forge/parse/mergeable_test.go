@@ -8,24 +8,9 @@ import (
 	"prdash/internal/state"
 )
 
-// TestMergeableFromEveryPath comprueba que el aviso de "las ramas se pisan" sale
-// del dato REAL de cada forge, con la forma que cada uno lo devuelve, y no de un
-// valor inyectado a mano.
-//
-// Ese es justo el patrón que dejó muerto el gate de borradores: los tests se
-// inyectaban State="draft", que ningún forge emite, y la suite entera pasaba con
-// la funcionalidad rota. Aquí cada fixture es el JSON que devuelve el forge, así
-// que si un adapter deja de pedir el campo o de copiarlo, esto falla.
-//
-// Los caminos que NO traen el dato (el respaldo REST de GitHub y la API de
-// Todos de GitLab) se comprueban también, y por el otro lado: tienen que salir
-// sin Known y sin aviso, porque no saber no es lo mismo que saber que no.
 func TestMergeableFromEveryPath(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		// wantKnown y wantConflicted son lo que el forge dice; wantBlocked es lo
-		// que el gate responde. Se comparan los tres porque son tres hechos
-		// distintos y el último es el que se ve.
+		name           string
 		wantKnown      bool
 		wantConflicted bool
 		wantBlocked    bool
@@ -50,8 +35,8 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			// UNKNOWN es "todavía no lo sé", no un "sí": sin Known y sin aviso,
-			// porque un aviso falso entrena a ignorar la caja entera.
+			// UNKNOWN is "I do not know yet", not a "yes": with no Known there is no warning either, because a
+			// false warning is worse.
 			name: "github graphql: UNKNOWN no avisa",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items := mustSearch(t, ghSearchUnknownFixture, 1)
@@ -85,9 +70,6 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			// La lista REST devuelve el valor en minúsculas (broken_status) y el
-			// enum de GraphQL el nombre en mayúsculas (CONFLICT): los dos tienen
-			// que acabar en el mismo veredicto.
 			name:           "gitlab rest: broken_status",
 			wantKnown:      true,
 			wantConflicted: true,
@@ -104,9 +86,7 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			// NEED_REBASE no es un conflicto: la rama está detrás pero se integra
-			// sin tocar nada, así que anunciarlo como conflicto sería una mentira
-			// que el usuario no puede actuar.
+			// NEED_REBASE is not a conflict: the branch is behind but integrates without touching anything.
 			name:      "gitlab graphql: NEED_REBASE no es conflicto",
 			wantKnown: true,
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
@@ -146,7 +126,6 @@ func TestMergeableFromEveryPath(t *testing.T) {
 	}
 }
 
-// mustSearch parsea la búsqueda de GitHub y devuelve los n primeros ítems.
 func mustSearch(t *testing.T, raw string, n int) []model.Item {
 	t.Helper()
 	items, _, err := ParseGHGraphQLSearch(raw)

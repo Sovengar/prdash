@@ -6,15 +6,8 @@ import (
 	"time"
 )
 
-// TestArgsWithNoMandaElVacioNiUnFlag: la regla única de los flags opcionales.
-//
-// Un flag con valor vacío NO se manda, y no por descuido: `--cwd ""` le dice a Herdr
-// "usa el directorio vacío", que no es lo mismo que no decir nada. La diferencia
-// sale en el sitio más malo, que es abrir el repo equivocado.
-//
-// Y con el valor puesto, el flag va con su valor detrás y en ese orden. El orden
-// importa porque Herdr distingue `tab create --label` de `tab rename`, y un par
-// flag/valor desordenado no da error: da el valor al flag anterior.
+// A flag with an empty value is NOT sent: `--cwd ""` tells Herdr "use the empty directory", which is
+// not the same as saying nothing, and that difference lands in the wrong repo.
 func TestArgsWithNoMandaElVacioNiUnFlag(t *testing.T) {
 	base := args{"comando"}
 
@@ -22,19 +15,17 @@ func TestArgsWithNoMandaElVacioNiUnFlag(t *testing.T) {
 	if got := base.with("--cwd", ""); !reflect.DeepEqual(got, args{"comando"}) {
 		t.Errorf("con el valor vacío salió %q, want solo el comando: un flag vacío no se manda", got)
 	}
-	// Y la lista de entrada no se modifica: los métodos la reutilizan, y mutarla
-	// dejaría flags de la llamada anterior en la siguiente.
+	// The input list is not modified: the methods reuse it, and mutating it would leave flags
+	// behind.
 	antes := append(args{}, base...)
 	base.with("--cwd", "/repo")
 	if !reflect.DeepEqual(base, antes) {
 		t.Errorf("with mutó la lista de entrada: %q", base)
 	}
 
-	// Con valor: el flag y el valor, y en ese orden.
 	if got := base.with("--cwd", "/repo"); !reflect.DeepEqual(got, args{"comando", "--cwd", "/repo"}) {
 		t.Errorf("con valor salió %q, want [comando --cwd /repo]", got)
 	}
-	// Y encadenados, en el orden en que se encadenan.
 	if got := base.with("--a", "1").with("--b", "2").with("--c", ""); !reflect.DeepEqual(got,
 		args{"comando", "--a", "1", "--b", "2"}) {
 		t.Errorf("encadenados salieron %q, want [comando --a 1 --b 2]: el vacío no debe desplazar a los demás", got)
@@ -50,32 +41,20 @@ func TestArgsWithIfApendaElFlagEnteroONada(t *testing.T) {
 	if got := base.withIf(true, "--force"); !reflect.DeepEqual(got, args{"comando", "--force"}) {
 		t.Errorf("con la condición cierta salió %q, want [comando --force]", got)
 	}
-	// Y encadenado con with, que es como se usa de verdad.
 	if got := base.with("--cwd", "/r").withIf(true, "--no-focus"); !reflect.DeepEqual(got,
 		args{"comando", "--cwd", "/r", "--no-focus"}) {
 		t.Errorf("encadenado salió %q, want [comando --cwd /r --no-focus]", got)
 	}
 }
 
-// TestArgvDeCadaComando: el argv COMPLETO de cada comando, con la lista entera
-// afirmada.
-//
-// Esto no es un golden de un dibujo: es una lista, y una lista se compara entera.
-// Lo que se afirma es el contrato con la CLI, y el contrato tiene tres partes que
-// aquí se ven las tres:
-//
-//   - qué flags van, que es la pregunta que respondía el guard en línea;
-//   - en qué orden, porque Herdr distingue `tab create --label` de `tab rename` y un
-//     par desordenado no da error, da el valor al flag anterior;
-//   - y qué NO va, que es la mitad del trabajo: un flag opcional vacío se omite, y
-//     un flag que se manda de más es un error de la CLI.
+// The FULL argv of each command with the whole list asserted. Not a golden of a drawing: a list, and
+// the list is the contract.
 func TestArgvDeCadaComando(t *testing.T) {
 	casos := []struct {
 		nombre string
 		got    []string
 		want   []string
 	}{
-		// worktree create: todos los flags opcionales, en orden.
 		{
 			"worktree create vacío",
 			worktreeCreateArgs(WorktreeSpec{}),
@@ -106,8 +85,8 @@ func TestArgvDeCadaComando(t *testing.T) {
 			[]string{"worktree", "list", "--cwd", "/repo"},
 		},
 
-		// --force es opt-in: quitar un checkout con cambios sin preguntar es peor
-		// que no poder hacerlo.
+		// --force is opt-in: dropping a checkout with changes without asking is worse than not being
+		// able to.
 		{
 			"worktree remove sin force",
 			worktreeRemoveArgs("ws1", false),
@@ -153,9 +132,8 @@ func TestArgvDeCadaComando(t *testing.T) {
 				"--label", "et", "--no-focus"},
 		},
 
-		// El ratio se omite si es cero, porque cero es el default de Herdr y
-		// mandarlo sobrescribe ese default. Y un ratio de 0 además es imposible
-		// (es una fracción), así que mandarlo no da error: da un pane de tamaño 0.
+		// The ratio is omitted when zero, because zero is Herdr's default and sending it would overwrite
+		// it.
 		{
 			"pane split sin ratio",
 			splitArgs(SplitSpec{PaneID: "p1", Direction: "right"}),
@@ -171,8 +149,7 @@ func TestArgvDeCadaComando(t *testing.T) {
 			splitArgs(SplitSpec{PaneID: "p1", Direction: "right", Ratio: 1}),
 			[]string{"pane", "split", "--pane", "p1", "--direction", "right", "--ratio", "1"},
 		},
-		// El env vacío NO se manda: `--env ""` le dice a Herdr que defina una
-		// variable sin nombre.
+		// An empty env is NOT sent: `--env ""` tells Herdr to define an unnamed variable.
 		{
 			"pane split con env vacío en medio",
 			splitArgs(SplitSpec{PaneID: "p1", Direction: "right", Env: []string{"A=1", "", "B=2"}}),
@@ -193,9 +170,8 @@ func TestArgvDeCadaComando(t *testing.T) {
 			[]string{"pane", "split", "--pane", "p1", "--direction", "right"},
 		},
 
-		// El timeout se omite si no hay plazo: un timeout de 0 quiere decir "sin
-		// límite", no "cero segundos", y mandarlo haría fallar la espera al
-		// instante.
+		// The timeout is omitted when there is no deadline: a timeout of 0 means "no limit", not "as soon
+		// as possible".
 		{
 			"wait-output sin timeout",
 			waitOutputArgs("p1", "listo", 0),
@@ -253,12 +229,7 @@ func TestArgvDeCadaComando(t *testing.T) {
 	}
 }
 
-// TestArgvNuncaLevaUnValorVacio: por encima de cada comando, una regla.
-//
-// Ningún flag con valor puede llevar una cadena vacía detrás, y ningún flag sin
-// valor puede faltar si su condición se cumple. Es la versión agregada de lo que
-// se afirma caso por caso, y sirve para los casos que nadie escribió: un comando
-// nuevo, un flag nuevo.
+// No value flag may carry an empty string, and no valueless flag may carry one.
 func TestArgvNuncaLevaUnValorVacio(t *testing.T) {
 	argv := map[string][]string{
 		"worktree create":       []string(worktreeCreateArgs(WorktreeSpec{Cwd: "/a", Branch: "b", Path: "/c", Label: "d", NoFocus: true})),
@@ -279,7 +250,6 @@ func TestArgvNuncaLevaUnValorVacio(t *testing.T) {
 		"notify vacío":          []string(notifyArgs("t", NotifyOptions{})),
 	}
 
-	// Los flags que llevan valor detrás, para saber dónde no puede haber un vacío.
 	conValor := map[string]bool{
 		"--cwd": true, "--branch": true, "--path": true, "--label": true,
 		"--workspace": true, "--body": true, "--sound": true,
@@ -294,9 +264,7 @@ func TestArgvNuncaLevaUnValorVacio(t *testing.T) {
 			if s == "" {
 				t.Errorf("%s: el elemento %d es una cadena vacía: %q", nombre, i, a)
 			}
-			// Un flag con valor, seguido de nada, es un argv que la CLI va a
-			// rechazar. Y un valor que empieza por -- también, porque se lee como
-			// otro flag: por eso el cwd vacío es peor que no mandarlo.
+			// A value flag followed by nothing is an argv the CLI will reject.
 			if conValor[s] {
 				if i+1 >= len(a) {
 					t.Errorf("%s: el flag %q es el último y no lleva valor: %q", nombre, s, a)

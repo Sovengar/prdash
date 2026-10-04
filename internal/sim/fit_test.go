@@ -6,13 +6,9 @@ import (
 	"testing"
 )
 
-// black es el color de fondo de los fixtures: da igual, el ratio no lo mira.
 var black = color.RGBA{A: 255}
 
-// TestFitKeepsTheAspectOfAWideImage: una celda es el doble de alta que de ancha,
-// así que una imagen 16:9 necesita 3,56 columnas por línea. Sin ese factor, el
-// grafo se estiraría a lo ancho y los dos commits de una fila se verían como una
-// tira de elipses en vez de dos círculos.
+// A cell is twice as tall as wide, so a 16:9 image needs 3.56 columns per row.
 func TestFitKeepsTheAspectOfAWideImage(t *testing.T) {
 	img := solid(1920, 1080, black)
 
@@ -20,14 +16,11 @@ func TestFitKeepsTheAspectOfAWideImage(t *testing.T) {
 	if rows != 40 {
 		t.Errorf("rows = %d, want 40: manda el alto", rows)
 	}
-	// 40 filas * 3,56 columnas por fila ≈ 142 columnas.
 	if cols < 138 || cols > 146 {
 		t.Errorf("cols = %d, want ~142 (3,56 columnas por fila para 16:9)", cols)
 	}
 }
 
-// TestFitPrefersTheWidthWhenItBinds: con una terminal ancha y baja manda la
-// anchura, y la imagen no debe desbordar hacia abajo.
 func TestFitPrefersTheWidthWhenItBinds(t *testing.T) {
 	img := solid(1920, 1080, black)
 
@@ -38,14 +31,11 @@ func TestFitPrefersTheWidthWhenItBinds(t *testing.T) {
 	if rows >= 400 {
 		t.Errorf("rows = %d, want menos que el máximo disponible", rows)
 	}
-	// 100 columnas a 3,56 por fila ≈ 28 filas.
 	if rows < 25 || rows > 31 {
 		t.Errorf("rows = %d, want ~28", rows)
 	}
 }
 
-// TestFitNeverExceedsTheArea: es la garantía que importa, porque si el ajuste
-// devolviera más de lo que cabe, el popup se saldría de la terminal.
 func TestFitNeverExceedsTheArea(t *testing.T) {
 	for _, size := range [][2]int{{1, 1}, {1920, 1080}, {4, 900}, {900, 4}, {3, 3}} {
 		img := solid(size[0], size[1], black)
@@ -61,8 +51,6 @@ func TestFitNeverExceedsTheArea(t *testing.T) {
 	}
 }
 
-// TestFitDegradesOnAnUnusableInput: sin imagen no hay ratio que respetar, así que
-// se devuelve el área tal cual y el popup sigue teniendo algo que dibujar.
 func TestFitDegradesOnAnUnusableInput(t *testing.T) {
 	if c, r := Fit(nil, 40, 10); c != 40 || r != 10 {
 		t.Errorf("Fit(nil) = %dx%d, want 40x10", c, r)

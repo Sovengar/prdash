@@ -1,6 +1,3 @@
-// Tests del inbox de una sola sección: sección activa y su ciclo, leyenda de
-// conteos del borde, prefijo de la activa, posición recordada por sección y los
-// estados de la activa. Cada test deriva de un escenario de behavior.feature.
 package tui
 
 import (
@@ -13,7 +10,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// ghItems crea ítems de GitHub con rutas concretas, todos en el mismo forge.
 func ghItems(projects ...string) []model.Item {
 	items := make([]model.Item, 0, len(projects))
 	for i, p := range projects {
@@ -22,9 +18,6 @@ func ghItems(projects ...string) []model.Item {
 	return items
 }
 
-// numberedItems crea n ítems de una misma sección con proyecto propio, para que
-// la leyenda cuente exactamente n sin que la deduplicación los colapse con los
-// de otra sección.
 func numberedItems(n int, project string) []model.Item {
 	items := make([]model.Item, 0, n)
 	for i := 1; i <= n; i++ {
@@ -33,13 +26,10 @@ func numberedItems(n int, project string) []model.Item {
 	return items
 }
 
-// listText es el texto plano de la lista de la sección activa.
 func listText(m Model) string {
 	return stripANSI(strings.Join(textOf(m.listLines(m.contentWidth())), "\n"))
 }
 
-// TestDefaultSectionIsAssigned cubre "al abrir, la sección activa es Assigned" y
-// que solo se ven sus ítems.
 func TestDefaultSectionIsAssigned(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
@@ -66,8 +56,6 @@ func TestDefaultSectionIsAssigned(t *testing.T) {
 	}
 }
 
-// TestCycleThroughEmptySection cubre "tab cicla también cuando una sección está
-// vacía": la activa pasa a la vacía y muestra su estado y su conteo.
 func TestCycleThroughEmptySection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -86,15 +74,12 @@ func TestCycleThroughEmptySection(t *testing.T) {
 		t.Errorf("la leyenda debería mostrar 0 para la vacía:\n%s", view)
 	}
 
-	// El ciclo sigue aunque la sección esté vacía.
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionAuthored {
 		t.Fatalf("activeSection = %q, want %q (sigue ciclando)", m.activeSection, model.SectionAuthored)
 	}
 }
 
-// TestLegendExactFormatReplacesInbox cubre el formato exacto de la leyenda y que
-// el título "Inbox" ya no existe.
 func TestLegendExactFormatReplacesInbox(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", numberedItems(9, "mine/repo"), false))
@@ -109,8 +94,6 @@ func TestLegendExactFormatReplacesInbox(t *testing.T) {
 	}
 }
 
-// TestLegendHighlightsActiveSection cubre que la activa va resaltada y las demás
-// atenuadas.
 func TestLegendHighlightsActiveSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -128,9 +111,6 @@ func TestLegendHighlightsActiveSection(t *testing.T) {
 	}
 }
 
-// TestLegendCountsDedupedSection cubre que los conteos son los de la sección
-// deduplicada: un ítem que aparecería en dos secciones cuenta solo en la de
-// mayor autoridad.
 func TestLegendCountsDedupedSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	dup := mkItem("github", "github.com", "acme/widget", "Dup", 1, "")
@@ -143,8 +123,6 @@ func TestLegendCountsDedupedSection(t *testing.T) {
 	}
 }
 
-// TestPrefixFollowsActiveSection cubre que la vista muestra el prefijo de la
-// activa y no el de otra sección.
 func TestPrefixFollowsActiveSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", ghItems("mine/group/api-a", "mine/group/api-b"), false))
@@ -154,7 +132,6 @@ func TestPrefixFollowsActiveSection(t *testing.T) {
 		t.Errorf("con Assigned activa la lista debería mostrar su prefijo, no el de Mine:\n%s", got)
 	}
 
-	// tab hasta Mine (Assigned → Mentioned → Mine), saltando la vacía.
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionAuthored {
@@ -165,8 +142,6 @@ func TestPrefixFollowsActiveSection(t *testing.T) {
 	}
 }
 
-// TestPrefixKeepsTableWidth cubre que el prefijo no desalinea la tabla a ningún
-// ancho y que las celdas ITEM conservan la hoja y el "#número".
 func TestPrefixKeepsTableWidth(t *testing.T) {
 	for _, width := range []int{70, 124, 200} {
 		m := newTestModel(t, ghAdapter())
@@ -188,8 +163,6 @@ func TestPrefixKeepsTableWidth(t *testing.T) {
 	}
 }
 
-// TestRememberCursorAndScrollPerSection cubre que cada sección recuerda su
-// cursor y su scroll al volver a ella.
 func TestRememberCursorAndScrollPerSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 24
@@ -217,7 +190,6 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 	m = press(t, m, "down")
 	mine := sectionPos{cursor: m.cursor, scroll: m.scroll}
 
-	// Volver a Assigned recupera su posición.
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionReview {
 		t.Fatalf("activeSection = %q, want %q", m.activeSection, model.SectionReview)
@@ -225,7 +197,6 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 	if m.cursor != assigned.cursor || m.scroll != assigned.scroll {
 		t.Errorf("Assigned no recuperó su posición: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, assigned)
 	}
-	// Y volver a Mine recupera la suya.
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if m.cursor != mine.cursor || m.scroll != mine.scroll {
@@ -233,8 +204,6 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 	}
 }
 
-// TestRefreshKeepsSectionPosition cubre que un refresco conserva la posición de
-// la activa, acotada al nuevo contenido.
 func TestRefreshKeepsSectionPosition(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 24
@@ -242,13 +211,11 @@ func TestRefreshKeepsSectionPosition(t *testing.T) {
 	m = press(t, m, "end")
 	before := sectionPos{cursor: m.cursor, scroll: m.scroll}
 
-	// Un refresco con el mismo contenido no mueve la posición.
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionReview, model.ReviewRequested, manyItems(60), false))
 	if m.cursor != before.cursor || m.scroll != before.scroll {
 		t.Errorf("el refresco movió la posición: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, before)
 	}
 
-	// Con menos contenido, la posición se acota.
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionReview, model.ReviewRequested, manyItems(3), false))
 	if m.cursor > len(m.rows())-1 || m.cursor < 0 {
 		t.Errorf("cursor = %d fuera de las %d filas nuevas", m.cursor, len(m.rows()))
@@ -258,7 +225,6 @@ func TestRefreshKeepsSectionPosition(t *testing.T) {
 	}
 }
 
-// TestActiveEmptyShowsEmptyAndZero cubre la sección activa vacía sin fallo.
 func TestActiveEmptyShowsEmptyAndZero(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	view := stripANSI(m.View().Content)
@@ -270,8 +236,6 @@ func TestActiveEmptyShowsEmptyAndZero(t *testing.T) {
 	}
 }
 
-// TestLoadingMoreOnlyOnActiveSection cubre que el indicador "loading more…" es
-// de la activa y reaparece al volver a la sección que pagina.
 func TestLoadingMoreOnlyOnActiveSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
@@ -285,7 +249,6 @@ func TestLoadingMoreOnlyOnActiveSection(t *testing.T) {
 		t.Errorf("el indicador de una sección no activa no debe pintarse:\n%s", view)
 	}
 
-	// Assigned → Mentioned → Mine: la que pagina pasa a ser la activa.
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionAuthored {
@@ -296,8 +259,6 @@ func TestLoadingMoreOnlyOnActiveSection(t *testing.T) {
 	}
 }
 
-// TestWarningsOnlyOnActiveSection cubre que los avisos de consulta son de la
-// activa: los de otra sección no se pintan y su conteo sigue en la leyenda.
 func TestWarningsOnlyOnActiveSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "github", section: model.SectionAuthored}, warnings: []model.Warning{
@@ -315,7 +276,6 @@ func TestWarningsOnlyOnActiveSection(t *testing.T) {
 		t.Errorf("la leyenda debería seguir contando la sección con aviso:\n%s", view)
 	}
 
-	// Assigned → Mentioned → Mine: al tabular a ella, su aviso aparece.
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "could not be queried") {
@@ -323,8 +283,6 @@ func TestWarningsOnlyOnActiveSection(t *testing.T) {
 	}
 }
 
-// TestNarrowTerminalTruncatesLegendKeepsBorderWidth cubre que en un terminal
-// estrecho la leyenda se recorta sin descuadrar la caja.
 func TestNarrowTerminalTruncatesLegendKeepsBorderWidth(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 34, 20
@@ -337,7 +295,6 @@ func TestNarrowTerminalTruncatesLegendKeepsBorderWidth(t *testing.T) {
 			t.Errorf("línea %d mide %d columnas, want %d:\n%q", i, w, m.width, l)
 		}
 	}
-	// La leyenda completa no cabe: se recorta por la derecha.
 	top := ""
 	for _, l := range lines {
 		if strings.HasPrefix(l, "╭") && strings.Contains(l, "Mine (") {

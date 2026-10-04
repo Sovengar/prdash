@@ -1,8 +1,3 @@
-// Composición de las cajas de la vista. Cada región de pantalla es una caja con
-// borde redondeado y título embebido en la línea superior: cabecera, lista del
-// inbox, panel de detalle del ítem seleccionado y atajos. Se apilan sin líneas en
-// blanco entre ellas —los bordes ya separan— y todas usan el ancho exterior de
-// la terminal, así que la suma de alturas da exactamente la altura del terminal.
 package tui
 
 import (
@@ -16,31 +11,21 @@ import (
 	"prdash/internal/tui/bordered"
 )
 
-// view es la vista compuesta: su texto y, fila a fila, si un aviso puede
-// superponerse a ella. Las filas van en el mismo orden que las líneas del texto,
-// así que el overlay de avisos puede elegir dónde aterrizar sin romper un marco.
 type view struct {
 	text string
 	rows []bool
 }
 
-// box es una caja ya compuesta. Toda caja tiene exactamente una línea de borde
-// arriba y otra abajo, así que su interior son las líneas intermedias: es lo
-// único donde puede aterrizar un aviso sin pisar un borde. paintable dice si
-// además la caja cede su interior; la de atajos no, porque es la ayuda que hay
-// que leer cuando no se entiende una tecla.
+// Every box has exactly one border line above and one below, so its interior is the middle lines: the
+// only place a warning can land without stepping on a border.
 type box struct {
 	text      string
 	paintable bool
 }
 
-// lines son las líneas que ocupa la caja, bordes incluidos.
 func (b box) lines() int { return strings.Count(b.text, "\n") + 1 }
 
-// stack apila cajas llevándose la cuenta de qué filas admiten un aviso. Los
-// bordes quedan fuera a propósito: es justo lo que evita que un aviso rompa un
-// marco. Join no añade líneas (el salto de línea ES el separador), así que las
-// filas de cada caja se encadenan sin huecos.
+// Borders are left out on purpose, which is exactly what keeps a warning from breaking a frame.
 type stack struct {
 	parts []string
 	rows  []bool
@@ -58,10 +43,6 @@ func (s *stack) view() view {
 	return view{text: strings.Join(s.parts, "\n"), rows: s.rows}
 }
 
-// sectionLines envuelve el contenido en una caja bordada con título embebido en
-// la línea superior. El contenido llega ya partido en líneas porque quien compone
-// sabe cuántas quiere (las rellena hasta su presupuesto) y así la caja no tiene
-// que re-contarlas.
 func (m Model) sectionLines(title string, content []string, paintable bool) box {
 	if title != "" {
 		title = " " + title + " "
@@ -74,29 +55,16 @@ func (m Model) sectionLines(title string, content []string, paintable bool) box 
 	}
 }
 
-// layout calcula el reparto de alto de la vista: lista arriba, panel de detalle
-// abajo.
 func (m Model) layout() layout {
-	// El tercer argumento no lleva `m.height > 0`, y antes lo llevaba. Es INALCANZABLE
-	// como guarda, porque `computeLayout` empieza por `if !show || height <= 0`:
-	//
-	//   - con `show` a `false` se devuelve el layout vacío, igual que con altura cero;
-	//   - y con `show` a `true` y altura cero o negativa, la propia guarda de
-	//     `computeLayout` lo devuelve vacío también.
-	//
-	// O sea que el `m.height > 0` del llamador y el `height <= 0` del llamado son la
-	// MISMA comprobación escrita en los dos sitios, y el del llamador no añade nada. Lo
-	// que sí cambia con `show` es el valor de entrada, no la guarda: con `show` a
-	// `false`, `computeLayout` ni siquiera mira la altura.
-	//
-	// Y la asimetría que queda es la que importa y no la que se borró: antes del primer
-	// `WindowSizeMsg` la altura es cero, y devolver un layout vacío es exactamente
-	// "pinta la lista entera sin recortar", que es lo que evita un render inicial vacío.
+	// The third argument used to carry `m.height > 0` and that guard was unreachable: computeLayout
+	// starts with `if !show || height <= 0`. The caller's `m.height > 0` and the callee's `height <= 0`
+	// are the SAME check written twice.
+	// The asymmetry that does matter is the other one: before the first WindowSizeMsg the height is zero,
+	// and returning an empty layout is exactly "paint the whole list unclipped", which is what avoids
+	// an empty first render.
 	return computeLayout(m.height, len(m.hintLines()), true)
 }
 
-// compose apila las cajas visibles: la cabecera, las que le pase el cuerpo
-// (lista y panel de detalle) y los atajos.
 func (m Model) compose(lay layout, boxes ...box) view {
 	var s stack
 	if lay.showHeader {
@@ -111,10 +79,7 @@ func (m Model) compose(lay layout, boxes ...box) view {
 	return s.view()
 }
 
-// headerSection muestra el estado de cada forge. El nombre va en el borde de la
-// caja, como en las demás, y el contenido se queda para lo que cambia: el
-// indicador de refresco va primero para que sobreviva al recorte en anchos
-// estrechos.
+// The refresh indicator goes first so it survives the clipping at narrow widths.
 func (m Model) headerSection() box {
 	parts := make([]string, 0, 2)
 	if m.loading {
@@ -124,16 +89,11 @@ func (m Model) headerSection() box {
 	return m.sectionLines("PRDash", []string{strings.Join(parts, "  ")}, true)
 }
 
-// listSection pinta la lista de la sección activa (prefijo, avisos, header de
-// columnas y filas) en la caja del inbox, recortada a la ventana visible. El
-// título del borde es la leyenda de conteos, que sustituye al nombre "Inbox".
-// Rellena hasta el alto reservado para que la caja no encoja: si no, el detalle
-// bailaría al añadir un ítem.
+// Filled to the reserved height so the box does not shrink: otherwise the detail panel would dance
+// when an item is added.
 func (m Model) listSection(lay layout) box {
 	all := m.listLines(m.contentWidth())
 
-	// Antes del primer WindowSizeMsg no se conoce la altura: se pinta la lista
-	// entera, sin recortar, que es lo que evita un render inicial vacío.
 	var body []string
 	if lay.bodyLines > 0 {
 		for _, l := range visibleList(all, m.scroll, lay.bodyLines) {
@@ -148,13 +108,8 @@ func (m Model) listSection(lay layout) box {
 	return m.sectionLines(m.legend(), body, true)
 }
 
-// legend compone la leyenda de conteos del borde superior del inbox: la etiqueta
-// corta de cada sección con su número de ítems, en el orden de autoridad del
-// inbox (Mine · Assigned · Mentioned). La sección activa va resaltada y las
-// demás atenuadas. Cada tramo va con su estilo completo, sin caracteres
-// desnudos, porque el borde reenvuelve cada segmento con su color y un reset de
-// un tramo interior no restaura el del borde. El borde trunca la leyenda
-// ANSI-aware en anchos estrechos, así que la caja nunca se descuadra.
+// Each segment carries its full style, because the border rewraps every segment with its colour and a
+// reset in the middle would not restore the border's own.
 func (m Model) legend() string {
 	parts := make([]string, 0, len(m.inbox.Sections))
 	for _, sec := range m.inbox.Sections {
@@ -168,9 +123,6 @@ func (m Model) legend() string {
 	return strings.Join(parts, styleDim.Render(" · "))
 }
 
-// textOf extrae el texto ya maquetado de las líneas de la lista. La caja solo
-// necesita el texto: el índice de fila era para el auto-scroll, que corre antes
-// de componer la vista.
 func textOf(lines []listLine) []string {
 	out := make([]string, 0, len(lines))
 	for _, l := range lines {
@@ -179,10 +131,6 @@ func textOf(lines []listLine) []string {
 	return out
 }
 
-// detailSection envuelve el detalle de un ítem en su caja, con la referencia como
-// título: dice de un vistazo sobre qué ficha se trata. El cuerpo se rellena
-// hasta su alto reservado para que la caja no dependa de lo largo que sea la
-// ficha.
 func (m Model) detailSection(it model.Item, ok bool, rows int) box {
 	body := m.detailLines(it, ok, rows)
 	for len(body) < rows {
@@ -195,9 +143,6 @@ func (m Model) detailSection(it model.Item, ok bool, rows int) box {
 	return m.sectionLines(title, body, true)
 }
 
-// keybindsSection muestra hasta hintLines líneas de la barra de atajos. No es
-// paintable: es la ayuda, y un aviso encima la volvería ilegible justo cuando
-// hace falta.
 func (m Model) keybindsSection(hintLines int) box {
 	lines := m.hintLines()
 	if hintLines < len(lines) {
@@ -206,22 +151,12 @@ func (m Model) keybindsSection(hintLines int) box {
 	return m.sectionLines("Keybinds", lines, false)
 }
 
-// hintSep une las partes de la barra de atajos. Lo compone la TUI y no la
-// config porque es una decisión de maquetación, no de datos: la lista y su
-// orden son cosa de config.Hints().
 const hintSep = " · "
 
-// hintLines parte la barra de atajos en las líneas que caben en el ancho interior
-// de la caja, acotadas por maxHintLines. En un terminal estrecho los atajos se
-// reparten en varias líneas en vez de perder la cola, y la cola es precisamente
-// lo que config.Hints() ordena para que no se pierda lo imprescindible: `quit`
-// va primero porque el recorte tira por el final.
-//
-// Con merge armado la caja deja de ser ayuda y pasa a ser la Confirmación: es el
-// aviso que el usuario tiene que leer antes de la segunda pulsación, y por eso
-// sustituye a la barra en vez de competir con ella. Vive aquí y no en un toast
-// porque un toast caduca a los 4 s y una Confirmación a la que se contesta
-// después de mirar a otro lado tiene que seguir ahí.
+// With a merge armed the box stops being help and becomes the confirmation: the warning the user must
+// read before the second keypress, which is why it replaces the bar instead of competing with it. It
+// lives here and not in a toast because a toast expires after 4s and a confirmation answered after
+// looking away has to still be there.
 func (m Model) hintLines() []string {
 	if m.mergeArmed {
 		return wrapHint(m.mergeConfirmText(), m.contentWidth(), func(s string) string { return styleWarn.Render(s) })
@@ -229,16 +164,10 @@ func (m Model) hintLines() []string {
 	return wrapHint(strings.Join(m.cfg.Hints(m.dynamicHints()), hintSep), m.contentWidth(), func(s string) string { return styleHint.Render(s) })
 }
 
-// dynamicHints son los fragmentos de etiqueta de la barra que dependen del estado
-// de la vista. Hoy solo hay uno: el modo de prefijo activo, que es lo único que
-// la config no puede deducir sola —no ve la TUI— y sin lo cual el hint prometería
-// una tecla sin decir en qué de los tres estados deja la columna ITEM.
 func (m Model) dynamicHints() config.HintState {
 	return config.HintState{"prefix-mode": m.prefixMode.String()}
 }
 
-// wrapHint parte el texto a lo ancho y lo viste línea a línea, para que el color
-// no dependa de dónde caiga el corte.
 func wrapHint(text string, width int, paint func(string) string) []string {
 	plain := wrapText(text, width)
 	if len(plain) > maxHintLines {
@@ -251,24 +180,15 @@ func wrapHint(text string, width int, paint func(string) string) []string {
 	return lines
 }
 
-// mergeConfirmText compone la Confirmación de merge. La segunda tecla ES el
-// modo, así que no hay estrategia por defecto que se pueda ejecutar sin
-// nombrarla: las opciones se leen enteras en la caja.
+// The branch delete is in the same box because it is the same decision: it is named here, with `tab`,
+// before the key that fires it. `delete: yes/no` is the value and `tab` is the gesture, and both are
+// only visible with the merge armed, since outside it there is no delete to decide.
 //
-// El borrado de la rama va en la misma caja porque es la misma decisión: se
-// nombra aquí, con `tab`, antes de la tecla que dispara. `delete: yes/no` es el
-// valor y `tab` es el gesto, y solo se ven con el merge armado: fuera de ahí el
-// borrado no es una decisión que se pueda tomar.
+// Only the modes the repository allows are listed, and when the rules are unknown (GitLab does not
+// expose them over GraphQL) all three are offered, because not knowing is not the same as forbidding.
 //
-// Solo se listan los modos que el repositorio admite. GitHub publica sus tres
-// flags en la misma consulta del ítem, así que la lista es exacta; un repositorio
-// con el squash desactivado no ofrece squash y no gasta una llamada en un rechazo
-// que ya se sabía. Cuando las reglas no se conocen (GitLab no las expone por
-// GraphQL) se ofrecen las tres, porque no saber no es lo mismo que no permitir.
-//
-// Cuando el gate ha detectado un bloqueo blando, la caja lo dice y las opciones
-// siguen ahí: el aviso no es un veto sino el dato que hace que la segunda
-// pulsación sea informada. Va en inglés como todos los avisos de la TUI.
+// When the gate finds a soft block the box says so and the options stay: the warning is not a veto, it
+// is what makes the second keypress informed.
 func (m Model) mergeConfirmText() string {
 	it, _ := m.selected()
 	parts := make([]string, 0, 4)
@@ -276,8 +196,6 @@ func (m Model) mergeConfirmText() string {
 		parts = append(parts, modeKey(mode)+" "+mode.Label())
 	}
 	if len(parts) == 0 {
-		// Un repositorio sin ninguna estrategia habilitada no tiene merge que
-		// hacer, y ofrecer las teclas sería mentir sobre lo que va a pasar.
 		parts = append(parts, "the repository allows no merge strategy")
 	}
 	head := "merge " + refLabel(it) + "? " + m.deleteLabel()
@@ -288,9 +206,6 @@ func (m Model) mergeConfirmText() string {
 	return head + " press the mode: " + strings.Join(parts, " · ") + " · esc cancel"
 }
 
-// deleteLabel describe el valor del toggle de borrado. `tab` va en las dos
-// formas porque es la tecla que lo cambia, y sin ella el valor parece un dato
-// fijo en vez de una decisión a la altura del merge.
 func (m Model) deleteLabel() string {
 	if m.deleteBranch {
 		return "delete branch: yes (tab)"
@@ -298,10 +213,8 @@ func (m Model) deleteLabel() string {
 	return "delete branch: no (tab)"
 }
 
-// modeKey es la tecla con la que se nombra un modo en la Confirmación. No sale de
-// la config a propósito: son tres y viven en el mismo espacio de teclado que el
-// resto de la vista, así que hacerlas configurables daría cuatro interpretaciones
-// de la misma tecla según el estado.
+// Not from the config on purpose: there are three and they share the keyboard space with the rest of
+// the view, so making them configurable would give one key four meanings depending on state.
 func modeKey(mode forge.MergeMode) string {
 	switch mode {
 	case forge.MergeCommit:
@@ -315,9 +228,6 @@ func modeKey(mode forge.MergeMode) string {
 	}
 }
 
-// outerWidth es el ancho exterior de las cajas: el de la terminal. Antes del
-// primer WindowSizeMsg se usa un ancho de trabajo por defecto, porque la caja se
-// dibuja siempre a un ancho exacto.
 func (m Model) outerWidth() int {
 	if m.width <= 0 {
 		return defaultOuterWidth

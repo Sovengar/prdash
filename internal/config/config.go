@@ -1,9 +1,5 @@
-// Package config carga la configuración XDG de prdash.
-//
-// El fichero ~/.config/prdash/config.toml es opcional: cualquier clave que
-// falte conserva su default. Una config malformada degrada a defaults con un
-// warning, sin abortar el arranque. Es el único paquete que lee TOML y el
-// entorno XDG.
+// Package config loads prdash's XDG configuration. The TOML file is optional and a malformed one
+// degrades to defaults with a warning: config never aborts the startup.
 package config
 
 import (
@@ -17,55 +13,33 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// FileName es el nombre del fichero de config dentro del directorio XDG.
 const FileName = "config.toml"
 
-// DirName es el subdirectorio de prdash bajo $XDG_CONFIG_HOME.
 const DirName = "prdash"
 
-// Keybindings mapea nombre de acción → tecla.
 type Keybindings map[string]string
 
-// Commands mapea nombre de comando → argv base (separado por espacios).
-//
-// Además de los comandos de forge (`gh`/`glab`), acepta las claves de pane del
-// orquestador de review: `tuicr`, `hunk`, `agent` y `editor`. En ese caso el
-// valor es el argv COMPLETO y verbatim del pane (no se le añade nada); sin clave
-// se usa el default del pane. Ver Config.PaneOverride.
+// A pane key (`tuicr`, `hunk`, `agent`, `editor`) takes the value as the pane's COMPLETE argv, verbatim.
 type Commands map[string]string
 
-// GitHubConfig es la config del forge GitHub.
 type GitHubConfig struct {
-	Enabled bool
-	Host    string
-	// CloneBase es el relative URL root de la instancia para clonado/web
-	// (p. ej. "git" en un GitHub Enterprise servido en https://host/git/).
-	// Vacío significa que la instancia vive en la raíz del host.
+	Enabled   bool
+	Host      string
 	CloneBase string
 }
 
-// GitLabConfig es la config del forge GitLab self-managed.
 type GitLabConfig struct {
 	Enabled bool
 	Host    string
-	// APIBase documenta el subfolder REST del self-managed (p. ej.
-	// "/git/api/v4/"). Además de informativo, se usa para derivar el relative
-	// URL root de clonado/web cuando CloneBase está vacío: `glab` resuelve el
-	// host y su base API por sí solo, pero el clon por git necesita el prefijo.
-	APIBase string
-	// CloneBase es un override explícito del relative URL root de clonado/web
-	// (p. ej. "git"). Vacío lo deriva de APIBase.
+	// Not just documentation: it also derives the clone/web URL root when CloneBase is empty, because
+	// glab resolves its own host and API base but a git clone does not.
+	APIBase   string
 	CloneBase string
 	TokenEnv  string // nombre de la variable de entorno del token (lo maneja glab)
 }
 
-// ClonePrefix devuelve el relative URL root de clonado/web de un GitHub
-// Enterprise configurado en subcarpeta. Normaliza las barras; vacío = raíz.
 func (g GitHubConfig) ClonePrefix() string { return normalizeBase(g.CloneBase) }
 
-// ClonePrefix devuelve el relative URL root de clonado/web de la instancia
-// GitLab. Prioriza CloneBase; si está vacío lo deriva de APIBase (p. ej.
-// "/git/api/v4/" → "git"). Vacío = la instancia vive en la raíz del host.
 func (g GitLabConfig) ClonePrefix() string {
 	if g.CloneBase != "" {
 		return normalizeBase(g.CloneBase)
@@ -73,12 +47,8 @@ func (g GitLabConfig) ClonePrefix() string {
 	return relativeRootFromAPIBase(g.APIBase)
 }
 
-// normalizeBase recorta las barras de un relative URL root; vacío = raíz.
 func normalizeBase(base string) string { return strings.Trim(base, "/") }
 
-// relativeRootFromAPIBase deriva el relative URL root del api_base REST de
-// GitLab quitando el sufijo "api/v4": "/git/api/v4/" → "git", "/api/v4/" → "".
-// Devuelve "" si api_base está vacío o no tiene la forma esperada (sin adivinar).
 func relativeRootFromAPIBase(apiBase string) string {
 	p := normalizeBase(apiBase)
 	const rest = "api/v4"
@@ -91,39 +61,32 @@ func relativeRootFromAPIBase(apiBase string) string {
 	return ""
 }
 
-// BitbucketConfig es la config del forge Bitbucket.
 type BitbucketConfig struct {
 	Enabled bool
 }
 
-// Forges agrupa la config de cada forge.
 type Forges struct {
 	GitHub    GitHubConfig
 	GitLab    GitLabConfig
 	Bitbucket BitbucketConfig
 }
 
-// Tools es el argv base de las herramientas externas que el orquestador usa.
 type Tools struct {
 	Tuicr string
 	Hunk  string
 	Agent string
-	// Editor es la orden con la que se abre el editor en el tab de review. No es
-	// una herramienta de review sino un comando de shell, así que puede ser
-	// cualquier cosa que el shell entienda (típicamente el `vi` que expande a
-	// `nvim .`).
+	// A shell command, not a review tool, so it can be anything the shell understands (typically the
+	// `vi` that expands to `nvim .`).
 	Editor string
 	GH     string
 	Glab   string
 }
 
-// AutoReview es la config del modo de auto-review (post-MVP; solo se parsea).
 type AutoReview struct {
 	Enabled   bool
 	Allowlist []string
 }
 
-// Config es la configuración resuelta de prdash.
 type Config struct {
 	Roots           []string
 	RefreshInterval time.Duration
@@ -137,8 +100,6 @@ type Config struct {
 	Commands        Commands
 }
 
-// fileConfig refleja el TOML crudo del disco, con punteros para distinguir
-// "ausente" (conservar default) de "valor cero".
 type fileConfig struct {
 	Roots           []string          `toml:"roots"`
 	RefreshInterval *string           `toml:"refresh_interval"`
@@ -190,9 +151,7 @@ type autoReviewFile struct {
 	Allowlist []string `toml:"allowlist"`
 }
 
-// Load lee la config del path estándar XDG. Devuelve la config resuelta y un
-// warning (posiblemente vacío) para notificar en la UI. Nunca falla: ante
-// cualquier error usa defaults.
+// Never fails: any error degrades to defaults.
 func Load() (Config, string) {
 	path, err := Path()
 	if err != nil {
@@ -201,7 +160,6 @@ func Load() (Config, string) {
 	return LoadFrom(path)
 }
 
-// LoadFrom resuelve la config desde un fichero concreto (testeable).
 func LoadFrom(path string) (Config, string) {
 	cfg := Defaults()
 
@@ -254,13 +212,11 @@ func LoadFrom(path string) (Config, string) {
 			cfg.AutoReview.Allowlist = append([]string(nil), fc.AutoReview.Allowlist...)
 		}
 	}
-	// Keybindings: merge sobre defaults (el usuario solo sobreescribe lo que cambia).
 	for k, v := range fc.Keybindings {
 		if v != "" {
 			cfg.Keybindings[k] = v
 		}
 	}
-	// Commands: merge sobre defaults.
 	for k, v := range fc.Commands {
 		if v != "" {
 			cfg.Commands[k] = v
@@ -269,7 +225,6 @@ func LoadFrom(path string) (Config, string) {
 	return cfg, ""
 }
 
-// Path devuelve la ruta del fichero de config respetando $XDG_CONFIG_HOME.
 func Path() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -278,7 +233,6 @@ func Path() (string, error) {
 	return filepath.Join(dir, DirName, FileName), nil
 }
 
-// DefaultKeybindings devuelve el mapa de teclas por defecto.
 func DefaultKeybindings() Keybindings {
 	return Keybindings{
 		"quit":         "q",
@@ -290,15 +244,12 @@ func DefaultKeybindings() Keybindings {
 		"section-next": "tab",
 		"open-browser": "o",
 		"prefix-mode":  "p",
-		// `retarget` es `e`, de "edit target branch", que es como se llama la acción
-		// en la documentación. `e` era la letra libre con el nombre más claro; las
-		// otras que se le ocurren (`b`, `t`) ya están ocupadas o se leen como otra
-		// cosa.
+		// `retarget` is `e`, from "edit target branch", the name the action has in the docs; it was the
+		// free letter with the clearest name and the alternatives were taken or read as something else.
 		"retarget": "e",
 	}
 }
 
-// DefaultCommands devuelve el argv base por defecto de las CLIs de forge.
 func DefaultCommands() Commands {
 	return Commands{
 		"gh":   "gh",
@@ -306,7 +257,6 @@ func DefaultCommands() Commands {
 	}
 }
 
-// Defaults construye la config por defecto.
 func Defaults() Config {
 	home, _ := os.UserHomeDir()
 	share := filepath.Join(home, ".local", "share", "prdash")
@@ -335,7 +285,6 @@ func Defaults() Config {
 	}
 }
 
-// KeyFor devuelve la tecla configurada para una acción, o el default.
 func (c Config) KeyFor(action string) string {
 	if k, ok := c.Keybindings[action]; ok {
 		return k
@@ -343,8 +292,6 @@ func (c Config) KeyFor(action string) string {
 	return DefaultKeybindings()[action]
 }
 
-// ActionForKey devuelve la acción configurada para una tecla, o "" si ninguna.
-// Se resuelve sobre el mapa ya fusionado (defaults + overrides del usuario).
 func (c Config) ActionForKey(key string) string {
 	if key == "" {
 		return ""
@@ -362,8 +309,6 @@ func (c Config) ActionForKey(key string) string {
 	return ""
 }
 
-// CmdArgs devuelve el argv base de un comando, separado por espacios. Es API
-// reservada para el orquestador F2 (comandos de tuicr/hunk/agente configurables).
 func (c Config) CmdArgs(action string) []string {
 	raw, ok := c.Commands[action]
 	if !ok {
@@ -372,10 +317,6 @@ func (c Config) CmdArgs(action string) []string {
 	return strings.Fields(raw)
 }
 
-// PaneOverride devuelve el argv completo y verbatim de `[commands]` para el
-// pane de una herramienta (`tuicr`/`hunk`/`agent`/`editor`), si el usuario lo
-// configuró. Un valor ausente o en blanco no es override: el pane usa su
-// default.
 func (c Config) PaneOverride(name string) ([]string, bool) {
 	raw, ok := c.Commands[name]
 	if !ok || strings.TrimSpace(raw) == "" {
@@ -384,10 +325,6 @@ func (c Config) PaneOverride(name string) ([]string, bool) {
 	return strings.Fields(raw), true
 }
 
-// ToolArgs devuelve el argv configurable de una herramienta del orquestador.
-// Prioriza `commands.<name>` (argv completo, permite flags), luego el binario de
-// `tools.<name>` y por último el default del propio nombre. Devuelve nil (pane
-// omitido con aviso) si no hay nada configurado.
 func (c Config) ToolArgs(name string) []string {
 	if raw, ok := c.Commands[name]; ok && strings.TrimSpace(raw) != "" {
 		return strings.Fields(raw)
@@ -405,7 +342,6 @@ func (c Config) ToolArgs(name string) []string {
 	return nil
 }
 
-// fieldsOr parte raw en argv; si está vacío usa el fallback.
 func fieldsOr(raw, fallback string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return strings.Fields(fallback)
@@ -413,26 +349,16 @@ func fieldsOr(raw, fallback string) []string {
 	return strings.Fields(raw)
 }
 
-// hint es una entrada de la barra de atajos. Con action vacía es una tecla
-// fija, que no sale de [keybindings] (j/k, pgup/dn). Con action puesta, la
-// tecla se resuelve sobre el mapa ya fusionado, de modo que un override del
-// usuario se refleja en la barra sin tocar nada aquí.
 type hint struct {
 	action string
 	key    string
 	label  string
 }
 
-// hintOrder es la única fuente de la barra de atajos: qué se muestra, en qué
-// orden y con qué etiqueta. La TUI solo une estas partes y las envuelve al
-// ancho de su caja, así que entrar aquí es la única forma de que una tecla
-// aparezca. TestHintsCubrenTodosLosKeybindings vigila que no se quede ninguna
-// fuera.
-//
-// El orden no es decorativo: el recorte a maxHintLines corta por la cola, así
-// que en un terminal estrecho solo sobrevive la cabeza de la lista. Por eso
-// `quit` abre la lista: es la única tecla sin la que no se sale, y si fuera la
-// última sería justo la primera en desaparecer.
+// The only source of the hint bar: the UI just joins these and wraps them, so this is the only way a
+// key can appear. The order is not cosmetic, because clipping to maxHintLines cuts the tail, so in a
+// narrow terminal only the head survives. That is why `quit` opens the list: it is the one key you
+// cannot leave without, so it cannot be the first thing to disappear.
 var hintOrder = []hint{
 	{action: "quit", label: "quit"},
 	{action: "section-next", label: "section"},
@@ -442,46 +368,22 @@ var hintOrder = []hint{
 	{action: "simulate", label: "simulate"},
 	{action: "open-browser", label: "open"},
 	{action: "refresh", label: "refresh"},
-	// `prefix-mode` va aquí y no al final porque el recorte a maxHintLines corta
-	// por la cola: al final se perdería antes que nada. No es una garantía de que
-	// siempre se lea —en un terminal de 40 columnas la barra se corta a tres
-	// líneas y el nombre del modo se va con ella, porque el nombre más largo es
-	// "common"—, pero en cualquier ancho en el que quepan las acciones, cabe
-	// también el modo. Su etiqueta la completa la TUI (ver HintState).
+	// Here rather than at the end, because clipping cuts the tail. Not a guarantee: in a 40-column
+	// terminal the mode name goes with it, since "common" is the longest name.
 	{action: "prefix-mode", label: "prefix"},
-	// `retarget` va DETRÁS de `prefix-mode` y no junto a merge, que es donde lo
-	// querría por grouping. El motivo es el mismo que el de arriba aplicado al
-	// revés: el recorte a maxHintLines corta por la cola, así que una entrada
-	// añadida antes de `prefix-mode` hace que el nombre del modo sea lo primero
-	// que se pierda, y hay un test que vigila exactamente eso. Detrás, lo que se
-	// pierde primero es esto, y a ese ancho tampoco caben ya `move` ni `page`.
-	//
-	// La etiqueta es corta a propósito: "edit target branch" no cabe al lado de
-	// "mount review", y el nombre largo es el que lleva el título del popup.
+	// BEHIND `prefix-mode`, not next to merge where grouping would want it: clipping cuts the tail, so
+	// anything added before the mode makes the mode name the first thing lost. The short label is on
+	// purpose: "edit target branch" does not fit beside "mount review", and the popup title carries
+	// the long name.
 	{action: "retarget", label: "edit base"},
 	{key: "j/k", label: "move"},
 	{key: "pgup/dn", label: "page"},
 }
 
-// HintState son los fragmentos de etiqueta que la config no puede deducir por sí
-// sola porque dependen del estado de la vista. Se indexan por acción: la config
-// sabe qué etiqueta tiene cada acción y cómo se une el fragmento, y quien pinta
-// es quien tiene el estado y lo pasa.
-//
-// Existe porque el hint de `prefix-mode` tiene que decir en qué modo está la
-// columna ITEM, y eso solo lo sabe la TUI. La alternativa —un marcador en la
-// etiqueta que la TUI sustituya— dejaría la barra vista desde la config con un
-// marcador crudo y difumiría que hintOrder es la fuente única de la barra.
+// The `prefix-mode` hint has to say which mode the ITEM column is in, and only the TUI knows that.
+// A placeholder the TUI substituted would leave the config's own view of the bar with a raw marker.
 type HintState map[string]string
 
-// Hints devuelve la barra de atajos como partes ya resueltas y en orden, cada
-// una "tecla etiqueta". Devuelve partes y no líneas porque el reparto en
-// líneas depende del ancho del terminal, que es del layout y no de la config.
-//
-// `state` es opcional: nil da la barra sin estado dinámico, que es la de las
-// teclas fijas y de las acciones cuya etiqueta no depende de la vista. Se pide
-// explícitamente y no por variádico para que ningún llamador declare sin pensar
-// que la barra tiene una dependencia de estado.
 func (c Config) Hints(state HintState) []string {
 	out := make([]string, 0, len(hintOrder))
 	for _, h := range hintOrder {
@@ -501,7 +403,6 @@ func (c Config) Hints(state HintState) []string {
 	return out
 }
 
-// expandAll expande `~/` a home en cada entrada.
 func expandAll(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, p := range in {
@@ -510,8 +411,6 @@ func expandAll(in []string) []string {
 	return out
 }
 
-// expand expande un `~/` inicial a home. Si no se puede resolver home, deja
-// la entrada tal cual.
 func expand(p string) string {
 	if len(p) < 2 || p[0] != '~' || (p[1] != '/' && p[1] != filepath.Separator) {
 		return p
@@ -529,7 +428,6 @@ func mergeString(src *string, dst *string) {
 	}
 }
 
-// mergeForges aplica los overrides del TOML sobre los defaults de forges.
 func mergeForges(dst *Forges, src *forgeFile) {
 	if src.GitHub != nil {
 		if src.GitHub.Enabled != nil {

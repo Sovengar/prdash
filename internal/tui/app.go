@@ -1,7 +1,6 @@
-// Package tui implementa el inbox cross-forge en Bubbletea v2: tres secciones
-// (creados por mí / review asignados / menciones) con datos ricos de cada
-// forge, detalle de ítem, refresco manual y automático con carga progresiva, y
-// acciones approve/merge.
+// Package tui implements prdash's cross-forge inbox in Bubbletea v2: three sections with each forge's
+// rich data, an item detail, manual and automatic refresh with progressive loading, and approve/merge
+// actions.
 package tui
 
 import (
@@ -23,18 +22,14 @@ import (
 	"prdash/internal/state"
 )
 
-// event es el mensaje unificado del canal de trabajo en segundo plano.
 type event interface{}
 
-// authMsg entrega el estado de autenticación de un forge.
 type authMsg struct {
 	cycle int
 	forge string
 	auth  model.AuthState
 }
 
-// pageMsg entrega una página de una lista de un forge. unchanged señala que la
-// cabecera no cambió y que se conserva lo ya cargado.
 type pageMsg struct {
 	cycle     int
 	key       streamKey
@@ -46,45 +41,36 @@ type pageMsg struct {
 	warnings  []model.Warning
 }
 
-// forgeDoneMsg marca el fin de la consulta de un forge.
 type forgeDoneMsg struct {
 	cycle int
 	forge string
 }
 
-// refreshDoneMsg marca el fin de un ciclo de refresco.
 type refreshDoneMsg struct{ cycle int }
 
-// actionMsg entrega el resultado de una acción rápida. cycle registra el ciclo
-// vigente al lanzarla (ver política en applyAction).
+// cycle records the cycle in force when it was launched (see the policy in applyAction).
 type actionMsg struct {
 	cycle   int
 	outcome forge.Outcome
 }
 
-// notifyMsg entrega un aviso efímero para la cabecera.
 type notifyMsg struct {
 	text  string
 	level noticeLevel
 }
 
-// toastTickMsg dispara la poda de los avisos caducados.
 type toastTickMsg struct{}
 
-// tickMsg dispara el refresco automático.
 type tickMsg struct{}
 
-// mountMsg entrega el resultado de un montaje de review en segundo plano.
 type mountMsg struct {
 	result executor.Result
 	err    error
 }
 
-// reviewCleanupMsg entrega el resultado del auto-borrado del worktree tras un
-// merge OK. `base` es el aviso del merge capturado al disparar: el resultado de
-// la limpieza se compone sobre ese texto, no sobre el aviso vigente, para no
-// pisar los hechos que el merge ya traía (modo, rama no borrada). `removed` y
-// `reason` vienen de RemoveIfClean y `err` de un fallo del borrado.
+// `base` is the merge warning captured when it was triggered: the cleanup composes on that text
+// rather than on the current warning, so it does not overwrite the facts the merge brought (mode, branch
+// not deleted).
 type reviewCleanupMsg struct {
 	base    string
 	level   noticeLevel
@@ -93,65 +79,48 @@ type reviewCleanupMsg struct {
 	err     error
 }
 
-// commentsTickMsg dispara la comprobación de si el ítem bajo el cursor tiene ya
-// su conversación. Es un reloj, no un lector del canal, así que no altera el
-// invariante del único lector.
+// A clock rather than a channel reader, so it does not disturb the single-reader invariant.
 type commentsTickMsg struct{}
 
-// commentsMsg entrega la conversación de un ítem. id es el que se pidió, no el
-// que esté bajo el cursor: la respuesta se guarda igual, porque volverá a hacer
-// falta en cuanto se vuelva a ese ítem, pero solo se pinta si sigue seleccionado.
+// id is the one asked for, not the one under the cursor: the answer is stored anyway because it will be
+// needed again as soon as the selection returns, but it is only painted while still selected.
 type commentsMsg struct {
 	id   model.ID
 	page forge.CommentPage
 	err  string
 }
 
-// Mounter monta el review de un ítem (worktree + layout). Un Model sin montador
-// informa que la acción requiere Herdr.
 type Mounter interface {
 	Mount(ctx context.Context, it model.Item) (executor.Result, error)
 }
 
-// refreshTimeout es el límite de un ciclo completo de consulta a los forges.
 const refreshTimeout = 60 * time.Second
 
-// mountTimeout acota un montaje de review completo (puede clonar y bajar refs).
 const mountTimeout = 5 * time.Minute
 
-// actionTimeout es el límite de una acción approve/merge (incluye releer).
 const actionTimeout = 60 * time.Second
 
-// reviewCleanupTimeout acota el borrado del worktree tras un merge (subproceso de
-// git). Es corto porque no debe dejar el evento colgado si el checkout no responde.
+// Short because it must not leave the event hanging when the checkout does not answer.
 const reviewCleanupTimeout = 30 * time.Second
 
-// commentsTimeout acota la consulta de la conversación de un ítem. Es una
-// lectura de un solo PR, así que si tarda más que esto el problema es el forge y
-// no merece la pena seguir esperando: la ficha dice que no se pudo leer y el
-// resto del panel sigue siendo cierto.
+// A read of a single PR: past this the problem is the forge and not worth waiting for, and the rest of
+// the panel is still true.
 const commentsTimeout = 20 * time.Second
 
-// commentsPoll es cada cuánto se mira si el ítem bajo el cursor necesita
-// comentarios. Es un reloj y no un evento: mirar es barato (una comparación de
-// mapa) y así no hay que rearmarlo en cada sitio por el que la selección puede
-// cambiar —teclas, páginas que llegan, acciones— y que se quede sin preguntar en
-// uno de ellos. El coste de un tick es invisible al lado del spinner, que ya
-// corre bastante más rápido.
+// A clock and not an event, because looking is cheap (one map comparison): that is what spares it from
+// having to be re-armed at every site where the selection can change — keys, pages arriving, actions —
+// and going unasked at one of them. A tick's cost is invisible next to the spinner, which runs far faster.
 const commentsPoll = 200 * time.Millisecond
 
-// maxBackoff es el tope del backoff por rate limit.
 const maxBackoff = 10 * time.Minute
 
-// streamKey identifica una lista paginable del inbox. El forge es único por
-// adapter, así que basta con él (más sección y tipo).
+// The forge is unique per adapter, so it is enough with it plus section and kind.
 type streamKey struct {
 	forge   string
 	section model.Section
 	kind    model.ReviewKind
 }
 
-// stream acumula las páginas de una lista.
 type stream struct {
 	items      []model.Item
 	cursor     string // cursor de la última página recibida
@@ -160,21 +129,17 @@ type stream struct {
 	more       bool
 }
 
-// streamHead es la cabecera recordada de un stream, para decidir si un refresco
-// cambió algo sin volver a paginar todo.
 type streamHead struct {
 	cursor   string
 	complete bool
 }
 
-// unchangedHead indica si la primera página de un refresco coincide con la
-// cabecera del último ciclo completo: en ese caso no hace falta seguir
-// paginando (el resto tampoco cambió) y se conserva lo cacheado.
+// The first page of a refresh matches the last complete cycle's header, so there is no need to keep
+// paging (the rest did not change either) and what is loaded is kept.
 func unchangedHead(prev streamHead, page forge.Page) bool {
 	return prev.complete && page.More && page.Next != "" && page.Next == prev.cursor
 }
 
-// forgeStatus es el estado de consulta de un forge.
 type forgeStatus struct {
 	forge     string
 	host      string
@@ -184,15 +149,11 @@ type forgeStatus struct {
 	loading   bool
 }
 
-// sectionPos es la posición recordada de una sección: dónde estaba el cursor y
-// qué línea encabezaba la ventana cuando se dejó de ver. Al volver a una sección
-// se restaura, acotada al contenido nuevo.
 type sectionPos struct {
 	cursor int
 	scroll int
 }
 
-// noticeLevel clasifica el aviso de la cabecera.
 type noticeLevel int
 
 const (
@@ -203,7 +164,6 @@ const (
 	levelError
 )
 
-// Model es el modelo raíz de la TUI.
 type Model struct {
 	cfg      config.Config
 	adapters []forge.Adapter
@@ -213,23 +173,17 @@ type Model struct {
 	statuses map[string]*forgeStatus
 	inbox    inbox.Inbox
 
-	// activeSection es la sección que se pinta y sobre la que opera el cursor.
-	// El inbox muestra una sola a la vez; el resto se resume en la leyenda del
-	// borde. Por defecto Assigned (SectionReview).
+	// Assigned by default: it carries the assigned work, and the rest is one `tab` away.
 	activeSection model.Section
-	// pos recuerda el cursor y el scroll de cada sección para restaurarlos al
-	// volver a ella. Los de la sección activa son los campos cursor/scroll.
+	// The active section's are the cursor/scroll fields.
 	pos map[model.Section]sectionPos
-	// prefixMode es qué parte de la ruta de proyecto ve la columna ITEM. Es
-	// global, no por sección: la barra lo nombra una vez y aplica a la que esté
-	// pintada. Vive solo en memoria —no se persiste— así que al reabrir el
-	// programa vuelve a common, que es el comportamiento heredado.
+	// Global rather than per section: the hint bar names it once and it applies to whatever is painted.
+	// Memory only, not persisted, so reopening the program goes back to common.
 	prefixMode prefixMode
 
 	cursor int
-	// scroll es la primera línea visible de la lista. No lo reajusta la vista
-	// (View no puede mutar el modelo): lo mantienen syncScroll, al mover el
-	// cursor, y rebuild, cuando llegan datos nuevos.
+	// The view cannot re-adjust it (View cannot mutate the model): syncScroll maintains it on cursor moves
+	// and rebuild when new data arrives.
 	scroll int
 
 	width, height int
@@ -237,103 +191,68 @@ type Model struct {
 	backoff       time.Duration
 	lastRefresh   time.Time
 
-	// tickPending evita armar una segunda cadena de auto-refresco mientras ya
-	// hay un tick agendado.
+	// Keeps a second auto-refresh chain from starting while one is already scheduled.
 	tickPending bool
 
-	// readers es el número de lectores del canal en vuelo. El invariante es 1:
-	// cada evento del canal consume un lector y withPump lo rearma; ninguna
-	// rama que no lea del canal debe armar uno (si no, se filtran goroutines).
+	// The invariant is 1: every channel event consumes a reader and withPump arms it back, and no branch
+	// that does not read the channel may arm one (or goroutines leak).
 	readers int
 
 	actionBusy bool
 	denied     map[model.ID]string
-	// selfDenied son los ítems cuya acción de approve no aplica por ser del
-	// propio usuario. A diferencia de `denied` (que el forge impone y un
-	// refresco exitoso borra), esto es una regla local y determinista: se
-	// deriva del ítem y del login del viewer en cada render, no se guarda.
+	// Unlike `denied`, which the forge imposes and a successful refresh clears, this is a local deterministic
+	// rule: derived from the item and the viewer's login on every render, not stored.
 	selfDenied map[model.ID]string
-	// actionCycle recuerda, por ítem, el ciclo en que se aplicó una acción.
-	// Sirve para que una página de refresco capturada antes de la acción no
-	// revierta su estado releído (ver reconcileFirstPage).
+	// So a refresh page captured before the action cannot revert its re-read state (see
+	// reconcileFirstPage).
 	actionCycle map[model.ID]int
 
-	// toast es la pila de avisos transitorios que se superpone a la vista.
 	toast *toastManager
 
-	// comments es la conversación ya consultada de cada ítem que se ha
-	// seleccionado, con su estado de carga. La ficha la lee en cada render, así
-	// que guardar el estado y no solo la lista es lo que permite distinguir
-	// "este PR no tiene comentarios" de "todavía no lo he preguntado", que son
-	// dos líneas distintas y una de ellas no puede quedarse colgada.
+	// Storing the state and not just the list is what lets "this PR has no comments" be told apart from "I
+	// have not asked yet", which are two different lines and one of them cannot be left hanging.
 	//
-	// Se cachea por ítem y no se borra al refrescar: el inbox se recarga cada
-	// minuto y la conversación no cambia a ese ritmo, así que repreguntarla en
-	// cada ciclo solo haría parpadear la ficha. La única invalidación es una
-	// acción sobre el ítem, que sí puede añadir comentarios.
+	// Cached per item and not cleared on refresh: the inbox reloads every minute and a conversation does not
+	// change at that rate, so re-asking every cycle would only make the card flicker. The single
+	// invalidation is an action on the item, which really can add comments.
 	comments map[model.ID]*commentState
 
 	cycle int
 
-	// mounter monta el review de un ítem; nil = sin Herdr/sin executor.
 	mounter   Mounter
 	mountBusy bool
 
-	// simulator renderiza simulaciones de merge/rebase; nil = sin git-sim.
 	simulator Simulator
-	// graphics publica la imagen del popup en la capa de gráficos del pane;
-	// nil = sin Herdr, y la imagen se pinta con half-blocks.
-	graphics Graphics
-	// openURL es el seam del abridor del navegador, y existe por un motivo concreto: sin
-	// él, probar el camino bueno de `openBrowserCmd` —que es el que devuelve "abriendo <url>"—
-	// obliga a EJECUTAR el comando, y eso lanza el navegador de verdad en la máquina de quien
-	// corre los tests. Un `tea.Cmd` es una función: se devuelve y se llama, así que "mirar el
-	// cmd sin llamarlo" no es una opción. nil usa el abridor real del sistema.
+	graphics  Graphics
+	// Without it, testing the good path of `openBrowserCmd` —the one returning "opening <url>"— means
+	// RUNNING the command, and that launches the real browser on whoever runs the tests. A tea.Cmd is a
+	// function: it is returned and then called, so "look at the cmd without calling it" is not an option.
 	openURL func(url string) error
-	// sim es el estado del overlay de simulación y simSeq el número de la
-	// petición en vuelo, que es lo que invalida un render tardío.
-	sim    simPanel
-	simSeq int
+	sim     simPanel
+	simSeq  int
 
-	// retarget es el overlay de cambio de rama destino. Comparte con el de
-	// simulación la regla de captura —abierto, se lleva el teclado entero— y los
-	// dos son excluyentes: ninguno se abre desde dentro del otro.
-	retarget retargetPanel
-	// branchSeq invalida un listado de ramas que llega tarde: el popup se cerró o
-	// se reabrió para otro ítem mientras se pedía.
+	// Shares the capture rule with the simulation overlay —open, it takes the whole keyboard— and the two
+	// are mutually exclusive: neither opens from inside the other.
+	retarget  retargetPanel
 	branchSeq int
-	// branchCache son los listados ya pedidos, por repositorio y con su momento.
-	// Sin él, abrir el popup dos veces seguidas sobre el mismo repo paginaba las
-	// ramas dos veces para cambiar de opinión una vez.
+	// Without it, opening the popup twice in a row on the same repo paginated the branches twice to change
+	// your mind once.
 	branchCache map[repoKey]branchCache
-	// reviewLookup dice si un ítem tiene ya un review montado, para poder avisar
-	// de que su worktree se quedó con la base anterior. nil = no hay con quién
-	// preguntarlo, y el aviso se pierde.
+	// nil means nobody to ask, and the warning is lost.
 	reviewLookup ReviewLookup
-	// reviewRemover borra el worktree del review activo de un ítem si está
-	// limpio. nil = sin auto-borrado: el merge funciona igual y el worktree se
-	// conserva. Es un puerto distinto de reviewLookup porque una capacidad que
-	// borra no puede heredar el contrato "solo lectura y degradable".
+	// A separate port from reviewLookup because a capability that deletes cannot inherit a "read-only and
+	// degradable" contract. nil means no auto-delete: the merge works and the worktree is kept.
 	reviewRemover ReviewRemover
 
-	// mergeArmed es la primera pulsación de merge: espera la segunda, que es la
-	// que elige el modo y ejecuta. mergeArmedID fija el ítem que se armó, porque
-	// un refresco puede recolocar el cursor entre medias y el merge debe salir
-	// sobre lo que el usuario confirmó, no sobre lo que ahora esté debajo.
+	// mergeArmedID pins the item that was armed, because a refresh can move the cursor in between and the
+	// merge must go out on what the user confirmed, not on what is under it now.
 	mergeArmed   bool
 	mergeArmedID model.ID
-	// mergeBlockReason es el motivo por el que state.MergeBlock frena este merge
-	// sin impedirlo (CI en rojo, cambios pedidos, CI todavía corriendo). No es un
-	// veto: es la línea que la confirmación enseña para que la segunda pulsación
-	// sea informada. Vacío = el merge no tiene nada que advertir.
+	// Not a veto: it is the line the confirmation teaches so the second press is informed.
 	mergeBlockReason string
-	// deleteBranch es la segunda de las dos cosas que el merge nombra: si la
-	// rama origen se borra al integrar. Es de sesión y no de ítem —una decisión
-	// sobre la housekeeping, no sobre el PR— y `tab` la conmuta con el merge
-	// armado, que es donde se ve. Arranca en true porque borrar la rama de un PR
-	// ya integrado es lo que se espera y lo que los forges hacen por su cuenta;
-	// quien necesite la rama (una release, un experimento) la apaga una vez y
-	// sigue.
+	// Session-scoped rather than per item (a housekeeping decision, not one about the PR) and toggled by
+	// `tab` while armed, where it is visible. Starts true because deleting the branch of a merged PR is
+	// what is expected and what the forges do on their own; whoever needs the branch turns it off once.
 	deleteBranch bool
 
 	events  chan event
@@ -341,12 +260,9 @@ type Model struct {
 	cancel  context.CancelFunc
 	spinner spinner.Model
 
-	// cachePath es la ruta del snapshot; vacía = sin cache (tests).
 	cachePath string
 }
 
-// New construye el modelo con la config y los adapters habilitados. Pinta el
-// snapshot cacheado si existe y arranca el primer refresco en Init.
 func New(cfg config.Config, adapters []forge.Adapter) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -379,16 +295,13 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		loading:     true,
 		cycle:       1, // el primer ciclo lo lanza Init
 		readers:     1, // Init arma el primer lector del canal
-		// Assigned es la sección que se ve al abrir: es la que lleva el trabajo
-		// asignado, y el resto queda a un `tab`.
+		// Assigned is the section shown on open: it carries the assigned work and the rest is one `tab` away.
 		activeSection: model.SectionReview,
 		pos:           map[model.Section]sectionPos{},
 		branchCache:   map[repoKey]branchCache{},
-		// El borrado de la rama se pide por defecto; se apaga con `tab` en la
-		// Confirmación de merge.
+		// Branch deletion asked for by default; `tab` in the merge confirmation turns it off.
 		deleteBranch: true,
 	}
-	// Init arma el primer tick si el auto-refresco está habilitado.
 	m.tickPending = cfg.RefreshInterval > 0
 	m.spinner = spinner.New(spinner.WithSpinner(spinner.Dot))
 
@@ -402,11 +315,8 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 	return m
 }
 
-// SetMounter inyecta el montador de reviews. nil lo deshabilita: la acción de
-// montar review informa entonces que requiere Herdr.
 func (m *Model) SetMounter(mounter Mounter) { m.mounter = mounter }
 
-// Init lanza el primer refresco, la bomba de eventos, el spinner y el tick.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.launchRefresh(m.cycle),
@@ -418,17 +328,13 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
-// tickToast agenda el siguiente tick de caducidad de los avisos. No consume el
-// canal de eventos (viene de tea.Every), así que no altera el invariante de un
-// único lector.
+// Does not consume the events channel (it comes from tea.Every), so the single-reader invariant holds.
 func tickToast() tea.Cmd {
 	return tea.Every(toastTickInterval, func(time.Time) tea.Msg {
 		return toastTickMsg{}
 	})
 }
 
-// waitForEvent lee UN evento del canal: el patrón de Bubbletea es devolver un
-// Cmd por evento y rearmarlo tras cada uno.
 func waitForEvent(ch <-chan event) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-ch
@@ -439,13 +345,11 @@ func waitForEvent(ch <-chan event) tea.Cmd {
 	}
 }
 
-// armReader arma un lector del canal y refleja el invariante en el contador.
 func (m *Model) armReader() tea.Cmd {
 	m.readers++
 	return waitForEvent(m.events)
 }
 
-// sendEvent publica en el canal respetando la cancelación.
 func sendEvent(ctx context.Context, ch chan<- event, ev event) {
 	select {
 	case ch <- ev:
@@ -453,12 +357,8 @@ func sendEvent(ctx context.Context, ch chan<- event, ev event) {
 	}
 }
 
-// beginRefresh marca el arranque de un ciclo: incrementa el contador (para
-// descartar eventos viejos), deja los forges en carga, limpia sus warnings y
-// reinicia la paginación de cada lista. El `more` anterior es residuo del ciclo
-// que acaba de terminar (si no, una página perdida dejaría el indicador pegado
-// y el auto-refresco pausado para siempre); las páginas nuevas lo volverán a
-// marcar. Devuelve el modelo actualizado y el Cmd que lanza las consultas.
+// The previous `more` is residue of the cycle that just ended: without clearing it, a lost page would
+// leave the indicator stuck and the auto-refresh paused for good. The new pages will set it again.
 func (m *Model) beginRefresh() (Model, tea.Cmd) {
 	m.loading = true
 	m.cycle++
@@ -472,14 +372,11 @@ func (m *Model) beginRefresh() (Model, tea.Cmd) {
 	return *m, m.launchRefresh(m.cycle)
 }
 
-// launchRefresh consulta todos los forges en paralelo y emite sus páginas de
-// forma progresiva. No muta el modelo: el ciclo va en cada mensaje.
 func (m *Model) launchRefresh(cycle int) tea.Cmd {
 	appCtx := m.ctx
 	events := m.events
 	adapters := append([]forge.Adapter(nil), m.adapters...)
 
-	// Cabeceras recordadas para el refresco incremental (comparación por cursor).
 	prev := make(map[streamKey]streamHead, len(m.streams))
 	for key, s := range m.streams {
 		prev[key] = streamHead{cursor: s.headCursor, complete: s.complete}
@@ -494,9 +391,8 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 			wg.Add(1)
 			go func(a forge.Adapter) {
 				defer wg.Done()
-				// La consulta se acota por timeout; la EMISIÓN va con el ctx
-				// de la app para que un timeout no descarte páginas ni el fin
-				// de un forge (eventos críticos) y cuelgue el ciclo.
+				// The QUERY is bounded by a timeout; the EMISSION uses the app's context, so a timeout discards
+				// neither pages nor a forge's end (both critical events) and does not hang the cycle.
 				streamForge(ctx, appCtx, events, a, cycle, prev)
 			}(a)
 		}
@@ -506,13 +402,8 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 	return nil
 }
 
-// streamForge consulta un forge y emite sus páginas, aplicando el corte del
-// refresco incremental por cursor: si la cabecera de una lista no cambió, se
-// emite un mensaje "unchanged" y no se sigue paginando.
-//
-// queryCtx acota la consulta (timeout, cancelación); emitCtx acota la entrega
-// de eventos. Los eventos son críticos: con emitCtx (el de la app) no se
-// descartan al vencer el timeout de la consulta.
+// queryCtx bounds the query (timeout, cancellation); emitCtx bounds event delivery. The events are
+// critical: with emitCtx, which is the app's, they are not dropped when the query timeout expires.
 func streamForge(queryCtx, emitCtx context.Context, events chan<- event, a forge.Adapter, cycle int, prev map[streamKey]streamHead) {
 	sendEvent(emitCtx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(queryCtx)})
 	forge.Stream(queryCtx, a, func(p forge.PageResult) bool {
@@ -535,8 +426,7 @@ func streamForge(queryCtx, emitCtx context.Context, events chan<- event, a forge
 	sendEvent(emitCtx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
 }
 
-// tickCmd programa el siguiente refresco automático. Devuelve nil si el
-// refresco está deshabilitado (intervalo 0).
+// Nil when the refresh is disabled (interval 0).
 func (m *Model) tickCmd() tea.Cmd {
 	d := m.tickInterval()
 	if d <= 0 {
@@ -545,8 +435,7 @@ func (m *Model) tickCmd() tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-// armTick arma el siguiente tick solo si no hay uno pendiente y el
-// auto-refresco está habilitado: garantiza una única cadena de ticks.
+// One tick chain, no matter how many Update calls arrive.
 func (m *Model) armTick() tea.Cmd {
 	if m.tickPending || m.tickInterval() <= 0 {
 		return nil
@@ -555,7 +444,6 @@ func (m *Model) armTick() tea.Cmd {
 	return m.tickCmd()
 }
 
-// tickInterval es el intervalo efectivo del auto-refresco, con backoff.
 func (m *Model) tickInterval() time.Duration {
 	base := m.cfg.RefreshInterval
 	if base <= 0 {
@@ -564,19 +452,14 @@ func (m *Model) tickInterval() time.Duration {
 	return base + m.backoff
 }
 
-// paused indica si el auto-refresco debe esperar: hay una acción en curso o un
-// refresco activo.
-//
-// La paginación no se consulta aquí a propósito: mientras se pagina de verdad
-// el ciclo sigue en vuelo (`loading`), así que ya está pausado. Un `more` que
-// sobrevive al fin del ciclo es residuo (p. ej. la página que lo cerraba se
-// perdió o el forge cortó por rate limit): mirarlo congelaría el tick para
-// siempre y el inbox no volvería a refrescar.
+// Pagination is deliberately NOT consulted here: while it is really paging the cycle is still in flight
+// (`loading`), so it is already paused. A `more` that survives the end of the cycle is residue (the page
+// that closed it was lost, or the forge cut off on a rate limit): consulting it would freeze the tick for
+// good and the inbox would never refresh again.
 func (m *Model) paused() bool {
 	return m.loading || m.actionBusy
 }
 
-// sectionLoadingMore indica si una sección tiene páginas pendientes.
 func (m *Model) sectionLoadingMore(kind model.Section) bool {
 	for key, s := range m.streams {
 		if key.section == kind && s.more {
@@ -586,10 +469,7 @@ func (m *Model) sectionLoadingMore(kind model.Section) bool {
 	return false
 }
 
-// applyPage incorpora una página al stream correspondiente. La primera página
-// reemplaza la lista (refresco incremental: el resto de listas conservan su
-// contenido hasta que llegue su página). Un mensaje unchanged conserva lo ya
-// cargado y cierra la paginación del stream.
+// An unchanged message keeps what is loaded and closes the stream's pagination.
 func (m *Model) applyPage(msg pageMsg) {
 	s := m.streams[msg.key]
 	if s == nil {
@@ -607,9 +487,8 @@ func (m *Model) applyPage(msg pageMsg) {
 		return
 	}
 
-	// La sección y el tipo de review los conoce la TUI por la clave del stream:
-	// se sellan aquí para que las reglas que dependen de ellos (el veto de
-	// aprobar lo propio) no dependan de que cada adapter los estampe.
+	// Sealed here so the rules depending on them (the own-approval veto) do not depend on every adapter
+	// stamping them.
 	for i := range msg.items {
 		msg.items[i].Section = msg.key.section
 		if msg.key.section == model.SectionReview {
@@ -617,8 +496,8 @@ func (m *Model) applyPage(msg pageMsg) {
 		}
 	}
 
-	// Un ítem visto en un refresco exitoso deja de estar denegado: puede que
-	// los permisos ya estén (o el usuario reintente con estado renovado).
+	// An item seen in a successful refresh stops being denied: the permissions may be there now, or the
+	// user is retrying with fresh state.
 	for i := range msg.items {
 		delete(m.denied, msg.items[i].ID())
 	}
@@ -631,8 +510,8 @@ func (m *Model) applyPage(msg pageMsg) {
 	}
 	s.cursor = msg.next
 	s.more = msg.more
-	// Un fallback degradado trae datos parciales: no se marca como completo,
-	// para que el refresco incremental no lo congele.
+	// A degraded fallback brings partial data and is not marked complete, so the incremental refresh
+	// does not freeze it.
 	if !msg.more && !hasDegraded(msg.warnings) {
 		s.complete = true
 	}
@@ -644,8 +523,6 @@ func (m *Model) applyPage(msg pageMsg) {
 	m.rebuild()
 }
 
-// applyItemUpdate reemplaza un ítem conocido por su versión releída; si no
-// estaba, lo añade a su sección.
 func (m *Model) applyItemUpdate(it model.Item) {
 	for _, s := range m.streams {
 		for i := range s.items {
@@ -666,8 +543,7 @@ func (m *Model) applyItemUpdate(it model.Item) {
 	m.rebuild()
 }
 
-// mergeItem conserva la sección y el tipo de review del ítem original si el
-// releído no los trae (ItemState no conoce la sección del inbox).
+// ItemState does not know the inbox section.
 func mergeItem(old, fresh model.Item) model.Item {
 	if fresh.Section == "" {
 		fresh.Section = old.Section
@@ -678,10 +554,7 @@ func mergeItem(old, fresh model.Item) model.Item {
 	return fresh
 }
 
-// reconcileFirstPage reemplaza la lista con la primera página de un refresco,
-// pero conserva el estado releído de los ítems sobre los que se aplicó una
-// acción en ese ciclo o en uno posterior: la página pudo capturarse antes de la
-// acción y no debe revertirla. El resto de la página sí manda.
+// The rest of the page does win.
 func (m *Model) reconcileFirstPage(old, fresh []model.Item, cycle int) []model.Item {
 	if len(m.actionCycle) == 0 {
 		return fresh
@@ -699,7 +572,6 @@ func (m *Model) reconcileFirstPage(old, fresh []model.Item, cycle int) []model.I
 	return out
 }
 
-// findItem busca un ítem por identidad.
 func findItem(items []model.Item, id model.ID) (model.Item, bool) {
 	for _, it := range items {
 		if it.ID() == id {
@@ -709,17 +581,15 @@ func findItem(items []model.Item, id model.ID) (model.Item, bool) {
 	return model.Item{}, false
 }
 
-// rebuild recompone el inbox a partir de los streams y reajusta el cursor.
 func (m *Model) rebuild() {
 	m.inbox = inbox.Build(m.forgeResults())
 	m.refreshSelfDenied()
 	m.clampCursor()
-	// Un refresco puede cambiar cuántas líneas ocupa cada sección: el
-	// desplazamiento se reacomoda para no dejar el cursor fuera de la ventana.
+	// A refresh can change how many lines each section takes, so the scroll is readjusted to keep the
+	// cursor inside the window.
 	m.syncScroll()
 }
 
-// forgeResults compone un resultado por forge de forma determinista.
 func (m *Model) forgeResults() []inbox.ForgeResult {
 	names := m.sortedForgeNames()
 	out := make([]inbox.ForgeResult, 0, len(names))
@@ -739,7 +609,6 @@ func (m *Model) forgeResults() []inbox.ForgeResult {
 	return out
 }
 
-// sortedForgeNames devuelve los nombres de forge ordenados.
 func (m *Model) sortedForgeNames() []string {
 	names := make([]string, 0, len(m.statuses))
 	for name := range m.statuses {
@@ -749,7 +618,6 @@ func (m *Model) sortedForgeNames() []string {
 	return names
 }
 
-// streamItems devuelve los ítems de un stream concreto.
 func (m *Model) streamItems(forgeName string, section model.Section, kind model.ReviewKind) []model.Item {
 	s := m.streams[streamKey{forge: forgeName, section: section, kind: kind}]
 	if s == nil {
@@ -758,9 +626,6 @@ func (m *Model) streamItems(forgeName string, section model.Section, kind model.
 	return s.items
 }
 
-// viewerLogin devuelve el login con el que el usuario está autenticado en un
-// forge, o "" si el adapter no lo conoce. Viene del probe de sesión, que ya se
-// hace en cada refresco.
 func (m *Model) viewerLogin(forgeName string) string {
 	if st := m.statuses[forgeName]; st != nil {
 		return st.auth.Login
@@ -768,10 +633,8 @@ func (m *Model) viewerLogin(forgeName string) string {
 	return ""
 }
 
-// refreshSelfDenied recalcula qué ítems no admiten approve por ser del propio
-// usuario. Se deriva del ítem y del login del viewer, así que un refresco que
-// traiga el ítem de nuevo lo vuelve a marcar: no depende de que nadie se acuerde
-// de limpiarlo. El veto de merge no existe (el autor sí puede mergear).
+// Derived from the item and the viewer's login, so a refresh bringing the item again re-marks it:
+// nothing has to remember to clear it. There is no merge veto: the author CAN merge.
 func (m *Model) refreshSelfDenied() {
 	denied := make(map[model.ID]string)
 	for _, it := range m.rows() {
@@ -782,7 +645,6 @@ func (m *Model) refreshSelfDenied() {
 	m.selfDenied = denied
 }
 
-// clampCursor mantiene el cursor dentro de las filas navegables.
 func (m *Model) clampCursor() {
 	rows := m.rows()
 	if len(rows) == 0 {
@@ -792,24 +654,20 @@ func (m *Model) clampCursor() {
 	m.cursor = min(max(0, m.cursor), len(rows)-1)
 }
 
-// rows devuelve los ítems de la sección activa. El inbox pinta una sola sección
-// a la vez, así que el cursor y la navegación solo recorren esa; el resto se
-// resume en su conteo en la leyenda del borde.
+// The inbox paints one section at a time, so the cursor and the navigation only walk that one; the
+// rest is summarised in the border legend's count.
 func (m *Model) rows() []model.Item {
 	return m.sectionItems(m.activeSection)
 }
 
-// sectionCycle es el orden en que `section-next` recorre las secciones activas:
-// Assigned → Mentioned → Mine → Assigned. No es el orden de la leyenda (Mine ·
-// Assigned · Mentioned, que es el de autoridad del inbox): el ciclo arranca en
-// la sección por defecto y la leyenda conserva el orden con el que se apilan.
+// Not the legend's order (Mine · Assigned · Mentioned, the inbox's authority order): the cycle starts
+// at the default section and the legend keeps the stacking order.
 var sectionCycle = []model.Section{
 	model.SectionReview,
 	model.SectionMentions,
 	model.SectionAuthored,
 }
 
-// sectionCycleIndex devuelve la posición de la sección activa dentro del ciclo.
 func (m *Model) sectionCycleIndex() int {
 	for i, s := range sectionCycle {
 		if s == m.activeSection {
@@ -819,17 +677,14 @@ func (m *Model) sectionCycleIndex() int {
 	return 0
 }
 
-// cycleSection avanza la sección activa al siguiente paso del ciclo. Cicla
-// siempre, aunque la sección destino esté vacía: su estado y su conteo son
-// justo lo que el usuario quiere poder ver.
+// Always cycles, even to an empty section: its state and count are exactly what the user wants to be
+// able to see.
 func (m *Model) cycleSection() {
 	m.setActiveSection(sectionCycle[(m.sectionCycleIndex()+1)%len(sectionCycle)])
 }
 
-// setActiveSection cambia la sección activa recordando la posición de la que
-// sale y restaurando la de la destino (cursor 0 y scroll 0 si nunca se vio),
-// acotada al contenido nuevo. El veto de aprobar lo propio se recalcula: se
-// deriva de los ítems visibles, y ahora son los de otra sección.
+// The own-approval veto is recomputed: it derives from the visible items, and those are now another
+// section's.
 func (m *Model) setActiveSection(kind model.Section) {
 	if m.pos == nil {
 		m.pos = map[model.Section]sectionPos{}
@@ -843,7 +698,6 @@ func (m *Model) setActiveSection(kind model.Section) {
 	m.syncScroll()
 }
 
-// selected devuelve el ítem bajo el cursor, si lo hay.
 func (m *Model) selected() (model.Item, bool) {
 	rows := m.rows()
 	if len(rows) == 0 || m.cursor >= len(rows) {
@@ -852,13 +706,10 @@ func (m *Model) selected() (model.Item, bool) {
 	return rows[m.cursor], true
 }
 
-// sectionItems devuelve los ítems de una sección.
 func (m *Model) sectionItems(kind model.Section) []model.Item {
 	return m.inbox.Section(kind).Items
 }
 
-// sectionProblems devuelve los mensajes de "no se pudo consultar" o de datos
-// parciales de una sección, derivados de los warnings de esa sección.
 func (m *Model) sectionProblems(kind model.Section) []string {
 	var out []string
 	for _, name := range m.sortedForgeNames() {
@@ -873,7 +724,6 @@ func (m *Model) sectionProblems(kind model.Section) []string {
 	return out
 }
 
-// problemText compone el aviso de un warning para una sección.
 func problemText(forgeName string, w model.Warning) string {
 	if w.Kind == "degraded" {
 		return fmt.Sprintf("%s: %s", forgeName, w.Msg)
@@ -881,7 +731,6 @@ func problemText(forgeName string, w model.Warning) string {
 	return fmt.Sprintf("%s: could not be queried (%s)", forgeName, problemLabel(w.Kind))
 }
 
-// hasDegraded indica si algún warning marca datos parciales.
 func hasDegraded(warns []model.Warning) bool {
 	for _, w := range warns {
 		if w.Kind == "degraded" {
@@ -891,7 +740,6 @@ func hasDegraded(warns []model.Warning) bool {
 	return false
 }
 
-// problemLabel traduce el tipo de warning a una etiqueta corta.
 func problemLabel(kind string) string {
 	switch kind {
 	case "auth":
@@ -913,7 +761,6 @@ func problemLabel(kind string) string {
 	}
 }
 
-// lastRefreshLabel resume el momento de la última actualización de una fuente.
 func lastRefreshLabel(since time.Time, now time.Time) string {
 	if since.IsZero() {
 		return "no data"
@@ -931,7 +778,6 @@ func lastRefreshLabel(since time.Time, now time.Time) string {
 	}
 }
 
-// applySnapshot vuelca el cache en los streams (sin cursor de paginación).
 func (m *Model) applySnapshot(f cache.File) {
 	for _, cs := range f.Streams {
 		key := streamKey{forge: cs.Forge, section: cs.Section, kind: cs.Kind}
@@ -942,7 +788,6 @@ func (m *Model) applySnapshot(f cache.File) {
 	}
 }
 
-// snapshot compone el documento de cache a partir de los streams.
 func (m *Model) snapshot() cache.File {
 	keys := make([]streamKey, 0, len(m.streams))
 	for key := range m.streams {
@@ -977,7 +822,6 @@ func (m *Model) snapshot() cache.File {
 	return f
 }
 
-// saveSnapshot persiste el snapshot sin bloquear la UI.
 func (m *Model) saveSnapshot() {
 	if m.cachePath == "" {
 		return
@@ -987,8 +831,6 @@ func (m *Model) saveSnapshot() {
 	go func() { _ = cache.Save(path, f) }()
 }
 
-// recomputeBackoff ajusta el backoff del auto-refresco según los warnings del
-// último ciclo (límite de peticiones o timeout).
 func (m *Model) recomputeBackoff() {
 	limited := false
 	for _, st := range m.statuses {
@@ -1013,8 +855,7 @@ func (m *Model) recomputeBackoff() {
 	}
 }
 
-// appendWarnings añade warnings sin duplicar los ya presentes (la paginación
-// puede repetir el mismo aviso en cada página).
+// Pagination can repeat the same warning on every page.
 func appendWarnings(dst, src []model.Warning) []model.Warning {
 	for _, w := range src {
 		dup := false
@@ -1031,7 +872,7 @@ func appendWarnings(dst, src []model.Warning) []model.Warning {
 	return dst
 }
 
-// toastForLevel traduce el nivel de aviso interno al del toast. levelNone no
+// levelNone produces nothing: a warning with no level never gets painted.
 // produce nada: un aviso sin nivel no llega a pintarse.
 func toastForLevel(level noticeLevel) (toastLevel, bool) {
 	switch level {
@@ -1048,37 +889,25 @@ func toastForLevel(level noticeLevel) (toastLevel, bool) {
 	}
 }
 
-// setNoticeReplacing compone sobre un aviso vigente: si el aviso con el texto
-// prev sigue vivo, lo actualiza con el nuevo texto y nivel en vez de apilar una
-// segunda copia que repetiría los hechos que prev ya contaba.
 func (m *Model) setNoticeReplacing(prev, text string, level noticeLevel) {
 	if lvl, ok := toastForLevel(level); ok {
 		m.toast.replace(prev, text, lvl)
 	}
 }
 
-// setNotice lanza el aviso como toast: se dibuja encima de la vista y caduca
-// solo, en vez de ocupar la cabecera hasta que lo sustituya otro evento.
 func (m *Model) setNotice(text string, level noticeLevel) {
 	if lvl, ok := toastForLevel(level); ok {
 		m.toast.show(text, lvl)
 	}
 }
 
-// Wiring resume qué dependencias tiene inyectadas el modelo.
+// Because wiring is seven `SetX` calls in a row and a missing one does NOT break compilation. The model
+// comes up anyway and the failure only surfaces when the user presses the key, with a warning that says
+// "missing dependency" — a diagnosis rather than a failure, and one that does not say which of the seven.
 //
-// Y existe por una razón concreta: el cableado son siete `SetX` seguidos, y uno que falte
-// NO rompe la compilación. El modelo arranca igual y el fallo sale solo cuando el usuario
-// pulsa la tecla correspondiente, con un aviso que dice "falta la dependencia" —que es un
-// diagnóstico, no un fallo, y que no dice cuál de las siete falta.
-//
-// Con esto, el cableado se puede comprobar entero desde fuera del paquete, que es lo que
-// hace que `cmd/prdash`'s `wire` sea una función testeable en vez de un bloque de código
-// que solo se ejecuta de verdad.
-//
-// Y `Simulator` y `Mounter` son las interfaces, no un `bool`: comparar la instancia es lo
-// que permite afirmar que el simulador y el registro de reviews usan EL MISMO ejecutor, que
-// es el fallo que cuatro instancias distintas producen en producción y no en los tests.
+// Simulator and Mounter are the interfaces rather than a bool: comparing the instance is what lets a test
+// assert that the simulator and the review registry share THE SAME executor, which is the failure four
+// distinct instances produce in production and not in tests.
 type Wiring struct {
 	Mounter       Mounter
 	Simulator     Simulator
@@ -1087,8 +916,6 @@ type Wiring struct {
 	ReviewRemover ReviewRemover
 }
 
-// Wiring devuelve qué dependencias tiene inyectadas el modelo. nil es una dependencia
-// ausente, que es exactamente lo que el modelo trata como "pide instalar X".
 func (m *Model) Wiring() Wiring {
 	return Wiring{
 		Mounter:       m.mounter,

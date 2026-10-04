@@ -9,33 +9,19 @@ import (
 	"time"
 )
 
-// shRunner es un Runner que habla con /bin/sh, que existe en cualquier runner de
-// CI y no depende de git ni de gh.
 func shRunner(timeout time.Duration) *Runner { return &Runner{Bin: "sh", Timeout: timeout} }
 
-// TestRunAplicaElTimeoutPorDefecto cuando no hay timeout configurado. Sin el
-// default, un `gh` colgado dejaría la TUI esperando para siempre: el inbox no
-// refresca y el usuario ve una lista congelada sin aviso.
-//
-// El caso que importa es Timeout=0 (cero explícito, no el que pone New): es el
-// valor de un Runner construido a mano, y `<= 0` es lo que lo recoge. Con
-// contexto ya vencido, un timeout de 0 es un plazo que pasó hace 30 segundos, así
-// que sin el default el comando muere al instante aunque sea trivial.
+// Without the default, a hung `gh` leaves the TUI frozen.
 func TestRunAplicaElTimeoutPorDefecto(t *testing.T) {
-	// Cero: el comando trivial tiene que salir bien, o sea que el plazo real era
-	// el default y no cero.
 	if _, err := shRunner(0).Run(context.Background(), "-c", "echo ok"); err != nil {
 		t.Errorf("timeout=0 debería usar el default, pero falló: %v", err)
 	}
-	// Negativo: un Runner mal formado, que el default también corrige. Con el
-	// guard, un plazo negativo se vuelve el default y el comando sale bien; sin
-	// él, WithTimeout lo trata como vencido y cancela al instante. Por eso el
-	// caso se afirma como ÉXITO, que es lo contrario de lo intuitivo.
+	// Negative: a malformed Runner, which the default also fixes.
 	if _, err := shRunner(-time.Second).Run(context.Background(), "-c", "sleep 1"); err != nil {
 		t.Errorf("un timeout negativo debería caer al default, pero falló: %v", err)
 	}
-	// Y Run no toca el Timeout del Runner: si lo mutara, el segundo Run usaría
-	// el default como timeout propio y dejaría de ser corregible.
+	// Run does not touch the Runner's Timeout: mutating it would make the second Run use the
+	// default instead of the configured one.
 	r := shRunner(0)
 	if _, err := r.Run(context.Background(), "-c", "echo ok"); err != nil {
 		t.Fatal(err)
@@ -43,18 +29,11 @@ func TestRunAplicaElTimeoutPorDefecto(t *testing.T) {
 	if r.Timeout != 0 {
 		t.Errorf("Run mutó el Timeout del Runner: %v", r.Timeout)
 	}
-	// Un timeout positivo y corto se respeta: el comando duerme más de lo que se
-	// le da y muere por plazo, que es la otra mitad del contrato.
 	if _, err := shRunner(50*time.Millisecond).Run(context.Background(), "-c", "sleep 5"); err == nil {
 		t.Error("un comando que excede el timeout tiene que fallar")
 	}
 }
 
-// TestRunUsaElMensajeDeStderrYElDeSuUltimoRespaldo: el motivo que ve el usuario
-// sale de stderr, y stderr vacío cae al error del propio proceso. Sin ese
-// respaldo, un binario que falla sin escribir nada daría un Error con Msg vacío,
-// que se clasificaría como "network" sin motivo y dejaría al usuario sin nada
-// que hacer.
 func TestRunUsaElMensajeDeStderrYElDeSuUltimoRespaldo(t *testing.T) {
 	// stderr presente: manda stderr, y solo su primera línea.
 	_, err := shRunner(time.Second).Run(context.Background(), "-c", "echo 'el motivo real' >&2; exit 3")
@@ -69,7 +48,6 @@ func TestRunUsaElMensajeDeStderrYElDeSuUltimoRespaldo(t *testing.T) {
 		t.Errorf("ExitCode = %d, want 3", cerr.ExitCode)
 	}
 
-	// stderr vacío: el motivo sale del error del proceso, y no queda vacío.
 	_, err = shRunner(time.Second).Run(context.Background(), "-c", "exit 7")
 	if !errors.As(err, &cerr) {
 		t.Fatalf("error = %T, want *tool.Error", err)
@@ -81,8 +59,7 @@ func TestRunUsaElMensajeDeStderrYElDeSuUltimoRespaldo(t *testing.T) {
 		t.Errorf("ExitCode = %d, want 7", cerr.ExitCode)
 	}
 
-	// stderr solo con blancos: también cuenta como vacío (se hace TrimSpace
-	// antes de mirar), así que el motivo sale del error del proceso.
+	// Whitespace-only stderr counts as empty too, because it is trimmed before the check.
 	_, err = shRunner(time.Second).Run(context.Background(), "-c", "echo '   ' >&2; exit 5")
 	if !errors.As(err, &cerr) {
 		t.Fatalf("error = %T, want *tool.Error", err)
@@ -92,10 +69,7 @@ func TestRunUsaElMensajeDeStderrYElDeSuUltimoRespaldo(t *testing.T) {
 	}
 }
 
-// TestRunDevuelveStdoutAunqueFalle: algunas CLIs de forge traen la respuesta
-// válida en stdout y salen con código distinto de cero (`gh pr checks` con un
-// check en rojo, entre otros). Tirar esa salida deja al usuario sin el dato que
-// sí llegó, y el aviso sin el porqué.
+// Some forge CLIs print a valid answer on stdout and exit non-zero.
 func TestRunDevuelveStdoutAunqueFalle(t *testing.T) {
 	out, err := shRunner(time.Second).Run(context.Background(), "-c", "echo 'salida válida'; exit 1")
 	if err == nil {
@@ -106,16 +80,9 @@ func TestRunDevuelveStdoutAunqueFalle(t *testing.T) {
 	}
 }
 
-// TestKindIgnoraElCodigoHTTPQueNoSeparaNada es la precondición de la cadena de
-// clasificación: un texto sin código HTTP debe caer al análisis de texto, y un
-// código que kindForHTTP no traduce (200, 418…) también, porque ahí lo único que
-// hay es el fraseo.
-//
-// Si el código 0 (que es lo que devuelve HTTPStatus cuando no encuentra nada) se
-// tomara como un código real, todo mensaje sin código se clasificaría por
-// kindForHTTP(0) = "" y se perdería el análisis de texto entero.
+// The precondition of the classification chain.
 func TestKindIgnoraElCodigoHTTPQueNoSeparaNada(t *testing.T) {
-	// Un texto sin código HTTP se clasifica por su fraseo, no por un 0 ficticio.
+	// Text with no HTTP code is classified by its wording, not by a fake 0.
 	for msg, want := range map[string]string{
 		"401 Unauthorized":           "auth",
 		"404 Not Found":              "notfound",
@@ -129,16 +96,11 @@ func TestKindIgnoraElCodigoHTTPQueNoSeparaNada(t *testing.T) {
 		}
 	}
 
-	// Un código que kindForHTTP no traduce deja pasar el texto. El 418 es el
-	// ejemplo limpio: es un código real y no significa nada para prdash.
+	// A code kindForHTTP does not translate lets the text through; 418 is the clean case.
 	if got := Kind(errors.New("HTTP 418: I am a teapot, not authorized")); got != "permission" {
 		t.Errorf("con un código sin traducción debe mandar el texto, dio %q", got)
 	}
-	// Y el caso que de verdad fija el ORDEN: mensajes donde el código HTTP y el
-	// texto dicen cosas distintas. Ahí manda el código, y la clase cambia. Con
-	// texto en vez de código, un 404 de un conflicto se ofrecería como "refresca"
-	// cuando lo que hay que rehacer es un rebase, o un 403 de rate limit se
-	// anunciaría como permiso y la acción quedaría deshabilitada para siempre.
+	// The case that really pins the ORDER: messages where the HTTP code and the text disagree.
 	discrepan := map[string]string{
 		"HTTP 404: merge conflict":            "notfound",
 		"HTTP 401: forbidden":                 "auth",
@@ -159,7 +121,6 @@ func TestKindIgnoraElCodigoHTTPQueNoSeparaNada(t *testing.T) {
 			t.Errorf("kindForHTTP(%d) = %q, want \"\" (sin traducción, que el texto decida)", code, got)
 		}
 	}
-	// Los que sí, para que la tabla no se vacíe por accidente.
 	for code, want := range map[int]string{
 		401: "auth", 403: "permission", 404: "notfound",
 		409: "conflict", 422: "validation", 429: "ratelimit",
@@ -171,11 +132,6 @@ func TestKindIgnoraElCodigoHTTPQueNoSeparaNada(t *testing.T) {
 	}
 }
 
-// TestHTTPStatusRecomponeElCodigo: el código se lee dígito a dígito de una
-// cadena, así que la aritmética del acumulador es lo que lo compose. Un error
-// ahí no da un código equivocado: da el código equivocado Y con el mismo aspecto
-// (tres dígitos), que es peor, porque un 404 leído como 404 con otro valor
-// clasifica el error en la clase de otro.
 func TestHTTPStatusRecomponeElCodigo(t *testing.T) {
 	cases := map[string]int{
 		"HTTP 404: Not Found":                   404,
@@ -192,9 +148,8 @@ func TestHTTPStatusRecomponeElCodigo(t *testing.T) {
 		"HTTP 403 sin texto de estado":          403,
 		"se receiving 200 pero no es un status": 0,
 		"status code: 422 con dos puntos":       422,
-		// Lo que parece un código pero no lo es. Un falso positivo aquí no es un
-		// 0: es un código equivocado que clasifica el error en la clase de otro,
-		// y por eso el patrón es estrecho a propósito.
+		// Something that looks like a code but is not. A false positive here is not a 0: it is a code
+		// printed as if it were one.
 		"X-Status-Code: 409 en una cabecera": 0,
 		"status_code 404 con guion bajo":     0,
 		"HTTP 40x4 no es un código":          0,
@@ -206,9 +161,6 @@ func TestHTTPStatusRecomponeElCodigo(t *testing.T) {
 	}
 }
 
-// TestFirstLineRecortaSinPerderNada: FirstLine es lo que decide qué frase entra
-// en el clasificador, y un mensaje de varias líneas del forge trae el motivo
-// detrás del argv. Sin recorte, el texto entero acabaría en el aviso.
 func TestFirstLineRecortaSinPerderNada(t *testing.T) {
 	cases := map[string]string{
 		"uno":                "uno",
@@ -228,9 +180,6 @@ func TestFirstLineRecortaSinPerderNada(t *testing.T) {
 	}
 }
 
-// TestExitCodeLeeElDeLaCadenaYSTecla lo que devuelven: 0 si no hay código en
-// error ninguno, y el del subproceso cuando lo hay. Un 0 falso se lee como
-// "salió bien" en quien lo use para decidir.
 func TestExitCodeLeeElDeLaCadenaYSTecla(t *testing.T) {
 	if got := ExitCode(nil); got != 0 {
 		t.Errorf("ExitCode(nil) = %d, want 0", got)
@@ -246,7 +195,6 @@ func TestExitCodeLeeElDeLaCadenaYSTecla(t *testing.T) {
 	if got := ExitCode(errWrap{&Error{ExitCode: 9}}); got != 9 {
 		t.Errorf("ExitCode(envuelto) = %d, want 9", got)
 	}
-	// Y el exec.ExitError crudo, que es lo que devuelve exec sin envolver.
 	var exitErr *exec.ExitError
 	if errors.As(shRunFailure(t, 6), &exitErr) {
 		if got := ExitCode(exitErr); got != 6 {
@@ -270,7 +218,6 @@ func shRunFailure(t *testing.T, code int) error {
 	if !errors.As(err, &cerr) {
 		t.Fatalf("error = %T, want *tool.Error", err)
 	}
-	// Se devuelve la causa cruda de exec, que es lo que exec.ExitError quiere.
 	return cerr.Err
 }
 

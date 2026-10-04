@@ -8,10 +8,8 @@ import (
 	"prdash/internal/forge"
 )
 
-// TestMergeAsksForTheBranchDeletion: el flag de borrado solo aparece cuando la
-// Confirmación lo pidió. Mandarlo siempre sería peor que no mandarlo: en un repo
-// con merge queue gh RECHAZA el comando entero si ve `-d`, así que un `-d`
-// implícito rompería merges que hoy funcionan.
+// Sending it always would be worse than not sending it: in a repo with a merge queue gh rejects
+// the whole command.
 func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -38,9 +36,6 @@ func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 	}
 }
 
-// TestMergeWithDeleteStillPins: el borrado es un efecto POSTERIOR al merge, y
-// añadirlo no puede relajar el pin. Un `--delete-branch` que se llevara por
-// delante el `--match-head-commit` devolvería el bug que el pin arregla.
 func TestMergeWithDeleteStillPins(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")

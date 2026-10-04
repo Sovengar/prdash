@@ -14,7 +14,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// TestBuildAdaptersWiring comprueba que el wiring de adapters respeta la config.
 func TestBuildAdaptersWiring(t *testing.T) {
 	cfg := config.Defaults() // github + gitlab habilitados, bitbucket no
 	got := names(buildAdapters(cfg))
@@ -36,7 +35,6 @@ func TestBuildAdaptersWiring(t *testing.T) {
 	}
 }
 
-// TestRunPrint cubre el modo --print con un adapter falso (sin red).
 func TestRunPrint(t *testing.T) {
 	item := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
 	item.Title = "Add widget"
@@ -57,8 +55,6 @@ func TestRunPrint(t *testing.T) {
 	}
 }
 
-// TestRunPrintKeepsOrder comprueba que el orden de las secciones es determinista
-// aunque los forges se consulten en paralelo.
 func TestRunPrintKeepsOrder(t *testing.T) {
 	mk := func(forgeName string) *testutil.FakeAdapter {
 		it := model.NewItem(model.RepoRef{Forge: forgeName, Host: forgeName + ".com", Project: "o/r"}, 1)
@@ -79,8 +75,6 @@ func TestRunPrintKeepsOrder(t *testing.T) {
 	}
 }
 
-// TestRunPrintShowsActiveReview comprueba que --print añade de forma
-// determinista la ruta del worktree del review activo de cada ítem.
 func TestRunPrintShowsActiveReview(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
 	it.Title = "Add widget"
@@ -106,8 +100,6 @@ func TestRunPrintShowsActiveReview(t *testing.T) {
 	}
 }
 
-// TestRunPrintWithoutReviewsKeepsF1 comprueba que sin resolvedor de reviews la
-// salida de --print no cambia respecto a F1.
 func TestRunPrintWithoutReviewsKeepsF1(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
 	it.Title = "Add widget"
@@ -137,16 +129,8 @@ func names(adapters []forge.Adapter) []string {
 	return out
 }
 
-// TestRunPrintNoAplicaElModoDePrefijo fija la independencia de --print respecto
-// al modo de prefijo de la TUI. Son dos salidas distintas por diseño: la TUI
-// reparte la ruta entre una línea y las celdas porque el ancho es el recurso
-// escaso, y --print no tiene columna ni terminal, así que imprime la referencia
-// entera siempre.
-//
-// El fixture usa una ruta de subgrupo larga —la que en la TUI se recortaría por
-// la cola y pondría el grupo en la línea de prefijo— para que un acoplamiento
-// accidental se notara: si --print heredara el modo, saldría "…" o una línea
-// "· APPCITTI/vsocial/".
+// --print is independent of the TUI's prefix mode by design: the TUI splits the path and --print
+// does not.
 func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 	const (
 		largo  = "APPCITTI/vsocial/backend/api-gateway"
@@ -182,8 +166,8 @@ func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 	if strings.Contains(out, "…") {
 		t.Errorf("--print recortó una referencia, y no debe: la TUI es la que recorta:\n%s", out)
 	}
-	// La línea de prefijo atenuada de la TUI no existe aquí: --print no compone
-	// ninguna lista ni declara ningún prefijo común.
+	// The TUI's dimmed prefix line does not exist here: --print composes no list and declares no common
+	// prefix.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(strings.TrimLeft(line, " "), "· ") {
 			t.Errorf("--print pintó una línea de prefijo: %q", line)
@@ -191,18 +175,7 @@ func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 	}
 }
 
-// imprimeABuffer ejecuta fn pasándole un buffer como stdout y stderr, y devuelve lo que
-// salió por stdout.
-//
-// Y sustituye a los dos capturadores por fd que había antes, y el motivo no es que
-// `bytes.Buffer` sea más limpio: es que **`os.Pipe` tiene un búfer de 64 KiB**. Un
-// capturador por fd solo devuelve si lo escrito cabe; en cuanto `fn` pasa de 64 KiB se
-// bloquea escribiendo en una tubería que nadie lee hasta que `fn` vuelva, y `fn` no vuelve
-// porque está bloqueado. Un test que pasa con la tabla del inbox entera y se cuelga cuando la
-// tabla crece es un test que falla por la razón equivocada.
-//
-// Y con un buffer no hay límite ni carrera: `fn` escribe en memoria y el contenido se lee
-// después.
+// It replaces the two fd captures that were there before.
 func imprimeABuffer(t *testing.T, fn func(w io.Writer)) string {
 	t.Helper()
 	var buf bytes.Buffer

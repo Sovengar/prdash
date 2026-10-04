@@ -125,13 +125,18 @@ docs/adr/              → decisiones de arquitectura (ADR numeradas)
 ## Convenciones
 
 - **Archivos**: `snake_case.go`. **Tipos**: `PascalCase`.
-- **Comentarios y docs en español** donde aplique (el README y las ADRs lo están).
+- **Comentarios en inglés, y solo si explican el POR QUÉ.** El README y las ADRs
+  siguen en español: son los que lee el operador, no quien lee el diff. Un comentario
+  que explica *cómo* funciona el código se borra —el código ya lo dice y cambia más
+  rápido—. Uno que justifica una decisión, una restricción o una trampa se queda, y
+  se comprime a una línea. Ver `docs/adr/0009-comentarios-en-ingles.md`.
 - **`internal/` exclusivamente** — no hay paquetes exportados.
 - **Config nunca aborta**: un config ausente o malformado degrada a defaults con
   un aviso. Es un patrón del proyecto, no una excepción: no introduzcas `os.Exit`
   ni `panic` por config inválido en runtime.
 - **Layouts de TUI**: degradación honesta y explícita. Si una caja no cabe, no
-  se pinta a medias — todo o nada. La razón está en los comentarios del código.
+  se pinta a medias — todo o nada. El suelo que lo hace posible va escrito junto a la
+  aritmética, porque un guard que no puede dispararse esconde la cuenta.
 - **Merge pide dos teclas** y una de ellas es el modo de confirmación.
 - **Worktrees de Worktrunk** viven bajo `.worktrees/`.
 

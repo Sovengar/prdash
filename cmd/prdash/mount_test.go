@@ -47,9 +47,6 @@ func TestToolAvailabilityReportsMissingBinary(t *testing.T) {
 	}
 }
 
-// El editor no se somete al chequeo de binarios: `vi` es una función del shell,
-// no un ejecutable, así que buscarlo en el PATH lo declararía ausente y el plan
-// omitiría el pane. Que no esté en el mapa es lo que lo mantiene siempre.
 func TestToolAvailabilityDoesNotGateTheEditor(t *testing.T) {
 	tools := plan.Tools{
 		Tuicr:  plan.Tool{Argv: []string{"tuicr"}},
@@ -61,8 +58,6 @@ func TestToolAvailabilityDoesNotGateTheEditor(t *testing.T) {
 		t.Fatal("el editor no debería pasar por el chequeo de disponibilidad")
 	}
 
-	// Y el efecto, con un entorno que no declara ninguna herramienta: el resto se
-	// omite con aviso y el editor se queda solo en su tab.
 	pl := plan.Build(model.Item{}, plan.Worktree{Path: "/wt"}, tools, plan.Env{Available: map[string]bool{}})
 	if pl.PaneCount() != 1 {
 		t.Fatalf("panes = %d, quiero solo el editor: %+v", pl.PaneCount(), pl)

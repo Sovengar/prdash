@@ -8,15 +8,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestPaneEnvAportaLoQueSeYLoQueNo: el env del pane es el contrato con las
-// herramientas de review (tuicr, hunk, el agente). Son datos del ítem y del
-// worktree, y un pane que los recibe a medias —una variable que falta o una que
-// viaja vacía— hace que la herramienta revise la cosa equivocada sin avisar.
-//
-// Las tres variables de identidad (repo, número y worktree) siempre se aportan:
-// un pane sin ellas no sabe sobre qué está trabajando. Las de contexto (rama,
-// base y URL) solo si el dato existe, y vacías no: `PRDASH_BRANCH=` se lee
-// como "la rama es la cadena vacía", que es un valor, no una ausencia.
+// The pane env is the contract with the review tools.
 func TestPaneEnvAportaLoQueSeYLoQueNo(t *testing.T) {
 	base := func() (model.Item, Worktree) {
 		it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}, 7)
@@ -26,7 +18,6 @@ func TestPaneEnvAportaLoQueSeYLoQueNo(t *testing.T) {
 		return it, Worktree{Path: "/wt/pr-7", Branch: "prdash/pr-7"}
 	}
 
-	// Con todo: las seis.
 	it, wt := base()
 	env := envMap(t, paneEnv(it, wt))
 	for k, want := range map[string]string{
@@ -45,9 +36,6 @@ func TestPaneEnvAportaLoQueSeYLoQueNo(t *testing.T) {
 		t.Errorf("env = %d variables, want 6: %v", len(env), env)
 	}
 
-	// Sin rama, sin base y sin URL: solo las de identidad, y ninguna vacía
-	// colgada (una variable presente y vacía se lee como un valor, no como una
-	// ausencia).
 	bare := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 3)
 	env = envMap(t, paneEnv(bare, Worktree{Path: "/wt/pr-3"}))
 	for _, k := range []string{"PRDASH_REPO", "PRDASH_NUMBER", "PRDASH_WORKTREE"} {
@@ -69,17 +57,12 @@ func TestPaneEnvAportaLoQueSeYLoQueNo(t *testing.T) {
 		t.Errorf("env = %d variables, want 3: %v", len(env), env)
 	}
 
-	// Y el número va como número, no como el número de la struct formateado.
 	env = envMap(t, paneEnv(bare, Worktree{Path: "/wt"}))
 	if env["PRDASH_NUMBER"] != strconv.Itoa(bare.Number) {
 		t.Errorf("PRDASH_NUMBER = %q, want %q", env["PRDASH_NUMBER"], strconv.Itoa(bare.Number))
 	}
 }
 
-// TestToolEffectiveCaeAlBinarioPorDefecto: un Tool con argv vacío y sin override
-// usa el binario por defecto, que es lo que hace que la config vacía funcione sin
-// tocar nada. Y con override, el argv va verbatim: no se le añade nada, porque
-// la config dice que ese argv es el completo.
 func TestToolEffectiveCaeAlBinarioPorDefecto(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -101,8 +84,8 @@ func TestToolEffectiveCaeAlBinarioPorDefecto(t *testing.T) {
 		})
 	}
 
-	// Y el argv devuelto no se aliasa al del Tool: si quien lo recibe lo muta, no
-	// puede cambiar el Tool de origen.
+	// The returned argv is not aliased to the Tool's: if the receiver mutates it, the change cannot
+	// leak back.
 	tool := Tool{Argv: []string{"tuicr"}}
 	got := tool.effective("default-bin", "extra")
 	got[0] = "otro"
@@ -111,10 +94,7 @@ func TestToolEffectiveCaeAlBinarioPorDefecto(t *testing.T) {
 	}
 }
 
-// TestToolBinaryDistingueOverrideVacioDeBaseVacio: un override sin argv no tiene
-// ejecutable, y eso significa "omite el pane". Un base sin argv sí tiene:
-// significa "usa el default". Confundirlos convertiría "configurado como vacío"
-// en "usa tuicr", que es lo contrario de lo que el usuario escribió.
+// An override with no argv has no executable, which means "omit the pane".
 func TestToolBinaryDistingueOverrideVacioDeBaseVacio(t *testing.T) {
 	cases := []struct {
 		name string
@@ -135,7 +115,6 @@ func TestToolBinaryDistingueOverrideVacioDeBaseVacio(t *testing.T) {
 	}
 }
 
-// envMap convierte el env del pane en un mapa, y falla si algo no es "K=V".
 func envMap(t *testing.T, env []string) map[string]string {
 	t.Helper()
 	out := map[string]string{}

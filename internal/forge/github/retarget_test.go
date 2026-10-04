@@ -9,11 +9,8 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestRetargetUsesTheAPINotPrEdit fija el argv del cambio de base, y sobre todo lo
-// que NO es: `gh pr edit --base` es la vía que documenta gh y hoy falla con un
-// error de GraphQL por la deprecación de Projects Classic antes de tocar nada. Un
-// test que solo afirmara "cambia la base" pasaría con las dos vías, así que este
-// comprueba el camino bueno Y la ausencia del roto.
+// `gh pr edit --base` is the documented way and it fails today before touching anything, on a
+// deprecated Projects (classic) query that only errors in some repos.
 func TestRetargetUsesTheAPINotPrEdit(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")
@@ -36,10 +33,7 @@ func TestRetargetUsesTheAPINotPrEdit(t *testing.T) {
 	}
 }
 
-// TestRetargetRefusesEmptyBranch: sin rama no hay nada que enviar, y el argv con
-// el campo vacío no es una operación inofensiva sino la que deja el PR sin base.
-// El corte se comprueba por ausencia de llamada, no por el warning: lo que importa
-// es que no se haya gastado nada.
+// An argv with an empty field is not a harmless no-op: it is what leaves the PR with no target.
 func TestRetargetRefusesEmptyBranch(t *testing.T) {
 	for _, branch := range []string{"", "   "} {
 		dir := t.TempDir()
@@ -55,9 +49,6 @@ func TestRetargetRefusesEmptyBranch(t *testing.T) {
 	}
 }
 
-// TestBranchesPaginatesAndProjectsElNombre: el listado tiene que traer el
-// repositorio entero y no una página, porque el buscador que lo consume ofrece
-// destinos y un subconjunto dejaría fuera la rama que se buscaba sin avisar.
 func TestBranchesPaginatesAndProjectsElNombre(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := dir + "/gh.args"
@@ -85,9 +76,6 @@ func TestBranchesPaginatesAndProjectsElNombre(t *testing.T) {
 	}
 }
 
-// TestBranchesAvisaSinProyecto: sin proyecto no hay a qué preguntar, y el motivo
-// tiene que ser el del notfound para que la TUI lo trate como conflicto y no como
-// un repositorio sin ramas.
 func TestBranchesAvisaSinProyecto(t *testing.T) {
 	dir := t.TempDir()
 	bin, _ := recorder(t, dir, "gh")

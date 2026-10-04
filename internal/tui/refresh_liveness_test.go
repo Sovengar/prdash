@@ -1,7 +1,3 @@
-// Tests de liveness del auto-refresco: una paginación que se cuelga al cerrar
-// el ciclo no puede congelar la cadena de ticks. Recoge el fallo detectado en
-// `sendEvent`/`streamForge` (eventos críticos descartables) y en `beginRefresh`
-// (no reinicia `more`).
 package tui
 
 import (
@@ -10,17 +6,14 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestAutoRefreshSurvivesStalePagination: si la página que cerraba la
-// paginación se descarta, `more` queda colgado al terminar el ciclo; el tick
-// no debe quedar bloqueado por ese residuo (antes: paused() == true para
-// siempre y el inbox no volvía a refrescar hasta pulsar "r").
+// If the page that closed the pagination is discarded, the `more` flag survives the end of the
+// cycle as residue, and consulting it would freeze the tick for good.
 func TestAutoRefreshSurvivesStalePagination(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "",
 		[]model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
 
-	// El ciclo termina con `more` aún pendiente: la página que lo cerraba no
-	// llegó a aplicarse.
+	// The cycle ends with `more` still pending: the page that closed it never arrived.
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 	if m.loading {
 		t.Fatal("el ciclo debería haber terminado")
@@ -36,9 +29,6 @@ func TestAutoRefreshSurvivesStalePagination(t *testing.T) {
 	}
 }
 
-// TestBeginRefreshResetsStalePagination: arrancar un ciclo nuevo no debe
-// arrastrar la paginación del ciclo anterior (`more`/`complete` frescos), o el
-// indicador "cargando más…" quedaría pegado indefinidamente.
 func TestBeginRefreshResetsStalePagination(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "",

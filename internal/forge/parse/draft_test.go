@@ -6,18 +6,7 @@ import (
 	"prdash/internal/state"
 )
 
-// TestDraftFlagFromEveryPath es el test que faltaba cuando el gate de merge
-// estaba muerto.
-//
-// IsDraft e isDraft se parseaban desde el principio y se descartaban sin mirar,
-// así que ningún ítem llegaba nunca marcado como borrador: la columna lo pintaba
-// como "pending" y MergeBlock, que solo comprobaba State=="draft", no lo frenaba.
-// Lo que lo sostenía eran tests que se inyectaban State="draft" a mano, un valor
-// que ningún forge emite, de modo que la suite entera pasaba mientras la
-// funcionalidad no existía.
-//
-// Estos casos usan JSON con la forma que devuelve cada forge de verdad, así que
-// si un adapter deja de pedir el campo o de copiarlo, esto falla.
+// The test that was missing while the merge gate was dead.
 func TestDraftFlagFromEveryPath(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -79,11 +68,7 @@ func TestDraftFlagFromEveryPath(t *testing.T) {
 			if !draft {
 				t.Error("IsDraft = false, want true: el forge lo marcó como borrador")
 			}
-			// El enum del forge tiene que seguir siendo el del forge, y la
-			// normalización es lo que decide el estado, no el parseo. Si el
-			// adapter volviera a traducir a "draft", el gate volvería a depender
-			// de que la traducción cuadre en los cuatro caminos, que es
-			// exactamente como se rompió.
+			// The forge's enum stays the forge's, and normalisation is what decides the state.
 			switch rawState {
 			case "OPEN", "open", "opened":
 			default:

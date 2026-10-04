@@ -9,20 +9,7 @@ import (
 	"prdash/internal/review/plan"
 )
 
-// Las ramas que quedan en el layout y en el runner, y que comparten una propiedad: son fallos
-// que el código DEGRADA en vez de propagar. Y degradar tiene un precio —un popup a medias, un
-// tab sin nombre— que hay que decidir consciously, y eso es lo que se fija aquí.
-
-// TestUnTabQueNoSeAbreNoTiraElRestoYLoDicePorTab: el `continue` del segundo tab.
-//
-// Y son dos salidas distintas del mismo `if err != nil`, y ambas son avisos y no abortes:
-//
-//   - Herdr falla al abrir el tab: el aviso trae el error.
-//   - Herdr responde sin pane raíz: el aviso lo dice SIN error, porque no hay ninguno —Herdr
-//     salió bien— y un aviso con un error vacío parece un bug.
-//
-// Y lo que se comprueba en las dos es que el resto del layout se montó. Con un solo tab en el
-// plan no se puede distinguir "continuó" de "no había nada más", así que el plan tiene dos.
+// Two exits from the same `if err != nil` and both are warnings, not errors.
 func TestUnTabQueNoSeAbreNoTiraElRestoYLoDicePorTab(t *testing.T) {
 	for _, c := range []struct {
 		nombre   string
@@ -43,8 +30,6 @@ func TestUnTabQueNoSeAbreNoTiraElRestoYLoDicePorTab(t *testing.T) {
 			nombre: "Herdr abre el tab pero sin pane raíz",
 			responde: func(args []string) ([]byte, []byte, error) {
 				if args[0] == "tab" && args[1] == "create" {
-					// Sin `root_pane`, que es lo que devuelve una versión que cambió el campo o
-					// un Herdr que aún no ha creado nada.
 					return []byte(`{"id":"cli:tab:create","result":{"type":"tab_created",` +
 						`"tab":{"tab_id":"w18:t1"}}}`), nil, nil
 				}
@@ -54,9 +39,6 @@ func TestUnTabQueNoSeAbreNoTiraElRestoYLoDicePorTab(t *testing.T) {
 		},
 	} {
 		t.Run(c.nombre, func(t *testing.T) {
-			// El `respond` por defecto cuenta las operaciones, y sustituirlo se lleva el
-			// contador con él —mi primera versión lo hacía y la comprobación de "el primer tab
-			// se montó" leía un mapa vacío—. Así que el override cuenta también.
 			cli := nuevoCLIQueCuenta(nil)
 			cli.respond = func(args []string) ([]byte, []byte, error) {
 				cli.llamadas[operacionDe(args)]++
@@ -72,11 +54,11 @@ func TestUnTabQueNoSeAbreNoTiraElRestoYLoDicePorTab(t *testing.T) {
 			if !strings.Contains(juntos, c.quiere) {
 				t.Errorf("el aviso %q no dice %q", juntos, c.quiere)
 			}
-			// Y el aviso NOMBRA el tab, que es lo que permite saber cuál de los dos falló.
+			// The warning NAMES the tab, which is what tells which of the two failed.
 			if !strings.Contains(juntos, "Edit") {
 				t.Errorf("el aviso no nombra el tab que falló:\n%s", juntos)
 			}
-			// Y el primer tab se montó entero: es lo que distingue "siguió" de "no había nada".
+			// The first tab was built whole, which is what tells "it continued" from "there was nothing".
 			if cli.llamadas["pane split"] == 0 || cli.llamadas["pane run"] == 0 {
 				t.Error("el primer tab no se montó: el fallo del segundo paró el layout entero")
 			}
@@ -84,8 +66,6 @@ func TestUnTabQueNoSeAbreNoTiraElRestoYLoDicePorTab(t *testing.T) {
 	}
 }
 
-// respondeNormal es el `respond` que usa `nuevoCLIQueCuenta`, separado para poder reusarlo desde
-// los casos que sustituyen una sola operación.
 func respondeNormal(args []string) ([]byte, []byte, error) {
 	switch {
 	case args[0] == "--version":
@@ -105,14 +85,7 @@ func respondeNormal(args []string) ([]byte, []byte, error) {
 	}
 }
 
-// TestTabOfDevuelveVacioSinPaneYNoTumbaElLayout: la degradación de `tabOf`.
-//
-// Y `tabOf` busca en qué tab está un pane porque Herdr no tiene "el tab de este pane", y por eso
-// degrada a cadena vacía en tres casos. Y el tercero es el que importa: si la LISTA de panes
-// falla, `tabOf` devuelve "" y el layout sigue, porque nombrar el tab es COSMÉTICO.
-//
-// Y degradar ahí es lo correcto: el tab queda sin su etiqueta y el popup sigue montándose. Lo
-// contrario —abortar— dejaría al usuario con el workspace vacío por un nombre que no aparece.
+// tabOf exists because Herdr has no "the tab of this pane".
 func TestTabOfDevuelveVacioSinPaneYNoTumbaElLayout(t *testing.T) {
 	ctx := context.Background()
 
@@ -148,15 +121,7 @@ func TestTabOfDevuelveVacioSinPaneYNoTumbaElLayout(t *testing.T) {
 	}
 }
 
-// TestUnaVariableDeEntornoSinNombreNoSeMeteEnElComandoDelPane: el filtro de `Env`.
-//
-// Y es la última frontera con el shell que queda: la lista de variables del pane se pasa a un
-// comando, y una entrada sin `=` —un argumento suelto, o un `PATH` vacío— se convertiría en
-// texto que el shell lee.
-//
-// Y el filtro tiene dos mitades: sin `=` no es una variable, y con el NOMBRE vacío tampoco lo
-// es aunque traiga `=`. Las dos son entradas que un config mal escrito puede producir, y las dos
-// tienen que quedar fuera sin tocar el resto.
+// The last boundary with the shell that is left: the variable list.
 func TestUnaVariableDeEntornoSinNombreNoSeMeteEnElComandoDelPane(t *testing.T) {
 	buena := plan.Pane{
 		Kind: plan.KindTuicr, Label: "TUICR", Cwd: "/wt",
@@ -187,7 +152,6 @@ func TestUnaVariableDeEntornoSinNombreNoSeMeteEnElComandoDelPane(t *testing.T) {
 				t.Errorf("con %v, la entrada inválida %q llegó al comando: %q", malas, mala, got)
 			}
 		}
-		// Y la que sí era válida entre las malas llega: el filtro quita las malas y no todas.
 		if len(malas) > 2 && !strings.Contains(got, "BUENA=1") {
 			t.Errorf("el filtro quitó también las buenas: %q", got)
 		}

@@ -10,8 +10,6 @@ import (
 	"prdash/internal/review/plan"
 )
 
-// fakeCLI graba las invocaciones y responde según una función, de modo que los
-// tests no tocan el Herdr real.
 type fakeCLI struct {
 	env     map[string]string
 	respond func(args []string) ([]byte, []byte, error)
@@ -184,8 +182,6 @@ func TestPaneWaitOutputPassesTimeoutMillis(t *testing.T) {
 	}
 }
 
-// TestGuardErrorNamesSubcommand comprueba que el error por Herdr no
-// disponible nombra el subcomando vetado en vez de salir con args vacíos.
 func TestGuardErrorNamesSubcommand(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{}, respond: versionOK}
 	_, err := f.client().WorktreeCreate(context.Background(), WorktreeSpec{Cwd: "/repo", Branch: "x"})
@@ -221,8 +217,6 @@ func equalSlices(a, b []string) bool {
 	return true
 }
 
-// TestMutationsRefusedWithoutHerdrEnv cubre "nada mutante si no Available()":
-// fuera de Herdr ninguna operación mutante toca la CLI.
 func TestMutationsRefusedWithoutHerdrEnv(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{}, respond: versionOK}
 	c := f.client()
@@ -248,8 +242,6 @@ func TestMutationsRefusedWithoutHerdrEnv(t *testing.T) {
 	}
 }
 
-// TestMutationsRefusedBelowMinVersion veta la mutación con una versión por
-// debajo del mínimo soportado.
 func TestMutationsRefusedBelowMinVersion(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}, respond: func([]string) ([]byte, []byte, error) {
 		return []byte("herdr 0.8.2\n"), nil, nil

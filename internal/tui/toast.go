@@ -1,10 +1,7 @@
-// Toasts: avisos transitorios que se dibujan encima de la vista, abajo a la
-// derecha, y se autodestruyen pasado su TTL.
-//
-// Mismo modelo que el ToastManager de dbx (pila de avisos con caducidad, tick
-// propio y overlay en la esquina), con dos diferencias: el reloj es inyectable
-// para poder testear la expiración sin dormir, y el ancho se recorta al ancho
-// útil de la vista para no desbordar nunca laterminal.
+// Toasts: transient warnings drawn over the view at the bottom right, self-destructing after their
+// TTL. Same model as dbx's ToastManager (a stack with expiry, its own tick and a corner overlay), with
+// two differences: an injectable clock so expiry can be tested without sleeping, and a width clipped to
+// the view's usable width so it never overflows the terminal.
 package tui
 
 import (
@@ -16,44 +13,28 @@ import (
 )
 
 const (
-	// toastDuration es el TTL por defecto de un aviso.
-	toastDuration = 4 * time.Second
-	// toastTickInterval es la resolución con la que caducan los avisos.
+	toastDuration     = 4 * time.Second
 	toastTickInterval = 500 * time.Millisecond
-	// toastMinWidth/toastMaxWidth acotan el ancho de la caja.
-	toastMinWidth = 24
-	toastMaxWidth = 60
-	// toastFrame es lo que el marco y el padding suman al ancho exterior: los dos
-	// bordes verticales y una columna de padding por lado. En lipgloss Width() es el
-	// ancho del contenido, así que esto es lo que hay que restar para saber cuánto
-	// texto cabe.
+	toastMinWidth     = 24
+	toastMaxWidth     = 60
+	// lipgloss Width() is the CONTENT width, so this is what has to be subtracted to know how much
+	// text fits.
 	toastFrame = 4
-	// toastIconGap es lo que el icono y su espacio empujan delante del texto. Solo
-	// en la primera línea, que es la razón de que el texto se parta al ancho útil
-	// menos esto y no al ancho útil.
-	//
-	// Es el ancho del icono (1) más su espacio (1), y por eso el ancho del icono se
-	// mide y no se supone: si algún día se añade un icono de dos columnas, el hueco
-	// crece con él y el texto sigue entrando.
+	// Only on the first line, which is why the text is wrapped at the usable width minus this.
+	// The icon's width is measured rather than assumed, so a two-column icon tomorrow grows the gap and
+	// the text still fits.
 	toastIconGap = 2
-	// toastIconSpace es el espacio que va entre el icono y el texto. Va con nombre
-	// aparte y no dentro de toastIconGap porque son dos cosas distintas: una es lo
-	// que mide el icono (que depende del nivel) y otra el hueco fijo. Sumarlos en un
-	// solo 2 haría que un icono de dos columnas no empujara nada, que es justo el
-	// error que haría que el texto se saliera del marco.
+	// Named apart from toastIconGap because they are different things: one is the icon's width (which
+	// depends on the level) and the other a fixed gap. Summing them into a single 2 would make a
+	// two-column icon push nothing, which is exactly the error that lets the text escape the frame.
 	toastIconSpace = 1
-	// toastMinInner es el suelo del ancho de TEXTO. Por debajo de 8 columnas no hay
-	// nada legible, y un aviso ilegible no informa de nada: mejor uno estrecho y
-	// partido en tres líneas que uno ancho con media palabra por línea.
+	// Below 8 columns of text nothing is readable, and an unreadable warning says nothing.
 	toastMinInner = 8
-	// toastMinAvailable es el hueco mínimo para intentar encajar la caja. Por
-	// debajo la superposición la recortaría por la derecha, así que es más honesto
-	// no fingir que cabe: se usa el ancho acotado y se deja que el recorte la
-	// recorte.
+	// Below this the overlay would clip the box on the right, so it is more honest not to pretend it
+	// fits.
 	toastMinAvailable = 8
 )
 
-// toastLevel es la gravedad de un aviso y decide icono y color.
 type toastLevel int
 
 const (
@@ -63,7 +44,6 @@ const (
 	toastWarning
 )
 
-// toast es un aviso con su caducidad.
 type toast struct {
 	message  string
 	level    toastLevel
@@ -71,24 +51,19 @@ type toast struct {
 	duration time.Duration
 }
 
-// toastManager es la pila de avisos vivos.
 type toastManager struct {
 	toasts []toast
-	// now es el reloj: inyectable para que los tests no dependan del tiempo.
-	now func() time.Time
+	now    func() time.Time
 }
 
-// newToastManager construye la pila con el reloj real.
 func newToastManager() *toastManager {
 	return &toastManager{now: time.Now}
 }
 
-// show añade un aviso con el TTL por defecto.
 func (t *toastManager) show(message string, level toastLevel) {
 	t.showFor(message, level, toastDuration)
 }
 
-// showFor añade un aviso con TTL propio.
 func (t *toastManager) showFor(message string, level toastLevel, d time.Duration) {
 	if message == "" {
 		return
@@ -96,9 +71,8 @@ func (t *toastManager) showFor(message string, level toastLevel, d time.Duration
 	t.toasts = append(t.toasts, toast{message: message, level: level, created: t.now(), duration: d})
 }
 
-// replace sustituye el aviso vigente cuyo texto es prev por uno nuevo, con su TTL
-// reiniciado. Si no lo encuentra —ya caducó o lo sustituyó otro— apila el nuevo.
-// Es lo que permite componer sobre un aviso sin duplicar su texto.
+// Not finding one (it expired or another replaced it) stacks the new one, which is what lets a
+// warning be composed on instead of duplicated.
 func (t *toastManager) replace(prev, message string, level toastLevel) {
 	if message == "" {
 		return
@@ -112,7 +86,6 @@ func (t *toastManager) replace(prev, message string, level toastLevel) {
 	t.show(message, level)
 }
 
-// update poda los avisos caducados. Es lo que llama el tick.
 func (t *toastManager) update() {
 	now := t.now()
 	alive := t.toasts[:0]
@@ -124,7 +97,6 @@ func (t *toastManager) update() {
 	t.toasts = alive
 }
 
-// texts devuelve los mensajes vivos, para los tests.
 func (t *toastManager) texts() []string {
 	out := make([]string, 0, len(t.toasts))
 	for _, x := range t.toasts {
@@ -133,7 +105,6 @@ func (t *toastManager) texts() []string {
 	return out
 }
 
-// last devuelve el mensaje del último aviso, o "" si no hay ninguno.
 func (t *toastManager) last() string {
 	if len(t.toasts) == 0 {
 		return ""
@@ -141,7 +112,6 @@ func (t *toastManager) last() string {
 	return t.toasts[len(t.toasts)-1].message
 }
 
-// blocks dibuja cada aviso vivo como una caja; es lo que se superpone.
 func (t *toastManager) blocks(available int) []string {
 	out := make([]string, 0, len(t.toasts))
 	for _, x := range t.toasts {
@@ -150,14 +120,12 @@ func (t *toastManager) blocks(available int) []string {
 	return out
 }
 
-// render compone la caja de un aviso: icono, texto envuelto y borde.
 func (t *toastManager) render(x toast, available int) string {
 	icon := toastIcon(x.level)
-	// Los tres números de la caja salen de toastGeometry, y el texto se envuelve al
-	// que devuelve. La geometría está en su propia función por la razón de siempre:
-	// dentro del pintado, un ancho mal calculado no se ve como un ancho mal
-	// calculado, se ve como "el aviso ocupa más filas" y el recorte de la
-	// superposición se come la diferencia.
+	// All three numbers come from toastGeometry and the text wraps at what it returns. The geometry is in
+	// its own function for the usual reason: inside the painting, a miscalculated width does not look like
+	// a miscalculated width, it looks like "the warning takes more rows", and the overlay's clipping eats
+	// the difference.
 	width, wrapAt := toastGeometry(x.message, icon, available)
 	lines := wrapText(x.message, wrapAt)
 
@@ -169,8 +137,8 @@ func (t *toastManager) render(x toast, available int) string {
 		}
 		b.WriteString(styleToast(x.level).Render("  "+line) + "\n")
 	}
-	// lipgloss añade el borde y el padding; el ancho se fija para que todas las
-	// líneas del bloque midan lo mismo y el overlay no desalinee la vista.
+	// The width is fixed so every line of the block measures the same and the overlay does not
+	// misalign the view.
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(toastBorderColor(x.level))).
@@ -179,59 +147,34 @@ func (t *toastManager) render(x toast, available int) string {
 		Render(strings.TrimRight(b.String(), "\n"))
 }
 
-// toastGeometry son los dos números con los que se compone la caja de un aviso: el
-// ancho exterior que se le pasa a lipgloss, y el ancho al que se parte el texto.
+// The width is an ESTIMATE rather than an exact measurement, deliberately: the estimate is text plus
+// icon plus frame, bounded by the two limits and the free space, and what actually guarantees the text
+// fits is the wrapper below. An over-estimate makes the text wrap into more lines, which is better than
+// a frame that clips a word in half.
 //
-// Está en su propia función por la razón de siempre: dentro del pintado, un ancho
-// mal calculado no se ve como un ancho mal calculado, se ve como "el aviso ocupa
-// más filas". Y como la superposición recorta la caja al ancho de la vista, una
-// columna de más o de menos se la come el recorte. Siendo aritmética pura se
-// comprueba directo, sin pintar nada.
-//
-// El ancho sale de una ESTIMACIÓN y no de una medida exacta, y eso es deliberado:
-// la primera estimación es "el texto más el icono más el marco", acotada por los
-// dos límites y por el espacio libre. El que garante que el texto quepa de verdad
-// es el envoltorio de abajo, que parte cada línea al ancho útil. Si la estimación
-// se pasa, el texto sale partido en más líneas, y eso es mejor que un texto
-// recortado a media palabra por el marco.
-//
-// O sea: la aritmética de aquí decide DÓNDE EMPIEZA el ancho útil, y de ahí solo
-// se deduce lo que cabe. El ancho útil es el exterior menos el marco, y el texto se
-// parte al ancho útil menos el hueco del icono, porque la primera línea lo lleva
-// delante y las siguientes no. De ahí los dos suelos: por debajo de 8 de ancho
-// útil no hay texto legible, y por debajo de 4 de partición un aviso corto se
-// parte en una palabra por línea, que no informa de nada.
+// In other words the arithmetic here decides where the USABLE width starts, and only what fits is
+// deduced from it: usable is outer minus the frame, and the text wraps at usable minus the icon gap,
+// because the first line carries the icon and the rest do not. Hence the two floors: below 8 of usable
+// there is no readable text, and below 4 of wrap a short warning breaks one word per line.
 func toastGeometry(message, icon string, available int) (width, wrapAt int) {
-	// Ancho total estimado: el texto, el icono, su espacio y el hueco de
-	// borde+padding. En lipgloss Width() es el ancho del CONTENIDO, sin borde ni
-	// padding, así que el marco va sumando y luego se resta.
-	//
-	// Cada sumando es una pieza con nombre, y la suma es el contrato: si un término
-	// falta o sobra, el aviso se sale o se estrecha de más, y desde el texto
-	// superpuesto no se distingue de que la superposición lo recortara.
+	// Every term is a named piece and the sum is the contract: a missing or extra term makes the warning
+	// overflow or narrow, and from the overlaid text you cannot tell that from the overlay clipping it.
 	width = ansi.StringWidth(message) + ansi.StringWidth(icon) + toastIconSpace + toastFrame
 	width = min(max(width, toastMinWidth), toastMaxWidth)
 
-	// Por debajo de este hueco no se intenta encajar: una caja más ancha que la
-	// columna donde va a caer la superposición la recorta por la derecha, y una
-	// columna tan estrecha no da para un aviso de ancho mínimo.
+	// Below this the box is not even attempted: a box wider than the column it lands in gets clipped on
+	// the right, and such a narrow column does not fit a minimum-width warning.
 	if available > toastMinAvailable {
 		width = min(width, available)
 	}
 
-	// Ancho útil: el exterior menos el marco, con suelo. Y el de partición: el útil
-	// menos el hueco del icono, SIN suelo propio.
-	//
-	// Lo de no ponerle suelo al de partición es una conclusión, no un descuido:
-	// inner >= toastMinInner = 8, así que inner - toastIconGap >= 6, y un suelo de
-	// 4 o de 5 nunca tocaría. Un suelo que no puede llegar es ruido que además
-	// invita a escribir tests que pasan por el suelo y no por la aritmética. El
-	// suelo que SÍ importa es el de inner, y ese está arriba.
+	// No floor on the wrap width, and that is a conclusion rather than an oversight: inner >= 8, so
+	// inner - toastIconGap >= 6, and a floor of 4 or 5 could never bind. A floor that cannot bind is noise
+	// that also invites tests passing through the floor instead of the arithmetic.
 	inner := max(width-toastFrame, toastMinInner)
 	return width, inner - toastIconGap
 }
 
-// toastIcon es el glifo del nivel.
 func toastIcon(level toastLevel) string {
 	switch level {
 	case toastSuccess:
@@ -247,7 +190,6 @@ func toastIcon(level toastLevel) string {
 	}
 }
 
-// toastBorderColor es el color del borde según el nivel.
 func toastBorderColor(level toastLevel) string {
 	switch level {
 	case toastSuccess:
@@ -263,7 +205,6 @@ func toastBorderColor(level toastLevel) string {
 	}
 }
 
-// styleToast elige el estilo del texto del aviso.
 func styleToast(level toastLevel) lipglossStyle {
 	switch level {
 	case toastSuccess:
@@ -279,7 +220,6 @@ func styleToast(level toastLevel) lipglossStyle {
 	}
 }
 
-// wrapText parte el texto en líneas de como mucho max columnas, por palabras.
 func wrapText(text string, max int) []string {
 	if max <= 0 || ansi.StringWidth(text) <= max {
 		return []string{text}
@@ -300,17 +240,10 @@ func wrapText(text string, max int) []string {
 	return lines
 }
 
-// overlayToasts superpone los avisos abajo a la derecha de `content`. Se
-// recortan por la derecha con ansi.Truncate/TruncateLeft para conservar los
-// códigos de color de la línea base: al revés que un simple replace, el texto de
-// debajo no se ensucia ni se desalinea.
-//
-// Solo pinta sobre las filas marcadas en `rows`: el interior de las cajas. Un
-// aviso nunca cae sobre un borde, así que ningún marco se rompe por tener un
-// aviso encima —que es lo que pasaba con el borde inferior del detalle—. Cada
-// aviso busca el hueco más bajo que le quepa, y los siguientes se apilan por
-// encima del anterior; si ya no queda interior libre, los que sobren no se
-// pintan, porque un aviso ilegible no informa de nada.
+// Only paints on the rows marked in `rows`, the interior of the boxes: a warning never lands on a
+// border, so no frame breaks from having a warning on top of it — which is what used to happen to the
+// detail's bottom border. Each warning takes the lowest gap that fits and the next stack above it; when
+// no free interior is left the rest are not painted, because an unreadable warning says nothing.
 func overlayToasts(content string, boxes []string, width int, rows []bool) string {
 	if len(boxes) == 0 {
 		return content
@@ -336,52 +269,35 @@ func overlayToasts(content string, boxes []string, width int, rows []bool) strin
 	return strings.Join(lines, "\n")
 }
 
-// toastBlockHeight es de cuántas filas se pinta un bloque que tiene bh filas,
-// cuando solo quedan `anchor` filas por debajo de donde se busca.
+// The cap is anchor+1 and not anchor: the last row (index anchor) is the lowest that exists, so anchor+1
+// rows fit from it counting upwards. Without the +1 a three-row box in a three-row window would try to
+// occupy rows 0..2 with its base at 1, landRow would find nowhere, and the warning would never paint in
+// the very window made for it.
 //
-// El tope es anchor+1 y no anchor: la última fila (índice anchor) es la más baja
-// que existe, así que desde ella caben anchor+1 filas contando las de arriba. Sin
-// ese +1 una caja de 3 filas en una ventana de 3 intentaría ocupar de la 0 a la 2
-// con la base en la 1, y landRow no encontraría sitio y el aviso no se pintaría
-// nunca justo en la ventana que está hecha a su medida.
-//
-// NO lleva suelo a cero, y es a propósito: anchor viene de len(lines)-1 sobre un
-// strings.Split, que siempre devuelve al menos una línea, así que anchor >= 0 y el
-// suelo no podría tocar. Un suelo que no llega es ruido que además esconde el +1
-// de verdad, que es el que hay que comprobar.
-//
-// Esta función solo decide la cuenta; que haya sitio es cosa de landRow.
+// No zero floor on purpose: anchor comes from len(lines)-1 over a strings.Split, which always returns at
+// least one line, so anchor >= 0 and a floor could never bind. A floor that cannot bind is noise that
+// also hides the +1 that does matter.
 func toastBlockHeight(bh, anchor int) int { return min(bh, anchor+1) }
 
-// toastColumn es la columna por la que empieza una caja de bw columnas en una
-// vista de width.
+// Pinned to the right with ONE column of air between the box and the edge: a warning reaching the last
+// column reads as part of the frame rather than as something on top of it. The floor of 0 is the case
+// of a box wider than the view, where there is no offset that does not overflow and column 0 is the
+// least bad, since the overlay's clipping is already covering the right.
 //
-// Va pegada a la derecha, con UNA columna de aire entre la caja y el borde: un
-// aviso que llega al último borde se lee como parte del marco, y no como algo
-// encima. El suelo a 0 es para el caso de que la caja sea más ancha que la vista:
-// entonces no hay ningún sitio donde no se salga, y empezar en la columna 0 es lo
-// menos malo, porque el recorte de la superposición ya lo está tapando por la
-// derecha.
-//
-// En su propia función porque es geometría comprobable: desde el texto
-// superpuesto, "la caja se salió una columna" no se distingue de "la caja se salió
-// y el recorte lo tapó", que es justo lo que pasa.
+// Its own function because this is checkable geometry: from the overlaid text, "the box overflowed by
+// one column" cannot be told apart from "the box overflowed and the clip hid it".
 func toastColumn(width, bw int) int { return max(width-bw-1, 0) }
 
-// landRow devuelve la fila más baja, sin pasar de anchor, en la que cabe un
-// bloque de bh filas que admiten avisos. Devuelve false si no cabe en ninguna.
+// The loop starts at anchor WITHOUT clamping it to len(rows)-1, on purpose. It used to clamp with a
+// min(anchor, len(rows)-1) that could never do anything: the only caller passes anchor = len(lines)-1
+// over rows the stack builds line by line alongside the lines, so len(rows) == len(lines) and
+// anchor == len(rows)-1 always. And after each warning the anchor goes DOWN (anchor = base - bh, with
+// bh >= 1 because the bh <= 0 guard already fired), so it never rises again. The clamp was noise that
+// also hid the step upwards, which is the thing that matters.
 //
-// El bucle arranca en anchor SIN acotarlo a len(rows)-1, y es a propósito. Antes se
-// acotaba con un min(anchor, len(rows)-1) que no podía hacer nada: el único llamante
-// pasa anchor = len(lines)-1 sobre un rows que la pila construye fila a fila a la
-// par que las líneas, así que len(rows) == len(lines) y anchor == len(rows)-1
-// siempre. Y tras cada aviso el ancla baja (anchor = base - bh, con bh >= 1 porque
-// el bh <= 0 de arriba ya salió), así que nunca vuelve a subir. El clamp era ruido
-// que además tapaba lo que sí hay que mirar, que es el paso hacia arriba.
-//
-// Que un anchor disparado no localice filas es cosa de admitenAviso, que acota cada
-// índice contra len(rows) y devuelve false. Por eso quitar el clamp es seguro: el
-// índice que se sale de rows no se lee, se rechaza.
+// A blown anchor failing to locate rows is admitenAviso's job, which bounds every index against
+// len(rows) and returns false. That is why removing the clamp is safe: an index past rows is rejected,
+// not read.
 func landRow(rows []bool, anchor, bh int) (int, bool) {
 	if bh <= 0 {
 		return 0, false
@@ -394,9 +310,8 @@ func landRow(rows []bool, anchor, bh int) (int, bool) {
 	return 0, false
 }
 
-// admitenAviso indica si las n filas que empiezan en from son todas interior de
-// alguna caja. Una fila que no existe cuenta como que no: es preferible no
-// pintar a pintar de más.
+// A row that does not exist counts as not admitting one: not painting is better than painting
+// too much.
 func admitenAviso(rows []bool, from, n int) bool {
 	for i := from; i < from+n; i++ {
 		if i < 0 || i >= len(rows) || !rows[i] {

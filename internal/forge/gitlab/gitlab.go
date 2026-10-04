@@ -1,11 +1,7 @@
-// Package gitlab implementa el adapter del GitLab self-managed hablando con
-// la CLI `glab`. El inbox usa GraphQL paginado por cursor y la API de Todos
-// para las menciones.
-//
-// `glab` resuelve por sí solo el host y su subfolder REST (p. ej. `/git/`), así
-// que las rutas que se le pasan son relativas (nunca construimos la URL
-// absoluta). El host se fija con `--hostname` y con `GITLAB_HOST` para que
-// ninguna llamada caiga por defecto en gitlab.com.
+// Package gitlab implements the self-managed GitLab forge over the `glab` CLI. The inbox uses
+// paginated GraphQL and the Todos API for mentions. glab resolves its own host and REST subfolder, so
+// the paths we pass are relative and the host is pinned with `--hostname` and GITLAB_HOST so no call
+// falls through to gitlab.com.
 package gitlab
 
 import (
@@ -22,27 +18,20 @@ import (
 	"prdash/internal/forge/tool"
 )
 
-// ForgeName es el identificador del forge.
 const ForgeName = "gitlab"
 
-// pageSize es el número de resultados por página.
 const pageSize = 50
 
-// commentFetch es cuántos nodos de notas se piden por consulta, por el mismo
-// motivo que en GitHub: se pide margen para que un MR con historial de acciones
-// (todas las notas de sistema) no se quede sin comentarios que enseñar.
+// Same reason as GitHub: the margin keeps an MR full of system notes from coming up short.
 const commentFetch = 3 * forge.CommentLimit
 
-// Adapter implementa forge.Adapter sobre la CLI `glab`.
 type Adapter struct {
 	host   string
 	runner *tool.Runner
 }
 
-// Aseguramos en compilación que el adapter cumple el contrato.
 var _ forge.Adapter = (*Adapter)(nil)
 
-// New construye el adapter para un host y un binario de `glab`.
 func New(host, bin string) *Adapter {
 	if bin == "" {
 		bin = "glab"
@@ -51,21 +40,15 @@ func New(host, bin string) *Adapter {
 		host = "gitlab.example.com"
 	}
 	return &Adapter{
-		host: host,
-		// GITLAB_HOST fija el host por defecto de todas las llamadas (incluidas
-		// las de `glab mr`, que no aceptan `--hostname`).
+		host:   host,
 		runner: tool.New(bin, "GLAB_NO_PROMPT=1", "GITLAB_HOST="+host),
 	}
 }
 
-// Forge devuelve el nombre del forge.
 func (a *Adapter) Forge() string { return ForgeName }
 
-// Host devuelve el host configurado.
 func (a *Adapter) Host() string { return a.host }
 
-// Auth comprueba la sesión de `glab` para este host (no de todas las
-// instancias configuradas).
 func (a *Adapter) Auth(ctx context.Context) model.AuthState {
 	out, err := a.runner.Run(ctx, a.authArgs()...)
 	if err != nil {
@@ -74,9 +57,6 @@ func (a *Adapter) Auth(ctx context.Context) model.AuthState {
 	return model.AuthState{Forge: ForgeName, OK: true, Login: loginFromAuthStatus(out)}
 }
 
-// loginFromAuthStatus extrae el login de la sesión de la salida de
-// `glab auth status`, que ya se pedía para comprobar la sesión y se
-// descartaba.
 func loginFromAuthStatus(out string) string {
 	m := loginRe.FindStringSubmatch(out)
 	if m == nil {
@@ -85,21 +65,17 @@ func loginFromAuthStatus(out string) string {
 	return m[1]
 }
 
-// loginRe captura el login de "Logged in to <host> as <login> (<path>)".
 var loginRe = regexp.MustCompile(`\bas ([^(\s]+)`)
 
-// authArgs compone `glab auth status` acotado al host.
 func (a *Adapter) authArgs() []string {
 	return []string{"auth", "status", "--hostname", a.host}
 }
 
-// graphqlArgs compone una llamada GraphQL con el host fijado.
 func (a *Adapter) graphqlArgs(query string) []string {
 	return []string{"api", "--hostname", a.host, "graphql", "-f", "query=" + query}
 }
 
-// getArgs compone una llamada REST por GET con el host fijado. Sin `-X GET`,
-// pasar campos convertiría la petición en POST.
+// Without `-X GET`, passing fields turns the request into a POST.
 func (a *Adapter) getArgs(endpoint string, fields ...string) []string {
 	args := []string{"api", "--hostname", a.host, "-X", "GET", endpoint}
 	for _, f := range fields {
@@ -108,13 +84,11 @@ func (a *Adapter) getArgs(endpoint string, fields ...string) []string {
 	return args
 }
 
-// mrArgs compone una acción `glab mr` sobre un proyecto.
 func (a *Adapter) mrArgs(sub string, number int, project string, extra ...string) []string {
 	args := []string{"mr", sub, strconv.Itoa(number), "-R", project}
 	return append(args, extra...)
 }
 
-// List devuelve una página de la lista pedida.
 func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
 	switch {
 	case q.Section == model.SectionAuthored:
@@ -130,7 +104,6 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 	}
 }
 
-// ItemState relee el estado de aprobación de un MR concreto.
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	if ref.Project == "" {
 		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
@@ -152,9 +125,6 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 	return it, nil
 }
 
-// Comments devuelve las últimas notas de la conversación de un MR, del más antiguo
-// de esas al más reciente. Las de sistema ("assigned to @x", "added 3 commits") se
-// descartan al parsear: no son conversación.
 func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
 	if ref.Project == "" {
 		return forge.CommentPage{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
@@ -171,24 +141,17 @@ func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (
 	return forge.CommentPage{Comments: comments, Total: total}.KeepLast(), nil
 }
 
-// Approve aprueba un MR con `glab mr approve`.
 func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning {
 	return a.action(ctx, a.mrArgs("approve", number, ref.Project)...)
 }
 
-// Merge mergea un MR con `glab mr merge`.
-// Merge mergea un MR con `glab mr merge` y el flag de estrategia que toque.
+// `--auto-merge=false` is not optional: glab defaults it to true, so with a pipeline running the command
+// did not merge, it queued the MR for auto-merge and exited 0. The UI reported "merge ok" on an MR
+// that was still open. `--yes` stops the confirmation from asking anyone.
 //
-// `--auto-merge=false` no es opcional: glab lo tiene en true por defecto, así que
-// con un pipeline en marcha la orden no mergeaba, solo dejaba el MR en cola de
-// auto-merge y salía con exit 0. El TUI informaba "merge ok" de un MR que
-// seguía abierto. Con `--yes` la confirmación tampoco se le pregunta a nadie.
-//
-// `--sha` es lo que pinea el merge al commit leído del ítem. `--auto-merge` y
-// `--sha` son el mismo género de trampa que el anterior pero al revés: sin el
-// pin, `glab` (y GitLab) integran el HEAD del momento, que puede haber avanzado
-// desde el refresco del inbox, y el merge se lleva commits que nadie revisó. Un
-// headSHA vacío se traduce en negarse, no en mergear sin pin.
+// `--sha` is the same kind of trap the other way round: without the pin, glab and GitLab both merge
+// whatever HEAD is at that moment, which may have advanced since the inbox refresh. An empty headSHA
+// refuses the action rather than merging unpinned.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	extra := []string{"--yes", "--auto-merge=false"}
 	if flag, ok := glabMergeFlag(req.Mode); ok {
@@ -200,21 +163,16 @@ func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req 
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
 	}
 	extra = append(extra, "--sha", req.HeadSHA)
-	// El flag se llama `-d`/`--remove-source-branch` en glab, no
-	// `--delete-branch` como en gh: es el mismo efecto con otro nombre. Con `-R`
-	// la rama que borra es la del repo indicado, que es justo lo que se pide.
-	// El proyecto puede tener "delete source branch" activado por defecto; el
-	// flag lo fuerza para los merges que salen de aquí, y su ausencia lo deja
-	// como esté.
+	// The flag is `-d`/`--remove-source-branch` in glab, not gh's `--delete-branch`: same effect, other
+	// name. With `-R` it deletes the branch of the given repo, which is what is being asked. A project
+	// may have "delete source branch" on by default; the flag forces it for our merges and its absence
+	// leaves the project as it was.
 	if req.DeleteBranch {
 		extra = append(extra, "--remove-source-branch")
 	}
 	return a.action(ctx, a.mrArgs("merge", number, ref.Project, extra...)...)
 }
 
-// glabMergeFlag traduce el modo al flag de `glab mr merge`. Merge commit no
-// tiene flag propio: es la ausencia de estrategia, y por eso devuelve ok con la
-// lista vacía en vez de un flag.
 func glabMergeFlag(mode forge.MergeMode) (string, bool) {
 	switch mode {
 	case forge.MergeCommit:
@@ -228,22 +186,16 @@ func glabMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
-// Retarget cambia la rama destino del MR con un PUT de la API y no con `glab mr
-// update --target-branch`.
+// A PUT, not `glab mr update --target-branch`. The command is not broken, it is an EDIT command whose
+// raison d'être is opening title and description in an editor, and with an open field flag that door
+// is ajar: in a subprocess with stdin on /dev/null it does not hang, it fails, and a failure caused by
+// an invisible editor is the worst kind. The PUT sends exactly the field it is asked for.
 //
-// El motivo no es que el comando esté roto, como en GitHub, sino que `glab mr
-// update` es un comando de edición: su raison d'être es abrir título y
-// descripción en el editor, y con un flag de campo abierto esa puerta se
-// entreabre. En un subproceso con stdin en /dev/null no se cuelga —falla—, pero
-// un fallo por un editor que el usuario no ve es el peor género de avería. El PUT
-// manda exactamente el campo que se le pide y nada más.
+// Explicit PUT because it is not the default method: with `-f`, glab switches to POST, and a POST on an
+// MR route updates nothing.
 //
-// El PUT es explícito porque no es el método por defecto: con `-f`, glab cambia a
-// POST, y un POST sobre la ruta de un MR no actualiza nada.
-//
-// El motivo del rechazo se saca del cuerpo de la respuesta y no de stderr, que es
-// donde solo llega el argv. Un 400 de GitLab ("Reference 'x' does not exist") es
-// accionable; `glab api -X PUT … (exit 1)` no lo es.
+// The reason comes from the body, not stderr: GitLab's 400 ("Reference 'x' does not exist") is
+// actionable and `glab api -X PUT … (exit 1)` is not.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -260,16 +212,10 @@ func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, b
 	return []model.Warning{{Forge: ForgeName, Kind: tool.Kind(err), Msg: msg}}
 }
 
-// Branches lista las ramas del repositorio para el buscador de la base destino.
 func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning) {
 	if strings.TrimSpace(ref.Project) == "" {
 		return nil, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
 	}
-	// `--output ndjson` y no `--jq` porque glab no tiene `--jq` (gh sí), así que el
-	// NDJSON es la única forma de que cada página venga en una línea y se pueda
-	// leer sin un parser de JSON entero. Con `--paginate` son varias páginas, y es
-	// un subconjunto el que no serviría: el buscador tiene que ofrecer el
-	// repositorio, no lo que quepa en una respuesta.
 	endpoint := "projects/" + url.QueryEscape(ref.Project) + "/repository/branches?per_page=100"
 	raw, err := a.runner.Run(ctx, "api", "--hostname", a.host, "-X", "GET", endpoint,
 		"--paginate", "--output", "ndjson")
@@ -283,16 +229,10 @@ func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []
 	return names, nil
 }
 
-// mrEndpoint compone la ruta REST de un MR con el proyecto urlencoded: un
-// grupo/proyecto anidado necesita el %2F o la ruta se parte en dos y la petición
-// va a un sitio que no existe.
 func mrEndpoint(project string, number int) string {
 	return "projects/" + url.QueryEscape(project) + "/merge_requests/" + strconv.Itoa(number)
 }
 
-// mrAPIArgs compone una llamada REST de escritura sobre un MR. El método es
-// explícito siempre, y no solo para GET: con `-f`, glab cae a POST, que en las
-// rutas de actualización no actualiza nada y contesta 200 como si lo hubiera hecho.
 func (a *Adapter) mrAPIArgs(method, endpoint string, fields ...string) []string {
 	args := []string{"api", "--hostname", a.host, "-X", method, endpoint}
 	for _, f := range fields {
@@ -308,11 +248,9 @@ func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
 	return nil
 }
 
-// graphqlList ejecuta una query GraphQL paginada y etiqueta los ítems.
 func (a *Adapter) graphqlList(ctx context.Context, q forge.Query, query string) (forge.Page, []model.Warning) {
 	raw, err := a.runner.Run(ctx, a.graphqlArgs(query)...)
 	if err != nil {
-		// Respaldo REST solo para la primera página de los MRs propios.
 		if q.Section == model.SectionAuthored && q.Cursor == "" {
 			if p, ok := a.restAuthored(ctx); ok {
 				return p, []model.Warning{a.degraded(q.Section, err)}
@@ -328,8 +266,6 @@ func (a *Adapter) graphqlList(ctx context.Context, q forge.Query, query string) 
 	return forge.Page{Items: items, Next: page.Next, More: page.More}, nil
 }
 
-// todosList pagina la API de Todos del GitLab. El cursor es el número de
-// página; se sigue mientras la página venga llena.
 func (a *Adapter) todosList(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
 	pageNum := 1
 	if n, err := strconv.Atoi(q.Cursor); err == nil && n > 0 {
@@ -356,7 +292,6 @@ func (a *Adapter) todosList(ctx context.Context, q forge.Query) (forge.Page, []m
 	return page, nil
 }
 
-// restAuthored consulta el respaldo REST (una sola página) de los MRs propios.
 func (a *Adapter) restAuthored(ctx context.Context) (forge.Page, bool) {
 	raw, err := a.runner.Run(ctx, a.getArgs("merge_requests",
 		"scope=created_by_me", "state=opened", "per_page="+strconv.Itoa(pageSize))...)
@@ -371,7 +306,6 @@ func (a *Adapter) restAuthored(ctx context.Context) (forge.Page, bool) {
 	return forge.Page{Items: items}, true
 }
 
-// stamp fija la sección, el tipo de review y la identidad de forge/host.
 func (a *Adapter) stamp(items []model.Item, q forge.Query) {
 	for i := range items {
 		items[i].Section = q.Section
@@ -382,7 +316,6 @@ func (a *Adapter) stamp(items []model.Item, q forge.Query) {
 	}
 }
 
-// identity normaliza forge y host del ítem.
 func (a *Adapter) identity(it *model.Item) {
 	it.Forge = ForgeName
 	it.Host = a.host
@@ -394,7 +327,6 @@ func (a *Adapter) warn(section model.Section, kind string, err error) model.Warn
 	return model.Warning{Forge: ForgeName, Section: section, Kind: kind, Msg: err.Error()}
 }
 
-// degraded avisa de datos parciales procedentes del respaldo REST.
 func (a *Adapter) degraded(section model.Section, err error) model.Warning {
 	return model.Warning{
 		Forge:   ForgeName,
@@ -404,47 +336,20 @@ func (a *Adapter) degraded(section model.Section, err error) model.Warning {
 	}
 }
 
-// restEndpoint devuelve el recurso REST relativo. `glab api` ya resuelve el
-// host y su subfolder (p. ej. `/git/api/v4/`) contra su base configurada: pasar
-// la ruta absoluta da 404.
 func restEndpoint(resource string) string {
 	return strings.TrimLeft(resource, "/")
 }
 
-// mrFields son los campos GraphQL de un merge request que el inbox consume. La
-// instancia CE no expone `approvalsLeft`, así que solo se pide `approved`.
+// `diffStats` is one entry PER CHANGED FILE, not an aggregate, so the parsing has to sum it, and the
+// file count is the list's length because the schema exposes no `changedFiles`.
 //
-// `diffStats` no es un agregado: es una entrada POR FICHERO cambiado, así que el
-// parseo tiene que sumarla. Pide el conteo de ficheros como la longitud de la
-// lista porque el schema no expone un `changedFiles` equivalente.
-//
-// `draft` viene en la misma consulta y no cuesta llamada. Sin él, `state` solo
-// decía "opened" y un MR en borrador era indistinguible de uno abierto: la
-// columna de estado lo pintaba como pendiente y el gate de merge no lo frenaba.
-//
-// `detailedMergeStatus` también, y por el mismo motivo: es lo que avisa de que el
-// MR choca con su base sin descubrirlo al mergear. Se pide el detallado y no el
-// `mergeStatus` porque el simple no distingue un conflicto de un pipeline en
-// rojo, y un CI en rojo ya lo avisa el gate por su cuenta. GitLab lo calcula por
-// MR en cada petición, así que es un cálculo por ítem y no una llamada extra.
-//
-// `diffHeadSha` y `squash` también salen en la misma consulta y no cuestan
-// llamada: el primero es lo que permite pinear el merge con `--sha` y el
-// segundo avisa de que el MR se aplana pase lo que pase.
-//
-// Lo que NO se piden son las estrategias admitidas por el repositorio. No hay un
-// `Project.mergeMethod` en el schema (comprobado contra la instancia), pero sí
-// un `Project.mergeRequestsFfOnlyEnabled` que dice si el proyecto integra en modo
-// fast-forward, así que el dato de "este repo es ff-only" es gratis. Lo que no
-// hay es forma de saber qué estrategias admite el proyecto: GitLab decide el
-// método del merge simple con un enum de un solo valor, y la API REST lo da por
-// proyecto (una llamada por repositorio), no por MR. Por eso las reglas de
-// merge llegan sin conocer en GitLab, y sin conocer no restringen.
+// The merge strategies are deliberately NOT asked for. There is no `Project.mergeMethod` in the schema,
+// and the REST API gives it per repository (one call per repo), not per MR. So the merge rules arrive
+// unknown in GitLab, and unknown does not restrict.
 const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt ` +
 	`diffHeadSha squash detailedMergeStatus diffStats { additions deletions } ` +
 	`author { username } project { fullPath name group { fullPath } }`
 
-// glConn cierra una conexión GraphQL con paginación.
 const glConn = `pageInfo { hasNextPage endCursor } nodes { %s }`
 
 func glAuthoredQuery(cursor string) string {
@@ -468,14 +373,9 @@ func glAssignedQuery(cursor string) string {
 	)
 }
 
-// glNotesQuery compone la query de las notas de un MR concreto.
-//
-// El iid va como literal de cadena por lo mismo que en glMRQuery: el schema lo
-// declara `String!` y GraphQL no coacciona un Int. Se pide `system` porque es lo
-// que distingue una nota escrita de una que dejó el MR al abrirse, y `last` (no
-// `first`) porque la ficha enseña el final de la conversación, que es donde está lo
-// último que se dijo del MR. Como en GitHub, `last` no invierte el orden: el más
-// antiguo de los últimos va primero.
+// The iid goes as a string literal because the schema declares it `String!`: GraphQL does not
+// coerce an Int literal into a String. `last` rather than `first`, as on GitHub, and it does not reverse
+// the order.
 func glNotesQuery(fullPath string, iid, last int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { `+
@@ -484,13 +384,9 @@ func glNotesQuery(fullPath string, iid, last int) string {
 	)
 }
 
-// glMRQuery compone la query GraphQL de un MR concreto.
-//
-// El iid va como literal de cadena porque el schema lo declara `String!`:
-// GraphQL no coacciona un literal Int a String, así que `iid: 7` se rechaza con
-// argumentLiteralsIncompatible y la query entera falla. Que el iid llegue además
-// como string en la RESPUESTA (es un `ID!`) lo resuelve el parser con flexInt;
-// aquí lo que importa es el tipo del literal de la query.
+// An Int literal for a `String!` field is rejected with argumentLiteralsIncompatible and takes the
+// whole query down. flexInt handles the iid arriving as a string in the RESPONSE; what matters here is
+// the literal's type.
 func glMRQuery(fullPath string, iid int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { %s } } }`,
@@ -505,5 +401,4 @@ func afterArg(cursor string) string {
 	return fmt.Sprintf(`, after: "%s"`, escapeGraphQL(cursor))
 }
 
-// escapeGraphQL escapa un valor para incrustarlo como literal de GraphQL.
 func escapeGraphQL(s string) string { return forge.EscapeGraphQL(s) }

@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// TestArgsPutGlobalsBeforeTheSubcommand: git-sim declara las opciones globales en
-// el grupo raíz y las del subcomando no las aceptan, así que el orden del argv no
-// es cosmético: es lo que decide si arranca o si aborta con el usage.
 func TestArgsPutGlobalsBeforeTheSubcommand(t *testing.T) {
 	r := NewRunner()
 	got := r.args(Spec{Kind: KindMerge, Ref: "prdash/pr-7"}, "/tmp/media")
@@ -26,10 +23,7 @@ func TestArgsPutGlobalsBeforeTheSubcommand(t *testing.T) {
 	}
 }
 
-// TestArgsNeverAskForQuietAndThePath: git-sim imprime la ruta de la imagen solo
-// cuando no está en silencio. Pedir las dos cosas a la vez —que es lo que parece
-// lo razonable— deja la salida vacía y la simulación falla sin explicación. Este
-// test lo fija para que nadie lo vuelva a "optimizar".
+// git-sim prints the image path only when not silent, so asking for both leaves the output empty.
 func TestArgsNeverAskForQuietAndThePath(t *testing.T) {
 	for _, kind := range []Kind{KindMerge, KindRebase} {
 		argv := strings.Join(NewRunner().args(Spec{Kind: kind, Ref: "x"}, "/tmp/m"), " ")
@@ -42,8 +36,6 @@ func TestArgsNeverAskForQuietAndThePath(t *testing.T) {
 	}
 }
 
-// TestArgsCarryTheRefOfEachKind: el ref no es la misma rama en merge que en
-// rebase, y es quien lo pide quien lo decide.
 func TestArgsCarryTheRefOfEachKind(t *testing.T) {
 	r := NewRunner()
 	if got := r.args(Spec{Kind: KindRebase, Ref: "main"}, "/tmp/m"); got[len(got)-2] != "rebase" {
@@ -54,10 +46,8 @@ func TestArgsCarryTheRefOfEachKind(t *testing.T) {
 	}
 }
 
-// TestEnvForcesNoAutoOpen: git-sim termina entregando la imagen al visor del
-// escritorio y, sin display, esa llamada no vuelve. Como el flag no tiene forma
-// negativa en el CLI, se apaga por entorno; y como Settings lee el primer valor
-// que encuentra, hay que quitar el del usuario en vez de añadir otro detrás.
+// git-sim ends by handing the image to the desktop viewer, and without a display that call never
+// returns.
 func TestEnvForcesNoAutoOpen(t *testing.T) {
 	t.Setenv("git_sim_auto_open", "true")
 	t.Setenv("git_sim_img_format", "png")
@@ -76,9 +66,6 @@ func TestEnvForcesNoAutoOpen(t *testing.T) {
 	}
 }
 
-// TestImagePathTakesTheLastNonEmptyLine: con --output-only-path la ruta es la
-// única salida, pero un manim que se queja por stdout no debe desplazar el
-// resultado.
 func TestImagePathTakesTheLastNonEmptyLine(t *testing.T) {
 	if got := imagePath("ruido\n/tmp/x.jpg\n\n"); got != "/tmp/x.jpg" {
 		t.Errorf("imagePath = %q, want /tmp/x.jpg", got)
@@ -88,8 +75,6 @@ func TestImagePathTakesTheLastNonEmptyLine(t *testing.T) {
 	}
 }
 
-// TestRenderReturnsTheImagePath: el runner no interpreta la salida, solo la
-// devuelve; lo que haga con ella es del servicio.
 func TestRenderReturnsTheImagePath(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeScript(t, dir, "git-sim", "#!/bin/sh\necho /tmp/media/img.jpg\n")
@@ -104,9 +89,6 @@ func TestRenderReturnsTheImagePath(t *testing.T) {
 	}
 }
 
-// TestRenderFailsWithTheStderrOfGitSim: el mensaje que explica un fallo es el de
-// git-sim, no el genérico del runtime, porque es el único que nombra la causa
-// (una base que no está en el clon, un ref inválido).
 func TestRenderFailsWithTheStderrOfGitSim(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeScript(t, dir, "git-sim", "#!/bin/sh\necho \"'x' is not a valid Git ref\" >&2\nexit 1\n")
@@ -128,8 +110,6 @@ func TestRenderFailsWithTheStderrOfGitSim(t *testing.T) {
 	}
 }
 
-// TestRenderRejectsAnUnknownKind: un kind que no existe no puede convertirse en
-// argv, y sin esta comprobación se leería como un binario.
 func TestRenderRejectsAnUnknownKind(t *testing.T) {
 	r := NewRunner()
 	if _, err := r.Render(context.Background(), t.TempDir(), "/tmp/m", Spec{Kind: "cherry-pick", Ref: "x"}); err == nil {
@@ -140,8 +120,6 @@ func TestRenderRejectsAnUnknownKind(t *testing.T) {
 	}
 }
 
-// TestAvailableFollowsTheBinary: sin git-sim la acción tiene que poder avisar
-// antes de abrir el popup, no fallar a mitad.
 func TestAvailableFollowsTheBinary(t *testing.T) {
 	missing := &Runner{Bin: "git-sim-que-no-existe", lookPath: func(string) (string, error) {
 		return "", os.ErrNotExist
@@ -156,7 +134,6 @@ func TestAvailableFollowsTheBinary(t *testing.T) {
 	}
 }
 
-// writeScript crea un ejecutable con cuerpo de shell y devuelve su ruta.
 func writeScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

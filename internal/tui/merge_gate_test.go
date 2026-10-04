@@ -1,10 +1,3 @@
-// Tests del gate de merge en la TUI: qué frena, qué solo avisa, y qué pasa con
-// una estrategia que el repositorio no admite.
-//
-// El gate no es una decisión de la TUI sino de state.MergeBlock, que ya tiene sus
-// tests. Lo que se comprueba aquí es que la TUI lo consume sin diluirlo: que un
-// bloqueo duro no arma, que uno blando arma pero se enseña, y que la lista de
-// modos sale de las reglas del repositorio.
 package tui
 
 import (
@@ -15,7 +8,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// gatedItems devuelve un ítem sano con las reglas de merge del repositorio dadas.
 func gatedItems(rules model.MergeRules) []model.Item {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	it.State = "open"
@@ -23,9 +15,6 @@ func gatedItems(rules model.MergeRules) []model.Item {
 	return []model.Item{it}
 }
 
-// TestMergeBlockedOnADraftNoArms: un PR en borrador no se puede mergear en GitHub.
-// Armar el merge solo para que la segunda tecla produzca un rechazo del forge
-// gasta una llamada y teaches al operador que la confirmación no significa nada.
 func TestMergeBlockedOnADraftNoArms(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].IsDraft = true
@@ -40,9 +29,6 @@ func TestMergeBlockedOnADraftNoArms(t *testing.T) {
 	}
 }
 
-// TestMergeBlockedOnAMergedItemNoArms: un ítem ya mergeado está en el mismo
-// grupo que el borrador por la misma razón —el forge lo rechaza—, pero el aviso
-// tiene que decir cuál de los dos es.
 func TestMergeBlockedOnAMergedItemNoArms(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].State = "merged"
@@ -54,10 +40,7 @@ func TestMergeBlockedOnAMergedItemNoArms(t *testing.T) {
 	}
 }
 
-// TestMergeOnFailingCIStillArmsButSays: el CI rojo no se puede prohibir —un check
-// inestable dejaría el PR sin salida—, pero tampoco puede pasar inadvertido. El
-// ítem arma y la confirmación lo dice, que es lo que convierte la segunda
-// pulsación en una decisión y no en un reflejo.
+// Red CI cannot be forbidden: an unstable check would otherwise leave the user stuck.
 func TestMergeOnFailingCIStillArmsButSays(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].Checks = model.Checks{State: model.ChecksFailing, Total: 5, Failing: 2}
@@ -76,10 +59,7 @@ func TestMergeOnFailingCIStillArmsButSays(t *testing.T) {
 	}
 }
 
-// TestMergeOnConflictingBranchesStillArmsButSays: un PR cuyas ramas se pisan no
-// lo va a integrar el forge, pero un rebase lo arregla en un comando, así que el
-// bloqueo es blando: arma, y la Confirmación lo dice nombrando la rama destino,
-// que es lo que hay que rebasar.
+// A PR whose branches collide is not going to be integrated anyway.
 func TestMergeOnConflictingBranchesStillArmsButSays(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].TargetBranch = "main"
@@ -99,10 +79,7 @@ func TestMergeOnConflictingBranchesStillArmsButSays(t *testing.T) {
 	}
 }
 
-// TestMergeWithoutMergeabilityDataStaysQuiet: cuando el forge no dice (GitHub
-// UNKNOWN, el respaldo REST, la API de Todos de GitLab) la caja no enseña nada
-// del conflicto. Un aviso que sale sin dato es un aviso falso, y un aviso falso
-// que se repite entrena a ignorar la caja entera.
+// When the forge does not say (GitHub UNKNOWN) the result stays quiet.
 func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -128,16 +105,8 @@ func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
 	}
 }
 
-// TestMergeRefusedForConflictingBranchesSaysRebase: el aviso del rechazo tiene
-// que decir qué hacer, y no "forge conflict".
-//
-// "Conflict" en prdash significa que el ítem cambió mientras lo mirabas, que se
-// resuelve refrescando. Un rechazo por ramas que se pisan no se arregla con un
-// refresco: hay que rebasar. Prometer un refresco es un aviso que no dice qué
-// hacer, que es la peor forma de equivocarse porque parece accionable.
+// The refusal's warning has to say what to do.
 func TestMergeRefusedForConflictingBranchesSaysRebase(t *testing.T) {
-	// Un solo ítem, para que no dependa de dónde caiga el cursor de la fixture.
-	// mkItem ya le pone head SHA, que es lo que hace que el merge llegue a salir.
 	it := mergeItems()[1]
 	f := newMergeFixture(t, it)
 	f.adp.ActionWarnings = map[string][]model.Warning{"merge:acme/widget#2": {{
@@ -160,16 +129,12 @@ func TestMergeRefusedForConflictingBranchesSaysRebase(t *testing.T) {
 	if !strings.Contains(notice, "rebase") {
 		t.Errorf("el aviso debería decir qué hacer: %q", notice)
 	}
-	// Y no puede quedarse registrado como denegado: un rebase lo deja
-	// integrable, y marcado como denegado el PR no volvería a armar nunca.
+	// And it must not stay recorded as denied: a rebase makes it integrable again.
 	if len(m.denied) != 0 {
 		t.Errorf("el ítem no debería quedar denegado para siempre: %+v", m.denied)
 	}
 }
 
-// TestMergeConfirmationOnlyOffersAllowedModes: un repositorio con squash
-// desactivado no debe ver `s` en la confirmación. La alternativa —ofrecerlo y
-// dejar que el forge lo rechace— es la que producía el error sin contexto.
 func TestMergeConfirmationOnlyOffersAllowedModes(t *testing.T) {
 	f := newMergeFixture(t, gatedItems(model.MergeRules{Known: true, Rebase: true, MergeCommit: true})...)
 
@@ -183,9 +148,6 @@ func TestMergeConfirmationOnlyOffersAllowedModes(t *testing.T) {
 	}
 }
 
-// TestMergeRefusesADisallowedMode: aunque la tecla llegue, el modo se revalida
-// contra las reglas. Sin esto, el filtro del menú sería solo ASNUARIO y un modo
-// no permitido se colaría por otra vía.
 func TestMergeRefusesADisallowedMode(t *testing.T) {
 	f := newMergeFixture(t, gatedItems(model.MergeRules{Known: true, Rebase: true})...)
 
@@ -199,9 +161,6 @@ func TestMergeRefusesADisallowedMode(t *testing.T) {
 	}
 }
 
-// TestMergeOnUnknownRulesOffersEveryMode: GitLab no publica las estrategias, así
-// que llegan sin conocer. Filtrar sin dato dejaría al usuario sin salida
-// legítima, que es peor que ofrecer una de más.
 func TestMergeOnUnknownRulesOffersEveryMode(t *testing.T) {
 	f := newMergeFixture(t, gatedItems(model.MergeRules{})...)
 
@@ -214,9 +173,6 @@ func TestMergeOnUnknownRulesOffersEveryMode(t *testing.T) {
 	}
 }
 
-// TestMergePinsToTheHeadCommitItSaw: el argv real que sale del camino completo
-// (armar, elegir modo, relectura, merge) lleva el pin. Si el pin viviera solo en
-// el adapter y la TUI no lo supplyera, esto fallaría.
 func TestMergePinsToTheHeadCommitItSaw(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].HeadSHA = "abc1234"
@@ -231,9 +187,6 @@ func TestMergePinsToTheHeadCommitItSaw(t *testing.T) {
 	}
 }
 
-// TestMergeWithoutAHeadSHARefuses: sin SHA no hay pin y sin pin es el bug. La
-// negación tiene que venir del adapter (que es quien sabe el flag de cada CLI),
-// y el resultado no es un merge "de todas formas".
 func TestMergeWithoutAHeadSHARefuses(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].HeadSHA = ""

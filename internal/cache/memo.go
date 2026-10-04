@@ -7,14 +7,11 @@ import (
 	"sync"
 )
 
-// MemoFileName es el fichero de memoria de rutas resueltas y reviews activos,
-// dentro del dir XDG de cache.
 const MemoFileName = "memo.json"
 
-// memoVersion del formato; un fichero de otra versión se ignora.
+// A memo from another version is ignored rather than migrated.
 const memoVersion = 1
 
-// ReviewRecord es el worktree que un ítem tiene montado como review activo.
 type ReviewRecord struct {
 	Repo     string `json:"repo"`
 	Worktree string `json:"worktree"`
@@ -22,15 +19,12 @@ type ReviewRecord struct {
 	Label    string `json:"label"`
 }
 
-// Memo es la memoria de rutas: clones locales ya resueltos (clave
-// "forge/host/proyecto") y el review activo de cada ítem (clave "…/proyecto#N").
 type Memo struct {
 	Version int                     `json:"version"`
 	Routes  map[string]string       `json:"routes"`
 	Reviews map[string]ReviewRecord `json:"reviews"`
 }
 
-// MemoPath devuelve la ruta del fichero de memoria ($XDG_CACHE_HOME/prdash).
 func MemoPath() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
@@ -39,8 +33,7 @@ func MemoPath() (string, error) {
 	return filepath.Join(dir, DirName, MemoFileName), nil
 }
 
-// LoadMemo lee la memoria. Fichero ausente, corrupto o de versión desconocida =
-// (Memo vacío, false), sin error.
+// A missing, corrupt or stale memo degrades to "empty": the memo caches resolved paths, so losing it costs a re-resolve.
 func LoadMemo(path string) (Memo, bool) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -53,23 +46,19 @@ func LoadMemo(path string) (Memo, bool) {
 	return normalize(m), true
 }
 
-// SaveMemo persiste la memoria (best-effort: el llamador puede ignorar el error).
 func SaveMemo(path string, m Memo) error {
 	m.Version = memoVersion
 	m = normalize(m)
 	return guardaJSON(path, m)
 }
 
-// Store es un acceso seguro en proceso a la memoria persistida. Serializa los
-// read-modify-write y mantiene el fichero coherente entre resolutor y executor.
+// The resolver and the executor share this file, so every read-modify-write goes through the mutex.
 type Store struct {
 	path string
 	mu   sync.Mutex
 	memo Memo
 }
 
-// OpenStore carga (o crea vacía) la memoria en path. path vacío = solo memoria
-// en proceso, sin persistencia.
 func OpenStore(path string) *Store {
 	s := &Store{path: path, memo: emptyMemo()}
 	if path != "" {
@@ -80,7 +69,6 @@ func OpenStore(path string) *Store {
 	return s
 }
 
-// Route devuelve la ruta local recordada para una clave de repo.
 func (s *Store) Route(key string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -88,7 +76,6 @@ func (s *Store) Route(key string) (string, bool) {
 	return p, ok
 }
 
-// SetRoute recuerda la ruta local de una clave de repo.
 func (s *Store) SetRoute(key, path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -96,7 +83,6 @@ func (s *Store) SetRoute(key, path string) {
 	s.saveLocked()
 }
 
-// Review devuelve el review activo recordado para una clave de ítem.
 func (s *Store) Review(key string) (ReviewRecord, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,7 +90,6 @@ func (s *Store) Review(key string) (ReviewRecord, bool) {
 	return rec, ok
 }
 
-// SetReview recuerda el review activo de una clave de ítem.
 func (s *Store) SetReview(key string, rec ReviewRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -112,8 +97,6 @@ func (s *Store) SetReview(key string, rec ReviewRecord) {
 	s.saveLocked()
 }
 
-// DeleteReview olvida el review activo de una clave de ítem. Se usa cuando su
-// worktree ya no existe, para que ActiveReview deje de reportarlo.
 func (s *Store) DeleteReview(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -125,6 +108,7 @@ func (s *Store) saveLocked() {
 	if s.path == "" {
 		return
 	}
+	// Best-effort on purpose: a write that fails here costs a re-resolve later, nothing more.
 	_ = SaveMemo(s.path, s.memo)
 }
 

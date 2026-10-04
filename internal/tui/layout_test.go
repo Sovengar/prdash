@@ -1,11 +1,7 @@
-// Tests del presupuesto de alto: la suma de las cajas tiene que dar la altura
-// del terminal, y en terminales bajos la vista degrada sin perder el cuerpo
-// central.
 package tui
 
 import "testing"
 
-// altoDe es el alto que ocuparía una composición con el layout dado.
 func altoDe(lay layout) int {
 	n := lay.bodyLines + listChrome + detailChrome + lay.detailLines
 	if lay.showHeader {
@@ -17,10 +13,7 @@ func altoDe(lay layout) int {
 	return n
 }
 
-// TestComputeLayoutLlenaLaAltura es el invariante que sostiene la vista entera:
-// cada caja aporta su alto reservado y la suma es exactamente la del terminal,
-// para que la caja de atajos quede siempre pegada abajo y nada se vaya de
-// pantalla.
+// The invariant the whole view rests on: each box gives up its height in turn.
 func TestComputeLayoutLlenaLaAltura(t *testing.T) {
 	for _, height := range []int{10, 14, 20, 24, 30, 40, 60, 120} {
 		lay := computeLayout(height, 1, true)
@@ -33,8 +26,6 @@ func TestComputeLayoutLlenaLaAltura(t *testing.T) {
 	}
 }
 
-// TestComputeLayoutDetalleCuarentaPorCiento: con sitio de sobra el panel inferior
-// conserva su 40% y el resto es para la lista.
 func TestComputeLayoutDetalleCuarentaPorCiento(t *testing.T) {
 	for _, tc := range []struct{ height, detail int }{
 		{40, 16}, // 16/40 = 40%
@@ -51,11 +42,7 @@ func TestComputeLayoutDetalleCuarentaPorCiento(t *testing.T) {
 	}
 }
 
-// TestComputeLayoutDegradaSinPerderElCuerpo: en un terminal bajo las cajas
-// laterales se van cayendo en orden —cabecera, luego hints— pero el cuerpo
-// central y el panel nunca se quedan sin líneas.
 func TestComputeLayoutDegradaSinPerderElCuerpo(t *testing.T) {
-	// 14 líneas ya no caben las cuatro cajas: cae la cabecera.
 	lay := computeLayout(14, 1, true)
 	if lay.showHeader {
 		t.Errorf("computeLayout(14) = %+v; la caja de cabecera debería caer", lay)
@@ -77,22 +64,15 @@ func TestComputeLayoutDegradaSinPerderElCuerpo(t *testing.T) {
 	}
 }
 
-// TestComputeLayoutRecortaHintsAntesDeOcultarlos: con poco sitio se conservan
-// varias líneas de atajos (envueltas) y, solo si no cabe ninguna, desaparece la
-// caja entera.
 func TestComputeLayoutRecortaHintsAntesDeOcultarlos(t *testing.T) {
-	// hintAvailable=3 con sitio de sobra: se respetan las 3 líneas.
 	lay := computeLayout(40, 3, true)
 	if lay.showKeybinds && lay.hintLines != maxHintLines {
 		t.Errorf("con sitio de sobra hints = %d, want %d (%+v)", lay.hintLines, maxHintLines, lay)
 	}
-	// hintAvailable=1 (terminal ancho, barra en una línea).
 	lay = computeLayout(40, 1, true)
 	if lay.hintLines != 1 {
 		t.Errorf("hints = %d, want 1 (%+v)", lay.hintLines, lay)
 	}
-	// Terminal diminuto: la caja de atajos desaparece y el cuerpo se queda con lo
-	// que liberó.
 	lay = computeLayout(9, 1, true)
 	if lay.showKeybinds {
 		t.Errorf("computeLayout(9) = %+v; la caja de atajos debería caer", lay)
@@ -102,8 +82,6 @@ func TestComputeLayoutRecortaHintsAntesDeOcultarlos(t *testing.T) {
 	}
 }
 
-// TestComputeLayoutSinAlturaNoRecorta: antes del primer WindowSizeMsg no se sabe
-// la altura, así que no se recorta nada y la vista se pinta entera.
 func TestComputeLayoutSinAlturaNoRecorta(t *testing.T) {
 	for _, show := range []bool{false, true} {
 		lay := computeLayout(0, 1, show)

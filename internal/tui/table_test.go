@@ -18,8 +18,6 @@ func TestPadAndTruncate(t *testing.T) {
 	}
 }
 
-// TestRenderCellsPadsBeforeStyle verifica que el relleno va antes del estilo:
-// el texto plano resultante conserva el ancho de columna.
 func TestRenderCellsPadsBeforeStyle(t *testing.T) {
 	cells := []cell{
 		{text: "ab", style: styleForge, width: 5},
@@ -31,23 +29,13 @@ func TestRenderCellsPadsBeforeStyle(t *testing.T) {
 	}
 }
 
-// TestNingunaCeldaLlenaSuColumna cubre el pegado de columnas: el ancho de una
-// columna incluye el hueco de separación, así que el texto nunca puede ocupar
-// los runes completos. Sin esto, un texto que llenara la columna exacta
-// pegaba con la siguiente ("…gatewayreview req").
 func TestNingunaCeldaLlenaSuColumna(t *testing.T) {
-	// Los casos que llenaban su columna: el título y el sufijo de ITEM (ancho
-	// dinámico), y ROLE, cuyo texto crudo era del ancho exacto de su columna
-	// antigua.
 	it := mkItem("github", "github.com", "APPCITTI/vsocial/backend/mobile-frontend",
 		strings.Repeat("t", colTitle+5), 1198, "")
 	it.ReviewKind = model.ReviewRequested // sin esto roleText devuelve "-"
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, mkItems("APPCITTI/vsocial/backend/mobile-frontend")...)}, prefixCommon)
 	cells := itemCells(it, model.SectionReview, "yo", lay)
 
-	// El texto CRUDO de ROLE tiene que caber con su hueco ("review req" = 10 en
-	// una columna de colRole): es el caso que pegaba con STATE. El título CRUDO
-	// se pasa de largo y se recorta.
 	if got, want := utf8.RuneCountInString(roleText(it, "yo")), colRole-1; got != want {
 		t.Fatalf("el texto de ROLE mide %d runes, want %d: el caso que pegaba ya no se está probando", got, want)
 	}
@@ -57,7 +45,6 @@ func TestNingunaCeldaLlenaSuColumna(t *testing.T) {
 	if got, want := utf8.RuneCountInString(cells[colTitleIdx].text), colTitle-1; got != want {
 		t.Fatalf("celda TITLE = %d runes, want %d (colTitle - hueco)", got, want)
 	}
-	// Y el sufijo más largo de la columna cabe entero: el ancho lo cuenta todo.
 	if got, want := utf8.RuneCountInString(cells[colRefIdx].text), textWidth(lay.cols[colRefIdx].width); got != want {
 		t.Fatalf("celda ITEM = %d runes, want %d (presupuesto de la columna)", got, want)
 	}
@@ -68,9 +55,6 @@ func TestNingunaCeldaLlenaSuColumna(t *testing.T) {
 	}
 }
 
-// TestColumnasSeparadasPorUnEspacio es el mismo invariante sobre la fila
-// compuesta: cada ranura de columna acaba en un espacio, así que ninguna
-// columna puede pegarse con la siguiente.
 func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -90,8 +74,6 @@ func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 		t.Fatal("no se encontró la fila del ítem")
 	}
 
-	// El prefijo de la fila ("  " o "▸ ") mide 2 runes: la primera columna
-	// empieza ahí.
 	runes := []rune(row)
 	off := 2
 	for _, c := range lay.cols[:fitColumns(lay, inner)] {
@@ -106,9 +88,6 @@ func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 	}
 }
 
-// TestForgeBadgeCoversStandardAndSelfHosted fija la etiqueta de la columna
-// FORGE: abreviatura sola en el host estándar, abreviatura + primera etiqueta
-// del host en uno self-hosted, sin perder nunca la identidad en el detalle.
 func TestForgeBadgeCoversStandardAndSelfHosted(t *testing.T) {
 	badge := func(forge, host string) string {
 		it := model.NewItem(model.RepoRef{Forge: forge, Host: host, Project: "o/r"}, 1)
@@ -131,15 +110,12 @@ func TestForgeBadgeCoversStandardAndSelfHosted(t *testing.T) {
 		}
 	}
 
-	// El detalle sigue mostrando la ruta completa.
 	it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "umane.emeal.nttdata.com", Project: "g/p"}, 7)
 	if got := forgeLabel(it); got != "gitlab@umane.emeal.nttdata.com" {
 		t.Errorf("forgeLabel = %q", got)
 	}
 }
 
-// TestForgeBadgeFitsColumn evita que un host self-hosted largo desalinee la
-// tabla: la celda se recorta al ancho de columna.
 func TestForgeBadgeFitsColumn(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "empresaurbanisimaziyota.example.com", Project: "g/p"}, 1)
 	if got := truncate(forgeBadge(it), colForge); utf8.RuneCountInString(got) != colForge {
@@ -147,9 +123,6 @@ func TestForgeBadgeFitsColumn(t *testing.T) {
 	}
 }
 
-// TestNavigationMovesCursor cubre la navegación dentro de la sección activa: el
-// cursor se mueve entre sus filas —ordenadas de más reciente a más antigua, así
-// que la última enviada va primero— y se acota en los extremos.
 func TestNavigationMovesCursor(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -175,8 +148,6 @@ func TestNavigationMovesCursor(t *testing.T) {
 	if m.cursor != 2 {
 		t.Fatalf("cursor tras segundo down = %d", m.cursor)
 	}
-	// Bajar más allá de la última fila se acota: la sección activa no salta a
-	// otra sección.
 	m = press(t, m, "down")
 	if it, ok := m.selected(); !ok || it.Number != 1 {
 		t.Fatalf("seleccionado en el tope inferior = %+v, want el #1", it)
@@ -186,9 +157,6 @@ func TestNavigationMovesCursor(t *testing.T) {
 	}
 }
 
-// TestSectionNextCyclesActiveSection fija el ciclo de `tab`: la sección activa
-// avanza Assigned → Mentioned → Mine → Assigned, siempre, aunque la destino esté
-// vacía.
 func TestSectionNextCyclesActiveSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -204,9 +172,6 @@ func TestSectionNextCyclesActiveSection(t *testing.T) {
 	}
 }
 
-// TestSectionNextHonorsRebind comprueba que la tecla de section-next sale de
-// [keybindings] y no de un "tab" cableado. Con el atajo hardcodeado, un
-// rebind en la config se anunciaba en la barra de hints y no hacía nada.
 func TestSectionNextHonorsRebind(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.cfg.Keybindings["section-next"] = "n"
@@ -218,16 +183,12 @@ func TestSectionNextHonorsRebind(t *testing.T) {
 	if m.activeSection != model.SectionMentions {
 		t.Fatalf("n debería ciclar la sección activa: activeSection = %q", m.activeSection)
 	}
-	// tab ya no es la tecla de la acción: debe ser una tecla muerta y no ciclar,
-	// para que la barra no prometa lo que no hay.
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionMentions {
 		t.Fatalf("tab movió la sección aun estando rebindeada: activeSection = %q", m.activeSection)
 	}
 }
 
-// TestAuthoredOnlyShowsOwnItems comprueba que la sección authored solo contiene
-// lo que abrí yo.
 func TestAuthoredOnlyShowsOwnItems(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Mío", 1, "")}, false))
@@ -246,12 +207,7 @@ func TestInitReturnsCmd(t *testing.T) {
 	}
 }
 
-// TestCompactCount fija la regla de abreviación del diffstat. El objetivo es que
-// el peor caso quepa en la columna: "+9.9k -9.9k" son 11 runes, y por eso a
-// partir de cinco dígitos se redondea a "12k" en vez de "12.3k".
 func TestCompactCount(t *testing.T) {
-	// El salto de décimas a enteros llega al redondear al alza, no al llegar a
-	// cinco dígitos: 9499 sigue siendo "9.5k" y solo 9950 se va a "10k".
 	cases := map[int]string{
 		0: "0", 7: "7", 999: "999",
 		1000: "1.0k", 1234: "1.2k", 9499: "9.5k", 9949: "9.9k",
@@ -267,8 +223,6 @@ func TestCompactCount(t *testing.T) {
 	}
 }
 
-// TestDiffColumnTextUnknownIsDash: un diffstat que el forge no reportó se marca
-// "-", igual que los checks sin datos. Un "0 -0" parecería un PR vacío.
 func TestDiffColumnTextUnknownIsDash(t *testing.T) {
 	if got := diffColumnText(model.DiffStat{}); got != "-" {
 		t.Errorf("diffColumnText sin datos = %q, want %q", got, "-")
@@ -281,9 +235,6 @@ func TestDiffColumnTextUnknownIsDash(t *testing.T) {
 	}
 }
 
-// TestDiffColumnAppearsOnlyOnWideTerminals fija la prioridad de la columna DIFF:
-// va la última, así que a 124 con rutas largas no cabe y se omite sin que se
-// pierda nada (el detalle la trae). Con terminal ancha aparece.
 func TestDiffColumnAppearsOnlyOnWideTerminals(t *testing.T) {
 	item := mkItem("github", "github.com", "APPCITTI/vsocial/backend/vsocial-api-actuacions", "fix", 1015, "")
 	item.Diff = model.DiffStat{Additions: 42, Deletions: 1, Files: 2, Known: true}
@@ -315,10 +266,7 @@ func TestDiffColumnAppearsOnlyOnWideTerminals(t *testing.T) {
 	}
 }
 
-// TestDiffSpansColoreaSoloCifras: la columna DIFF lleva dos colores en la misma
-// celda —verde lo que se añade, rojo lo que se quita— y es notación de diff, no
-// un juicio. Lo que no es un recuento con signo se queda plano: colorear un
-// "unknown" o un "no changes" inventaría una cifra que no está.
+// The DIFF column carries two colours in the same cell.
 func TestDiffSpansColoreaSoloCifras(t *testing.T) {
 	cases := []struct {
 		plain string
@@ -359,9 +307,6 @@ func TestDiffSpansColoreaSoloCifras(t *testing.T) {
 	}
 }
 
-// TestDiffSpansSideColores fija qué color va con cada lado: verde al añadido,
-// rojo al quitado. Si se intercambian, el diffstat diría lo contrario de lo que
-// pasó.
 func TestDiffSpansSideColores(t *testing.T) {
 	spans := diffSpans("+381 -36")
 	if len(spans) != 3 {
@@ -375,9 +320,6 @@ func TestDiffSpansSideColores(t *testing.T) {
 	}
 }
 
-// TestRenderCellSpansKeepWidth: una celda con varios tramos debe ocupar
-// exactamente el ancho de su columna, igual que una de un solo estilo. Si el
-// relleno se midiera sobre texto ya coloreado, la tabla bailaría.
 func TestRenderCellSpansKeepWidth(t *testing.T) {
 	c := diffCell(model.DiffStat{Additions: 1589, Deletions: 474, Files: 23, Known: true}, colDiff)
 	out := renderCell(c)
@@ -390,7 +332,6 @@ func TestRenderCellSpansKeepWidth(t *testing.T) {
 	if !strings.Contains(out, "\x1b[") {
 		t.Errorf("la celda debería traer color: %q", out)
 	}
-	// La celda desconocida no lleva color de cifra: solo el gris de "no hay dato".
 	unknown := renderCell(diffCell(model.DiffStat{}, colDiff))
 	if got := strings.TrimRight(stripANSI(unknown), " "); got != "-" {
 		t.Errorf("celda desconocida = %q, want %q", got, "-")
@@ -400,9 +341,6 @@ func TestRenderCellSpansKeepWidth(t *testing.T) {
 	}
 }
 
-// TestStyleDiffTextNoAlteraElAncho: styleDiffText solo añade códigos ANSI; el
-// texto plano tiene que quedar idéntico, que es lo que permite medir y recortar
-// antes de colorear.
 func TestStyleDiffTextNoAlteraElAncho(t *testing.T) {
 	for _, plain := range []string{"+381 -36", "+381 -36 (11 files)", "-", "no changes", "unknown (forge did not report it)"} {
 		if got := stripANSI(styleDiffText(plain)); got != plain {

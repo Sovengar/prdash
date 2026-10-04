@@ -8,10 +8,7 @@ import (
 	"prdash/internal/forge"
 )
 
-// TestMergeAsksForTheBranchDeletion: el flag es `--remove-source-branch`, que no
-// se parece en nada al `--delete-branch` de gh. Que el nombre sea distinto es
-// justo lo que hay que fijar en un test: copiar el flag de GitHub al adapter de
-// GitLab compila y no hace nada.
+// The flag is `--remove-source-branch`, nothing like gh's `--delete-branch`.
 func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -34,7 +31,6 @@ func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 			if got := strings.Contains(joined, "--remove-source-branch"); got != tc.want {
 				t.Errorf("argv = %q, want --remove-source-branch presente = %v", joined, tc.want)
 			}
-			// El flag de GitHub no debe colarse nunca aquí.
 			if strings.Contains(joined, "--delete-branch") {
 				t.Errorf("argv = %q: --delete-branch es de gh, glab no lo entiende", joined)
 			}
@@ -42,8 +38,6 @@ func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 	}
 }
 
-// TestMergeWithDeleteStillPins: el borrado no puede relajar el `--sha`, que es lo
-// que impide integrar commits que nadie revisó.
 func TestMergeWithDeleteStillPins(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "glab")

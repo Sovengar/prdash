@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// solid es una imagen de un solo color, para poder comprobar que el promedio no
-// inventa tonos que no estaban.
 func solid(w, h int, c color.RGBA) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := range h {
@@ -20,8 +18,6 @@ func solid(w, h int, c color.RGBA) *image.RGBA {
 	return img
 }
 
-// TestCellsEmitsTwoPixelsPerCell: el bloque superior es lo que compra resolución
-// vertical, así que una fila de celdas tiene el doble de píxeles que columnas.
 func TestCellsEmitsTwoPixelsPerCell(t *testing.T) {
 	lines := Cells(solid(4, 4, color.RGBA{R: 10, G: 20, B: 30, A: 255}), 3, 2)
 	if len(lines) != 2 {
@@ -34,9 +30,7 @@ func TestCellsEmitsTwoPixelsPerCell(t *testing.T) {
 	}
 }
 
-// TestCellsEncodesBothHalves: el color de la celda es el del píxel de arriba como
-// foreground y el de abajo como background. Si se invirtieran, la imagen saldría
-// con las bandas cambiadas y las líneas del grafo Nada dirían.
+// The cell's colour is the top pixel as foreground and the bottom as background.
 func TestCellsEncodesBothHalves(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 1, 2))
 	img.SetRGBA(0, 0, color.RGBA{R: 10, G: 20, B: 30, A: 255})   // arriba
@@ -54,11 +48,7 @@ func TestCellsEncodesBothHalves(t *testing.T) {
 	}
 }
 
-// TestCellsAveragesInsteadOfSampling: una muestra puntual deja los trazos finos
-// rotos en un mullón, que es justo el detalle por el que se viene a mirar.
 func TestCellsAveragesInsteadOfSampling(t *testing.T) {
-	// Dos columnas de 100 y 200 separadas en dos celdas: reducir a una sola
-	// columna tiene que dar la media, no uno de los dos.
 	img := image.NewRGBA(image.Rect(0, 0, 2, 1))
 	img.SetRGBA(0, 0, color.RGBA{R: 100, A: 255})
 	img.SetRGBA(1, 0, color.RGBA{R: 200, A: 255})
@@ -69,8 +59,6 @@ func TestCellsAveragesInsteadOfSampling(t *testing.T) {
 	}
 }
 
-// TestCellsGuardsBadGeometry: sin imagen o sin sitio donde dibujar no hay nada que
-// devolver, y una línea vacía en el popup descuadraría la caja entera.
 func TestCellsGuardsBadGeometry(t *testing.T) {
 	img := solid(2, 2, color.RGBA{A: 255})
 	if Cells(nil, 2, 2) != nil {
@@ -87,9 +75,6 @@ func TestCellsGuardsBadGeometry(t *testing.T) {
 	}
 }
 
-// TestCellsSurvivesUpscaling: reducir una imagen más pequeña que el destino
-// deja fracciones enteras sin píxeles que promediar, y ahí el negro por defecto
-// se leería como un punto que el render no tenía.
 func TestCellsSurvivesUpscaling(t *testing.T) {
 	lines := Cells(solid(1, 1, color.RGBA{G: 77, A: 255}), 8, 4)
 	if len(lines) != 4 {
@@ -100,8 +85,6 @@ func TestCellsSurvivesUpscaling(t *testing.T) {
 	}
 }
 
-// TestErrorUnwrapsAndNamesTheCommand: el error tiene que decir qué comando falló y
-// en qué directorio, porque es lo primero que se mira cuando git-sim se queja.
 func TestErrorUnwrapsAndNamesTheCommand(t *testing.T) {
 	cause := errors.New("boom")
 	err := &Error{Args: []string{"merge", "x"}, Dir: "/wt", ExitCode: 3, Msg: "nope", Err: cause}
@@ -117,7 +100,6 @@ func TestErrorUnwrapsAndNamesTheCommand(t *testing.T) {
 	}
 }
 
-// asError es errors.As sin importar el paquete en cada test.
 func asError(err error, target **Error) bool {
 	for err != nil {
 		if e, ok := err.(*Error); ok {

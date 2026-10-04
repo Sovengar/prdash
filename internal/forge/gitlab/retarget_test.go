@@ -9,10 +9,8 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestRetargetUsesTheAPINotMrUpdate fija el argv del cambio de base y sobre todo
-// que no sea `glab mr update --target-branch`: ese comando es de edición y su
-// razón de ser es abrir título y descripción en el editor, así que con un flag de
-// campo abierto esa puerta se entreabre. El PUT manda el campo y nada más.
+// `glab mr update` is not broken, it is an EDIT command whose purpose is opening title and
+// description in an editor.
 func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "glab")
@@ -23,8 +21,8 @@ func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 	}
 
 	got := strings.Join(readArgs(t, argsFile), " ")
-	// El proyecto anidado necesita el %2F: sin él la ruta se parte en dos y la
-	// petición va a un sitio que no existe.
+	// A nested project needs the %2F: without it the path splits in two and the request goes to the
+	// wrong place.
 	if want := "-X PUT projects/grp%2Fproj/merge_requests/7"; !strings.Contains(got, want) {
 		t.Errorf("argv = %q, want %q con el proyecto urlencoded", got, want)
 	}
@@ -34,16 +32,13 @@ func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 	if strings.Contains(got, "mr update") {
 		t.Errorf("argv = %q, no debe usar `glab mr update`: es un comando de edición", got)
 	}
-	// El método tiene que ser explícito: con `-f`, glab cae a POST, y un POST
-	// sobre la ruta de un MR no actualiza nada y contesta 200 como si lo hubiera
-	// hecho.
+	// The method has to be explicit: with -f glab falls back to POST, and a POST on the MR update
+	// route does not work.
 	if !strings.Contains(got, "--hostname gitlab.example.com") {
 		t.Errorf("argv = %q, want el host fijado", got)
 	}
 }
 
-// TestRetargetRefusesEmptyBranch: sin rama no hay nada que enviar, y el corte se
-// comprueba por ausencia de llamada, que es lo que de verdad importa.
 func TestRetargetRefusesEmptyBranch(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "glab")
@@ -57,10 +52,7 @@ func TestRetargetRefusesEmptyBranch(t *testing.T) {
 	}
 }
 
-// TestBranchesPaginatesAsNDJSON: glab no tiene `--jq`, así que el NDJSON es la
-// única forma de que cada página venga en una línea. Y tiene que traer el
-// repositorio entero, porque el buscador ofrece destinos y un subconjunto
-// dejaría fuera la rama que se buscaba sin avisar.
+// glab has no --jq, so NDJSON is the only way each page arrives on its own line.
 func TestBranchesPaginatesAsNDJSON(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := dir + "/glab.args"
@@ -89,9 +81,6 @@ func TestBranchesPaginatesAsNDJSON(t *testing.T) {
 	}
 }
 
-// TestBranchesAvisaSiLaSalidaNoSeEntiende: una respuesta ilegible no es un
-// repositorio sin ramas. Devolver la lista vacía sin motivo haría que el buscador
-// pareciera un repo vacío, que es un diagnóstico falso.
 func TestBranchesAvisaSiLaSalidaNoSeEntiende(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeScript(t, dir, "glab", "#!/bin/sh\nprintf 'no soy json\\n'\n")

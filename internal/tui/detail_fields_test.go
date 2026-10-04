@@ -11,13 +11,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestReviewLabelCaeAlEstadoCuandoNoHayDecision: la etiqueta del detalle dice
-// cómo está el ítem, y sin decisión de review la única información real es el
-// estado del forge. Sin ese cae, la etiqueta sale vacía y el detalle no dice nada
-// del estado de un PR abierto sin reviews.
-//
-// Y el tipo de review se traduce: "review requested" y "assigned" son cosas
-// distintas para el operador, aunque la decisión sea la misma.
 func TestReviewLabelCaeAlEstadoCuandoNoHayDecision(t *testing.T) {
 	cases := []struct {
 		name string
@@ -55,15 +48,12 @@ func TestReviewLabelCaeAlEstadoCuandoNoHayDecision(t *testing.T) {
 			"approved · assigned",
 		},
 		{
-			// Un valor de decisión que no es ninguno de los tres conocidos se
-			// enseña tal cual: es dato del forge, no se inventa una traducción.
 			"decisión desconocida tal cual",
 			model.Item{State: "OPEN", ReviewDecision: "DISMISSED"},
 			"DISMISSED",
 		},
 		{
-			// Sin decisión NI estado: la etiqueta queda vacía, que es el dato
-			// honesto cuando el forge no dijo nada.
+			// With neither decision nor state the label is empty, which is the honest datum.
 			"sin nada que decir",
 			model.Item{},
 			"",
@@ -78,11 +68,7 @@ func TestReviewLabelCaeAlEstadoCuandoNoHayDecision(t *testing.T) {
 	}
 }
 
-// TestChecksDetailSeparaLoQueNoSeSabeDeLoQueEstaEnVerde: "no checks" y "passing
-// (0)" son afirmaciones distintas. La primera dice que no se consultó, la segunda
-// que se consultó y no había ninguno. Confundirlas hace que un repo sin CI (o con
-// el dato sin traer) parezca un CI verde, que es la forma más caro de mentir que
-// tiene la TUI.
+// "no checks" and "passing (0)" are different claims.
 func TestChecksDetailSeparaLoQueNoSeSabeDeLoQueEstaEnVerde(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -96,8 +82,6 @@ func TestChecksDetailSeparaLoQueNoSeSabeDeLoQueEstaEnVerde(t *testing.T) {
 		},
 		{
 			"total cero pero con estado conocido: hay recuento",
-			// Total == 0 con un estado que NO es unknown es un dato conocido con
-			// cero checks, no la ausencia de datos.
 			model.Checks{State: model.ChecksPassing},
 			"passing (0)",
 		},
@@ -131,10 +115,6 @@ func TestChecksDetailSeparaLoQueNoSeSabeDeLoQueEstaEnVerde(t *testing.T) {
 	}
 }
 
-// TestDiffDetailDistingueDesconocidoDeSinCambios: un diffstat que el forge no
-// reportó y un MR que no toca ningún fichero son cosas distintas, y la segunda no
-// se puede saber sin el dato. Aquí se afirma el texto entero porque es la
-// distinción de la que depende el gate.
 func TestDiffDetailDistingueDesconocidoDeSinCambios(t *testing.T) {
 	cases := []struct {
 		name string
@@ -157,12 +137,7 @@ func TestDiffDetailDistingueDesconocidoDeSinCambios(t *testing.T) {
 	}
 }
 
-// TestAuthReasonNoConfundeLasDosCosasQueNoSeArreglanIgual: el motivo de un forge
-// no autenticado decide qué hace el operador. "not authenticated" se arregla
-// retomando el token; "not implemented" (un adapter que no soporta la acción) no
-// se arregla de ninguna forma. Sin motivo, el texto por defecto es el que lleva a
-// la sesión de depuración larga, que es justo lo que el comentario de la función
-// dice evitar.
+// An unauthenticated forge and an unimplemented one are not the same repair.
 func TestAuthReasonNoConfundeLasDosCosasQueNoSeArreglanIgual(t *testing.T) {
 	if got := authReason(model.AuthState{}); got != "not authenticated" {
 		t.Errorf("sin motivo = %q, want \"not authenticated\"", got)
@@ -178,11 +153,6 @@ func TestAuthReasonNoConfundeLasDosCosasQueNoSeArreglanIgual(t *testing.T) {
 	}
 }
 
-// TestDetailWarningsAvisaPorForgeYPorMotivoDeAccion: son dos filas distintas con
-// dos potenciales órdenes distintos, y el motivo de la acción deshabilitada tiene
-// prioridad sobre el del forge: el motivo de la acción es el que el usuario acaba
-// de provocar, y mandarlo al aviso del forge lo lleva a un sitio donde no está el
-// problema.
 func TestDetailWarningsAvisaPorForgeYPorMotivoDeAccion(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	it := mkItem("github", "github.com", "acme/widget", "Uno", 1, "")
@@ -192,9 +162,6 @@ func TestDetailWarningsAvisaPorForgeYPorMotivoDeAccion(t *testing.T) {
 		t.Errorf("sin nada que avisar: %v", got)
 	}
 
-	// Forge no autenticado: avisa con el motivo. El slice lleva una línea vacía
-	// delante, que es el separador que el detalle usa para no pegar el aviso al
-	// campo de arriba.
 	m.statuses["github"].auth = model.AuthState{Forge: "github", OK: false, Reason: "GH_TOKEN no vale"}
 	got := m.detailWarnings(it)
 	if len(got) != 2 {
@@ -221,27 +188,21 @@ func TestDetailWarningsAvisaPorForgeYPorMotivoDeAccion(t *testing.T) {
 	}
 }
 
-// TestClipTopRecortaPorArribaYNoDejaHuecos: el recorte del detalle tiene
-// que enseñar el final de una lista larga (donde está el dato que importa, el
-// estado) y no la cabeza. Y con más líneas de las que caben, tiene que devolver
-// justo las que caben.
+// The cut has to show the END.
 func TestClipTopRecortaPorArribaYNoDejaHuecos(t *testing.T) {
 	lineas := []string{"una", "dos", "tres", "cuatro"}
 
-	// Cabe entero: no recorta.
 	if got := clipTop(lineas, 4); len(got) != 4 {
 		t.Errorf("con 4 filas para 4 líneas = %d, want 4", len(got))
 	}
 	if got := clipTop(lineas, 10); len(got) != 4 {
 		t.Errorf("con hueco de sobra = %d, want 4 (no rellena)", len(got))
 	}
-	// No cabe: recorta, y devuelve el número exacto que se pidió.
 	if got := clipTop(lineas, 2); len(got) != 2 {
 		t.Fatalf("con 2 filas para 4 líneas = %d, want 2", len(got))
 	}
-	// Sin filas no hay recorte posible, así que la entrada vuelve intacta: es un
-	// passthrough, no un recorte a cero. Quien llama ya sabe que no hay espacio, y
-	// devolver la lista entera deja que sea el layout quien decida.
+	// With no rows there is no clipping possible, so the entry comes back whole: it is a
+	// passthrough.
 	for _, rows := range []int{0, -1} {
 		if got := clipTop(lineas, rows); len(got) != len(lineas) {
 			t.Errorf("rows=%d devolvió %d líneas, want las %d intactas (no hay recorte posible)", rows, len(got), len(lineas))
@@ -250,28 +211,15 @@ func TestClipTopRecortaPorArribaYNoDejaHuecos(t *testing.T) {
 	if got := clipTop(nil, 3); len(got) != 0 {
 		t.Errorf("sin líneas devolvió %d", len(got))
 	}
-	// Y una sola línea con hueco de sobra no se rellena con blancos: el detalle
-	// no necesita un bloque de altura fija.
 	if got := clipTop([]string{"x"}, 5); len(got) != 1 {
 		t.Errorf("una línea con 5 filas = %d, want 1", len(got))
 	}
 }
 
-// TestLosCamposDelDetalleNoSePisanNiSeComen: el detalle es una ficha de dos
-// columnas, y su geometría tiene tres invariantes que se rompen en silencio:
-//
-//   - el valor se recorta a `ancho - labelWidth`, que es lo que deja sitio a la
-//     etiqueta. Sin ese `-`, un valor largo llega a la columna de al lado y la
-//     ficha se lee con los datos corridos.
-//   - la celda tiene un mínimo de 24 columnas, porque por debajo de eso la
-//     etiqueta se come el valor entero y no queda nada que leer.
-//   - el hueco entre columnas se rellena con lo que sobra, y lo que sobra se
-//     mide sobre el valor YA recortado y en texto plano, nunca sobre la cadena
-//     coloreada (que daría un número de columnas inventado).
+// The detail is a two-column card and its geometry is the whole point.
 func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
 	largo := detailField{key: "checks", value: strings.Repeat("x", 200)}
 
-	// El valor recortado nunca pasa del ancho de la celda menos la etiqueta.
 	for _, inner := range []int{30, 40, 60, 80, 120} {
 		cell := max(24, (inner-detailGap)/2)
 		linea, w := detailCell(largo, cell)
@@ -288,25 +236,20 @@ func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
 		}
 	}
 
-	// La celda nunca baja de 24 por muy estrecho que sea el interior: por debajo
-	// la etiqueta se comería el valor.
+	// The cell never drops below 24 however narrow the interior, because below that the label does
+	// not fit.
 	for _, inner := range []int{10, 20, 28, 30} {
 		if cell := max(24, (inner-detailGap)/2); cell != 24 {
 			t.Errorf("inner %d dio celda de %d columnas, want el mínimo de 24", inner, cell)
 		}
 	}
 
-	// Y una fila de la rejilla no se pasa del interior, que es lo que garantiza que las
-	// dos columnas y el hueco caben. En un interior estrecho la celda cae a su
-	// mínimo de 24, y entonces la fila son dos celdas más el hueco: ese es el
-	// número que hace observable el `max(24, ...)`, porque comparar el ancho que
-	// devuelve detailCell con el mismo `cell` que se le pasó sería una tautología.
+	// A grid row never exceeds the interior, which is what keeps the two columns apart.
 	for _, inner := range []int{10, 28, 30, 40} {
 		filas := detailGrid([]detailField{largo, largo}, inner)
 		if len(filas) != 1 {
 			t.Fatalf("inner %d: %d filas, want 1", inner, len(filas))
 		}
-		// Los dos valores llenan la celda, así que el hueco es el de siempre.
 		want := 2*24 + detailGap
 		if w := ansi.StringWidth(filas[0]); w != want {
 			t.Errorf("inner %d: la fila mide %d columnas, want %d (dos celdas de 24 más el hueco de %d): %q",
@@ -321,8 +264,6 @@ func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
 		}
 	}
 
-	// Un campo de ancho completo (el URL) también cabe, y con un interior pequeño
-	// no se sale.
 	for _, inner := range []int{20, 38, 60, 160} {
 		linea := fullWidthField(detailField{key: "url", value: "https://gitlab.example.com/grp/proj/-/merge_requests/1"}, inner)
 		if w := ansi.StringWidth(linea); w > inner {
@@ -330,8 +271,7 @@ func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
 				inner, w, inner, ansi.Strip(linea))
 		}
 	}
-	// Y con un interior de 1 columna (el mínimo) no revienta: el max(1, ...)
-	// impide un ancho negativo, que panicaría en truncate.
+	// And with a 1-column interior it does not panic: the max(1, ...) prevents a negative.
 	for _, inner := range []int{0, 1, 2} {
 		linea := fullWidthField(detailField{key: "u", value: "valor"}, inner)
 		if w := ansi.StringWidth(linea); w != labelWidth+1 {
@@ -341,16 +281,8 @@ func TestLosCamposDelDetalleNoSePisanNiSeComen(t *testing.T) {
 	}
 }
 
-// TestRelTimeNoInventaUnNumeroNegativo: la antigüedad decide si un ítem parece
-// recién tocado o abandonado, así que los cortes tienen que estar donde dicen. El
-// de días es el que más duele cuando se mueve: un corte movido por un día
-// convierte un "hace 2 días" en "hace 3" y viceversa, y ambos son afirmaciones
-// sobre urgency.
-//
-// Y el "ahora" de menos de un minuto no lleva unidades: un "-0m" se lee como un
-// dato raro, y la información de que acaba de pasar no necesita más.
+// The age decides whether an item looks freshly touched or abandoned.
 func TestRelTimeNoInventaUnNumeroNegativo(t *testing.T) {
-	// Se mide contra ahora con tolerancias, porque relTime usa time.Now().
 	for _, tc := range []struct {
 		atras time.Duration
 		want  string
@@ -371,20 +303,16 @@ func TestRelTimeNoInventaUnNumeroNegativo(t *testing.T) {
 			t.Errorf("relativeTime(hace %v) = %q, want %q", tc.atras, got, tc.want)
 		}
 	}
-	// Una fecha en el futuro (un reloj desfasado o un fixture mal hecho) no puede
-	// dar un número negativo: sería un dato que nadie sabe leer.
+	// A date in the future (a skewed clock or a bad fixture) cannot give a negative age.
 	if got := relativeTime(time.Now().Add(24 * time.Hour)); strings.HasPrefix(got, "-") {
 		t.Errorf("una fecha futura dio %q, que se lee como un número negativo", got)
 	}
-	// Y la fecha cero es un guion, no un "-20000d": el forge no la trajo y eso
-	// se dice con el mismo guion que el resto de campos sin dato.
+	// And the zero date is a dash, not a "-20000d": the forge did not send it.
 	if got := relativeTime(time.Time{}); got != "-" {
 		t.Errorf("una fecha sin dato dio %q, want \"-\"", got)
 	}
 }
 
-// TestOrDashNoDejaUnCampoVacio: un campo sin dato se enseña como "-", no como un
-// hueco. Un hueco en el detalle se lee como un campo que se olvidó de rellenar.
 func TestOrDashNoDejaUnCampoVacio(t *testing.T) {
 	if got := orDash(""); got != "-" {
 		t.Errorf("orDash(\"\") = %q, want \"-\"", got)

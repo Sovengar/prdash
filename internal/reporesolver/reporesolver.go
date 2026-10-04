@@ -1,10 +1,6 @@
-// Package reporesolver es el único dueño del namespace de rutas de prdash.
-//
-// Indexa los clones locales sobre los roots configurados, recuerda rutas ya
-// resueltas, crea el clon bare cuando falta, trae el ref de review y prepara la
-// rama local de trabajo. No llama a la API del forge: solo usa git, de modo que
-// resolver un ítem no depende de credenciales ni de red más allá del propio
-// fetch del ref.
+// Package reporesolver is the sole owner of prdash's path namespace. It never calls the forge API,
+// only git, so resolving an item does not depend on credentials or on the network beyond the ref
+// fetch itself.
 package reporesolver
 
 import (
@@ -24,37 +20,20 @@ import (
 	"prdash/internal/gitcmd"
 )
 
-// Options configura un Resolver.
 type Options struct {
-	// Roots son los directorios donde buscar clones locales.
-	Roots []string
-	// CloneDir es la raíz de los clones bare.
-	CloneDir string
-	// WorktreeDir es la raíz de los worktrees.
+	Roots       []string
+	CloneDir    string
 	WorktreeDir string
-	// MemoPath es el fichero de memoria de rutas. Vacío usa el XDG de cache.
-	MemoPath string
-	// Hosts mapea host → nombre de forge para normalizar remotos.
-	Hosts map[string]string
-	// Prefixes mapea host → relative URL root de la instancia (p. ej. "git"
-	// para un GitLab self-managed en subcarpeta). Se aplica simétricamente al
-	// construir la URL de clonado (CloneURL) y al normalizar remotos
-	// (ParseRemoteURL). Vacío = instancia en la raíz del host.
-	Prefixes map[string]string
-	// CloneURL construye la URL de clonado de un repo. Inyectable para usar
-	// remotos locales en tests; por defecto arma la URL canónica del forge
-	// incluyendo el prefijo de subcarpeta del host.
-	CloneURL func(model.RepoRef) string
-	// ParseRemote normaliza una URL remota a RepoRef. Inyectable para tests;
-	// por defecto parsea las URLs de git de los forges conocidos quitando el
-	// prefijo de subcarpeta del host.
+	MemoPath    string
+	Hosts       map[string]string
+	// Applied symmetrically when building the clone URL and when normalising remotes, so a
+	// subfolder instance resolves to the same Project as one at the host root.
+	Prefixes    map[string]string
+	CloneURL    func(model.RepoRef) string
 	ParseRemote func(string) (model.RepoRef, bool)
-	// Git permite sustituir el ejecutor de git; vacío usa el binario del PATH.
-	Git *gitcmd.Runner
+	Git         *gitcmd.Runner
 }
 
-// Resolver resuelve rutas locales, provisiona clones bare y prepara la rama de
-// review. Es seguro para uso concurrente.
 type Resolver struct {
 	roots       []string
 	cloneDir    string
@@ -69,7 +48,6 @@ type Resolver struct {
 	indexed bool
 }
 
-// New construye un Resolver con las opciones dadas.
 func New(opts Options) *Resolver {
 	r := &Resolver{
 		roots:       append([]string(nil), opts.Roots...),
@@ -105,9 +83,6 @@ func New(opts Options) *Resolver {
 	return r
 }
 
-// ResolveLocal devuelve la ruta del clon local de un repo, si existe. Consulta
-// primero la memoria de rutas y, si falla, el índice de los roots (que se
-// construye una sola vez).
 func (r *Resolver) ResolveLocal(ref model.RepoRef) (string, bool) {
 	key := repoKey(ref)
 	if p, ok := r.store.Route(key); ok && isRepo(p) {
@@ -128,12 +103,8 @@ func (r *Resolver) ResolveLocal(ref model.RepoRef) (string, bool) {
 	return p, true
 }
 
-// HasBare informa si ya existe el clon bare de un repo.
 func (r *Resolver) HasBare(ref model.RepoRef) bool { return isRepo(r.barePath(ref)) }
 
-// EnsureBare devuelve el clon bare del repo, clonándolo si falta. El clon se
-// arma en un directorio temporal y se publica con rename, de modo que un fallo
-// no deja un clon a medias.
 func (r *Resolver) EnsureBare(ctx context.Context, ref model.RepoRef) (string, error) {
 	dest := r.barePath(ref)
 	if isRepo(dest) {
@@ -143,7 +114,6 @@ func (r *Resolver) EnsureBare(ctx context.Context, ref model.RepoRef) (string, e
 		return "", fmt.Errorf("prepare the bare clone %s: %w", dest, err)
 	}
 	if _, err := os.Stat(dest); err == nil {
-		// Restos de un intento previo: se limpian antes de reintentar.
 		if err := os.RemoveAll(dest); err != nil {
 			return "", fmt.Errorf("clean up the incomplete bare clone %s: %w", dest, err)
 		}
@@ -162,8 +132,6 @@ func (r *Resolver) EnsureBare(ctx context.Context, ref model.RepoRef) (string, e
 	return dest, nil
 }
 
-// RemoveBare borra el clon bare de un repo si existe. Se usa para no dejar
-// basura cuando el montaje falla después de haberlo creado.
 func (r *Resolver) RemoveBare(ref model.RepoRef) error {
 	dest := r.barePath(ref)
 	if _, err := os.Stat(dest); err != nil {
@@ -172,9 +140,7 @@ func (r *Resolver) RemoveBare(ref model.RepoRef) error {
 	return os.RemoveAll(dest)
 }
 
-// FetchReviewRef trae el ref de review del ítem y asegura una rama local de
-// trabajo. Devuelve el nombre de la rama local. Nunca toca una rama que ya
-// exista (reutiliza el worktree en curso).
+// Never touches a branch that already exists: the work in progress is reused.
 func (r *Resolver) FetchReviewRef(ctx context.Context, repo string, it model.Item) (string, error) {
 	src, ok := ReviewRef(it)
 	if !ok {
@@ -195,7 +161,6 @@ func (r *Resolver) FetchReviewRef(ctx context.Context, repo string, it model.Ite
 	return branch, nil
 }
 
-// Remember recuerda la ruta local de un repo en la memoria persistida.
 func (r *Resolver) Remember(ref model.RepoRef, path string) {
 	if path == "" {
 		return
@@ -203,27 +168,20 @@ func (r *Resolver) Remember(ref model.RepoRef, path string) {
 	r.store.SetRoute(repoKey(ref), path)
 }
 
-// RecordReview registra el worktree de un ítem como su review activo.
 func (r *Resolver) RecordReview(it model.Item, rec cache.ReviewRecord) error {
 	r.store.SetReview(itemKey(it.ID()), rec)
 	return nil
 }
 
-// ActiveReview devuelve el review activo registrado para un ítem.
 func (r *Resolver) ActiveReview(id model.ID) (cache.ReviewRecord, bool) {
 	return r.store.Review(itemKey(id))
 }
 
-// ForgetReview olvida el review activo de un ítem. Se llama cuando su worktree
-// se ha borrado de verdad: dejarlo apuntando a un checkout inexistente haría que
-// ActiveReview mintiera para siempre.
 func (r *Resolver) ForgetReview(it model.Item) error {
 	r.store.DeleteReview(itemKey(it.ID()))
 	return nil
 }
 
-// WorktreePath devuelve la ruta destino del worktree de un ítem. Es la única
-// fuente de rutas de worktree: el módulo worktree nunca las construye.
 func (r *Resolver) WorktreePath(ref model.RepoRef, number int) string {
 	return filepath.Join(
 		r.worktreeDir,
@@ -234,20 +192,15 @@ func (r *Resolver) WorktreePath(ref model.RepoRef, number int) string {
 	)
 }
 
-// barePath devuelve la ruta del clon bare de un repo.
 func (r *Resolver) barePath(ref model.RepoRef) string {
 	return filepath.Join(r.cloneDir, ref.Forge, ref.Host, filepath.FromSlash(ref.Project))
 }
 
-// branchExists comprueba si una rama local existe en el repo.
 func (r *Resolver) branchExists(ctx context.Context, repo, branch string) bool {
 	_, err := r.git.Run(ctx, repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	return err == nil
 }
 
-// buildIndex recorre los roots y construye el índice remoto→local. Poda
-// directorios ocultos y los worktrees enlazados (su repo principal ya se
-// indexa por sí mismo).
 func (r *Resolver) buildIndex() map[string]string {
 	idx := map[string]string{}
 	ctx := context.Background()
@@ -287,10 +240,8 @@ func (r *Resolver) buildIndex() map[string]string {
 	return idx
 }
 
-// ReviewBranch es el nombre de la rama local de review de un ítem.
 func ReviewBranch(number int) string { return fmt.Sprintf("prdash/pr-%d", number) }
 
-// ReviewRef devuelve el ref remoto de review de un ítem según su forge.
 func ReviewRef(it model.Item) (string, bool) {
 	switch it.Forge {
 	case "github":
@@ -302,9 +253,6 @@ func ReviewRef(it model.Item) (string, bool) {
 	}
 }
 
-// CloneURL arma la URL de clonado canónica de un repo (HTTPS), incluyendo el
-// relative URL root de la instancia. prefix es el prefijo de subcarpeta del
-// host (p. ej. "/git/" o "git" para un GitLab self-managed); vacío = raíz.
 func CloneURL(ref model.RepoRef, prefix string) string {
 	project := strings.TrimSuffix(ref.Project, ".git")
 	host := strings.Trim(ref.Host, "/")
@@ -315,26 +263,19 @@ func CloneURL(ref model.RepoRef, prefix string) string {
 	return fmt.Sprintf("https://%s/%s/%s.git", host, base, project)
 }
 
-// ParseRemoteURL normaliza una URL remota de git a una referencia de repo.
-// Reconoce la forma SCP (git@host:owner/repo) y las URLs con esquema. El forge
-// se deduce del host con el mapa hosts; un host desconocido no se normaliza.
-// prefixes mapea host → relative URL root de la instancia; el prefijo se quita
-// del path para que un remoto en subcarpeta (https://host/git/grupo/proy.git)
-// normalice al mismo Project que uno en la raíz.
+// The subfolder prefix is stripped from the path so a remote at https://host/git/group/proj.git
+// normalises to the same Project as one at the host root.
 func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]string) (model.RepoRef, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return model.RepoRef{}, false
 	}
 
-	// Las tres formas que se reconocen, y SOLO esas tres. La condición del "@" pide
-	// que haya algo ANTES del "@", porque un SCP con el usuario vacío ("@host:a/b")
-	// no es un remoto de git y normalizarlo produciría un repo que no existe.
-	//
-	// Y el "://" se acepta en la posición 0 aunque el esquema falte, porque no hace
-	// falta decidir aquí: url.Parse rechaza "://algo" por esquema ausente, así que
-	// esa entrada cae sola. Lo que no se debe es dejar que una entrada así se cuele
-	// por la rama de SCP, que es lo que haría un "!= 0" en lugar de un ">= 0".
+	// The "@" condition demands something before it: an SCP with an empty user ("@host:a/b") is not a git
+	// remote and normalising it would produce a repo that does not exist.
+	// "://" is accepted at position 0 even with a missing scheme, because that decision is not needed
+	// here: url.Parse rejects it for the absent scheme, so the entry falls on its own. What must not
+	// happen is such an entry slipping through the SCP branch, which a "!= 0" instead of ">= 0" would do.
 	var host, path string
 	if i := strings.Index(raw, "://"); i >= 0 {
 		u, err := url.Parse(raw)
@@ -389,7 +330,6 @@ func itemKey(id model.ID) string {
 	return id.Forge + "/" + id.Host + "/" + id.Project + "#" + strconv.Itoa(id.Number)
 }
 
-// isRepo reconoce un repo git normal o un clon bare por su estructura.
 func isRepo(path string) bool {
 	if _, err := os.Lstat(filepath.Join(path, ".git")); err == nil {
 		return true
@@ -401,13 +341,11 @@ func isRepo(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// isGitRepo reconoce un repo con `.git` como directorio (no un worktree).
 func isGitRepo(path string) bool {
 	info, err := os.Lstat(filepath.Join(path, ".git"))
 	return err == nil && info.IsDir()
 }
 
-// isWorktreeMarker reconoce un worktree enlazado (`.git` es un fichero).
 func isWorktreeMarker(path string) bool {
 	info, err := os.Lstat(filepath.Join(path, ".git"))
 	return err == nil && !info.IsDir()

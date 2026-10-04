@@ -9,9 +9,6 @@ import (
 	"prdash/internal/inbox"
 )
 
-// TestRefLeafReduceLaRutaALaHoja fija qué es la etiqueta de máxima densidad: el
-// último segmento del proyecto más el número. Es el modo que más info tira, así
-// que su valor tiene que ser exacto —y no un "casi el sufijo"—.
 func TestRefLeafReduceLaRutaALaHoja(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -22,8 +19,6 @@ func TestRefLeafReduceLaRutaALaHoja(t *testing.T) {
 		{"owner/repo de github", mkItems("acme/widget"), []string{"widget#100"}},
 		{"sin subgrupo", mkItems("myrepo"), []string{"myrepo#100"}},
 		{"varios items", mkItems("g/a/one", "g/a/two", "h/b/three"), []string{"one#100", "two#101", "three#102"}},
-		// Un proyecto vacío no es un caso raro (un forge puede devolver la ruta
-		// sin parsear) y no puede dejar la celda vacía ni meter una barra.
 		{"proyecto vacío", mkItems("", "g/p"), []string{"#100", "p#101"}},
 	} {
 		for i, it := range tc.items {
@@ -34,9 +29,6 @@ func TestRefLeafReduceLaRutaALaHoja(t *testing.T) {
 	}
 }
 
-// TestPrefixModeCiclaVuelveAlOrigen fija el ciclo que anuncia el hint: common →
-// full → leaf → common. Con tres valores, un next() mal hecho (p. ej. que se
-// saltara un caso) sería invisible en la barra hasta que el usuario pulsara.
 func TestPrefixModeCiclaVuelveAlOrigen(t *testing.T) {
 	m := prefixCommon
 	for i, want := range []prefixMode{prefixFull, prefixLeaf, prefixCommon, prefixFull} {
@@ -47,8 +39,6 @@ func TestPrefixModeCiclaVuelveAlOrigen(t *testing.T) {
 	}
 }
 
-// TestPrefixModeStringEsElNombreDelHint fija los tres nombres exactos: son lo que
-// el usuario lee en la barra, así que no pueden ser "full-ref" o "leafMode".
 func TestPrefixModeStringEsElNombreDelHint(t *testing.T) {
 	for mode, want := range map[prefixMode]string{
 		prefixCommon: "common",
@@ -61,9 +51,6 @@ func TestPrefixModeStringEsElNombreDelHint(t *testing.T) {
 	}
 }
 
-// TestNewRefLayoutDeclaraPrefijoSoloEnCommon es la invariante que hace desaparecer
-// la línea de prefijo en full y leaf sin tocar listLines: fuera de common el
-// layout no declara prefijo, y listLines solo pinta la línea si sale no vacío.
 func TestNewRefLayoutDeclaraPrefijoSoloEnCommon(t *testing.T) {
 	sections := []inbox.Section{section(model.SectionReview, mkItems(
 		"APPCITTI/vsocial/backend/api-gateway",
@@ -79,13 +66,7 @@ func TestNewRefLayoutDeclaraPrefijoSoloEnCommon(t *testing.T) {
 	}
 }
 
-// TestNewRefLayoutDimensionaITEMPorModo es el motivo de pasar el modo al layout:
-// el ancho sale de lo que la celda va a pintar, y eso cambia por modo. Los tres
-// números están calculados contra el fixture de behavior.feature.
 func TestNewRefLayoutDimensionaITEMPorModo(t *testing.T) {
-	// Dos ítems que comparten "APPCITTI/vsocial" pero divergen ya en el tercer
-	// segmento: así el sufijo de common tiene DOS segmentos y no coincide con la
-	// hoja, que es lo que distingue los tres anchos entre sí.
 	sections := []inbox.Section{section(model.SectionReview,
 		mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")...)}
 
@@ -107,9 +88,6 @@ func TestNewRefLayoutDimensionaITEMPorModo(t *testing.T) {
 	}
 }
 
-// TestRefCellTextPorModo comprueba la etiqueta de la celda en los tres modos. El
-// caso que importa es la degradación: sin prefijo común, common tiene que verse
-// EXACTAMENTE como full, no como una ruta repetida.
 func TestRefCellTextPorModo(t *testing.T) {
 	conGrupo := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 	prefix := sectionPrefix(conGrupo)
@@ -123,8 +101,6 @@ func TestRefCellTextPorModo(t *testing.T) {
 		t.Errorf("leaf = %q, want %q", got, want)
 	}
 
-	// Sin nada en común: common no inventa prefijo y cae a la ruta completa, que
-	// es justo lo que hace full. Mismo resultado, no "parecido".
 	sinGrupo := mkItems("acme/one", "other/one")
 	if p := sectionPrefix(sinGrupo); p != "" {
 		t.Fatalf("el fixture no debería tener prefijo común, tiene %q", p)
@@ -136,9 +112,6 @@ func TestRefCellTextPorModo(t *testing.T) {
 	}
 }
 
-// TestFullRecortaPorLaColaYConservaElNumero fija el recorte exacto del fixture
-// largo en modo full: la referencia completa no cabe en el tope, así que se
-// recorta por la izquierda y sobrevive la hoja con su número.
 func TestFullRecortaPorLaColaYConservaElNumero(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixFull)
@@ -152,10 +125,7 @@ func TestFullRecortaPorLaColaYConservaElNumero(t *testing.T) {
 	}
 }
 
-// TestLeafNoDesambiguaHojasRepetidas documenta el límite del modo con su caso
-// real: dos repos de grupos distintos con la MISMA hoja son indistinguibles en
-// leaf. No es un bug que se arregle aquí (el detalle conserva la ruta completa),
-// pero el ADR no debe prometer lo que el modo no da.
+// The limit of the mode, with its real case: two repos whose leaf repeats.
 func TestLeafNoDesambiguaHojasRepetidas(t *testing.T) {
 	items := mkItems("acme/one", "other/one")
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixLeaf)
@@ -168,8 +138,6 @@ func TestLeafNoDesambiguaHojasRepetidas(t *testing.T) {
 	}
 }
 
-// TestRefCellTextNoRepiteLaRutaEnLaLinea ni en la celda: la degradación de common
-// deja el grupo en un solo sitio, que es la celda.
 func TestRefCellTextNoRepiteLaRutaEnLaLinea(t *testing.T) {
 	items := mkItems("acme/one", "other/one")
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixCommon)
@@ -182,16 +150,7 @@ func TestRefCellTextNoRepiteLaRutaEnLaLinea(t *testing.T) {
 	}
 }
 
-// TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho fija una degradación real de
-// `full` que conviene no descubrir en producción: con el ITEM al tope (34), la
-// columna ya no cabe junto a FORGE (14) por debajo de 48 de ancho interior, y
-// fitColumns la elimina por la derecha. En `common` y `leaf` el sufijo es corto y
-// la columna sobrevive hasta 38.
-//
-// No es un fallo de este modo: el tope de 34 lo fijó el ADR 0002 para el sufijo
-// y la fórmula sigue siendo la misma. Pero significa que `full` es el modo que
-// peor aguanta un terminal estrecho, y el usuario se pierde justo la referencia
-// que fue a elegir. El test lo fija para que el umbral no se mueva en silencio.
+// A real degradation of `full`.
 func TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")
 	segs := []inbox.Section{section(model.SectionReview, items...)}
@@ -216,9 +175,6 @@ func TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho(t *testing.T) {
 	}
 }
 
-// titlesDe son las columnas que caben en el ancho dado, con la coma de ADR 0005
-// de fondo: la referencia completa manda en ITEM, así que el modo `full` es el
-// que come la tabla por la derecha.
 func titlesDe(l refLayout, inner int) string {
 	var out []string
 	for _, c := range l.cols[:fitColumns(l, inner)] {

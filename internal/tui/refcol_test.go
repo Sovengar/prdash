@@ -10,8 +10,6 @@ import (
 	"prdash/internal/inbox"
 )
 
-// mkItems crea ítems con rutas concretas, para probar el reparto del prefijo de
-// ruta entre las secciones.
 func mkItems(projects ...string) []model.Item {
 	items := make([]model.Item, 0, len(projects))
 	for i, p := range projects {
@@ -24,9 +22,6 @@ func section(kind model.Section, items ...model.Item) inbox.Section {
 	return inbox.Section{Kind: kind, Items: items}
 }
 
-// TestSectionPrefix fija el prefijo de ruta común de una sección: alineado en
-// fronteras "/", y sin comerse nunca el segmento final (la hoja), que es lo que
-// identifica el proyecto en la celda.
 func TestSectionPrefix(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -50,9 +45,6 @@ func TestSectionPrefix(t *testing.T) {
 	}
 }
 
-// TestRefSuffixQuitaElPrefijoDeLaCabecera comprueba que la celda y la cabecera
-// reconstruyen la referencia completa, y que un prefijo que no encaja deja la
-// celda intacta en vez de mutilarla.
 func TestRefSuffixQuitaElPrefijoDeLaCabecera(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 	prefix := sectionPrefix(items)
@@ -91,12 +83,7 @@ func TestTruncateTail(t *testing.T) {
 	}
 }
 
-// TestNewRefLayoutDimensionaITEMPorContenido comprueba que la columna se
-// dimensiona al sufijo más largo de todas las secciones (no a una constante) y
-// que respeta los límites.
 func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
-	// Sufijo corto: la columna se ajusta a lo que necesita, no al tope. El ancho
-	// incluye el hueco de separación, así que es el sufijo más un rune.
 	lay := newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems("g/one", "g/two")...),
 	}, prefixCommon)
@@ -121,16 +108,12 @@ func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
 		t.Errorf("ancho de ITEM = %d, want el tope %d", got, itemWidthCap)
 	}
 
-	// Sin ítems: el mínimo, para que "ITEM" no se solape con la columna vecina.
 	lay = newRefLayout(nil, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthMin {
 		t.Errorf("ancho de ITEM sin ítems = %d, want %d", got, itemWidthMin)
 	}
 }
 
-// TestItemCellsConservanElNumeroAlRecortar es el caso que motivó el cambio: con
-// la ruta larga de un subgrupo, la celda tiene que seguir diciendo qué proyecto
-// y qué número es, aunque haya que recortar.
 func TestItemCellsConservanElNumeroAlRecortar(t *testing.T) {
 	items := mkItems(
 		"APPCITTI/vsocial/backend/un-servicio-con-nombre-larguísimo",
@@ -148,16 +131,13 @@ func TestItemCellsConservanElNumeroAlRecortar(t *testing.T) {
 	if !strings.HasPrefix(ref, "…") {
 		t.Errorf("celda ITEM = %q, want el recorte por la cola (prefijo %q)", ref, "…")
 	}
-	// Lo que se pierde por el frente es el grupo, que la cabecera ya declara.
+	// What is lost from the front is the group, which the header already declares.
 	if got := lay.prefixOf(model.SectionReview); got != "APPCITTI/vsocial/backend" {
 		t.Errorf("prefijo = %q, want el grupo que compensó el recorte", got)
 	}
 }
 
-// TestListLinesMuestranElPrefijoEnUnaLineaFija es la prueba de integración: con
-// una sola sección visible, su prefijo de ruta común va en una línea fija al
-// inicio del cuerpo y las filas solo pintan el sufijo, sin truncar por ninguna
-// de las dos.
+// The integration test: with one section there is no common prefix.
 func TestListLinesMuestranElPrefijoEnUnaLineaFija(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, mkItems(
@@ -180,7 +160,6 @@ func TestListLinesMuestranElPrefijoEnUnaLineaFija(t *testing.T) {
 	if prefixLine == "" {
 		t.Errorf("falta la línea del prefijo común:\n%s", strings.Join(all, "\n"))
 	}
-	// El prefijo se pinta una sola vez (en su línea), no repetido en cada fila.
 	if got := strings.Count(strings.Join(all, "\n"), "APPCITTI/vsocial/backend/"); got != 1 {
 		t.Errorf("el prefijo aparece %d veces, want 1 (solo su línea):\n%s", got, strings.Join(all, "\n"))
 	}
@@ -190,17 +169,13 @@ func TestListLinesMuestranElPrefijoEnUnaLineaFija(t *testing.T) {
 	if !strings.Contains(row, "api-gateway#100") {
 		t.Errorf("fila = %q, want %q sin truncar", row, "api-gateway#100")
 	}
-	// No queda una cabecera interna de sección con el título y el conteo: la
-	// leyenda vive en el borde, no en la lista.
+	// No inner section header with the title and the count: the legend lives elsewhere.
 	if joined := strings.Join(all, "\n"); strings.Contains(joined, "Assigned (2)") {
 		t.Errorf("la lista no debería llevar cabecera de sección:\n%s", joined)
 	}
 }
 
-// TestListLinesSinPrefijoConservanLaRuta completa: una sección con un solo ítem no
-// puede declarar prefijo común, así que la celda lleva la ruta ella sola, sin
-// línea de prefijo. Si cabe, entera; si no, recortada por la cola, que es donde
-// está el número.
+// A section with a single item cannot declare a common prefix.
 func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 	render := func(project string) []string {
 		m := newTestModel(t, ghAdapter())
@@ -217,8 +192,8 @@ func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 		t.Fatal("una ruta corta en sección de un ítem no se pintó entera")
 	}
 
-	// Ruta larga: sin prefijo que la compense, se recorta por la cola y el
-	// "#número" sigue visible; y no aparece ninguna línea de prefijo.
+	// A long path: with no prefix to compensate it is clipped at the tail and the "#number"
+	// survives.
 	var cell string
 	for _, line := range render("APPCITTI/vsocial/backend/api-gateway") {
 		if strings.Contains(line, "APPCITTI") {
@@ -246,22 +221,15 @@ func containsSubstring(lines []string, s string) bool {
 	return false
 }
 
-// TestRefColInvariantes sobre rutas aleatorias y en los tres modos: la celda es
-// exactamente el recorte de la etiqueta que le toca, nunca queda vacía, conserva
-// la cola que identifica el ítem y el ancho se queda dentro de los límites.
 func TestRefColInvariantes(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	seg := func() string {
 		return strings.Repeat(string(rune('a'+rng.Intn(26))), 1+rng.Intn(12))
 	}
-	// Una sección por kind, como los garantiza inbox.Build: el prefijo se indexa
-	// por sección y dos secciones del mismo kind se pisarían.
 	kinds := []model.Section{model.SectionAuthored, model.SectionReview, model.SectionMentions}
 	for round := range 300 {
 		sections := make([]inbox.Section, 1+rng.Intn(3))
 		for si := range sections {
-			// Los proyectos de una sección comparten grupo la mayoría de las
-			// veces; a veces no, para ejercitar el prefijo vacío.
 			group := seg()
 			if rng.Intn(4) == 0 {
 				group = seg()
@@ -277,11 +245,8 @@ func TestRefColInvariantes(t *testing.T) {
 			}
 		}
 
-		// Los invariantes se comprueban en los TRES modos, no solo en common: el
-		// recorte por la cola tiene que proteger el número igual de la
-		// referencia completa que de la hoja, y el ancho se acota igual. common es
-		// el único que puede declarar prefijo, así que fuera de él la celda
-		// tiene que salir igual a la etiqueta del modo.
+		// The invariants are checked in ALL THREE modes, not just common: tail clipping is only
+		//correct in common.
 		for _, mode := range []prefixMode{prefixCommon, prefixFull, prefixLeaf} {
 			lay := newRefLayout(sections, mode)
 			w := lay.cols[colRefIdx].width
@@ -303,8 +268,6 @@ func TestRefColInvariantes(t *testing.T) {
 					if want == "" {
 						t.Fatalf("round %d en %v: etiqueta vacía para %q", round, mode, full)
 					}
-					// common con prefijo declarado: la celda y la cabecera tienen
-					// que recomponer la referencia completa.
 					if prefix != "" {
 						if recon := strings.TrimPrefix(full, prefix+"/"); recon == full {
 							t.Fatalf("round %d en %v: el prefijo %q no aplica a %q", round, mode, prefix, full)
@@ -316,8 +279,6 @@ func TestRefColInvariantes(t *testing.T) {
 					if cell == "" {
 						t.Fatalf("round %d en %v: celda vacía para %q", round, mode, full)
 					}
-					// El presupuesto de texto es el ancho de la ranura menos el hueco
-					// de separación: la etiqueta más larga tiene que caber entero.
 					cut := truncateTail(want, textWidth(w))
 					if want == cut {
 						if cell != want {
@@ -325,7 +286,6 @@ func TestRefColInvariantes(t *testing.T) {
 						}
 						continue
 					}
-					// Recortada: la cola (hoja y número) tiene que salir intacta.
 					if !strings.HasPrefix(cell, "…") {
 						t.Fatalf("round %d en %v: celda recortada %q, want el prefijo %q", round, mode, cell, "…")
 					}

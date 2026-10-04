@@ -30,9 +30,7 @@ func TestNewItemSyncsForgeAndHost(t *testing.T) {
 	}
 }
 
-// TestSectionLegendKeepsStringIntact fija las dos etiquetas de una sección:
-// Legend() es la corta de la leyenda del borde y String() el nombre largo del
-// modo de datos, que no puede cambiar porque lo usa --print.
+// Legend() is the short one; String() must not change.
 func TestSectionLegendKeepsStringIntact(t *testing.T) {
 	for _, tc := range []struct {
 		s      Section

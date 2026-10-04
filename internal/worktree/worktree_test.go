@@ -142,7 +142,6 @@ func TestCreateFailureLeavesNoPartialDir(t *testing.T) {
 	dest := filepath.Join(base, "prdash-pr-1")
 	g := NewGitDirect(base)
 
-	// La rama no existe: `git worktree add` falla y no debe dejar restos.
 	if _, err := g.Create(context.Background(), Spec{Repo: repo, Branch: "no-existe", Path: dest, Label: "prdash-pr-1"}); err == nil {
 		t.Fatal("esperaba error al sacar una rama inexistente")
 	}
@@ -151,8 +150,6 @@ func TestCreateFailureLeavesNoPartialDir(t *testing.T) {
 	}
 }
 
-// newCleanWorktree crea un worktree limpio bajo una raíz propia y devuelve la
-// raíz, la ruta del checkout y el repo de origen (para poder ensuciarlo).
 func newCleanWorktree(t *testing.T) (base, dest, repo string) {
 	t.Helper()
 	repo = newRepo(t)
@@ -165,8 +162,6 @@ func newCleanWorktree(t *testing.T) (base, dest, repo string) {
 	return base, dest, repo
 }
 
-// TestRemoveIfCleanRemovesCleanWorktree cubre el caso feliz de B: un worktree sin
-// cambios se borra.
 func TestRemoveIfCleanRemovesCleanWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
 	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
@@ -181,8 +176,6 @@ func TestRemoveIfCleanRemovesCleanWorktree(t *testing.T) {
 	}
 }
 
-// TestRemoveIfCleanKeepsDirtyWorktree cubre el candado "solo si limpio": con
-// cambios sin commitear se conserva y se explica.
 func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
 	if err := os.WriteFile(filepath.Join(dest, "base.txt"), []byte("editado"), 0o644); err != nil {
@@ -201,9 +194,8 @@ func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 	}
 }
 
-// TestRemoveIfCleanKeepsUntrackedWorktree fija que un archivo nuevo sin trackear
-// también cuenta como sucio: `git diff --quiet` lo ignora, `status --porcelain`
-// no.
+// An untracked file counts as dirty too: `git diff --quiet` ignores it and `status
+// --porcelain` does not.
 func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
 	if err := os.WriteFile(filepath.Join(dest, "nuevo.txt"), []byte("sin trackear"), 0o644); err != nil {
@@ -222,12 +214,9 @@ func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
 	}
 }
 
-// TestRemoveIfCleanKeepsOnUnreadableStatus cubre el fail-safe: si no se puede
-// leer el estado de git, se conserva en vez de borrar.
+// The fail-safe: if git's status cannot be read, the worktree is kept instead of deleted.
 func TestRemoveIfCleanKeepsOnUnreadableStatus(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
-	// El enlace .git apunta a un gitdir inexistente: el fichero sigue siendo un
-	// worktree enlazado, pero `git status` no puede leerlo.
 	if err := os.WriteFile(filepath.Join(dest, ".git"), []byte("gitdir: /nonexistent/prdash-gitdir\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -244,8 +233,7 @@ func TestRemoveIfCleanKeepsOnUnreadableStatus(t *testing.T) {
 	}
 }
 
-// TestRemoveIfCleanAbsentPathIsNoop cubre "si el worktree ya no está en disco, es
-// un no-op sin error": es lo que hace idempotente a B.
+// Already gone is a no-op without an error, which is what makes it idempotent.
 func TestRemoveIfCleanAbsentPathIsNoop(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
@@ -255,8 +243,6 @@ func TestRemoveIfCleanAbsentPathIsNoop(t *testing.T) {
 	}
 }
 
-// TestRemoveIfCleanRefusesForeign usa los mismos guardas que Remove: un worktree
-// ajeno nunca se borra, ni siquiera si está limpio.
 func TestRemoveIfCleanRefusesForeign(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -276,8 +262,6 @@ func TestRemoveIfCleanRefusesForeign(t *testing.T) {
 	}
 }
 
-// TestRemoveIfCleanRefusesPathOutsideBase comprueba que el guarda de raíz sigue
-// vigente en el camino de B.
 func TestRemoveIfCleanRefusesPathOutsideBase(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")

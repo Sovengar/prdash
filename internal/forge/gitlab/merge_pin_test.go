@@ -9,10 +9,6 @@ import (
 	"prdash/internal/forge"
 )
 
-// TestMergePinsTheHeadCommit blinda el arreglo: `--sha` es lo que hace que `glab
-// mr merge` rechace el merge si la rama se movió. Es el mismo género de trampa
-// que `--auto-merge` pero al revés: sin el pin, GitLab integra el HEAD del
-// momento, que puede no ser el que se leyó y revisó.
 func TestMergePinsTheHeadCommit(t *testing.T) {
 	for _, mode := range []forge.MergeMode{forge.MergeCommit, forge.Rebase, forge.Squash} {
 		dir := t.TempDir()
@@ -30,8 +26,6 @@ func TestMergePinsTheHeadCommit(t *testing.T) {
 	}
 }
 
-// TestMergeRefusesToPinNothing: sin SHA no hay pin posible, y un merge sin pin es
-// exactamente el fallo que este arreglo evita.
 func TestMergeRefusesToPinNothing(t *testing.T) {
 	for _, sha := range []string{"", "  "} {
 		dir := t.TempDir()
@@ -47,16 +41,13 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 	}
 }
 
-// TestMRFieldsAskForThePin: `diffHeadSha` tiene que estar en la query. Es
-// comprobable contra el schema real de la instancia: `Project.mergeMethod`, que
-// sería lo que traería las estrategias admitidas, NO existe ahí, y por eso las
-// reglas de merge llegan sin conocer en GitLab.
+// diffHeadSha has to be in the query; Project.mergeMethod does not exist in the schema.
 func TestMRFieldsAskForThePin(t *testing.T) {
 	if !strings.Contains(mrFields, "diffHeadSha") {
 		t.Error("mrFields no pide diffHeadSha, así que el pin nunca podría satisfacerse")
 	}
-	// La aserción negativa documenta una decisión, no un deseo: si algún día el
-	// schema de la instancia expone mergeMethod, hay que ir a por las reglas.
+	// The negative assertion documents a decision, not a wish: if the schema ever grows it, the test
+	// says so.
 	if strings.Contains(mrFields, "mergeMethod") {
 		t.Log("mrFields pide mergeMethod: la instancia lo soporta, se puede filtrar por reglas")
 	}

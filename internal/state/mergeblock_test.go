@@ -7,9 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// base es un ítem abierto, sano y accionable: el punto de partida desde el que
-// cada test ensucia un campo. Sin esto, cada caso repetiría el literal entero y
-// un cambio en la forma del ítem tocaría veinte tests.
 func base() model.Item {
 	return model.Item{
 		Number:         7,
@@ -21,8 +18,6 @@ func base() model.Item {
 	}
 }
 
-// TestMergeBlockRefusesWhatTheForgeRefuses: un bloqueo duro no lo levanta ninguna
-// pulsación. Son las propiedades del forge, no políticas.
 func TestMergeBlockRefusesWhatTheForgeRefuses(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -50,14 +45,7 @@ func TestMergeBlockRefusesWhatTheForgeRefuses(t *testing.T) {
 	}
 }
 
-// TestMergeBlockSeesTheDraftUnderAnyReviewDecision: el caso que el gate no veía
-// cuando leía el borrador en el estado crudo.
-//
-// base() viene aprobado, así que añadirle IsDraft deja un ítem que Derive
-// clasifica como approved y cuyo borrador desaparece de la columna de estado.
-// MergeBlock tiene que seguir frenando el merge, porque la pregunta que hace no
-// es a quién mira el operador primero sino si el forge va a integrar esto, y
-// GitHub rechaza el borrador antes de mirar la review que sea.
+// The case the gate missed when it read the draft off the review decision.
 func TestMergeBlockSeesTheDraftUnderAnyReviewDecision(t *testing.T) {
 	for _, decision := range []string{"", "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"} {
 		t.Run("review="+decision, func(t *testing.T) {
@@ -76,13 +64,6 @@ func TestMergeBlockSeesTheDraftUnderAnyReviewDecision(t *testing.T) {
 	}
 }
 
-// TestMergeBlockWarnsAboutConflictingBranches: el conflicto de ramas se anuncia
-// y no se veta.
-//
-// Es la asimetría del gate deliberada: GitHub no va a integrar el PR mientras las
-// ramas se pisen, pero un rebase lo arregla en un comando y el gate no puede
-// saber si el usuario lo ha hecho ya. Vetarlo dejaría al PR sin salida desde
-// aquí; no decirlo gastaría una llamada entera en descubrirlo.
 func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
 	it := base()
 	it.TargetBranch = "main"
@@ -92,8 +73,7 @@ func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
 	if !strings.Contains(block.Reason, "conflicts") {
 		t.Fatalf("Reason = %q, want que mencione el conflicto", block.Reason)
 	}
-	// El nombre de la rama delante dice qué hay que rebasar, y sin vetar: un
-	// rebase lo arregla, así que la segunda pulsación tiene que servir.
+	// The branch name first says what to rebase against, without vetoing: a rebase resolves it.
 	if !strings.Contains(block.Reason, "main") {
 		t.Errorf("Reason = %q, want que nombre la rama destino", block.Reason)
 	}
@@ -102,9 +82,6 @@ func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
 	}
 }
 
-// TestMergeBlockPrefersTheConflictOverTheCI: un PR que choca tampoco pasa el CI,
-// y decir "CI is failing" manda al operador a mirar el sitio equivocado. El
-// conflicto va primero porque es lo que hay que rehacer.
 func TestMergeBlockPrefersTheConflictOverTheCI(t *testing.T) {
 	it := base()
 	it.TargetBranch = "main"
@@ -116,9 +93,6 @@ func TestMergeBlockPrefersTheConflictOverTheCI(t *testing.T) {
 	}
 }
 
-// TestMergeBlockStaysQuietWithoutTheData: lo que no se sabe no se anuncia. Un
-// aviso de conflicto que sale sin datos es un aviso falso, y un aviso falso que
-// se repite entrena a ignorar la caja.
 func TestMergeBlockStaysQuietWithoutTheData(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -139,11 +113,7 @@ func TestMergeBlockStaysQuietWithoutTheData(t *testing.T) {
 	}
 }
 
-// TestMergeBlockWarnsWithoutForbidding: el CI rojo, el CI corriendo y los cambios
-// pedidos son política, no propiedad del forge. Bloquearlos del todo convertiría
-// la herramienta en un muro —un check inestable dejaría el PR sin poder mergear
-// nunca— y no bloquearlos los haría invisibles. Se anuncian y se piden dos
-// veces.
+// Red CI, running CI and requested changes are POLICY, not a veto.
 func TestMergeBlockWarnsWithoutForbidding(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -177,18 +147,12 @@ func TestMergeBlockWarnsWithoutForbidding(t *testing.T) {
 	}
 }
 
-// TestMergeBlockIsQuietOnAHealthyItem: el caso normal no puede producir ruido. Un
-// gate que avisa siempre entrena al operador a ignorar el aviso, que es
-// exactamente lo que un gate debe evitar.
 func TestMergeBlockIsQuietOnAHealthyItem(t *testing.T) {
 	if block := MergeBlock(base()); block.Reason != "" {
 		t.Errorf("MergeBlock = %+v, want sin bloqueo ni aviso", block)
 	}
 }
 
-// TestMergeBlockPrefersFailingCI: con el CI rojo y cambios pedidos a la vez, el
-// motivo es el CI. Es el dato que el operador necesita primero, y la precedencia
-// es la misma que ya usa Derive para ordenar el inbox.
 func TestMergeBlockPrefersFailingCI(t *testing.T) {
 	it := base()
 	it.Checks = model.Checks{State: model.ChecksFailing, Total: 2, Failing: 1}

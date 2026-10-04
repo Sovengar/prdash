@@ -9,11 +9,8 @@ import (
 	"prdash/internal/forge"
 )
 
-// TestMergePinsTheHeadCommit blinda el arreglo: sin `--match-head-commit`, `gh
-// pr merge` integra el HEAD del momento. Entre el refresco del inbox y la
-// pulsación la rama puede haber avanzado, y entonces el merge se lleva commits
-// que nadie revisó. El pin no es una mejora: es la diferencia entre integrar lo
-// que se leyó y lo que hay.
+// Without `--match-head-commit`, gh merges whatever HEAD is at that moment, and between the inbox
+// refresh and the keypress the branch can have advanced.
 func TestMergePinsTheHeadCommit(t *testing.T) {
 	for _, mode := range []forge.MergeMode{forge.MergeCommit, forge.Rebase, forge.Squash} {
 		dir := t.TempDir()
@@ -31,8 +28,6 @@ func TestMergePinsTheHeadCommit(t *testing.T) {
 	}
 }
 
-// TestMergeRefusesToPinNothing: sin SHA no hay pin posible. Degradar a un merge
-// sin pin sería volver al bug que el pin arregla, así que se niega y lo dice.
 func TestMergeRefusesToPinNothing(t *testing.T) {
 	for _, sha := range []string{"", "   "} {
 		dir := t.TempDir()
@@ -51,9 +46,6 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 	}
 }
 
-// TestMergeRefusesAnUnknownModeBeforePinning: el modo se valida primero. Un modo
-// corrupto con un SHA válido no debe colarse hasta el punto de construir el
-// argv, porque `gh pr merge` sin flag de estrategia abre un prompt.
 func TestMergeRefusesAnUnknownModeBeforePinning(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")
@@ -67,10 +59,7 @@ func TestMergeRefusesAnUnknownModeBeforePinning(t *testing.T) {
 	}
 }
 
-// TestPRFieldsAskForThePinAndTheRules: los dos datos que hacen posibles el pin y
-// el filtro de modos tienen que estar en la query, o el resto no sirve de nada.
-// Sin headRefOid el pin es siempre imposible y sin los merge*Allowed el filtro
-// se queda sin datos.
+// Both data have to be in the query or the rest is useless.
 func TestPRFieldsAskForThePinAndTheRules(t *testing.T) {
 	for _, field := range []string{
 		"headRefOid",

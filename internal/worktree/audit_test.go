@@ -10,8 +10,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// TestOwnedReconocesoloLaMarcaPrdash comprueba que el ownership se resuelve por
-// el prefijo `prdash-` en la etiqueta o en el nombre de la ruta.
 func TestOwnedReconocesoloLaMarcaPrdash(t *testing.T) {
 	cases := []struct {
 		label string
@@ -32,8 +30,6 @@ func TestOwnedReconocesoloLaMarcaPrdash(t *testing.T) {
 	}
 }
 
-// TestAuditListsOnlyOwnedWorktrees comprueba que el listado ignora los
-// worktrees ajenos que convivan bajo la misma raíz.
 func TestAuditListsOnlyOwnedWorktrees(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "propia")
@@ -59,20 +55,10 @@ func TestAuditListsOnlyOwnedWorktrees(t *testing.T) {
 	}
 }
 
-// TestAuditOrdenaPorRuta: Audit garantiza el orden por ruta (está en su
-// contrato) y de ese orden depende la limpieza por lotes, que borra una entrada
-// detrás de otra.
-//
-// Sin afirmarlo, invertir la comparación del sort no lo detecta ningún test: el
-// recorrido de directorios de filepath.WalkDir ya sale en orden lexicográfico, de
-// modo que el sort parece un no-op y el listado sale igual. Solo se nota cuando se
-// mete trabajo en la raíz que el walk NO puede ordenar por nosotros.
 func TestAuditOrdenaPorRuta(t *testing.T) {
 	repo := newRepo(t)
 	base := t.TempDir()
 
-	// Se crean en orden REVERSOS a como deben salir, y con números de dos cifras
-	// para que un orden lexic-inglés ("10" < "2") no losconfunda.
 	var quiere []string
 	for _, n := range []string{"prdash-pr-10", "prdash-pr-2", "prdash-pr-1"} {
 		testutil.RunGit(t, repo, "branch", n)
@@ -82,11 +68,7 @@ func TestAuditOrdenaPorRuta(t *testing.T) {
 		}
 		quiere = append(quiere, path)
 	}
-	// El orden que se espera es el LEXICOGRÁFICO de las rutas, no el de creación
-	// ni el numérico: "prdash-pr-1" < "prdash-pr-10" < "prdash-pr-2". Con dos
-	// cifras el orden numérico y el de cadena discrepan, que es justo lo que
-	// hace que la prueba tenga contenido: un sort por número o por orden de
-	// creación se confundiría con el de cadena solo en estos nombres.
+	// The expected order is LEXICOGRAPHIC on the paths, not creation order.
 	slices.Sort(quiere)
 
 	entries := NewGitDirect(base).Audit(context.Background())
@@ -105,8 +87,6 @@ func TestAuditOrdenaPorRuta(t *testing.T) {
 	}
 }
 
-// TestAuditFlagsOrphanWhenSourceGone marca huérfano un worktree cuyo repo de
-// origen desapareció: la limpieza debe poder reportarlo.
 func TestAuditFlagsOrphanWhenSourceGone(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -126,8 +106,6 @@ func TestAuditFlagsOrphanWhenSourceGone(t *testing.T) {
 	}
 }
 
-// TestListExcludesForeignWorktrees fija que el listado del puerto respeta el
-// ownership: los worktrees ajenos no se exponen.
 func TestListExcludesForeignWorktrees(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "propia")
@@ -147,8 +125,6 @@ func TestListExcludesForeignWorktrees(t *testing.T) {
 	}
 }
 
-// TestRemoveOrphanDeletesCheckout comprueba que un worktree huérfano (repo de
-// origen desaparecido) se puede borrar por petición explícita.
 func TestRemoveOrphanDeletesCheckout(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -171,8 +147,6 @@ func TestRemoveOrphanDeletesCheckout(t *testing.T) {
 	}
 }
 
-// TestRemoveRefusesForeignWorktree comprueba que un worktree sin ownership
-// prdash no se borra aunque su repo exista.
 func TestRemoveRefusesForeignWorktree(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -190,8 +164,6 @@ func TestRemoveRefusesForeignWorktree(t *testing.T) {
 	}
 }
 
-// TestRemoveRefusesPathOutsideBase comprueba que ni un worktree con nombre
-// prdash se borra si queda fuera de la raíz gestionada.
 func TestRemoveRefusesPathOutsideBase(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -208,7 +180,6 @@ func TestRemoveRefusesPathOutsideBase(t *testing.T) {
 	}
 }
 
-// TestAuditSkipsNonWorktreeDirs ignora directorios normales bajo la raíz.
 func TestAuditSkipsNonWorktreeDirs(t *testing.T) {
 	base := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(base, "prdash-pr-9"), 0o755); err != nil {
@@ -219,9 +190,6 @@ func TestAuditSkipsNonWorktreeDirs(t *testing.T) {
 	}
 }
 
-// TestRemoveOrphanWithoutGitDirDeletesCheckout cubre el huérfano cuyo `.git`
-// existe pero no declara un gitdir (corrupto o truncado): Audit lo marca huérfano
-// y no hay repo que resolver, así que borrar el checkout es lo único que queda.
 func TestRemoveOrphanWithoutGitDirDeletesCheckout(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -244,8 +212,6 @@ func TestRemoveOrphanWithoutGitDirDeletesCheckout(t *testing.T) {
 	}
 }
 
-// TestRemoveRefusesNonLinkedDir blinda el guarda del caso anterior: un directorio
-// con nombre prdash que no es un worktree enlazado no se borra.
 func TestRemoveRefusesNonLinkedDir(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "prdash-not-a-worktree")

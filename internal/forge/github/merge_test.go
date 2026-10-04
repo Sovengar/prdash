@@ -11,8 +11,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// recorder devuelve una CLI falsa que vuelca sus argumentos en un fichero, para
-// poder afirmar sobre el argv exacto que se le pasó al forge.
 func recorder(t *testing.T, dir, name string) (bin, argsFile string) {
 	t.Helper()
 	argsFile = filepath.Join(dir, name+".args")
@@ -31,12 +29,9 @@ func readArgs(t *testing.T, path string) []string {
 
 var mergeRef = model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}
 
-// headSHA es el commit leído del ítem: el pin al que todo merge debe salir.
 const headSHA = "9f1c0de"
 
-// TestMergePassesTheStrategyFlag: cada modo llega a `gh pr merge` con su flag.
-// El modo no es opcional porque sin flag gh abre un prompt interactivo, que en
-// un subproceso no interactivo se queda colgado.
+// The mode is not optional.
 func TestMergePassesTheStrategyFlag(t *testing.T) {
 	for _, tc := range []struct {
 		mode forge.MergeMode
@@ -65,8 +60,7 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 	}
 }
 
-// TestMergeRefusesUnknownMode: un modo desconocido es un warning, no un argv sin
-// flag. Sin este corte, un modo corrupto colgaría el merge en un prompt.
+// An unknown mode is a warning, not an argv without the flag.
 func TestMergeRefusesUnknownMode(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")

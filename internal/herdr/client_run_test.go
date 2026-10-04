@@ -9,23 +9,10 @@ import (
 	"time"
 )
 
-// TestRunSaleAlBinarioDeVerdad: `run` ejecuta el binario, captura stdout y stderr por
-// separado, y devuelve el fallo.
-//
-// Y este es el agujero que mas cubre de golpe, porque TODOS los demas tests del paquete
-// pasan por `execFn` y `run` es justo la rama que esquivan. Lo que se esta probando aqui es
-// la concha: el timeout, el binario por defecto, el entorno que se hereda y que stdout y
-// stderr no se mezclen.
-//
-// Y no se puede cambiar `execFn` desde fuera del paquete, asi que un test externo a este
-// paquete no llegaria aqui nunca. Es una de las razones por las que los tests de este
-// fichero son `package herdr` y no `package herdr_test`.
 func TestRunSaleAlBinarioDeVerdad(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "args.log")
 
-	// Un binario falso que escribe lo que se le pasó, dice otra cosa por stderr, y
-	// sale con el código que se le indique.
 	script := "#!/bin/sh\n" +
 		"echo \"$@\" >> " + log + "\n" +
 		"echo 'esto es stdout'\n" +
@@ -45,14 +32,11 @@ func TestRunSaleAlBinarioDeVerdad(t *testing.T) {
 	if !strings.Contains(string(errb), "esto es stderr") {
 		t.Errorf("stderr salio %q", errb)
 	}
-	// Y stdout y stderr NO se mezclan: si se mezclaran, un aviso de la CLI aparecería
-	// como si fuera contenido, y al parsear el JSON sería un error de formato en vez de
-	// el aviso que es.
+	// stdout and stderr are NOT mixed: mixed, a CLI warning would look like a successful answer.
 	if strings.Contains(string(out), "stderr") {
 		t.Errorf("stderr se metio en stdout: %q", out)
 	}
 
-	// Los argumentos llegan enteros y en orden, que es lo que forma el argv.
 	crudo, err := os.ReadFile(log)
 	if err != nil {
 		t.Fatal(err)
@@ -61,21 +45,12 @@ func TestRunSaleAlBinarioDeVerdad(t *testing.T) {
 		t.Errorf("al binario le llego %q, want %q", got, "pane list --json")
 	}
 
-	// Y el codigo de salida distinto de cero es un error, con stderr en el mensaje.
 	t.Setenv("FAKE_RC", "3")
 	if _, _, err := c.run(context.Background(), "pane", "list"); err == nil {
 		t.Error("un binario que sale con codigo 3 no dio error")
 	}
 }
 
-// TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo: sin `Bin` puesto, `run` usa
-// HERDR_BIN_PATH, y sin esa variable usa el nombre canonico.
-//
-// Y la via canonica es `HERDR_BIN_PATH` y no "herdr" a secas, y el motivo esta en el
-// comentario del codigo: apunta al binario REALMENTE en ejecucion, con lo que el socket y
-// los pipes son los correctos. Un `herdr` del PATH puede ser otra version, y con ella el
-// socket no es el de esta sesion — que es el fallo que hace que Herdr parezca roto sin
-// estarlo.
 func TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo(t *testing.T) {
 	// Sin nada puesto: "herdr".
 	t.Setenv("HERDR_BIN_PATH", "")
@@ -83,7 +58,6 @@ func TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo(t *testing.T) {
 		t.Errorf("sin HERDR_BIN_PATH devolvio %q, want herdr", got)
 	}
 
-	// Con la variable: la variable, y no un nombre fijo.
 	t.Setenv("HERDR_BIN_PATH", "/opt/herdr/bin/herdr")
 	if got := defaultBin(); got != "/opt/herdr/bin/herdr" {
 		t.Errorf("con HERDR_BIN_PATH devolvio %q, want la ruta de la variable", got)
@@ -100,16 +74,7 @@ func TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo(t *testing.T) {
 	}
 }
 
-// TestInHerdrSoloMiraLaVariable: dentro de Herdr es HERDR_ENV=1, y cualquier otra cosa es
-// que no.
-//
-// Y esta es la UNICA lectura de HERDR_ENV en todo el programa, que es lo que hace que la
-// degradación sea coherente: si dos sitios la leyeran distinta, uno diría que estamos
-// dentro y otro que no, y la operación se intentaría a medias.
-//
-// Y el caso que no se puede confundir: `"true"`, `"yes"` y `"0"` NO son estar dentro. Un
-// bool.Parse o un chequeo de presencia los tomarían por verdadero, y el resultado sería
-// intentar montar un review fuera de Herdr.
+// The ONLY read of HERDR_ENV in the whole program.
 func TestInHerdrSoloMiraLaVariable(t *testing.T) {
 	casos := []struct {
 		valor string
@@ -132,16 +97,6 @@ func TestInHerdrSoloMiraLaVariable(t *testing.T) {
 	}
 }
 
-// TestLasOperacionesMutantesSeVetanFueraDeHerdr: worktree remove, workspace close y pane
-// focus no tocan la sesion si Herdr no esta disponible.
-//
-// Y esto no es un detalle defensivo: estas tres son las que MODIFICAN estado. Un worktree
-// eliminado de mas es trabajo perdido del usuario, y un workspace cerrado con un review
-// dentro deja el review sin sitio.
-//
-// El veto es el `guard`, que mira disponibilidad antes de salir. Y las lecturas —list y
-// version— NO pasan por ahi, que es la diferencia: una lectura que falla no destruye nada,
-// y vetarla solo haria que la app pareciera no tener nada que mostrar.
 func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
 	// Fuera de Herdr: vetadas, y sin tocar el binario.
 	llamadas := 0
@@ -169,8 +124,6 @@ func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
 			"tiene que ir ANTES de salir a la CLI, no despues", llamadas)
 	}
 
-	// Y dentro de Herdr, con versión bastante, pasan. Sin esto el test de arriba
-	// probaría que todo está vetado siempre, que es un fallo distinto.
 	dentro := &Client{
 		Bin: "herdr",
 		getenv: func(k string) string {
@@ -187,10 +140,8 @@ func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
 	if err := dentro.PaneFocus(context.Background(), "left"); err != nil {
 		t.Errorf("dentro de Herdr, pane focus falló: %v", err)
 	}
-	// Y aquí hay que contar BIEN, que es la trampa del test: `guard` llama a
-	// `Available()`, que consulta la versión, y esa consulta ES una llamada al binario.
-	// La primera versión de este test contaba una y veía dos, y la conclusión fácil —
-	// «el guard llama dos veces»— era falsa: una es `--version` y la otra la operación.
+	// Counting carefully is the trap: guard calls Available(), which queries the version, and THAT is
+	// a call to the binary.
 	if len(vistos) != 2 {
 		t.Errorf("dentro de Herdr se hicieron %d llamadas, want 2 (version + operacion): "+
 			"%v", len(vistos), vistos)
@@ -200,12 +151,6 @@ func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
 	}
 }
 
-// TestPaneFocusSinDireccionVaADerecha: sin dirección, el foco va a la derecha, que es la
-// lectura de un diff junto a lo que lo comenta.
-//
-// Y es el mismo suelo que la dirección de división del layout: lo que no se dice es "a la
-// derecha", porque derecha es lo que se espera y lo que se lee. Un foco a la izquierda
-// por defecto pondría el diff donde estaba la conversación.
 func TestPaneFocusSinDireccionVaADerecha(t *testing.T) {
 	var vistos [][]string
 	nuevo := func() *Client {
@@ -226,7 +171,6 @@ func TestPaneFocusSinDireccionVaADerecha(t *testing.T) {
 		t.Errorf("sin dirección se mandó %v y ninguna lleva right", vistos)
 	}
 
-	// Y con dirección explícita, esa se respeta.
 	vistos = nil
 	if err := nuevo().PaneFocus(context.Background(), "up"); err != nil {
 		t.Fatalf("pane focus con dirección: %v", err)
@@ -236,17 +180,6 @@ func TestPaneFocusSinDireccionVaADerecha(t *testing.T) {
 	}
 }
 
-// TestElTimeoutDeRunSeAplica: la llamada a la CLI no se queda colgada para siempre.
-//
-// Y esto importa por lo que hay detrás: si `run` no tuviera timeout y el binario se
-// colgara —un Herdr con el socket atascado, un pane que no responde— el bubbletea loop se
-// quedaría esperando ese mensaje y la TUI dejaría de responder al teclado, sin que se ve
-// por qué.
-//
-// El test usa `sleep`, que es de los pocos comandos que están en cualquier sitio, y mide
-// que el contexto corta antes que el proceso. Con un timeout de 50ms y un binario que
-// duerme un segundo, la diferencia entre "cortó" y "no cortó" es de un orden de magnitud y
-// no cabe en el margen del reloj.
 func TestElTimeoutDeRunSeAplica(t *testing.T) {
 	dir := t.TempDir()
 	bin := escribirBinario(t, dir, "herdr-colgado", "#!/bin/sh\nsleep 5\n")
@@ -264,15 +197,8 @@ func TestElTimeoutDeRunSeAplica(t *testing.T) {
 		t.Errorf("run tardó %s con un timeout de 50ms: el contexto no está cortando la "+
 			"llamada", elapsed)
 	}
-	// Y el suelo por defecto se aplica cuando el campo Timeout viene vacío. La forma de
-	// probarlo NO es esperar a los 30 s de DefaultTimeout, sino comprobar lo contrario:
-	// que con Timeout a cero la llamada NO se corta a los 50 ms del caso anterior.
-	//
-	// Y por eso el assert va en la dirección contraria a la del primer caso. Es tentador
-	// escribir "tarda menos de 2 s" y sería falso: con el suelo de 30 s y un binario que
-	// duerme 1 s, lo correcto es que tarde 1 s. Un timeout de 50 ms no se parece en nada a
-	// un suelo de 30 s, así que el margen entre 1 s y 2 s separa las dos implementaciones
-	// sin depender de la precisión del reloj.
+	// The default floor applies when Timeout is empty, and it is proved by checking what run computes
+	//rather than by waiting 30s.
 	bin1s := escribirBinario(t, dir, "herdr-corto", "#!/bin/sh\nsleep 1\n")
 	c.Bin = bin1s
 	c.Timeout = 0
@@ -286,8 +212,7 @@ func TestElTimeoutDeRunSeAplica(t *testing.T) {
 	}
 }
 
-// contieneArg mira entre TODAS las llamadas, porque la primera que hace el guard es la de
-// `--version` y no lleva el argumento que se está mirando.
+// contieneArg looks through ALL the calls, because the guard's first one is `--version`.
 func contieneArg(llamadas [][]string, arg string) bool {
 	for _, c := range llamadas {
 		for _, a := range c {

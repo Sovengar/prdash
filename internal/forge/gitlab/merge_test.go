@@ -11,7 +11,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// recorder devuelve una CLI falsa que vuelca sus argumentos en un fichero.
 func recorder(t *testing.T, dir, name string) (bin, argsFile string) {
 	t.Helper()
 	argsFile = filepath.Join(dir, name+".args")
@@ -30,11 +29,8 @@ func readArgs(t *testing.T, path string) []string {
 
 var mergeRef = model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grp/proj"}
 
-// headSHA es el commit leído del ítem: el pin al que todo merge debe salir.
 const headSHA = "9f1c0de"
 
-// TestMergePassesTheStrategyFlag: rebase y squash llevan su flag, y merge commit
-// no lleva ninguno porque en glab es la ausencia de estrategia.
 func TestMergePassesTheStrategyFlag(t *testing.T) {
 	for _, tc := range []struct {
 		mode forge.MergeMode
@@ -70,10 +66,8 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 	}
 }
 
-// TestMergeDisablesAutoMerge cubre un bug silencioso: glab tiene `--auto-merge`
-// en true por defecto, así que con un pipeline en marcha `glab mr merge` no
-// mergeaba, solo dejaba el MR en cola de auto-merge y salía con exit 0. El TUI
-// informaba "merge ok" de un MR que seguía abierto.
+// A silent bug: glab defaults --auto-merge to true, so with a pipeline running the command did
+// not merge, it queued the MR and exited 0.
 func TestMergeDisablesAutoMerge(t *testing.T) {
 	for _, mode := range []forge.MergeMode{forge.MergeCommit, forge.Rebase, forge.Squash} {
 		dir := t.TempDir()

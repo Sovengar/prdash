@@ -18,40 +18,8 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// Los tres fallos del sistema de ficheros, a través de los tres seams del servicio.
-//
-// Y los tres son el mismo tipo de problema con tres capas distintas:
-//
-//   - `Simulate` no puede crear el directorio donde git-sim escribe. La causa es el disco:
-//     `ENOSPC`, `EDQUOT`, `EIO`. El aviso tiene que decir eso y no otra cosa, porque el arreglo
-//     es "libera espacio" y no "mira el remoto".
-//   - `copyFile` no puede cerrar el temporal. La causa es el sistema de ficheros reportando un
-//     error que el `write` no vio, y la consecuencia concreta es que el temporal se queda a
-//     medias en el caché de imágenes sin que nadie lo borre.
-//   - `prune` no puede preguntar la fecha de una entrada. La causa es que el fichero desapareció
-//     entre el listado y el `lstat`, y la consecuencia es que la imagen más antigua se queda ahí
-//     para siempre porque el conteo bajó.
-//
-// Y los tres se provocan por el seam de su frontera, y no montando un sistema de ficheros
-// defectuoso, porque eso no se puede montar sin privilegios. Lo que sí se comprueba en cada uno
-// es el camino de verdad: el aviso, la limpieza, y que la operación no se dé por buena.
-
-// TestElDiscoSinEspacioSeAvisaComoLoQueEsYNoComoUnFalloDeGit: el `MkdirAll` del directorio de
-// render.
-//
-// Y el caso no es inventado. El directorio cuelga de un `os.MkdirTemp` que acaba de salir bien,
-// así que su `MkdirAll` solo falla cuando el sistema de ficheros dice que no puede: `ENOSPC` en
-// un tmpfs pequeño —y un `TMPDIR` en un tmpfs es lo que tienen muchos contenedores de CI—,
-// `EDQUOT` en un volumen con cuota, `EIO` en un disco que se está muriendo. La causa importa: el
-// arreglo de `ENOSPC` es liberar espacio y el de un fallo de git es mirar el remoto.
-//
-// Y `ENOSPC` es el que se usa porque es el más confundible. Los avisos de git empiezan por
-// `clonar <url>` o por `check out <rama>` y siempre llevan una ruta de repo; el del disco
-// empieza por `prepare the render directory` y lleva la ruta del temporal. Un usuario que los
-// viera iguales iría a mirar el remoto de un repo que no tiene nada que ver.
-//
-// Y lo segundo que se comprueba es que la simulación NO continúa y que devuelve un `Result`
-// vacío: con el `Path` puesto, el popup ofrecería abrir una imagen que no se generó.
+// ENOSPC on the render directory is real —a small tmpfs swallows a big repo— and the warning must not
+// talk about git.
 func TestElDiscoSinEspacioSeAvisaComoLoQueEsYNoComoUnFalloDeGit(t *testing.T) {
 	repo, _ := simRepoMonta(t)
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
@@ -60,9 +28,8 @@ func TestElDiscoSinEspacioSeAvisaComoLoQueEsYNoComoUnFalloDeGit(t *testing.T) {
 	s := newService(t, locatorFalso{ok: true, place: Place{Repo: repo, Branch: "main-origin"}},
 		fakeSim(t, writeJPEG(t)))
 
-	// Y el `mkdir` se cuenta y se mira, porque un `Mkdir` inyectado que no se llama no probaría
-	// nada: el error tiene que venir del punto correcto del camino, que es DESPUÉS de clonar y de
-	// materializar las dos ramas.
+	// The mkdir is counted and inspected, because an injected Mkdir that is never called proves
+	// nothing.
 	llamadas := 0
 	s.Mkdir = func(path string, perm fs.FileMode) error {
 		llamadas++
@@ -95,36 +62,21 @@ func TestElDiscoSinEspacioSeAvisaComoLoQueEsYNoComoUnFalloDeGit(t *testing.T) {
 		t.Errorf("el aviso %q no trae la causa de ENOSPC, que es la mitad que dice cómo "+
 			"arreglarlo", msg)
 	}
-	// Y no dice nada de git, que es el error con el que más se confunde.
+	// And it says nothing about git, which is the error it is most confused with.
 	for _, deGit := range []string{"clonar", "check out", "branch --quiet"} {
 		if strings.Contains(msg, deGit) {
 			t.Errorf("el aviso %q habla de git (%q) y el fallo fue del disco", msg, deGit)
 		}
 	}
 
-	// Y el `Mkdir` por defecto sigue siendo el de producción. Con el campo puesto, un servicio
-	// que se constructa a mano y no lo rellena tiene que clonar igual, y un `Mkdir` inyectado
-	// que se colara en `New` dejaría al servicio real sin poder escribir.
 	limpio := &Service{Locator: locatorFalso{}}
 	if limpio.mkdir() == nil {
 		t.Error("mkdir() no devolvió una función con un servicio construido a mano")
 	}
 }
 
-// TestUnTemporalQueNoSeCierraSeBorraYNoSePublicaNada: el `Close` de la copia.
-//
-// Y este es el más importante de los tres, porque su consecuencia no es un aviso: es un `.part`
-// a medias en el directorio del caché de imágenes, con el peso del JPEG entero.
-//
-// Y por qué se quedaría ahí para siempre: `prune` solo mira los ficheros que acaban en `.jpg`,
-// así que un `.part` no lo cuenta ni lo borra. La limpieza de los dos fallos anteriores —la
-// copia y el cierre— es lo único que evita que se acumulen, y por eso el error del cierre tiene
-// que comprobar que borra y no solo que se propaga.
-//
-// Y el fallo se provoca con el seam: un fichero que escribe bien y cuyo `Close` falla, que es
-// exactamente el estado que no se puede montar. El kernel acepta todo lo que se le pasa a
-// `write` porque va a la caché de páginas, así que el único error posible aquí es del `close`, y
-// el `close` solo lo decide el sistema de ficheros.
+// The most important of the three: its consequence is not a warning but a `.part` the size of the
+// JPEG that `prune` never deletes.
 func TestUnTemporalQueNoSeCierraSeBorraYNoSePublicaNada(t *testing.T) {
 	dir := t.TempDir()
 	dst := filepath.Join(dir, "destino.jpg")
@@ -139,26 +91,20 @@ func TestUnTemporalQueNoSeCierraSeBorraYNoSePublicaNada(t *testing.T) {
 		t.Errorf("el error es %v, want el del cierre. Un fallo de escritura daría el del "+
 			"`write` y probaría el otro camino", err)
 	}
-	// Y lo escrito llegó al fichero de verdad, que es lo que prueba que el `Copy` pasó entero y
-	// que el fallo es del cierre y no de la copia.
 	if !bytes.Equal(roto.escrito, contenido) {
 		t.Errorf("se escribió %q, want %q", roto.escrito, contenido)
 	}
 
-	// Y el temporal no quedó. Este es el aserto que importa: un `.part` pesa lo que pesa la
-	// imagen y `prune` no lo ve.
+	// And the temporary is gone. This is the assertion that matters: a `.part` weighs as much as the
+	// JPEG it was going to become.
 	if _, err := os.Stat(dst + ".part"); !os.IsNotExist(err) {
 		t.Errorf("quedó el temporal %s: pesa lo que pesa la imagen y `prune` solo mira los "+
 			"`.jpg`", dst+".part")
 	}
-	// Y en el destino no se publicó nada, porque el renombrado es lo último y no llegó.
 	if _, err := os.Stat(dst); !os.IsNotExist(err) {
 		t.Errorf("se publicó %s sin cerrar bien el temporal", dst)
 	}
 
-	// Y el camino bueno con el mismo seam, para que lo anterior no sea "nunca publica": con un
-	// cierre que funciona, el `.part` se consume en el renombrado y el destino aparece con el
-	// contenido entero.
 	bueno := &escrituraFalsa{fallaAlCerrar: nil}
 	if err := copiaPublicando(bytes.NewReader([]byte("hola")), filepath.Join(dir, "bueno.jpg"),
 		bueno.abreEn); err != nil {
@@ -172,7 +118,6 @@ func TestUnTemporalQueNoSeCierraSeBorraYNoSePublicaNada(t *testing.T) {
 		t.Errorf("lo publicado es %q (%v)", got, err)
 	}
 
-	// Y `creaTemporal` es el `os.Create` de verdad: sin el seam, la copia tiene que funcionar.
 	origen := filepath.Join(dir, "origen.jpg")
 	if err := os.WriteFile(origen, contenido, 0o644); err != nil {
 		t.Fatal(err)
@@ -186,15 +131,9 @@ func TestUnTemporalQueNoSeCierraSeBorraYNoSePublicaNada(t *testing.T) {
 	}
 }
 
-// errDeCierre es el error del doble. Es un valor concreto y no un `errors.New` en cada sitio,
-// para que `errors.Is` lo distinga del error de la escritura, que es otro camino.
 var errDeCierre = errors.New("el sistema de ficheros no pudo cerrar el temporal")
 
-// escrituraFalsa escribe en un fichero de verdad y falla al cerrarlo.
-//
-// Y escribe en un fichero de verdad porque un doble en memoria daría el error de cierre sin
-// dejar nada en disco, y entonces el aserto de "el temporal no quedó" no comprobaría nada: no
-// habría temporal.
+// It writes a real file because an in-memory double would leave nothing to assert on.
 type escrituraFalsa struct {
 	fallaAlCerrar error
 
@@ -202,7 +141,6 @@ type escrituraFalsa struct {
 	fichero *os.File
 }
 
-// abreEn crea el fichero de verdad que hay detrás del doble.
 func (e *escrituraFalsa) abreEn(ruta string) (escritura, error) {
 	f, err := os.Create(ruta)
 	if err != nil {
@@ -230,23 +168,7 @@ func (e *escrituraFalsa) Close() error {
 
 var _ escritura = &escrituraFalsa{}
 
-// TestUnaImagenQueDesapareceAntesDelLstatNoRompeLaPoda: el `Info` de `prune`.
-//
-// Y la carrera es real pero no se puede forzar: `ReadDir` devuelve entradas y `Info` hace un
-// `lstat`, y para que el segundo falle el fichero tiene que desaparecer entre los dos. Con
-// veinte imágenes eso es una ventana de microsegundos por entrada. Así que el seam entrega una
-// entrada que ya no está, que es el estado final de la carrera.
-//
-// Y lo que se comprueba NO es que el `continue` no reviente, que es lo que hace por
-// construcción. Lo que se comprueba es que la poda sigue con el resto y que la imagen más
-// antigua se borra igualmente. Y esto importa por una razón concreta: si la entrada ilegible NO
-// se saltara, el conteo de la lista sería uno más y la poda borraría una imagen buena de más.
-// Con el `continue` el conteo baja, la lista sigue siendo mayor que `keep` y la cola que se
-// borra es la correcta.
-//
-// Y el error del listado entero —un caché que ya no existe, por ejemplo— va en el mismo test
-// porque es el camino de al lado y se mide con el mismo seam. Un caché que no se puede leer se
-// deja como está, que es lo contrario de vaciarlo a ciegas.
+// The race is real but cannot be forced, so an already-gone entry is handed over instead.
 func TestUnaImagenQueDesapareceAntesDelLstatNoRompeLaPoda(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-24 * time.Hour)
@@ -260,8 +182,6 @@ func TestUnaImagenQueDesapareceAntesDelLstatNoRompeLaPoda(t *testing.T) {
 		survivors = append(survivors, filepath.Join(dir, nombre))
 	}
 
-	// Y una entrada que ya no está: un `.jpg` más antiguo que la más antigua de las de verdad,
-	// con la fecha que tendría, pero cuyo `lstat` falla.
 	listado := func(string) ([]os.DirEntry, error) {
 		reales, err := os.ReadDir(dir)
 		if err != nil {
@@ -301,7 +221,6 @@ func TestUnaImagenQueDesapareceAntesDelLstatNoRompeLaPoda(t *testing.T) {
 		t.Errorf("un listado ilegible vació el caché: %v", err)
 	}
 
-	// Y `prune` sin seam, que es la producción: el caché de verdad se poda por el camino bueno.
 	real := t.TempDir()
 	for i := 0; i <= keepImages; i++ {
 		imagenFalsa(t, real, "img-"+dosCifras(i)+".jpg", base.Add(time.Duration(i)*time.Hour))
@@ -316,8 +235,6 @@ func TestUnaImagenQueDesapareceAntesDelLstatNoRompeLaPoda(t *testing.T) {
 	}
 }
 
-// entradaMuerta es un `os.DirEntry` cuyo `Info` falla: el estado en el que queda una entrada de
-// un `ReadDir` cuando el fichero desaparece antes del `lstat`.
 type entradaMuerta struct {
 	nombre string
 	err    error
@@ -330,7 +247,6 @@ func (e entradaMuerta) Info() (fs.FileInfo, error) { return nil, e.err }
 
 var _ os.DirEntry = entradaMuerta{}
 
-// imagenFalsa escribe una imagen con la fecha que se le pide y devuelve su ruta.
 func imagenFalsa(t *testing.T, dir, nombre string, cuando time.Time) string {
 	t.Helper()
 	ruta := filepath.Join(dir, nombre)
@@ -343,9 +259,6 @@ func imagenFalsa(t *testing.T, dir, nombre string, cuando time.Time) string {
 	return ruta
 }
 
-// dosCifras rellena a la izquierda para que el orden de los nombres sea el mismo que el de las
-// fechas. No es cosmetics: si `img-9` se ordenara antes que `img-10`, un fallo en la poda sería
-// indistinguible de un fallo en la lista.
 func dosCifras(i int) string {
 	s := fmt.Sprintf("%04d", i)
 	return s[len(s)-4:]

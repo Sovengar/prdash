@@ -7,30 +7,10 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// Los dos de inbox.go que sobrevivían son el orden y la autoridad, y los dos son
-// comparaciones cuyo borde es un empate.
-//
-// Y un empate no es un caso raro aquí: dos PRs del mismo autor en el mismo estado tienen
-// la misma atención, y eso pasa en cada ejecución.
+// The two survivors are the order and the authority, and both are comparisons whose boundary
+//is a tie.
 
-// TestElOrdenEsAtencionFechaYNumero: el orden tiene tres desempates y el último es el
-// número.
-//
-// Y el tercero es el que hace falta para que el comparador sea un ORDEN TOTAL, que es lo
-// que necesita `sort.SliceStable` para converger. Con solo atención y fecha, dos PRs del
-// mismo autor en el mismo estado y del mismo día empatan, y `SliceStable` los deja en el
-// orden de llegada —que depende de qué forge respondió antes, y eso cambia entre
-// ejecuciones—. Con el número, el orden es el mismo siempre.
-//
-// Y ese es el motivo por el que la comparación de atención tiene que ser ESTRICTA: con
-// `>=` en vez de `>`, dos ítems con la misma atención se declaran ordenados en los dos
-// sentidos a la vez, y `sort.SliceStable` deja de tener un orden parcial que cumplir. El
-// resultado no es un fallo visible, es un orden distinto cada vez según el pivote que el
-// sort elija.
-//
-// Por eso los tres casos van en el test, y el primero es el que más cuesta ver: con la
-// atención IGUAL y la fecha IGUAL, el `>=` y el `>` se distinguen, y sin los tres
-// desempates probados no se sabe cuál de ellos manda.
+// The order has three tie-breaks and the last one is the number.
 func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 	fecha := time.Date(2026, 3, 17, 10, 0, 0, 0, time.UTC)
 
@@ -59,9 +39,7 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 		return true
 	}
 
-	// EL TERCER DESEMPATE, que es el que se ve sin pensar. Cuatro PRs con la misma
-	// atención y la misma fecha, en orden inverso al número: tienen que salir por
-	// número, no como entraron.
+	// The THIRD tie-break, the one you can see without thinking.
 	items := []model.Item{
 		item(4, "approved", fecha), item(2, "approved", fecha),
 		item(3, "approved", fecha), item(1, "approved", fecha),
@@ -73,7 +51,6 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 			"de qué forge respondió antes y cambia entre ejecuciones", got)
 	}
 
-	// Y al revés, para que no sea un caso que sale solo por casualidad.
 	items = []model.Item{
 		item(1, "approved", fecha), item(3, "approved", fecha),
 		item(2, "approved", fecha), item(4, "approved", fecha),
@@ -95,9 +72,6 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 			"la actualización más reciente", got)
 	}
 
-	// Y con el número al revés para que la fecha no compense: el 1 es el más antiguo
-	// pero si la fecha mandara sobre el número dentro de la atención igual, esto
-	// distinguiría las dos cosas.
 	items = []model.Item{
 		item(9, "approved", fecha), item(1, "approved", fecha.Add(time.Hour)),
 	}
@@ -106,9 +80,7 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 		t.Errorf("con el número al revés y la fecha al revés salió %v, want [1 9]", got)
 	}
 
-	// EL PRIMERO, que es el que mata al `>=`: la atención manda sobre todo lo demás.
-	// Un PR con cambios solicitados va primero aunque sea el más viejo y el de número más
-	// alto, porque es el único de los cuatro que necesita una acción.
+	// The FIRST tie-break, the one that kills a `>=`: attention beats everything else.
 	items = []model.Item{
 		item(1, "approved", fecha),
 		item(2, "approved", fecha.Add(time.Hour)),
@@ -122,9 +94,6 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 			items[0].Number)
 	}
 
-	// Y el estado que de verdad se ve arriba del todo, para que el orden entero se lea
-	// de una vez: checks rotos, cambios pedidos, review pendiente, aprobado y
-	// pendiente, de más nuevo a más viejo.
 	fallos := item(1, "approved", fecha)
 	fallos.State = "OPEN"
 	fallos.Checks.State = model.ChecksFailing
@@ -142,28 +111,7 @@ func TestElOrdenEsAtencionFechaYNumero(t *testing.T) {
 	}
 }
 
-// TestLaSeccionConMasAutoridadSeQuedaConElItem: un ítem que aparece en varias secciones
-// se queda en la de más autoridad, y el criterio es el ORDEN DECLARADO.
-//
-// Y la autoridad es lo que decide si el usuario lo ve: un PR que escribiste tú está en
-// `authored` y en `mentions`, y aparecer en las dos es verlo dos veces. El criterio es el
-// orden de `sectionOrder` y no el orden de llegada de los datos, que depende de qué forge
-// respondió antes —y eso cambia entre ejecuciones—.
-//
-// Y hay dos cosas que este test afirma porque son las que hacen que la comparación sea
-// fiable, y ninguna es lo que parece:
-//
-//   - Solo se miran las secciones DECLARADAS. `assignAuthority` recorre `sectionOrder`, no
-//     las claves del mapa, así que una sección que prdash no conoce no se mira. La
-//     primera versión de este test construía un empate de rango con dos secciones
-//     desconocidas y medía "" en las diez vueltas: no era un empate, era que nunca se
-//     miran. Y eso no es un accidente: es lo que hace que la autoridad no dependa de qué
-//     trae cada adapter.
-//
-//   - La autoridad es un RANGO, y con el rango solo hay dos casos: una sección que gana o
-//     una que pierde. No hay empate entre dos secciones declaradas, porque `rank` es la
-//     posición en `sectionOrder` y son todas distintas. El `!ok` cubre la primera vez que
-//     se ve el ítem, y el `rank` cubre las siguientes.
+// An item in several sections stays in the most authoritative one.
 func TestLaSeccionConMasAutoridadSeQuedaConElItem(t *testing.T) {
 	nuevo := func(n int) model.Item {
 		it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com",
@@ -172,10 +120,8 @@ func TestLaSeccionConMasAutoridadSeQuedaConElItem(t *testing.T) {
 		return it
 	}
 
-	// En las TRES secciones declaradas: se queda en la primera, que es la de más
-	// autoridad. Y se repite veinte veces porque el mapa de Go no tiene orden: con un
-	// `<=` en la comparación de rango el resultado sería el de la última que se
-	// procesa, con lo que el mismo dato daría respuestas distintas entre ejecuciones.
+	// All THREE declared sections: it stays in the first. Repeated twenty times because Go's map
+	//order is not guaranteed.
 	for i := range 20 {
 		best := assignAuthority(map[model.Section][]model.Item{
 			model.SectionMentions: {nuevo(1)},
@@ -189,7 +135,6 @@ func TestLaSeccionConMasAutoridadSeQuedaConElItem(t *testing.T) {
 		}
 	}
 
-	// Y cada sección gana cuando es la única: el caso normal.
 	for _, s := range []model.Section{
 		model.SectionAuthored, model.SectionReview, model.SectionMentions,
 	} {
@@ -199,9 +144,7 @@ func TestLaSeccionConMasAutoridadSeQuedaConElItem(t *testing.T) {
 		}
 	}
 
-	// Y una sección que prdash NO declara no se mira, ni ganas ni pierdes: el ítem no
-	// entra en el mapa de autoridad. Lo que se afirma es que sale vacío, no que salga
-	// con la sección desconocida.
+	// A section prdash does NOT declare is not consulted at all: the item does not enter.
 	futura := model.Section("futura")
 	best := assignAuthority(map[model.Section][]model.Item{futura: {nuevo(3)}})
 	if got, ok := best[nuevo(3).ID()]; ok {
@@ -210,8 +153,7 @@ func TestLaSeccionConMasAutoridadSeQuedaConElItem(t *testing.T) {
 			"dependería de qué trae cada adapter", got)
 	}
 
-	// Y el mismo ítem en una declarada y una no declarada: gana la declarada, porque la
-	// no declarada ni se mira.
+	// The same item in a declared and an undeclared one: the declared wins.
 	best = assignAuthority(map[model.Section][]model.Item{
 		futura:                {nuevo(4)},
 		model.SectionMentions: {nuevo(4)},

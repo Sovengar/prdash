@@ -7,9 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestPrefixModeCiclaConLaTecla es el escenario central de la tecla: `p` recorre
-// los tres modos y vuelve al inicio. Se pulsa de verdad, no se asigna el campo,
-// porque el contrato es también que la tecla llegue al ciclo.
 func TestPrefixModeCiclaConLaTecla(t *testing.T) {
 	m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway")
 
@@ -24,10 +21,7 @@ func TestPrefixModeCiclaConLaTecla(t *testing.T) {
 	}
 }
 
-// TestPrefixModeSaleDeLaConfig comprueba que la tecla no está cableada: con la
-// acción reasignada, la tecla nueva cicla y la vieja deja de hacerlo. Es el
-// mismo guard que section-next, por el mismo motivo: una barra que anuncia una
-// tecla que no hace nada es peor que no anunciarla.
+// With the action reassigned the key is NOT hard-wired.
 func TestPrefixModeSaleDeLaConfig(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.cfg.Keybindings["prefix-mode"] = "P"
@@ -45,9 +39,6 @@ func TestPrefixModeSaleDeLaConfig(t *testing.T) {
 	}
 }
 
-// TestPrefixModeNoLoReiniciaElCambioDeSeccion: el modo es global, no por sección.
-// Tabular a otra sección, cuyo prefijo común es otro, no puede devolver la vista a
-// common.
 func TestPrefixModeNoLoReiniciaElCambioDeSeccion(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested,
@@ -81,10 +72,7 @@ func TestPrefixModeNoLoReiniciaElCambioDeSeccion(t *testing.T) {
 	}
 }
 
-// TestPrefixModeNoDisparaOtrasAcciones comprueba que `p` es solo un ciclo de
-// vista. Es el guard de que la tecla nueva no se cuele en ninguna otra: si `p`
-// acabara en approve o en refresh, la barra sería veraz pero la vista haría cosas
-// que el usuario no pidió.
+// p is only a view cycle.
 func TestPrefixModeNoDisparaOtrasAcciones(t *testing.T) {
 	m := listModelWithItems(t, "acme/widget")
 	m.loading = false
@@ -112,10 +100,7 @@ func TestPrefixModeNoDisparaOtrasAcciones(t *testing.T) {
 	}
 }
 
-// TestPrefixModeConservaElCursorYLaVentana comprueba el efecto secundario que sí
-// importa: cambiar de modo no mueve el cursor de ítem. Y como full y leaf quitan
-// la línea de prefijo, la lista se acorta: sin el syncScroll del ciclo, una
-// lista desplazada dejaría la fila del cursor fuera de la ventana.
+// The side effect that does matter: changing the mode keeps the cursor and the window.
 func TestPrefixModeConservaElCursorYLaVentana(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	items := make([]model.Item, 0, 30)
@@ -145,9 +130,6 @@ func TestPrefixModeConservaElCursorYLaVentana(t *testing.T) {
 	}
 }
 
-// TestPrefixModeArrancaEnCommonSinPersistir documenta la decisión de no
-// persistirlo: el modo es estado de la sesión y un modelo nuevo arranca en
-// common, que es el comportamiento heredado.
 func TestPrefixModeArrancaEnCommonSinPersistir(t *testing.T) {
 	m := listModelWithItems(t, "acme/widget")
 	m = press(t, m, "p")

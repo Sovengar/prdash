@@ -1,9 +1,7 @@
-// La conversación del ítem seleccionado dentro del panel de detalle.
-//
-// Los comentarios no son una vista aparte ni un subproceso que el usuario pide:
-// son parte de la ficha, y por eso se consultan solos al llegar el cursor al
-// ítem. Lo que este archivo evita es el otro extremo, que es consultarlos con el
-// inbox: son N llamadas más por ciclo para datos de una sola fila.
+// The selected item's conversation, inside the detail panel.
+// Comments are not a separate view nor something the user asks for: they are part of the card, which
+// is why they are fetched when the cursor reaches the item. What this file avoids is the other extreme,
+// fetching them with the inbox: N extra calls per cycle for data belonging to a single row.
 package tui
 
 import (
@@ -21,13 +19,9 @@ import (
 	"prdash/internal/tui/bordered"
 )
 
-// commentState es lo que la ficha sabe de un ítem en lo que a conversación se
-// refiere.
-//
-// Guardar el estado y no solo la lista es lo que permite que "no hay comentarios"
-// y "aún no lo he preguntado" se pinten distinto. Con solo la lista, un ítem sin
-// consultar y otro sin comentarios serían los dos una lista vacía, y el primero
-// se quedaría fingiendo que el PR no tiene conversación.
+// Storing the state and not just the list is what lets "no comments" and "I have not asked yet"
+// paint differently. With only the list, an unasked item and a commentless one are both an empty list, and
+// the first pretends the PR has no conversation.
 type commentState struct {
 	list  []model.Comment
 	total int  // los que dice el forge que hay, para poder decir "5 de 23"
@@ -35,24 +29,19 @@ type commentState struct {
 	err   string
 }
 
-// maxCommentLines es el tope de filas por comentario. Sin él, un comentario largo
-// se comería el panel entero en un terminal alto y los otros cuatro no se verían:
-// lo pedido son cinco comentarios, no uno.
+// Without it a long comment eats the whole panel on a tall terminal and the other four are never
+// seen: five comments were asked for, not one.
 const maxCommentLines = 4
 
-// commentsCmd agenda el siguiente tick de comentarios.
 func (m *Model) commentsCmd() tea.Cmd {
 	return tea.Tick(commentsPoll, func(time.Time) tea.Msg { return commentsTickMsg{} })
 }
 
-// requestComments lanza la consulta de la conversación del ítem seleccionado si
-// todavía no se tiene. No toca el canal de eventos: la goroutine publica su
-// resultado con sendEvent, pero eso no consume el lector que tiene la bomba, así
-// que el invariante de un único lector sigue igual.
+// Does not touch the events channel: the goroutine publishes with sendEvent, which does not consume the
+// reader the bomb has, so the single-reader invariant holds.
 //
-// Devuelve siempre el tick rearmado, tanto si consultó como si no: la cadena no
-// se corta nunca y el próximo cambio de selección se nota sin tener que acordarse
-// de rearmarla en el sitio del cambio.
+// The re-armed tick comes back either way, so the chain is never cut and the next selection change is
+// noticed without having to remember to re-arm it at the change site.
 func (m *Model) requestComments() tea.Cmd {
 	tick := m.commentsCmd()
 	it, ok := m.selected()
@@ -67,16 +56,14 @@ func (m *Model) requestComments() tea.Cmd {
 	if a == nil {
 		return tick
 	}
-	// Sin sesión no se pregunta: la ficha lo deduce del estado del forge, y
-	// gastar una consulta para que vuelva a fallar no le dice nada al usuario que
-	// no dijera ya la cabecera.
+	// Without a session it does not ask: the card deduces it from the forge's state, and spending a call
+	// to fail again tells the user nothing the header did not already say.
 	if st := m.statuses[it.Forge]; st != nil && !st.auth.OK {
 		return tick
 	}
 
-	// Se marca como pedida ANTES de salir. Si no, dos ticks seguidos sobre el
-	// mismo ítem —el primero aún en vuelo, el segundo ya sin respuesta— lanzarían
-	// la misma consulta dos veces.
+	// Marked as asked BEFORE leaving: otherwise two consecutive ticks on the same item — the first still
+	// in flight, the second already without an answer — would fire the same query twice.
 	m.comments[id] = &commentState{}
 
 	appCtx := m.ctx
@@ -87,9 +74,9 @@ func (m *Model) requestComments() tea.Cmd {
 		defer cancel()
 		page, warns := a.Comments(ctx, ref, number)
 		msg := commentsMsg{id: id, page: page}
-		// Un warning solo se convierte en error si no vino nada. Si el forge
-		// devolvió comentarios y además coleó algo, lo que se tiene es mejor que
-		// dejar la ficha vacía por un aviso que no impide leer lo que sí llegó.
+		// A warning only becomes an error if nothing came back. If the forge sent comments and also slipped
+		// something in, what we have is better than an empty card because of a warning that does not stop
+		// the reading.
 		if len(warns) > 0 && len(page.Comments) == 0 {
 			msg.err = warns[0].Msg
 		}
@@ -98,10 +85,8 @@ func (m *Model) requestComments() tea.Cmd {
 	return tick
 }
 
-// applyComments guarda la conversación de un ítem. No comprueba el ciclo: la
-// respuesta es del ítem que se pidió, no de la vista, así que sigue siendo
-// válida aunque el inbox se haya refrescado mientras volaba (misma política que
-// applyAction con el estado releído).
+// No cycle check: the answer belongs to the item that was asked, not to the view, so it is still
+// valid even if the inbox refreshed while it was in flight (same policy as applyAction's re-read).
 func (m *Model) applyComments(msg commentsMsg) {
 	st := &commentState{
 		list:  msg.page.Comments,
@@ -110,28 +95,20 @@ func (m *Model) applyComments(msg commentsMsg) {
 		err:   msg.err,
 	}
 	if st.total < len(st.list) {
-		// GitLab no expone recuento: el total es lo leído. Se queda por lo menos
-		// al alto de la lista para que la aritmética del recuento no invente que
-		// hay más de los que se ven.
+		// GitLab exposes no count, so the total is what was read. It is floored at the list's height so the
+		// count arithmetic does not invent comments that are not there.
 		st.total = len(st.list)
 	}
 	m.comments[msg.id] = st
 }
 
-// commentLines compone el bloque de comentarios del ítem para el hueco que sobra
-// tras la ficha. `avail` son las filas que quedan; el bloque se queda en ellas o
-// no se pinta.
+// When there are comments they go in their own titled box rather than as more card fields: a
+// conversation is not data about the PR but what people said about it, and a border says so without
+// needing an explanation. The lone states (loading, error, none) stay as field lines because they are
+// one-line messages, not conversation.
 //
-// Cuando hay comentarios van en una caja propia titulada, no como campos más de la
-// ficha: la conversación no es un dato del PR sino lo que la gente dijo de él, y un
-// borde lo dice sin tener que explicarlo. Los estados sueltos (cargando, error,
-// ninguno) se quedan como líneas de campo porque son mensajes de una línea, no
-// conversación.
-//
-// El hueco se reparte entre los comentarios en vez de dárselo al primero: así los
-// cinco se ven siempre y en un terminal alto se lee algo más que la primera
-// línea de cada uno. Al revés, un comentario largo se comería el panel y la
-// ficha enseñaría un comentario y un hueco.
+// The room is shared among the comments instead of going to the first, so all five are always visible
+// and a tall terminal shows more than the first line of each.
 func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	if avail <= 0 {
 		return nil
@@ -139,71 +116,54 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	st := m.comments[it.ID()]
 	switch {
 	case st == nil:
-		// Todavía no se ha preguntado y no hay nada en vuelo. Puede que el
-		// siguiente tick ni siquiera lo pregunte: sin sesión no se pregunta, y ya
-		// lo dice la cabecera. Poner "cargando…" aquí sería anunciar una consulta
-		// que no existe.
+		// Not asked and nothing in flight. The next tick might not even ask: without a session it does
+		// not, and the header already says so. "Loading…" here would announce a query that does not exist.
 		return nil
 	case !st.ready:
-		// La consulta está en vuelo. Se dice en vez de dejar un hueco en blanco:
-		// un hueco no se distingue de "este PR no tiene comentarios" y aquí
-		// todavía no se sabe.
+		// In flight: said rather than left blank, because a blank is indistinguishable from "this PR has
+		// no comments" and we do not know that yet.
 		return []string{label("Comments", styleDim.Render("loading…"))}
 	case st.err != "":
-		// Sin suelo en el ancho: `inner` viene de contentWidth, que no baja de 38, y
-		// labelWidth son 14, así que la diferencia nunca es negativa. Un suelo aquí
-		// protegería un `truncate` de un ancho negativo que no se puede dar, y
-		// escondería que lo que decide es cuánto cabe del error, que es la
-		// pregunta de la línea siguiente.
+		// No floor on the width: `inner` comes from contentWidth, never below 38, and labelWidth is 14, so
+		// the difference is never negative. A floor here would guard a truncate of an impossible negative
+		// width and would hide that what decides is how much of the error fits.
 		return []string{label("Comments", styleWarn.Render(truncate("not read: "+st.err, inner-labelWidth)))}
 	case len(st.list) == 0:
-		// Sin comentarios no hay caja. La caja existe para separar la conversación
-		// de los campos, y una caja alrededor de la palabra "none" no separa nada:
-		// además es el estado de todos los PRs sin conversación, así que un borde
-		// apareciendo y desapareciendo en cada movimiento del cursor es ruido.
+		// No comments, no box. The box exists to separate the conversation from the fields, and a box around
+		// the word "none" separates nothing — and it is the state of every commentless PR, so a border
+		// appearing and disappearing with each cursor move is noise.
 		return []string{label("Comments", styleDim.Render("none"))}
 	}
 
-	// La caja no se pinta a medias. Un bloque con su borde de arriba y sin el de
-	// abajo no es media caja, es ruido que ocupa lo mismo que el bloque entero: si
-	// no caben los dos bordes, no cabe la conversación y se cae entera (ver la
-	// escalera de degradación en detailLines).
+	// Never painted half: a block with a top border and no bottom one is not a half box, it is noise taking
+	// the same room as the whole block, so if both borders do not fit neither does the conversation.
 	//
-	// Y además tiene que caber TODA la conversación, no un trozo. La caja se come
-	// dos filas, y una de las dos es borde: en un terminal de 30 filas, con tres
-	// comentarios y tres filas de presupuesto, el bloque cabría sin caja para tres
-	// comentarios y con caja para uno. Ver uno y perder los otros dos es peor que no
-	// ver ninguno, porque un recorte de la caja no parece un recorte: parece que el
-	// PR solo tiene ese comentario. Sin caja los pierde enteros, y el usuario ve la
-	// ficha completa, que es lo que corresponde a un terminal corto.
+	// And the WHOLE conversation has to fit, not a part of it. The box costs two rows and one of them is a
+	// border: on a 30-row terminal with three comments and a three-row budget, the block would fit three
+	// comments with no box and one with the box. Seeing one and losing the other two is worse than seeing
+	// none, because a clipped box does not look clipped: it looks like the PR only has that comment.
 	if avail < commentChrome+len(st.list) {
 		return nil
 	}
 	budget := avail - commentChrome
 
-	// Se acota aquí y no solo en el adapter. CommentLimit es una decisión de la
-	// ficha, y una ficha que se la salta porque confió en quién la llenó enseñaría
-	// comentarios que no caben en su propio alto.
+	// Bounded here and not only in the adapter. CommentLimit is the card's decision, and a card that
+	// skipped it because it trusted whoever filled it would show comments that do not fit its own height.
 	shown := st.list
 	if len(shown) > forge.CommentLimit {
 		shown = shown[:forge.CommentLimit]
 	}
-	// Y aquí NO hay un segundo mínimo por `len(shown)`. Lo hubo, y era INALCANZABLE:
-	// el de arriba es `avail < commentChrome+len(st.list)` y el de abajo habría sido
-	// `avail < commentChrome+len(shown)`, y como `len(shown) <= len(st.list)` por el
-	// tope de cinco, el primero se cumple siempre que el segundo. Una guarda que la
-	// anterior ya cubre no cubre nada: solo hace que se lea como si el recorte del
-	// tope tuviera su propia comprobación de sitio, y no la tiene porque no la
-	// necesita.
+	// There is deliberately NO second floor on `len(shown)`. There used to be, and it was unreachable: the
+	// floor above is `avail < commentChrome+len(st.list)` and this one would have been
+	// `avail < commentChrome+len(shown)`, and since `len(shown) <= len(st.list)` by the cap of five the
+	// first always holds whenever the second does. A guard the previous one already covers covers
+	// nothing, and it reads as if the cap's clipping had a room check of its own.
 
-	// El cuerpo va dentro de la caja y esta sangrada: el ancho sale de una función
-	// aparte porque es geometría comprobable, no un detalle del pintado.
 	bodyWidth := commentBodyWidth(inner)
 
-	// Se cuenta cuántas filas necesita cada comentario componiéndolo con el tope
-	// alto, que es el mismo código que lo pinta, así que el reparto no puede mentir
-	// sobre lo que cabe. Componer dos veces es barato (cinco comentarios de texto) y
-	// evita repartir a ciegas.
+	// Each comment's needed rows are counted by composing it at the tall cap, which is the same code that
+	// paints it, so the allocation cannot lie about what fits. Composing twice is cheap and beats
+	// allocating blind.
 	need := make([]int, len(shown))
 	total := 0
 	for i, c := range shown {
@@ -211,88 +171,56 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		total += need[i]
 	}
 
-	// El recuento NO va en el cuerpo: vive en el borde de abajo, a la derecha (ver
-	// commentLegend). Aquí cada fila es una fila de lo que dijo la gente, y una de
-	// recuento es una que no es de nadie; y en el borde no cuesta alto, así que no
-	// es lo primero que se cae cuando el panel va justo, que era su destino.
+	// The count does not go in the body: it lives on the bottom border, on the right (see
+	// commentLegend). Every body row is something a person wrote, and a count row belongs to nobody — and
+	// on the border it costs no height, so it is not the first thing to go when the panel is tight.
 	body := make([]string, 0, budget)
 
-	// Si caben enteros, cada uno toma lo que necesita. Es lo que evita que un
-	// comentario de seis párrafos se quede en "the timeout is 30x too high…" al lado
-	// de cuatro de una línea, que es lo que pasaba con un reparto a ciegas.
-	//
-	// Y si no caben, a todos se les da una fila —para que los cinco estén presentes,
-	// que es lo pedido— y el sobrante va a quién más tiene que perder. Es preferible
-	// a darle el panel al primero, que se comería los cinco.
+	// When they fit whole, each takes what it needs, which is what stops a six-paragraph comment sitting
+	// next to four one-liners truncated to "the timeout is 30x too high…".
+	// When they do not, everyone gets one row — all five present, which is what was asked — and the surplus
+	// goes to whoever has most to lose, which beats handing the panel to the first.
 	rows := need
 	if total > budget {
 		rows = allocate(need, budget)
 	}
 
 	for i, c := range shown {
-		// No hay red de seguridad aquí, y antes la había. Era INALCANZABLE, y la
-		// cuenta es corta:
-		//
-		//   - la guarda de arriba dice `avail >= commentChrome+len(st.list)`, así que
-		//     `budget = avail - commentChrome` es al menos `len(st.list)`;
-		//   - y `len(shown)` es a lo sumo `len(st.list)` por el tope de cinco, así
-		//     que `budget >= len(need)`.
-		//
-		// Con eso, allocate reparte como mucho `min(budget, sum(need))`: reparte
-		// `budget - len(need)` filas extra y para en cuanto todos llegan a su `need`.
-		// La suma nunca pasa de `budget`. Y `max(1, rows[i])` no la sube, porque
-		// allocate ya deja a todos en 1 como mínimo.
-		//
-		// Así que el bloque no puede pasar del presupuesto, que es justo lo que la
-		// red fingía comprobar. Y una red que no puede dispararse es peor que
-		// ninguna: hace que el reparto parezca tener una segunda salvaguarda cuando lo
-		// que tiene es una aritmética que hay que mirar, que es la de allocate.
-		//
-		// Lo que sí decide es que `rows[i]` se indexa con el mismo `i` que
-		// `shown`, y eso no lo cubre ninguna guarda: es una estructura, no un número.
-		//
-		// Y `rows[i]` va sin suelo a 1 porque no puede ser 0, por las dos ramas:
-		// `need[i]` es la cuenta de filas de un commentBody, y commentBody devuelve
-		// al menos una fila siempre —tiene su propio suelo, y un cuerpo vacío
-		// devuelve la fila que lo dice—. Y allocate deja a todos en 1 como mínimo
-		// antes de repartir. Un `max(1, ...)` aquí protegería un 0 que no existe, y
-		// taparía el reparto, que es lo que de verdad decide cuántas filas se lleva
-		// cada uno.
+		// There is no safety net here and there used to be. It was unreachable, and the count is short:
+		// the guard above says `avail >= commentChrome+len(st.list)`, so `budget = avail - commentChrome` is
+		// at least `len(st.list)`, and `len(shown)` is at most `len(st.list)` by the cap of five, so
+		// `budget >= len(need)`.
+		// So allocate hands out at most `min(budget, sum(need))`: it distributes `budget - len(need)`
+		// extra rows and stops once everyone reaches their need. The sum never exceeds the budget, and
+		// `max(1, rows[i])` cannot raise it, since allocate already leaves everyone at 1.
+		// A net that cannot fire is worse than none: it makes the allocation look like it has a second
+		// safeguard when what it has is arithmetic you have to read.
 		body = append(body, commentBody(c, rows[i], bodyWidth)...)
 	}
 	return commentBox(body, commentLegend(len(shown), st.total, inner), inner)
 }
 
-// commentChrome son las filas que cuesta la caja: borde de arriba y de abajo. Los
-// dos títulos van embebidos en ellas —el "Comments" arriba y el recuento abajo—, así
-// que ninguno gasta una más.
+// Both titles are embedded in them —"Comments" above and the count below — so neither costs an extra row.
 const commentChrome = 2
 
-// commentBoxBorder son las columnas que se come la caja: un borde a cada lado.
 const commentBoxBorder = 2
 
-// commentTitle es el título de la caja. Va en el borde y no como etiqueta de
-// campo: eso es justo lo que distingue este bloque de los datos de la ficha.
 const commentTitle = "Comments"
 
-// commentBox envuelve el bloque de comentarios en una caja redondeada titulada y
-// con el recuento en el borde de abajo, y devuelve sus líneas sueltas. `outer` es el
-// ancho del interior del panel de detalle: la caja va sangrada dentro de él, para
-// quedar dentro y no pisar el borde de la de fuera.
+// `outer` is the width inside the detail panel: the box is inset within it so it sits inside rather
+// than stepping on the outer border.
 func commentBox(body []string, legend string, outer int) []string {
 	border := bordered.Rounded()
-	// La leyenda no se apoya en la esquina: entre ella y la esquina se queda una raya
-	// del propio borde. Sin ella, un "3" suelto con un hueco a cada lado hace que la
-	// línea de abajo se lea como partida —no como un borde con algo escrito dentro—,
-	// que es justo lo que se pierde al escribir en un borde.
+	// The legend does not sit on the corner: between it and the corner the border keeps a dash of its own.
+	// Without it, a loose "3" with a gap on each side makes the bottom line read as broken rather than as
+	// a border with something written inside it, which is exactly what is lost by writing on a border.
 	//
-	// Y la raya va FUERA del estilo del recuento: dentro heredaría su gris y el tramo
-	// que cierra la línea se vería de otro color que la línea que cierra. Pero
-	// "fuera del estilo" no es "sin estilo": el estilo del recuento se cierra con un
-	// reset, y un reset no restaura lo anterior, se lleva por delante el gris del
-	// borde. Sin repintarla, esa raya —y su espacio— salían con el color de primer
-	// plano del terminal, que en muchas paletas es un blanco amarillento: un tramo
-	// de borde en otro color, justo en la línea que cierra la caja.
+	// The dash goes OUTSIDE the count's style: inside it would inherit its grey and the segment closing the
+	// line would be a different colour from the segment that opens it. But outside the style is not unstyled:
+	// the count's style ends with a reset, and a reset does not restore what was there, it takes the border's
+	// grey with it. Without repainting, the dash and its space came out in the terminal's foreground colour,
+	// which on many palettes is a yellowish white: a piece of border in another colour, right on the line
+	// that closes the box.
 	legend = " " + legend + styleBorder.Render(" "+border.Bottom)
 	lines := strings.Split(bordered.RenderWithTitles(
 		border, borderColor, " "+commentTitle+" ", bordered.AlignLeft,
@@ -300,8 +228,8 @@ func commentBox(body []string, legend string, outer int) []string {
 		strings.Join(body, "\n"), commentBoxWidth(outer),
 	), "\n")
 
-	// El sangrado se pone a los dos lados. Solo a la izquierda, la caja se quedaría
-	// una columna más corta que el panel y el borde de fuera se vería desplazado.
+	// Indented on both sides: with only the left one, the box ends up a column narrower than the panel
+	// and the outer border looks displaced.
 	inset := strings.Repeat(" ", commentInset)
 	for i, l := range lines {
 		lines[i] = inset + l + inset
@@ -309,54 +237,33 @@ func commentBox(body []string, legend string, outer int) []string {
 	return lines
 }
 
-// commentBodyWidth es el ancho de TEXTO del cuerpo de un comentario, que es más
-// estrecho que el de la caja por dos motivos que se suman: el sangrado de la caja
-// por los dos lados, y los dos bordes verticales del marco.
-//
-// Está en su propia función por el mismo motivo que commentWidths: dentro del
-// pintado, un cuerpo dos columnas más ancho no da una caja más ancha —la caja
-// trunca igual— sino dos caracteres menos por línea, y eso no lo ve ningún test del
-// render. Siendo una aritmética pura se comprueba directo, y el suelo de 8 con ella.
+// Its own function for the same reason as commentWidths: a body two columns wider does not give a
+// wider box — the box clips either way — but two fewer characters per line, and no render test sees that.
+// Being pure arithmetic it is checked directly, floor of 8 included.
 func commentBodyWidth(outer int) int {
 	return max(8, commentBoxWidth(outer)-commentBoxBorder)
 }
 
-// commentInset es el sangrado de la caja de comentarios, por lado. Es lo que hace
-// legible que la caja va anidada dentro del panel de detalle.
-//
-// Sin él, la caja ocupa el ancho entero del panel y comparte columnas con su borde:
-// sus verticales se solapan con las de fuera y cada fila sale `││`. Con un tono de
-// gris más claro los dos bordes se distinguían, pero un gris más claro sale
-// amarillento en las paletas cálidas, y eso era un problema de color tapando uno de
-// forma: lo que hace falta es que los dos bordes no se pisen, no que se vean
-// distintos.
+// Without it the box spans the panel's full width and shares columns with its border: the verticals
+// overlap and every row comes out as `||`. A lighter grey told the two borders apart, but lighter grey
+// goes yellowish on warm palettes, and that was a colour problem covering a shape one: what is needed is
+// for the two borders not to overlap, not for them to look different.
 const commentInset = 1
 
-// commentBoxWidth es el ancho exterior de la caja una vez descontado el sangrado.
 func commentBoxWidth(outer int) int { return max(8, outer-2*commentInset) }
 
-// allocate reparte un presupuesto de filas entre comentarios que piden más de la
-// que les toca. Cada uno arranca en una fila, que es lo mínimo para que se vea, y
-// las sobrantes van una a una a quien menos tiene.
-//
-// Ir de una en una y no llenando primero a los más necesitados es lo que evita la
-// arbitrariedad del orden: "el primero se lo queda" haría que un comentario de seis
-// párrafos al principio se comiera el panel y uno igual de largo al final se quedara
-// en su primera frase, y eso solo depende de quién escribió antes. Igualar niveles
-// reparte el daño por igual entre los que lo van a sufrir, que es lo único que se
-// puede repartir sin un criterio mejor.
-//
-// El presupuesto puede ser menor que el número de comentarios: entonces no caben
-// todos y cada uno se queda con su fila mínima. Quien recorta el bloque es quien lo
-// compone, con su propio tope de filas.
+// One at a time rather than filling the neediest first, because that avoids the arbitrariness of order:
+// "the first one keeps it" would let a six-paragraph comment at the top eat the panel while an equally
+// long one at the bottom keeps its first phrase, which depends only on who wrote first. Levelling shares
+// the damage among those who will suffer it, which is the only thing shareable without a better rule.
 func allocate(need []int, budget int) []int {
 	rows := make([]int, len(need))
 	for i := range need {
 		rows[i] = 1
 	}
 	for left := budget - len(need); left > 0; left-- {
-		// El que menos cuota tiene y todavía le queda texto. Entre iguales gana el
-		// de índice menor, para que el reparto no dependa del recorrido del mapa.
+		// The one with the least share and text still left. Ties go to the lower index, so the allocation does
+		// not depend on the map's iteration order.
 		best := -1
 		for i := range need {
 			if rows[i] >= need[i] {
@@ -374,32 +281,20 @@ func allocate(need []int, budget int) []int {
 	return rows
 }
 
-// commentHint es lo que hace accionable el recuento: no dice solo que hay más
-// conversación, dice dónde está. Va separada porque en un panel estrecho no cabe y
-// entonces se cae ella y no los números.
+// It does not just say there is more conversation, it says where. Kept apart so that in a narrow panel
+// it is what goes, not the numbers.
 const commentHint = " · open the PR to read the rest"
 
-// legendGap son las columnas que la leyenda deja sin usar junto a la esquina: el
-// hueco de texto a cada lado más la raya del propio borde que cierra la línea
-// (ver commentBox). Sin eso el "3" se apoya en la esquina y la línea de abajo parece
-// partida en vez de un borde con algo escrito dentro.
 const legendGap = 3
 
-// commentLegend compone el texto del recuento que va embebido en el borde de abajo,
-// a la derecha, que es donde va: el cuerpo de la caja son las filas que dijo la
-// gente, y una fila de recuento es una que no es de nadie. En el borde además es
-// gratis, así que no es lo primero que se cae cuando el panel va justo.
+// Both numbers are always stated, even with the whole conversation visible. "3 of 3" informs as much
+// as "5 of 23": it says nothing is left out, and the size of the conversation is part of the item's state —
+// 3 comments or 30 is not the same PR. The phrasing that only appeared when there was more was justified
+// by costing a row, and that cost disappeared when it moved to the border: staying silent about the
+// count no longer buys anything.
 //
-// Siempre dice los dos números, también con toda la conversación a la vista. "3 de 3"
-// informa igual que "5 of 23": dice que no queda nada fuera, y el tamaño de la
-// conversación es parte del estado del PR —3 comentarios o 30 no es el mismo PR—.
-// La frase que solo salía al haber más venía justificada por su coste de una fila, y
-// ese coste desapareció al irse al borde: callar el recuento ya no compra nada.
-//
-// Lo que le cabe es el interior del borde menos las dos esquinas y el hueco que
-// commentBox deja alrededor. La coletilla solo se usa si cabe entera y solo si hay
-// algo fuera: recortada a media frase ("5 of 23 · open the PR to read…") dice menos
-// que la corta, y sin comentarios escondidos no hay nada que abrir.
+// Only the suffix if it fits whole and only when something is hidden: cut in half ("5 of 23 · open the PR
+// to read…") it says less than the short form, and with no hidden comments there is nothing to open.
 func commentLegend(shown, total, outer int) string {
 	legend := fmt.Sprintf("%d of %d", shown, total)
 	room := commentBoxWidth(outer) - commentBoxBorder - legendGap
@@ -409,45 +304,38 @@ func commentLegend(shown, total, outer int) string {
 	return styleCount.Render(legend)
 }
 
-// commentBody compone un comentario en como mucho `lines` filas: el autor en la
-// primera y el cuerpo debajo, alineado bajo el texto.
-//
-// Se usa el cuerpo entero y no solo su primera línea. Con la primera línea, un
-// comentario de tres párrafos ocupaba una fila de las cuatro que le tocaban y
-// desperdiciaba las otras tres, que es justo el espacio que la rejilla de campos
-// liberó para que los comentarios cupieran. Los párrafos se respetan como están
-// (ver parse.CommentLines): envolverlos de corrido produciría "fix the timeout fix
-// the backoff".
-//
-// Lo que no cabe se marca con "…", porque una fila que para en mitad de una frase
-// se lee como si el comentario se acabara ahí.
+// The whole body and not just its first line: with the first line, a three-paragraph comment took one of
+// the four rows it was given and wasted the other three, which is exactly the room the field grid freed so
+// the comments would fit. Paragraphs are respected as they are (see parse.CommentLines), because wrapping
+// them continuously produces "fix the timeout fix the backoff".
+
+// What does not fit is marked with "…", because a row stopping mid-sentence reads as the comment ending
+// there.
 func commentBody(c model.Comment, lines, inner int) []string {
-	// Nadie se queda sin fila por un descuadre de reparto: una fila vacía es mejor
-	// que un índice fuera de rango al marcar el corte.
+	// Nobody goes without a row because of an allocation mismatch: an empty row beats an out-of-range
+	// index when marking the cut.
 	lines = max(1, lines)
 	author := truncate(c.Author, maxCommentAuthor)
 	first, cont := commentWidths(inner, author)
 
-	// Se guardan aparte el último trozo escrito y el ancho que tenía, para poder
-	// recortarlo al marcar el corte sin volver a medir una fila ya vestida con
-	// estilos: truncar la fila entera cortaría por la mitad de un código ANSI.
+	// The last written piece and its width are kept apart so it can be clipped when marking the cut
+	// without measuring a row already dressed with styles: clipping the whole row would cut an ANSI code in
+	// half.
 	var (
 		out       []string
 		lastPiece string
 		lastW     int
 	)
 	for _, src := range parse.CommentLines(c.Body) {
-		// Cada párrafo se parte al ancho de la fila que le toca, no al más ancho de
-		// las dos: partirlo al ancho grande y recortarlo después cortaría palabras.
+		// Each paragraph wraps at the width of the row it gets, not at the wider of the two: wrapping wide
+		// and clipping after would cut words.
 		w := cont
 		if len(out) == 0 {
 			w = first
 		}
 		for _, piece := range wrapText(src, w) {
 			if len(out) >= lines {
-				// Queda texto sin escribir: la última fila se vuelve a componer
-				// marcando el corte, porque una fila que para en mitad de una frase
-				// se lee como si el comentario se acabara ahí.
+				// Text left unwritten: the last row is recomposed marking the cut.
 				out[len(out)-1] = commentRow(len(out)-1, author, commentSep, lastPiece, lastW, true)
 				return out
 			}
@@ -457,50 +345,29 @@ func commentBody(c model.Comment, lines, inner int) []string {
 	}
 
 	if len(out) == 0 {
-		// Cuerpo vacío o solo boilerplate: se dice, para que la fila no se lea como
-		// un comentario que no dice nada.
+		// Empty body or only boilerplate: said, so the row does not read as a comment that says nothing.
 		return []string{commentRow(0, author, commentSep, "(no text)", first, false)}
 	}
 	return out
 }
 
-// commentWidths son los dos anchos de texto de un comentario: el de la primera
-// fila, que lleva el autor delante, y el de las siguientes, que solo llevan el
-// sangrado de continuación.
-//
-// Están en una función propia, y no en línea en commentBody, por una razón concreta:
-// la geometría es lo que hay que poder comprobar, y dentro del bucle de pintado
-// cualquier error suyo queda tapado por el recorte del marco. Una primera fila dos
-// columnas más ancha no da una caja más ancha —la caja trunca igual— sino dos
-// caracteres menos por línea, y eso no lo ve ningún test del render. Siendo una
-// función pura, se comprueba directo: el ancho es el ancho, sin pintar nada.
-//
-// La cuenta es en RUNES y sobre texto plano: el ancho que hay que rellenar es el
-// del texto, y medir una fila ya vestida con estilos daría un número de columnas
-// que no es el de la caja. El nombre del autor va dentro porque es lo que empuja el
-// cuerpo de la primera fila, y por eso depende de `author` y no solo de `inner`.
+// In RUNES and over plain text: the width to fill is the text's, and measuring a row already dressed
+// with styles would give a column count that is not the box's. The author's name is inside because that
+// is what pushes the first row's body, which is why it depends on `author` and not only on `inner`.
 func commentWidths(inner int, author string) (first, cont int) {
 	first = max(8, inner-utf8.RuneCountInString(commentIndent+author+commentSep))
 	cont = max(8, inner-utf8.RuneCountInString(contIndent))
 	return first, cont
 }
 
-// commentRow compone una fila de comentario. La primera lleva el autor delante y
-// las siguientes llevan el sangrado de continuación, para que el cuerpo se lea como
-// un bloque y no como trozos sueltos.
+// Note that the block below says the opposite: the continuation does NOT line up with the first row's
+// text. The continuation indent is a constant (4 columns) and the first row's text starts at 2 + name + 2,
+// so with a short author the body is staggered to the left. What makes it read as a block is that all
+// the following rows share an indent, not that they line up with the first. Actually aligning them to the
+// author would give a long name a one-column body, and the name is not what says anything.
 //
-// OJO, porque el bloque del comentario de abajo dice otra cosa: la continuación NO
-// se alinea con el texto de la primera fila. El sangrado de continuación es un
-// constante (4 columnas) y el texto de la primera empieza en 2 + nombre + 2, así
-// que con un autor corto el cuerpo queda escalonado hacia la izquierda. Lo que hace
-// que se lea como bloque es que TODAS las filas siguientes comparten sangrado, no
-// que encajen con la primera. Alinearlas de verdad con el autor daría a un nombre
-// largo un cuerpo de una columna, y el nombre no es lo que dice algo.
-//
-// cut marca que quedaba más texto detrás. No basta con recortar: si el último
-// trozo cabía justo, se quedaría sin "…" y una fila que parece acabada dice que
-// el comentario se acababa ahí. El hueco del "…" se descuenta del ancho para que
-// la fila no se pase de la caja.
+// `cut` means there was more text behind. Clipping is not enough: if the last piece fit exactly it would
+// carry no "…", and a row that looks finished says the comment ended there.
 func commentRow(idx int, author, sep, piece string, w int, cut bool) string {
 	indent, prefix := contIndent, ""
 	if idx == 0 {
@@ -515,16 +382,13 @@ func commentRow(idx int, author, sep, piece string, w int, cut bool) string {
 		}
 		return indent + prefix + clipRunes(runes, room)
 	case n > w:
-		// Una palabra suelta más ancha que la caja: no hay por dónde partirla, así
-		// que se recorta.
+		// A single word wider than the box: there is nowhere to break it, so it is clipped.
 		return indent + prefix + clipRunes(runes, w)
 	default:
 		return indent + prefix + piece
 	}
 }
 
-// clipRunes corta un texto a n runes marcando con "…" que se perdió más: sin la
-// marca, una fila que para en media frase se lee como el final del comentario.
 func clipRunes(runes []rune, n int) string {
 	switch {
 	case n >= len(runes):
@@ -538,20 +402,16 @@ func clipRunes(runes []rune, n int) string {
 	}
 }
 
-// maxCommentAuthor acota el ancho del autor en la primera fila. Un nombre de
-// usuario largo no puede comerse el cuerpo del comentario, que es lo único que
-// dice algo.
 const maxCommentAuthor = 24
 
-// Sangrado de los comentarios. Los separan de la ficha sin necesitar una línea en
-// blanco, que en un panel de 18 filas es cara; y las filas siguientes llevan un
-// sangrado FIJO, el mismo entre ellas, para que el cuerpo se lea como un bloque.
-// No se alinean con el texto de la primera fila: esa lleva el autor delante y su
-// ancho depende de lo largo que sea el nombre, así que alinearse con ella haría que
-// un nombre largo se comiera el cuerpo, y el nombre no es lo que dice nada.
+// Separates them from the card without needing a blank line, which in an 18-row panel is expensive,
+// and the following rows share a FIXED indent so the body reads as a block.
+//
+// They are NOT aligned with the first row's text: that one carries the author and its width depends on
+// how long the name is, so aligning to it would let a long name eat the body, and the name is not what
+// says anything.
 const (
 	commentIndent = "  "
 	contIndent    = "    "
-	// commentSep separa el autor de su texto.
-	commentSep = ": "
+	commentSep    = ": "
 )

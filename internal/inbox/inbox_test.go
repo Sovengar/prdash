@@ -21,8 +21,6 @@ func mkItem(forge, host, project string, number int, decision string) model.Item
 	return it
 }
 
-// TestBuildShowsThreeSectionsWithBothForges cubre el escenario "el inbox
-// muestra las tres secciones con datos de ambos forges".
 func TestBuildShowsThreeSectionsWithBothForges(t *testing.T) {
 	gh := ForgeResult{
 		Forge:    "github",
@@ -67,8 +65,6 @@ func TestBuildShowsThreeSectionsWithBothForges(t *testing.T) {
 	}
 }
 
-// TestAuthoredOnlyOpenByMe comprueba que "creados por mí" solo recibe los ítems
-// de authored, nunca los de review o menciones.
 func TestAuthoredOnlyOpenByMe(t *testing.T) {
 	gh := ForgeResult{
 		Forge:    "github",
@@ -114,8 +110,6 @@ func TestReviewIncludesRequestedAndAssigned(t *testing.T) {
 	}
 }
 
-// TestDedupeKeepsHighestAuthority cubre el escenario "el mismo ítem no se
-// duplica entre secciones o queries".
 func TestDedupeKeepsHighestAuthority(t *testing.T) {
 	shared := mkItem("github", "github.com", "acme/widget", 1, "")
 	box := Build([]ForgeResult{{
@@ -141,7 +135,6 @@ func TestDedupeKeepsHighestAuthority(t *testing.T) {
 	}
 }
 
-// TestDedupeWithinSection comprueba que la misma query repetida no duplica.
 func TestDedupeWithinSection(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", 1, "")
 	box := Build([]ForgeResult{{
@@ -154,19 +147,8 @@ func TestDedupeWithinSection(t *testing.T) {
 	}
 }
 
-// TestSortItemsRompeLosEmpatesEnCascada: el orden de la lista es a tres niveles
-// y el desempate importa porque la lista es lo que el usuario recorre. Sin
-// probarlos por separado, quitar cualquiera de los tres deja la lista igual en
-// los tests que hay, que es exactamente cómo un empate mal resuelto llega a
-// producción sin que nada se entere.
-//
-//  1. atención (score) — lo que requiere atención va primero.
-//  2. fecha de actualización — a igual atención, lo más reciente.
-//  3. número — a igual de todo, el más bajo; es lo que hace determinista la
-//     lista cuando dos PR se movieron en el mismo segundo, que pasa cada vez que
-//     seImportan en lote.
+// Three levels of tie-break, and the tie-break matters because the list is what the user reads.
 func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
-	// Dos ítems con la misma atención y distinta fecha: manda la fecha.
 	reciente := mkItem("github", "github.com", "acme/widget", 9, "APPROVED")
 	antiguo := mkItem("github", "github.com", "acme/widget", 1, "APPROVED")
 	reciente.UpdatedAt = time.Unix(2000, 0)
@@ -178,8 +160,8 @@ func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
 		t.Errorf("a igual atención manda la fecha más reciente, primero = #%d", items[0].Number)
 	}
 
-	// Misma atención y misma fecha: manda el número más bajo, para que el orden
-	// no dependa de cómo llegó la página.
+	// Same attention and same date: the lowest number wins, so the order does not depend on input
+	// order.
 	menor := mkItem("github", "github.com", "acme/widget", 3, "APPROVED")
 	mayor := mkItem("github", "github.com", "acme/widget", 7, "APPROVED")
 	menor.UpdatedAt = time.Unix(1000, 0)
@@ -191,23 +173,16 @@ func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
 		t.Errorf("a igual de todo manda el número más bajo, primero = #%d", items[0].Number)
 	}
 
-	// El mismo empate con la entrada YA en el orden correcto. Es el caso que
-	// separa la comparación de una que siempre dice "sí": con dos ítems empatados
-	// un `>=` en vez de `>` devuelve verdadero siempre, y un ordenamiento estable
-	// con eso invierte la entrada en vez de mantenerla. Con la entrada en orden,
-	// el original no la toca y el mutante la da vuelta.
+	// The same tie with the input ALREADY in the right order: the case that separates a real
+	//comparison from one that always says "yes".
 	items = []model.Item{reciente, antiguo}
 	sortItems(items)
 	if items[0].Number != 9 || items[1].Number != 1 {
 		t.Errorf("con la entrada ya en orden, un empate no debe reordenarla: %d, %d", items[0].Number, items[1].Number)
 	}
 
-	// Dos ítems con el MISMO número (repos distintos, así que los dos sobreviven
-	// al dedupe), misma atención y misma fecha. Con dos números distintos el
-	// desempate por número da el mismo resultado con `<` y con `<=`, así que el
-	// único caso que distingue la comparación estricta es la igualdad: un `<=`
-	// haría que cualquier orden se considerara "menor" y el estável acabaría
-	// invirtiendo la entrada.
+	// Two items with the SAME number (different repos, so both survive dedupe) and the same
+	//attention and date; with different numbers the number decides.
 	igualA := mkItem("github", "github.com", "acme/widget", 5, "APPROVED")
 	igualB := mkItem("gitlab", "gitlab.example.com", "grp/proj", 5, "APPROVED")
 	igualA.UpdatedAt = time.Unix(1000, 0)
@@ -219,7 +194,7 @@ func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
 			items[0].Ref.Project, items[1].Ref.Project)
 	}
 
-	// Y la cascada entera: changes requested gana a aprobado aunque sea más viejo.
+	// The whole cascade: changes requested beats approved even when it is older.
 	changes := mkItem("github", "github.com", "acme/widget", 1, "CHANGES_REQUESTED")
 	changes.UpdatedAt = time.Unix(500, 0)
 	approved := mkItem("github", "github.com", "acme/widget", 99, "APPROVED")
@@ -231,24 +206,18 @@ func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
 	}
 }
 
-// TestRankOrdenaLasSecciones por autoridad: la sección de mayor rank se queda
-// con el ítem cuando aparece en varias. El orden es el de sectionOrder, así que
-// rank() tiene que devolver el índice real y no un valor arbitrario.
 func TestRankOrdenaLasSecciones(t *testing.T) {
 	for i, kind := range sectionOrder {
 		if got := rank(kind); got != i {
 			t.Errorf("rank(%v) = %d, want %d (su posición en sectionOrder)", kind, got, i)
 		}
 	}
-	// Una sección que no está en la lista va al final, no a un sitio arbitrario:
-	// es lo que hace que un ítem de una sección desconocida no robe la
-	// autoridad de una de verdad.
+	// A section not in the list goes last, not to an arbitrary place.
 	if got := rank(model.Section("inventada")); got != len(sectionOrder) {
 		t.Errorf("rank(inventada) = %d, want %d (al final)", got, len(sectionOrder))
 	}
 }
 
-// TestOrderByAttention comprueba que lo que requiere atención va primero.
 func TestOrderByAttention(t *testing.T) {
 	approved := mkItem("github", "github.com", "acme/widget", 1, "APPROVED")
 	changes := mkItem("github", "github.com", "acme/widget", 2, "CHANGES_REQUESTED")
@@ -281,7 +250,6 @@ func TestBuildAggregatesWarnings(t *testing.T) {
 	if !box.Empty() {
 		t.Fatal("el inbox debería estar vacío")
 	}
-	// Aun sin ítems, siempre hay tres secciones para pintar.
 	if len(box.Sections) != 3 {
 		t.Fatalf("secciones = %d, want 3", len(box.Sections))
 	}

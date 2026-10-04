@@ -12,40 +12,10 @@ import (
 	"prdash/internal/testutil"
 )
 
-// El `rename` que publica el clon.
-//
-// Y el caso que lo hace fallar no es una carrera, que es lo que parece al leerlo. `EnsureBare`
-// lo llama `Executor.resolveRepo`, que solo llama `TUI.update`, o sea que las monturas salen
-// del único goroutine del `update` de Bubbletea y están serializadas por construcción. La
-// carrera entre dos clones del mismo repo no se puede dar.
-//
-// Y entonces ¿qué es lo que falla? `rename` falla cuando `dest` ya existe y es un directorio
-// con contenido, y `dest` acaba de comprobar el código línea a línea: `isRepo` dijo que no es un
-// repo y el `os.Stat` que sigue lo limpió. Para que vuelva a estar ocupado alguien tiene que
-// haber publicado entre medias, y eso ya no es una carrera sino otra cosa —un `mount` usb, un
-// rsync, un script de arranque— que conviene avisar en vez de asumir.
-//
-// Y lo que se comprueba son las TRES propiedades que importan de ese `if`, y las tres son de
-// limpieza:
-//
-//   - El temporal PROPIO se borra. Un `.tmp-` pesa lo que pesa el repo.
-//   - El clon ajeno NO se toca. `rename` no pisa un directorio con contenido, y el código no
-//     hace un `RemoveAll(dest)` en este camino a propósito: si el ocupante es de otro
-//     programa, borrarlo sería peor que avisar.
-//   - Y el siguiente intento funciona. El clon ajeno es un repo válido, así que `isRepo` lo
-//     acepta y `EnsureBare` devuelve sin volver a clonar. El fallo deja el árbol en un estado
-//     del que se puede reintentar sin limpiar a mano nada.
+// The case that fails the rename is NOT a race, which is what it looks like: the mounts come from
+//Bubbletea's single update goroutine and are serialised by construction.
 
-// gitQuePublicaElClonAntesDeDevolver es un `git` que clona de verdad y luego deja en `dest` un
-// segundo clon, que es lo que hace el ocupante inesperado del que habla el test.
-//
-// Y el guion saca `dest` del propio temporal que le pasaron, quitándole el sufijo `.tmp-<nano>`,
-// en vez de recibirlo por entorno: es igual de fiable y no depende de que el entorno del test
-// llegue al subproceso, que `gitcmd.Env()` filtra por si acaso.
-//
-// Y hace el segundo clon DESPUÉS del primero, no antes. Si lo hiciera antes, el clon propio
-// fallaría al encontrar el destino ocupado y estaríamos probando el error de clonar en el
-// sitio del error de publicar, que es el despiste más fácil de cometer al escribir este guion.
+// The script derives dest from the temporary it was handed, rather than through the environment.
 func gitQuePublicaElClonAntesDeDevolver(t *testing.T, fuente string) *gitcmd.Runner {
 	t.Helper()
 	dir := t.TempDir()
@@ -66,28 +36,12 @@ func gitQuePublicaElClonAntesDeDevolver(t *testing.T, fuente string) *gitcmd.Run
 	return &gitcmd.Runner{Bin: guion, Timeout: gitcmd.DefaultTimeout}
 }
 
-// TestElRenameQueFallaNoDejaTemporalNiBorraElClonAjenoYPermiteReintentar: `EnsureBare`.
-//
-// Y el caso es el error de publicación del clon, que era la última rama sin poder provocar del
-// resolutor. Se provoca con un `git` que deja un segundo clon en el destino justo antes de que
-// el código publique el suyo.
-//
-// Y el aserto que manda es el segundo: el clon ajeno sigue ahí. Es lo que distingue esta
-// escritura de "no me deja nada" y de "me borra lo del otro", que es la forma en que un
-// `RemoveAll(dest)` de limpieza a lo bruto acabaría con el trabajo de otro programa. Y
-// el código NO lo hace en este camino, que es lo correcto: si lo que ocupa `dest` es de otro,
-// lo propio es avisar y dejar que el otro decida.
-//
-// Y el tercero es el que hace que el error sea recuperable sin intervención: el clon ajeno es un
-// repo válido, así que el siguiente `EnsureBare` lo ve con `isRepo` y devuelve sin clonar otra
-// vez. Un error que obliga a borrar el árbol de clones a mano para reintentar es un error
-// distinto del que se avisa.
+// The reason it warns is that `dest` being occupied means something unexpected, which deserves a
+// warning rather than an assumption.
 func TestElRenameQueFallaNoDejaTemporalNiBorraElClonAjenoYPermiteReintentar(t *testing.T) {
 	base := t.TempDir()
 
-	// El remoto: un repo normal con un commit, porque un bare no tiene working tree y
-	// `CommitFile` necesita uno. `EnsureBare` lo clona como bare, que es lo que hace el
-	// ejecutor de verdad.
+	// A normal remote with a commit, because a bare has no working tree.
 	origen := filepath.Join(base, "fuente")
 	testutil.InitRepo(t, origen)
 	testutil.CommitFile(t, origen, "f.txt", "base", "base")
@@ -112,10 +66,8 @@ func TestElRenameQueFallaNoDejaTemporalNiBorraElClonAjenoYPermiteReintentar(t *t
 			"avisar, y quien lo ocupa puede haber perdido su trabajo", destino)
 	}
 
-	// El aviso dice qué pasó y dónde, que es lo que separa "no se pudo publicar" de "el clon
-	// está mal". Y el motivo del sistema va dentro: `ENOTEMPTY` y `EXDEV` son arreglos
-	// distintos —el primero es un ocupante, el segundo es que el temporal cayó en otro
-	// dispositivo— y sin él el diagnóstico es el mismo para los dos.
+	// ENOTEMPTY and EXDEV are different repairs (an occupant and a different device) and without
+	//the system's reason the diagnosis is the same for both.
 	if !strings.Contains(err.Error(), "publish the bare clone") {
 		t.Errorf("el aviso %q no dice que falló la publicación", err)
 	}
@@ -126,14 +78,11 @@ func TestElRenameQueFallaNoDejaTemporalNiBorraElClonAjenoYPermiteReintentar(t *t
 		t.Errorf("el aviso %q no trae el motivo del sistema, que es lo que dice si el destino "+
 			"está ocupado o si el temporal cayó en otro dispositivo", err)
 	}
-	// Y no devuelve una ruta con el error: el ejecutor creería que tiene repo local y montaría
-	// un worktree sobre un temporal que ya no existe.
+	// And it does NOT return a path with the error: the executor would believe it has a local repo.
 	if destino != "" {
 		t.Errorf("EnsureBare devolvió %q con el error", destino)
 	}
 
-	// El temporal propio se fue, y este es el aserto de tamaño: cada `.tmp-` es un clon del
-	// repo entero, y uno que sobrevive al intento se suma al siguiente.
 	temporales, errGlob := filepath.Glob(filepath.Join(cloneDir, "**", "*.tmp-*"))
 	if errGlob != nil {
 		t.Fatal(errGlob)
@@ -142,8 +91,7 @@ func TestElRenameQueFallaNoDejaTemporalNiBorraElClonAjenoYPermiteReintentar(t *t
 		t.Errorf("quedaron %d temporales tras una publicación fallida: %v", len(temporales), temporales)
 	}
 
-	// Y el clon ajeno sigue entero y utilizable. Que sea utilizable es lo que hace que el
-	// siguiente intento sea gratis.
+	// The foreign clone stays whole and usable, which is what makes the warning the right call.
 	if !isRepo(dest) {
 		t.Errorf("EnsureBare se llevó por delante el clon que ya estaba en %s: un ocupante no "+
 			"es necesariamente basura", dest)

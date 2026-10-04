@@ -1,9 +1,3 @@
-// Package parse traduce la salida JSON de `gh`/`glab` (GraphQL, REST y la API
-// de Todos) a los tipos normalizados de model.
-//
-// Es una capa pura: no ejecuta subprocesos ni toca red o disco. Cada forma de
-// salida tiene su propia función y ninguna lanza panic: ante una entrada
-// inesperada devuelven los ítems que se pudieron leer más un error tipado.
 package parse
 
 import (
@@ -16,29 +10,22 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// ForgeGitHub y ForgeGitLab son los nombres de forge que el parseo estampa en
-// los ítems cuando la salida no trae el dato (el adapter los ajusta al host
-// real configurado).
 const (
 	ForgeGitHub = "github"
 	ForgeGitLab = "gitlab"
 )
 
-// Error describe un fallo de parseo de la salida de una herramienta.
 type Error struct {
 	Tool string // "gh-graphql" | "gh-search" | "gh-checks" | "gl-graphql"…
 	Msg  string
 	Err  error
 }
 
-// PageInfo describe la paginación de una respuesta: Next es el cursor (GraphQL)
-// o el número de página siguiente (REST) y More indica si quedan páginas.
 type PageInfo struct {
 	Next string
 	More bool
 }
 
-// Error implementa el contrato de error.
 func (e *Error) Error() string {
 	if e.Err != nil {
 		return fmt.Sprintf("parse %s: %s: %v", e.Tool, e.Msg, e.Err)
@@ -46,16 +33,12 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("parse %s: %s", e.Tool, e.Msg)
 }
 
-// Unwrap permite inspeccionar la causa subyacente.
 func (e *Error) Unwrap() error { return e.Err }
 
-// flexInt acepta un entero serializado como número JSON o como string: GraphQL
-// expone los `ID!` (p. ej. `iid`) como string y REST los devuelve como número.
-// Un valor nulo, ausente o no numérico se lee como 0; quien lo consuma decide
-// si descarta el ítem (no se inventa un número).
+// GraphQL exposes `ID!` values as strings and REST as numbers. A null, missing or non-numeric
+// value reads as 0 and the consumer decides whether to drop the item: a number is never invented.
 type flexInt int
 
-// UnmarshalJSON implementa la tolerancia de tipo sin fallar el parseo entero.
 func (f *flexInt) UnmarshalJSON(b []byte) error {
 	s := strings.TrimSpace(string(b))
 	if s == "" || s == "null" {
@@ -76,14 +59,8 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ---- GitHub: búsqueda GraphQL ----
-
-// ghPRNodeRepository es el repositorio que anida cada nodo de pull request. Las
-// tres estrategias de merge llegan en la MISMA consulta del ítem, así que
-// filtrar los modos por lo que el repositorio admite no cuesta una llamada
-// extra. Los punteros a bool distinguen "el repositorio lo tiene desactivado" de
-// "la respuesta no trajo el campo" (por ejemplo el respaldo REST), que es la
-// diferencia entre ofrecer tres modos y no ofrecer ninguno.
+// The bool pointers separate "the repo has it off" from "the response did not carry the field", which
+// is the difference between offering three modes and offering none.
 type ghPRNodeRepository struct {
 	NameWithOwner string `json:"nameWithOwner"`
 	Name          string `json:"name"`
@@ -95,9 +72,6 @@ type ghPRNodeRepository struct {
 	SquashMergeAllowed *bool `json:"squashMergeAllowed"`
 }
 
-// ghPRNode es el nodo de pull request que devuelven las queries GraphQL de
-// búsqueda y de pullRequest individual. Comparten forma a propósito, de modo
-// que una sola función de parseo sirve para ambos.
 type ghPRNode struct {
 	Number         int    `json:"number"`
 	Title          string `json:"title"`
@@ -108,25 +82,15 @@ type ghPRNode struct {
 	UpdatedAt      string `json:"updatedAt"`
 	HeadRefName    string `json:"headRefName"`
 	BaseRefName    string `json:"baseRefName"`
-	// IsCrossRepository dice que la rama origen vive en OTRO repositorio (un
-	// fork). No es un dato decorativo: quien mergea con `--delete-branch` sobre
-	// un PR de fork no borra nada, porque la rama no es del repo destino, y gh
-	// aun así lo da por hecho. Sin este campo el aviso de "rama borrada" sería
-	// mentira justo en los PRs que más se vigilan.
-	IsCrossRepository bool `json:"isCrossRepository"`
-	// Mergeable es el estado de mergeabilidad que GitHub calcula en segundo
-	// plano: MERGEABLE, CONFLICTING, o UNKNOWN mientras todavía no lo sabe. Es un
-	// campo del pull request, así que sale en la consulta que ya se hace y no
-	// cuesta llamada.
-	Mergeable string `json:"mergeable"`
-	// HeadRefOid es el commit de la rama origen. Es lo que permite pinear el
-	// merge a un commit concreto: sin él, la rama puede haberse movido desde la
-	// última lectura y el merge integraría commits que nadie revisó.
+	// gh assumes the branch is in the target repo, so `--delete-branch` on a fork PR deletes nothing
+	// while gh reports success. Without this field the "branch deleted" warning lies exactly on the
+	// items most closely watched.
+	IsCrossRepository bool   `json:"isCrossRepository"`
+	Mergeable         string `json:"mergeable"`
+	// This is what lets the merge be pinned: without it the branch may have moved since the last read.
 	HeadRefOid string `json:"headRefOid"`
-	// Additions va como puntero a propósito: `additions` es `Int!` en el schema,
-	// así que si el campo viene es que la query lo pidió. Ausente = la respuesta
-	// no lo trajo (respaldo REST u otra forma de salida) y el diffstat queda
-	// como desconocido en vez de como un cambio de cero líneas.
+	// A pointer on purpose: `additions` is `Int!`, so if the field arrived the query asked for it. Absent
+	// means the answer had none (REST fallback), leaving the diffstat unknown rather than zero.
 	Additions    *int `json:"additions"`
 	Deletions    int  `json:"deletions"`
 	ChangedFiles int  `json:"changedFiles"`
@@ -172,10 +136,6 @@ type ghGraphQLResp struct {
 	} `json:"errors"`
 }
 
-// ParseGHGraphQLSearch interpreta la respuesta de una query GraphQL de PRs
-// (búsqueda con `search.nodes` o un `repository.pullRequest` individual).
-// Devuelve los ítems leídos, la paginación de la búsqueda y un error tipado si
-// la entrada no es válida o la API reporta errores.
 func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 	var resp ghGraphQLResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -238,12 +198,8 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	return it
 }
 
-// mergeRulesFromGHRepo lee las estrategias que el repositorio admite.
-//
-// Known exige los TRES flags: con uno solo, la respuesta vino de una forma que
-// no los trae todos y asumir que los ausentes valen false dejaría fuera el único
-// modo que el repositorio quizá sí permite. Ante la duda se devuelven reglas
-// desconocidas, que no restringen.
+// Known requires ALL THREE flags: with one missing, the answer came from a shape that does not carry
+// them all, and assuming the absent ones are false would hide the one mode the repo may well allow.
 func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 	if r.MergeCommitAllowed == nil || r.RebaseMergeAllowed == nil || r.SquashMergeAllowed == nil {
 		return model.MergeRules{}
@@ -256,12 +212,8 @@ func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 	}
 }
 
-// mergeableFromGH lee el estado de mergeabilidad de GitHub.
-//
-// UNKNOWN no es un "sí": es "todavía no lo sé", y GitHub lo devuelve siempre la
-// primera vez que se pregunta, mientras un job en segundo plano calcula la
-// respuesta. Traducirlo a integrable haría que el gate anunciara un conflicto que
-// no existe, así que Known=false es lo que sale, y un unknown no restringe.
+// UNKNOWN is not a yes, it is "not computed yet", and GitHub returns it the first time every time.
+// Translating it to mergeable would announce a conflict that does not exist.
 func mergeableFromGH(v string) model.Mergeability {
 	switch strings.ToUpper(strings.TrimSpace(v)) {
 	case "CONFLICTING":
@@ -273,8 +225,6 @@ func mergeableFromGH(v string) model.Mergeability {
 	}
 }
 
-// diffFromGHNode lee el diffstat de un PR. GitHub lo da ya agregado en tres
-// escalares, así que no hay nada que sumar.
 func diffFromGHNode(n ghPRNode) model.DiffStat {
 	if n.Additions == nil {
 		return model.DiffStat{}
@@ -287,8 +237,6 @@ func diffFromGHNode(n ghPRNode) model.DiffStat {
 	}
 }
 
-// checksFromRollup agrega el statusCheckRollup del último commit en un
-// resumen de checks.
 func checksFromRollup(n ghPRNode) model.Checks {
 	if len(n.Commits.Nodes) == 0 {
 		return model.Checks{}
@@ -353,8 +301,6 @@ func checksStateFromRollup(state string) model.CheckState {
 	}
 }
 
-// ---- GitHub: REST search/issues (fallback de authored) ----
-
 type ghSearchIssuesResp struct {
 	TotalCount int `json:"total_count"`
 	Items      []struct {
@@ -379,10 +325,6 @@ type ghSearchIssuesResp struct {
 	} `json:"items"`
 }
 
-// ParseGHAuthored interpreta la salida de la búsqueda REST de issues/PRs
-// (`GET search/issues`), usada como respaldo cuando GraphQL no está
-// disponible. No trae reviewDecision, checks ni diffstat: eso queda como
-// desconocido.
 func ParseGHAuthored(raw string) ([]model.Item, error) {
 	var resp ghSearchIssuesResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -414,17 +356,12 @@ func ParseGHAuthored(raw string) ([]model.Item, error) {
 	return items, nil
 }
 
-// ---- GitHub: `gh pr checks --json` ----
-
 type ghCheck struct {
 	Name   string `json:"name"`
 	State  string `json:"state"`
 	Bucket string `json:"bucket"`
 }
 
-// ParseGHChecks interpreta la salida de `gh pr checks --json name,state,bucket`
-// y resume el estado de los checks. El bucket que normaliza `gh` manda; si
-// falta, se cae al estado crudo.
 func ParseGHChecks(raw string) (model.Checks, error) {
 	var checks []ghCheck
 	if err := json.Unmarshal([]byte(raw), &checks); err != nil {
@@ -440,7 +377,6 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 		case "pending":
 			c.Pending++
 		case "pass", "skipping":
-			// cuenta como correcto
 		default:
 			switch {
 			case isGHFailure("", ch.State):
@@ -463,41 +399,27 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 	return c, nil
 }
 
-// ---- GitLab: GraphQL (currentUser / project) ----
-
 type glMR struct {
 	IID    flexInt `json:"iid"`
 	Title  string  `json:"title"`
 	WebURL string  `json:"webUrl"`
 	State  string  `json:"state"`
-	// Draft es la bandera de borrador del MR. Va separada de State porque State
-	// es el enum del forge ("opened") y no lo cubre: sin ella un MR en borrador
-	// era indistinguible de uno abierto.
+	// Separate from State, which is the forge's enum ("opened") and does not cover it: without this a draft
+	// MR was indistinguishable from an open one.
 	Draft bool `json:"draft"`
-	// DetailedMergeStatus es el veredicto de mergeabilidad de GitLab. Se pide el
-	// detallado y no el `mergeStatus` porque el simple no distingue "choca" de
-	// "falta el pipeline": con el simple, un CI en rojo se anunciaría como
-	// conflicto de ramas, que sería una mentira. El coste es que GitLab lo calcula
-	// por MR en cada petición (su API REST de lista también lo devuelve), así que
-	// es un cálculo por ítem y no una llamada extra.
+	// The detailed one, not `mergeStatus`, because the simple one cannot tell "collides" from "pipeline
+	// missing": with the simple one a red CI is announced as a branch conflict, which is a lie. GitLab
+	// computes it per MR per request, so it is a calculation and not an extra call.
 	DetailedMergeStatus string `json:"detailedMergeStatus"`
 	SourceBranch        string `json:"sourceBranch"`
 	TargetBranch        string `json:"targetBranch"`
 	Approved            bool   `json:"approved"`
 	UpdatedAt           string `json:"updatedAt"`
-	// DiffHeadSha es el commit de la rama origen: lo que permite pinear el merge
-	// con `--sha`. Es puntero porque GitLab lo declara nullable y lo devuelve a
-	// null cuando el diff no está calculado; ausente y null significan lo mismo
-	// aquí, que es "no se puede pinear".
+	// A pointer because GitLab declares it nullable and returns null while the diff is uncomputed;
+	// absent and null both mean "cannot be pinned".
 	DiffHeadSha *string `json:"diffHeadSha"`
-	// Squash dice si el MR se aplana al integrarlo. Es la señal de que un modo
-	// rebase acabaría en un squash igualmente, y la TUI la enseña.
-	Squash *bool `json:"squash"`
-	// DiffStats es una entrada por fichero cambiado, no un agregado, y va como
-	// puntero a slice para poder distinguir las dos cosas que un `[]` vacío
-	// significaría: ausente (la query no lo pidió, p. ej. la API de Todos) y
-	// presente-pero-vacío (el MR no toca ningún fichero).
-	DiffStats *[]struct {
+	Squash      *bool   `json:"squash"`
+	DiffStats   *[]struct {
 		Additions flexInt `json:"additions"`
 		Deletions flexInt `json:"deletions"`
 	} `json:"diffStats"`
@@ -537,11 +459,6 @@ type glConn struct {
 	Nodes []glMR `json:"nodes"`
 }
 
-// ParseGLGraphQL interpreta la respuesta GraphQL del GitLab: las listas del
-// `currentUser` (authored, reviewRequested, assigned) y, si está, un
-// `project.mergeRequest` individual. Cada ítem sale con su sección y su
-// ReviewKind ya resueltos; la paginación corresponde a la primera conexión
-// presente (cada consulta pide una sola).
 func ParseGLGraphQL(raw string) ([]model.Item, PageInfo, error) {
 	var resp glGraphQLResp
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
@@ -619,52 +536,33 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	if mr.DiffHeadSha != nil {
 		it.HeadSHA = *mr.DiffHeadSha
 	}
-	// GitLab NO expone las estrategias de integración en la API GraphQL
-	// (`Project.mergeMethod` no existe en el schema de la instancia), y leerlas
-	// por REST costaría una llamada por repositorio. Las reglas quedan sin
-	// conocer, que no restringe: se ofrecen los tres modos y el forge rechaza lo
-	// que no admita.
+	// GitLab does not expose the merge strategies in GraphQL and reading them over REST would cost a
+	// call per repository, so the rules stay unknown, which restricts nothing.
 	it.Merge = model.MergeRules{}
 	it.UpdatedAt = parseTime(mr.UpdatedAt)
 	return it
 }
 
-// mergeableFromGL lee el veredicto de mergeabilidad de GitLab.
+// The enum was renamed across versions (`broken_status` in old ones, `CONFLICT` in new) and REST returns
+// it lowercased while GraphQL returns the enum name, so both are accepted: a conflict that does not
+// exist is a false warning, and a false warning that repeats trains the user to ignore the whole box.
 //
-// El enum ha cambiado de nombre con las versiones: `broken_status` en las
-// antiguas y `CONFLICT` en las nuevas (GitLab renombró el valor al hablar de
-// "conflict" y no de "broken"), y la API REST devuelve el valor en minúsculas
-// mientras GraphQL devuelve el nombre del enum. Se comparan en minúsculas y se
-// aceptan las dos formas, porque el coste de equivocarse es el habitual: un
-// conflicto que no existe es un aviso falso, y un aviso falso que se repite
-// entrena a ignorar la caja entera.
-//
-// `need_rebase` NO es un conflicto: la rama está detrás pero se puede integrar
-// sin tocar nada, así que se trata como integrable. Los estados que no son ni
-// conflicto ni integrable ("unchecked", "checking", y los bloqueos de
-// aprobación o pipeline) salen como conocidos y no conflitados, que es lo que
-// ya avisa el gate del CI por su cuenta.
+// `need_rebase` is NOT a conflict: the branch is behind but integrates without touching anything.
+// States that are neither conflict nor mergeable come out known and not-conflicting, because the CI gate
+// already reports those.
 func mergeableFromGL(v string) model.Mergeability {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "conflict", "broken_status":
 		return model.Mergeability{Known: true, Conflicted: true}
 	case "":
-		// El campo no vino: la respuesta es de una forma que no lo trae (la API
-		// de Todos, un respaldo). No se sabe nada, y no saber no restringe.
 		return model.Mergeability{}
 	default:
 		return model.Mergeability{Known: true}
 	}
 }
 
-// diffFromGLMR suma el diffstat de un MR. GitLab entrega `diffStats` como una
-// lista con una entrada por fichero cambiado, no como un agregado: hay que
-// sumarla entera. Cog solo la primera o la última entrada daría el total de un
-// fichero cualquiera en lugar del MR.
-//
-// El recuento de ficheros sale de la longitud de la lista, y por eso puede
-// quedarse corto: GitLab colapsa los diffs que superan su límite de tamaño y de
-// filas, así que en un MR enorme las cifras son un mínimo, no un exacto.
+// The file count comes from the length of the list and can therefore be short: GitLab collapses
+// diffs past its size and row limits, so on a huge MR the numbers are a minimum, not an exact figure.
 func diffFromGLMR(mr glMR) model.DiffStat {
 	if mr.DiffStats == nil {
 		return model.DiffStat{}
@@ -679,9 +577,6 @@ func diffFromGLMR(mr glMR) model.DiffStat {
 	return d
 }
 
-// glReviewDecision traduce la aprobación del MR a una decisión homóloga a la de
-// GitHub. La instancia CE no expone el recuento de aprobaciones, así que un MR
-// no aprobado se reporta como desconocido en vez de inventar "review required".
 func glReviewDecision(mr glMR) string {
 	if mr.Approved {
 		return "APPROVED"
@@ -689,17 +584,14 @@ func glReviewDecision(mr glMR) string {
 	return ""
 }
 
-// ---- GitLab: REST merge_requests (BasicMergeRequest) ----
-
 type glBasicMR struct {
 	IID    flexInt `json:"iid"`
 	Title  string  `json:"title"`
 	WebURL string  `json:"web_url"`
 	State  string  `json:"state"`
 	Draft  bool    `json:"draft"`
-	// DetailedMergeStatus llega en la respuesta de la lista REST de MRs, así que
-	// leerlo no cuesta nada. El campo `merge_status` (deprecated) se ignora a
-	// propósito: no distingue un conflicto de un pipeline en rojo.
+	// It arrives in the REST list response, so reading it costs nothing. The deprecated `merge_status` is
+	// ignored on purpose: it cannot tell a conflict from a red pipeline.
 	DetailedMergeStatus string `json:"detailed_merge_status"`
 	SourceBranch        string `json:"source_branch"`
 	TargetBranch        string `json:"target_branch"`
@@ -713,10 +605,6 @@ type glBasicMR struct {
 	} `json:"references"`
 }
 
-// ParseGLMRList interpreta una lista de merge requests del GitLab en su forma
-// REST (`glab mr list -F json` o `GET /merge_requests`). El endpoint REST de
-// merge requests no expone additions ni deletions (gitlab-org/gitlab#464260), así
-// que el diffstat queda como desconocido.
 func ParseGLMRList(raw string) ([]model.Item, error) {
 	var list []glBasicMR
 	if err := json.Unmarshal([]byte(raw), &list); err != nil {
@@ -748,8 +636,6 @@ func ParseGLMRList(raw string) ([]model.Item, error) {
 	return items, nil
 }
 
-// ---- GitLab: API de Todos ----
-
 type glTodo struct {
 	ID         flexInt `json:"id"`
 	ActionName string  `json:"action_name"`
@@ -772,10 +658,6 @@ type glTodo struct {
 	} `json:"target"`
 }
 
-// ParseGLTodos interpreta la API de Todos del GitLab y devuelve como ítems
-// solo las menciones sobre merge requests, que son las que alimentan la
-// sección de menciones. El segundo valor es el número de todos de la página
-// (antes de filtrar), que el adapter usa para saber si quedan páginas.
 func ParseGLTodos(raw string) ([]model.Item, int, error) {
 	var todos []glTodo
 	if err := json.Unmarshal([]byte(raw), &todos); err != nil {
@@ -815,8 +697,6 @@ func ParseGLTodos(raw string) ([]model.Item, int, error) {
 	return items, len(todos), nil
 }
 
-// ---- utilidades ----
-
 func parseTime(s string) time.Time {
 	if s == "" {
 		return time.Time{}
@@ -827,7 +707,6 @@ func parseTime(s string) time.Time {
 	return time.Time{}
 }
 
-// splitRepoURL extrae (owner, repo) de "https://api.github.com/repos/owner/repo".
 func splitRepoURL(u string) (string, string) {
 	const marker = "/repos/"
 	if i := strings.Index(u, marker); i >= 0 {
@@ -836,7 +715,6 @@ func splitRepoURL(u string) (string, string) {
 	return "", ""
 }
 
-// joinProject compone "owner/repo" omitiendo el separador si falta una parte.
 func joinProject(owner, name string) string {
 	switch {
 	case owner == "":
@@ -848,7 +726,6 @@ func joinProject(owner, name string) string {
 	}
 }
 
-// splitProject separa "grupo/sub/proy" en ("grupo/sub", "proy").
 func splitProject(path string) (string, string) {
 	path = strings.Trim(path, "/")
 	if i := strings.LastIndex(path, "/"); i >= 0 {
@@ -857,7 +734,6 @@ func splitProject(path string) (string, string) {
 	return "", path
 }
 
-// projectFromRef extrae "grupo/proy" de una referencia "grupo/proy!12".
 func projectFromRef(ref string) string {
 	if i := strings.LastIndex(ref, "!"); i >= 0 {
 		return ref[:i]

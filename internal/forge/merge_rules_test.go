@@ -7,9 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestAllowedModesReadsTheRepository: un repositorio que desactiva squash no debe
-// ver squash en el menú. Antes se ofrecían los tres siempre, así que la
-// herramienta prometía una estrategia que el forge iba a rechazar.
 func TestAllowedModesReadsTheRepository(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -29,10 +26,8 @@ func TestAllowedModesReadsTheRepository(t *testing.T) {
 	}
 }
 
-// TestAllowedModesDoesNotRestrictWhatItDoesNotKnow: GitLab no publica las
-// estrategias por GraphQL. Filtrar sin dato sería peor que no filtrar: dejaría
-// fuera el único modo que el repositorio quizá sí admite, y el usuario se
-// quedaría sin salida legítima. No saber no es lo mismo que no permitir.
+// GitLab does not publish the strategies over GraphQL; filtering with no data would be worse than
+// not filtering.
 func TestAllowedModesDoesNotRestrictWhatItDoesNotKnow(t *testing.T) {
 	got := AllowedModes(model.MergeRules{})
 	want := []MergeMode{Rebase, MergeCommit, Squash}
@@ -41,10 +36,7 @@ func TestAllowedModesDoesNotRestrictWhatItDoesNotKnow(t *testing.T) {
 	}
 }
 
-// TestAllowedModesPutsRebaseFirst: el orden de la lista es el orden en que se le
-// ofrecen al usuario, y rebase es la única estrategia que no reescribe la
-// historia publicada. Que salga primero no lo hace el default —no hay default—,
-// pero sí inclina el menú.
+// The list's order is the order they are offered in, and rebase comes first.
 func TestAllowedModesPutsRebaseFirst(t *testing.T) {
 	got := AllowedModes(model.MergeRulesAll())
 	if len(got) == 0 || got[0] != Rebase {
@@ -52,8 +44,6 @@ func TestAllowedModesPutsRebaseFirst(t *testing.T) {
 	}
 }
 
-// TestAllowsModeEsConsistentWithAllowedModes: la respuesta tiene que salir de la
-// misma fuente que la lista, o el menú y el gate cuentan historias distintas.
 func TestAllowsModeIsConsistentWithAllowedModes(t *testing.T) {
 	rules := model.MergeRules{Known: true, Rebase: true, MergeCommit: true}
 	if !AllowsMode(rules, Rebase) {

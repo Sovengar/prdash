@@ -70,8 +70,6 @@ func TestBuildAllToolsPresent(t *testing.T) {
 	}
 }
 
-// Los panes que no son el primero de su tab se abren con una división a la
-// derecha: el segundo se lee junto a lo que comenta.
 func TestBuildSplitsPanesToTheRight(t *testing.T) {
 	p := Build(sampleItem(), sampleWorktree(), sampleTools(), Env{})
 
@@ -88,8 +86,8 @@ func TestBuildSplitsPanesToTheRight(t *testing.T) {
 	}
 }
 
-// El editor no se omite aunque no se pueda probar su disponibilidad: su orden
-// puede ser una función del shell (`vi` -> `nvim .`) que no está en el PATH.
+// The editor is not omitted even when its availability cannot be checked: its ORDER may be
+// useful.
 func TestBuildKeepsEditorWithoutAvailability(t *testing.T) {
 	p := Build(sampleItem(), sampleWorktree(), sampleTools(), Env{Available: map[string]bool{}})
 
@@ -105,9 +103,7 @@ func TestBuildKeepsEditorWithoutAvailability(t *testing.T) {
 	}
 }
 
-// Un tab que se queda sin panes no se monta: abrir una pestaña en blanco es
-// ruido que el usuario tendría que cerrar a mano. El tab de Edit es el único que
-// puede vaciarse, porque el de Review siempre conserva su editor.
+// A tab left with no panes is not mounted: opening a blank tab is noise.
 func TestBuildDropsEmptyTab(t *testing.T) {
 	env := Env{Available: map[string]bool{"tuicr": true}}
 	p := Build(sampleItem(), sampleWorktree(), sampleTools(), env)
@@ -148,10 +144,7 @@ func TestBuildEmptyArgvOmitsPane(t *testing.T) {
 	}
 }
 
-// El pane de Hunk muestra el diff del WORKING TREE, no el del PR/MR. El pane
-// vive al lado del editor y del agente: lo que se revisa es lo que se está
-// tocando, y el diff del PR es un objetivo fijo que no se mueve mientras
-// editas. El diff del PR sigue disponible por `[commands].hunk`.
+// Hunk's pane shows the WORKING TREE diff, not the PR's: it sits next to the editor.
 func TestBuildHunkDiffsTheWorkingTree(t *testing.T) {
 	it := sampleItem()
 	it.TargetBranch = "main"
@@ -167,8 +160,8 @@ func TestBuildHunkDiffsTheWorkingTree(t *testing.T) {
 	}
 }
 
-// La rama destino sigue llegando al pane por el entorno, aunque ya no sea un
-// argumento del diff: el agente la necesita para push/PR.
+// The target branch still reaches the pane through the environment, even though it is no longer
+// an argument.
 func TestBuildInjectsBaseEnv(t *testing.T) {
 	it := sampleItem()
 	it.TargetBranch = "develop"
@@ -207,8 +200,7 @@ func paneOfKind(p Plan, kind Kind) (Pane, bool) {
 	return Pane{}, false
 }
 
-// Un override de `[commands]` es el argv completo del pane: verbatim, sin
-// añadirle los argumentos por defecto del ítem.
+// A `[commands]` override is the pane's WHOLE argv: verbatim, with nothing appended.
 func TestBuildOverrideArgvVerbatim(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -302,19 +294,7 @@ func hasWarning(warns []string, needle string) bool {
 	return false
 }
 
-// TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro: el `default` de `Tools.Binary`.
-//
-// Y la consecuencia de equivocarse en este `default` es silenciosa: un Kind desconocido que
-// saliera con el binario del editor lanzaría el `vi` donde debía ir el revisor, y el usuario
-// vería un visor en vez de una herramienta de review sin ningún aviso.
-//
-// Y los dos Kind que lo provocan en la práctica son un Kind VACÍO —un pane sin tipo, que es lo
-// que produce un constructor mal escrito— y un Kind al que se le añade un valor sin tocar este
-// switch, que es el caso que hace que un `default` bien escrito deba existir y no ser un
-// {refactor} pendiente.
-//
-// Y el control es que los conocidos SÍ devuelven algo, y DISTINTO entre sí: si dos Kind
-// conocidos devolvieran el mismo binario, un `default` que copiara el de otro no se notaría.
+// What getting this wrong costs.
 func TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro(t *testing.T) {
 	tools := Tools{}
 
@@ -325,8 +305,6 @@ func TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro(t *testing.T) {
 		}
 	}
 
-	// Y los conocidos dan su binario, que es el control que hace que lo anterior no sea
-	// "nunca devuelve nada".
 	conocidos := map[Kind]string{
 		KindTuicr:  "tuicr",
 		KindHunk:   "hunk",
@@ -350,15 +328,12 @@ func TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro(t *testing.T) {
 		vistos[got] = kind
 	}
 
-	// Y un `Argv` configurado sustituye al suyo y no al de otro: es lo que permite tener un
-	// editor distinto por proyecto sin tocar los demás panes.
+	// A configured Argv replaces its own, not another's: that is what allows one override per tool.
 	propio := Tools{
 		Tuicr:  Tool{Argv: []string{"/opt/mytui", "pr", "7"}},
 		Editor: Tool{Argv: []string{"nvim"}},
 	}
-	// Lo que se compara es el PRIMER elemento del argv, porque es lo que se busca en el PATH
-	// para decidir si la herramienta está disponible. Comparar el argv entero daría "pr" como
-	// si fuera el binario.
+	// What is compared is the FIRST element of the argv, because that is what is looked up in PATH.
 	if got := propio.Binary(KindTuicr); got != "/opt/mytui" {
 		t.Errorf("el argv de tuicr dio %q, want /opt/mytui: es el primer elemento, que es "+
 			"lo que se comprueba para decidir si está disponible", got)
@@ -370,13 +345,8 @@ func TestBinaryDeUnKindDesconocidoDaVacioYNoElBinarioDeOtro(t *testing.T) {
 		t.Errorf("el Kind de hunk cambió a %q con argv de otros panes puestos", got)
 	}
 
-	// Y `Override` con el argv VACÍO es lo contrario de un override: es una DESACTIVACIÓN
-	// explícita, y devuelve vacío en vez del binario por defecto. Es la pieza que permite
-	// apagar un pane sin quitarlo del plan —un config que pone `agent = []` y quiere que no
-	// se lance nada— y sin ella el pane se lanzaría igual con el agente por defecto.
-	//
-	// Y el orden de las dos comprobaciones es lo que lo hace funcionar: el `Argv` gana sobre
-	// `Override`, así que un pane desactivado que además traiga un argv improbable usa el argv.
+	// An OVERRIDE with an EMPTY argv is the opposite of an override: it is an explicit DISABLE, and it
+	//returns empty instead of the binary.
 	desactivado := Tools{Agent: Tool{Override: true}}
 	if got := desactivado.Binary(KindAgent); got != "" {
 		t.Errorf("un pane desactivado dio el binario %q: se lanzaría igual que si no estuviera "+

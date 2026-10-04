@@ -10,8 +10,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// retargetFixture monta un adapter con un ítem abierto y registra en el los
-// ítems, que es lo que necesita checkBeforeAction para no cortar la acción.
 func retargetFixture(t *testing.T, it model.Item) *testutil.FakeAdapter {
 	t.Helper()
 	a := &testutil.FakeAdapter{
@@ -32,10 +30,7 @@ func retargetItem(state string) model.Item {
 	return it
 }
 
-// TestRunRetargetCambiaLaBaseYRelee: el camino es el de las otras acciones —relee,
-// comprueba, actúa y relee— así que el Outcome trae el ítem con la base nueva sin
-// esperar al refresco del inbox. Sin esa relectura, la ficha y la simulación
-// seguirían enseñando la base vieja hasta un minuto después.
+// The path is the same as the other actions —re-read, check, act, re-read—.
 func TestRunRetargetCambiaLaBaseYRelee(t *testing.T) {
 	it := retargetItem("OPEN")
 	a := retargetFixture(t, it)
@@ -55,9 +50,6 @@ func TestRunRetargetCambiaLaBaseYRelee(t *testing.T) {
 	}
 }
 
-// TestRunRetargetNiegaSinRama: sin rama no hay nada que enviar. El corte va antes
-// de releer el ítem, así que no se gasta ni una llamada, y el motivo es el canónico
-// para que la TUI y los dos adapters digan lo mismo.
 func TestRunRetargetNiegaSinRama(t *testing.T) {
 	it := retargetItem("OPEN")
 	a := retargetFixture(t, it)
@@ -77,9 +69,6 @@ func TestRunRetargetNiegaSinRama(t *testing.T) {
 	}
 }
 
-// TestRunRetargetRespetaElGuardDeAbierto: la base solo se cambia en un ítem que
-// todavía es algo que integrar. Un PR mergeado o cerrado no es accionable, y
-// escribir contra él sería talking to the wind del forge.
 func TestRunRetargetRespetaElGuardDeAbierto(t *testing.T) {
 	for _, state := range []string{"MERGED", "CLOSED"} {
 		it := retargetItem(state)
@@ -95,9 +84,6 @@ func TestRunRetargetRespetaElGuardDeAbierto(t *testing.T) {
 	}
 }
 
-// TestRunRetargetClasificaElPermisoDelForge: si el usuario no puede tocar la base
-// (no es mantenedor del repo), el rechazo es permanente para ese ítem y la TUI
-// tiene que registrarlo como denegado en vez de ofrecer la acción otra vez.
 func TestRunRetargetClasificaElPermisoDelForge(t *testing.T) {
 	it := retargetItem("OPEN")
 	a := retargetFixture(t, it)

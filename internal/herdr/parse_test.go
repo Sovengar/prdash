@@ -87,13 +87,8 @@ const fixtureNotification = `{
   "result": {"type": "notification_show", "shown": true, "reason": ""}
 }`
 
-// TestVersionAtLeastComparaPorCascada: el versionado de Herdr decide si se puede
-// usar una capacidad, así que un `>` mal puesto convierte un requisito en "no
-// disponible" o en "creo que sí" sobre una versión que no lo soporta.
-//
-// Los casos que importan son los de la frontera: la versión EXACTA mínima tiene
-// que validar (por eso el patch es `>=` y no `>`), y un minor superior vale con
-// cualquier patch. Un major superior manda sobre todo lo demás.
+// Herdr's versioning decides whether a capability is usable, so a misplaced `>` disables or
+// enables it wrongly.
 func TestVersionAtLeastComparaPorCascada(t *testing.T) {
 	min := Version{Major: 0, Minor: 9, Patch: 3}
 	cases := []struct {
@@ -117,26 +112,21 @@ func TestVersionAtLeastComparaPorCascada(t *testing.T) {
 			}
 		})
 	}
-	// La versión mínima 0.0.0 no es un caso raro: es lo que se recibe cuando no
-	// se puede leer la versión, y "cualquier cosa cumple" es la degradación
-	// correcta para no bloquear la TUI por un dato que no se sabe.
+	// The 0.0.0 minimum is not a rare case: it is what arrives when the version cannot be read.
 	if !(Version{}).AtLeast(Version{}) {
 		t.Error("0.0.0 debería cumplir el mínimo 0.0.0: es la degradación cuando no se lee la versión")
 	}
 	if (Version{}).AtLeast(min) {
 		t.Error("0.0.0 no debería cumplir un mínimo 0.9.3")
 	}
-	// Y una versión enorme cumple: el 0.x de Herdr es el que hace inútil un
-	// rango de versiones, no un techo.
+	// And a huge version qualifies, which is what makes Herdr's 0.x versioning useless here.
 	if !(Version{99, 0, 0, ""}).AtLeast(min) {
 		t.Error("un major muy alto debería cumplir cualquier mínimo 0.x")
 	}
 }
 
-// TestErrorComponeElMensajeConLoQueHay: el mensaje de Herdr es lo que la TUI
-// enseña, y las tres partes que se añaden (código del servidor, código de salida,
-// causa) son opcionales e independientes. Un "exit 0" colgado o un código de
-// servidor inventado son ruido que manda a mirar donde no es.
+// Herdr's message is what the TUI shows, and the three added parts are the code, the dir and the
+// exit.
 func TestErrorComponeElMensajeConLoQueHay(t *testing.T) {
 	cases := []struct {
 		name string
@@ -164,8 +154,7 @@ func TestErrorComponeElMensajeConLoQueHay(t *testing.T) {
 			"herdr [pane list]: pane not found [E_NOENT] (exit 2)",
 		},
 		{
-			// Un exit 0 con código de salida != 0 es un dato raro pero posible si
-			// el proceso se corta por una señal; el código se enseña igual.
+			// An exit 0 with a non-zero code is odd but possible when the process is killed.
 			"sin args",
 			&Error{Msg: "boom"},
 			"herdr []: boom",
@@ -178,8 +167,8 @@ func TestErrorComponeElMensajeConLoQueHay(t *testing.T) {
 			}
 		})
 	}
-	// Y la causa: Unwrap la preserva, que es lo que permite clasificar sin
-	// depender del texto.
+	// The cause is preserved by Unwrap, which is what allows classifying without depending on the
+	// text.
 	causa := os.ErrNotExist
 	err := &Error{Msg: "x", Err: causa}
 	if !errors.Is(err, causa) {
@@ -201,8 +190,7 @@ func TestParseWorktreeCreated(t *testing.T) {
 	if info.Path != "/home/u/.herdr/worktrees/prdash/feat-x" || info.Branch != "prdash/pr-7" {
 		t.Fatalf("worktree = %+v", info)
 	}
-	// La etiqueta de ownership viene del workspace (--label); worktree.label es
-	// el nombre del repo en la salida real de Herdr 0.9.1.
+	// The ownership label comes from the workspace (--label); worktree.label is the worktree's name.
 	if info.WorkspaceLabel != "prdash-pr-7" || info.Label != "repo" {
 		t.Fatalf("labels = %+v", info)
 	}
@@ -289,45 +277,19 @@ func TestParseServerErrorVariants(t *testing.T) {
 	}
 }
 
-// TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa: el final de
-// `parseServerError`.
-//
-// Y es el caso más común de todos y el que más se cuela: `herdr` no devuelve siempre JSON. Para
-// una operación que no conoce —un pane inexistente, una capa que no está— escribe texto plano en
-// stderr, y el texto no es ni un código ni un motivo.
-//
-// Y lo que hay que comprobar es que el `default` NO se invente nada. Un parser que devolviera el
-// texto como `msg` haría que el aviso fuera legible, pero devolvería `code` con un valor
-// inventado y eso es peor: `code` es lo que la TUI usa para clasificar, y un código falso
-// clasifica la operación como algo que no es —permiso, conflicto, no encontrado— sin que nadie
-// pueda corregir el dato.
-//
-// Y el caso es el de la línea 265, que es el único camino que queda después de los tres
-// `Unmarshal`: texto que no es un mapa, o que es un mapa sin `error` y sin `code`/`message`.
 func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testing.T) {
 	for _, c := range []struct {
 		nombre string
 		stderr string
 	}{
-		// Y el caso que se da de verdad: texto plano de una CLI.
 		{"texto plano de una CLI", "workspace_limit\n"},
 		{"texto plano con espacios", "pane w18:p1 not found"},
 		{"ayuda de uso", "usage: herdr pane graphics set [--pane ID]"},
-		// Y los JSON que no traen lo que se busca. Un `error` sin `message` NO está aquí:
-		// el código sí se lee, y es lo que la TUI necesita para clasificar, así que
-		// devolver el código con el motivo vacío es lo correcto. Mi primera versión lo puso
-		// en la lista de ilegibles y el código hacía bien.
+		// JSONs that do not carry what is looked for. An `error` with no `message` is NOT here: the code
+		//is still read.
 		{"error que no es un objeto", `{"error":"algo"}`},
 		{"mapa sin error ni code", `{"other":"value"}`},
-		// Y el caso que de verdad llega al final de la cadena: el `code` de JSON-RPC es un
-		// NÚMERO —`{"code":-32601,"message":"..."}`—, así que el `Unmarshal` al struct de
-		// cadenas falla y no hay ni código ni motivo.
-		//
-		// Y merece la pena decirlo porque es la forma estándar de un error de JSON-RPC y la
-		// que se traga sin que se note: el mensaje se lee bien pero el código se pierde, y el
-		// código es lo que clasifica. Con eso, un "pane no encontrado" de JSON-RPC saldría
-		// sin código y la TUI lo trataría como un error sin clasificar —sin conflicto, sin
-		// permiso— en vez de como algo que se resuelve refrescando.
+		// JSON-RPC's code is a NUMBER —{"code":-32601,...}.
 		{"code de JSON-RPC, que es numérico", `{"code":-32601,"message":"method not found"}`},
 		{"code numérico suelto", `{"code":42}`},
 		{"array", `[1,2,3]`},
@@ -341,8 +303,6 @@ func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testin
 		}
 	}
 
-	// Y el contraste, que es lo que hace que lo anterior sea "el parser funciona" y no "el
-	// parser devuelve siempre vacío": las formas que sí entiende.
 	for _, c := range []struct {
 		stderr   string
 		wantCode string
@@ -350,10 +310,7 @@ func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testin
 	}{
 		{`{"error":{"code":"pane_not_found","message":"no such pane"}}`, "pane_not_found", "no such pane"},
 		{`{"code":"rate_limited","message":"slow down"}`, "rate_limited", "slow down"},
-		// Y el caso donde el código se lee pero el motivo no: se devuelve el código con el
-		// motivo vacío, porque el código es lo que clasifica y el motivo es lo que se lee.
 		{`{"error":{"code":"workspace_limit"}}`, "workspace_limit", ""},
-		// Y el caso donde el JSON parsea pero no trae nada: eso SÍ es el 265.
 		{`{"other":"value"}`, "", ""},
 	} {
 		code, msg := parseServerError([]byte(c.stderr))
@@ -362,7 +319,6 @@ func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testin
 		}
 	}
 
-	// Y el vacío explícito, que es el caso más frecuente de todos y el primer `return`.
 	for _, vacio := range []string{"", "   ", "\n\n"} {
 		if code, msg := parseServerError([]byte(vacio)); code != "" || msg != "" {
 			t.Errorf("un stderr vacío dio (%q, %q)", code, msg)

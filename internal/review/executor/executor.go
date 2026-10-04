@@ -1,9 +1,6 @@
-// Package executor aplica el plan de review usando puertos. Orquesta
-// resolver→fetch→rama→worktree→layout sin conocer ningún detalle de git, de
-// Herdr ni de la configuración: solo habla con las interfaces inyectadas.
-//
-// El puerto de Herdr puede ser nil (fuera de Herdr): el núcleo de F2 monta el
-// worktree igualmente y el layout se reporta como no disponible.
+// Package executor applies the review plan through ports, orchestrating resolve → fetch → branch →
+// worktree → layout without knowing anything about git, Herdr or the configuration. The Herdr port
+// may be nil: the core still mounts the worktree and reports the layout as unavailable.
 package executor
 
 import (
@@ -17,9 +14,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// Resolver es el puerto del resolutor de repos: resuelve la ruta local, asegura
-// el clon bare, trae el ref de review, decide rutas de worktree y recuerda
-// rutas y reviews activos.
 type Resolver interface {
 	ResolveLocal(ref model.RepoRef) (string, bool)
 	HasBare(ref model.RepoRef) bool
@@ -30,58 +24,35 @@ type Resolver interface {
 	Remember(ref model.RepoRef, path string)
 	RecordReview(it model.Item, rec cache.ReviewRecord) error
 	ActiveReview(id model.ID) (cache.ReviewRecord, bool)
-	// ForgetReview olvida el review activo de un ítem. Se llama solo cuando su
-	// worktree se ha borrado de verdad.
 	ForgetReview(it model.Item) error
 }
 
-// HerdrPort es el puerto de montaje del layout dentro de Herdr. La
-// implementación real es *herdr.Client.
 type HerdrPort interface {
-	// Available informa si Herdr está presente y operativo.
 	Available() bool
-	// MountLayout abre el layout de panes del plan sobre el contenedor y
-	// devuelve los avisos no fatales.
 	MountLayout(ctx context.Context, container herdr.Container, pl plan.Plan) ([]string, error)
-	// Notify muestra una notificación en Herdr.
 	Notify(ctx context.Context, title string, opts herdr.NotifyOptions) error
 }
 
-// Executor monta el review de un ítem.
 type Executor struct {
 	Resolver  Resolver
 	Worktrees worktree.Provisioner
 	Herdr     HerdrPort
 	Tools     plan.Tools
 	Env       plan.Env
-	// Planner permite sustituir la construcción del plan en tests; nil usa
 	// plan.Build.
 	Planner func(pr model.Item, wt plan.Worktree) plan.Plan
 }
 
-// Result describe el review montado.
 type Result struct {
-	// RepoPath es el clon local (normal o bare) del que se sacó el worktree.
 	RepoPath string
-	// Branch es la rama local de trabajo del ítem.
-	Branch string
-	// Worktree es el worktree provisionado (o reutilizado).
+	Branch   string
 	Worktree worktree.Worktree
-	// Plan es el plan de panes construido.
-	Plan plan.Plan
-	// Reused indica que el worktree ya existía y no se creó otro.
-	Reused bool
-	// Herdr indica si el layout se montó (Herdr disponible).
-	Herdr bool
-	// Warnings son avisos no fatales (herramienta ausente, Herdr no disponible).
+	Plan     plan.Plan
+	Reused   bool
+	Herdr    bool
 	Warnings []string
 }
 
-// Mount monta el review de un ítem: resuelve o clona el repo, trae el ref de
-// review, crea (o reutiliza) el worktree y aplica el layout si Herdr está.
-//
-// Ante un fallo no deja basura: si hubo que crear el clon bare en esta llamada,
-// se borra; un worktree a medias lo limpia el propio provisioner.
 func (e *Executor) Mount(ctx context.Context, it model.Item) (Result, error) {
 	var res Result
 
@@ -127,7 +98,6 @@ func (e *Executor) Mount(ctx context.Context, it model.Item) (Result, error) {
 	return res, nil
 }
 
-// ActiveReview devuelve el review ya montado de un ítem, si lo hay.
 func (e *Executor) ActiveReview(it model.Item) (worktree.Worktree, bool) {
 	rec, ok := e.Resolver.ActiveReview(it.ID())
 	if !ok || rec.Worktree == "" {
@@ -142,11 +112,8 @@ func (e *Executor) ActiveReview(it model.Item) (worktree.Worktree, bool) {
 	}, true
 }
 
-// RemoveReview quita el worktree del review activo de un ítem, solo si está
-// limpio (candado RemoveIfClean). Es la capacidad de borrado que la TUI no tiene
-// hoy: sin review montado, o con la ruta ya ausente, es un no-op sin error. Solo
-// olvida el registro del review cuando de verdad se ha borrado, para no dejar un
-// registro apuntando a un checkout inexistente.
+// The record is only forgotten when the worktree was really deleted, so it never points at a checkout
+// that does not exist.
 func (e *Executor) RemoveReview(ctx context.Context, it model.Item) (bool, string, error) {
 	rec, ok := e.Resolver.ActiveReview(it.ID())
 	if !ok || rec.Worktree == "" {
@@ -159,15 +126,10 @@ func (e *Executor) RemoveReview(ctx context.Context, it model.Item) (bool, strin
 	if !removed {
 		return false, reason, nil
 	}
-	// El worktree ya no está: el olvido del registro es best-effort porque no
-	// convierte un borrado correcto en un error, y el store en proceso no falla.
 	_ = e.Resolver.ForgetReview(it)
 	return true, "", nil
 }
 
-// resolveRepo devuelve la ruta del repo local, clonándolo en bare si no existe.
-// created informa si el clon bare se creó en esta llamada (para poder limpiarlo
-// si algo falla después).
 func (e *Executor) resolveRepo(ctx context.Context, it model.Item) (path string, created bool, err error) {
 	if p, ok := e.Resolver.ResolveLocal(it.Ref); ok {
 		return p, false, nil
@@ -181,8 +143,6 @@ func (e *Executor) resolveRepo(ctx context.Context, it model.Item) (path string,
 	return p, !hadBare, nil
 }
 
-// worktreePath usa el review activo si ya existe, y si no la ruta canónica del
-// resolutor (único dueño del namespace de rutas).
 func (e *Executor) worktreePath(it model.Item) string {
 	if rec, ok := e.Resolver.ActiveReview(it.ID()); ok && rec.Worktree != "" {
 		return rec.Worktree
@@ -190,7 +150,6 @@ func (e *Executor) worktreePath(it model.Item) string {
 	return e.Resolver.WorktreePath(it.Ref, it.Number)
 }
 
-// buildPlan construye el plan de panes del review.
 func (e *Executor) buildPlan(it model.Item, wt worktree.Worktree) plan.Plan {
 	pw := plan.Worktree{Path: wt.Path, Branch: wt.Branch, Label: wt.Label}
 	if e.Planner != nil {
@@ -199,8 +158,6 @@ func (e *Executor) buildPlan(it model.Item, wt worktree.Worktree) plan.Plan {
 	return plan.Build(it, pw, e.Tools, e.Env)
 }
 
-// mountLayout aplica el plan por el puerto de Herdr. Sin Herdr no es un error:
-// se avisa y el worktree queda montado igualmente.
 func (e *Executor) mountLayout(ctx context.Context, wt worktree.Worktree, pl plan.Plan, res *Result) bool {
 	if e.Herdr == nil || !e.Herdr.Available() {
 		res.Warnings = append(res.Warnings, "the review layout requires Herdr; the worktree was mounted")
@@ -217,7 +174,6 @@ func (e *Executor) mountLayout(ctx context.Context, wt worktree.Worktree, pl pla
 	return true
 }
 
-// cleanupBare borra el clon bare creado en esta llamada cuando el montaje falla.
 func (e *Executor) cleanupBare(created bool, it model.Item) {
 	if !created {
 		return
@@ -225,5 +181,4 @@ func (e *Executor) cleanupBare(created bool, it model.Item) {
 	_ = e.Resolver.RemoveBare(it.Ref)
 }
 
-// Label es el nombre con ownership prdash de un review.
 func Label(number int) string { return fmt.Sprintf("prdash-pr-%d", number) }

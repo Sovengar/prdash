@@ -1,4 +1,3 @@
-// Detalle de un ítem del inbox.
 package tui
 
 import (
@@ -11,39 +10,25 @@ import (
 	"prdash/internal/state"
 )
 
-// detailPane compone el detalle para el alto del panel inferior.
 func (m *Model) detailPane(rows int) []string {
 	it, ok := m.selected()
 	return m.detailLines(it, ok, rows)
 }
 
-// detailField es una línea "etiqueta: valor" del detalle. Se guarda como dato y
-// no como texto ya maquetado para que el panel elija la disposición: en una
-// columna si cabe, en dos si el hueco es más bajo que el detalle.
+// Kept as data rather than as pre-laid-out text so the panel can choose the arrangement.
 type detailField struct{ key, value string }
 
-// labelWidth es el ancho reservado a la etiqueta de un campo del detalle.
 const labelWidth = 14
 
-// detailGap separa las dos columnas cuando el detalle va en rejilla.
 const detailGap = 4
 
-// detailLines compone el detalle de un ítem como líneas sueltas para el panel
-// inferior. `rows` es el alto disponible. Sin ítem que describir (inbox vacío)
-// lo dice en vez de inventar datos.
+// Three blocks: the short fields in a two-column grid, the URL on a full-width row, and the comments
+// below. Always in the grid, not only when the fields do not fit in one column: in a single column the
+// card took 16 of the ~18 lines the 40% gives and not one comment fitted.
 //
-// La ficha son tres bloques: los campos cortos en rejilla de dos columnas, el URL
-// en una fila a todo el ancho, y los comentarios debajo. Siempre en rejilla, no
-// solo cuando no caben en una: en una sola columna la ficha ocupaba 16 de las ~18
-// líneas que concede el 40% de un terminal normal y no cabía ni un comentario.
-//
-// Sacar el URL de la rejilla no cuesta alto, que es lo que hacía sospechar: los 13
-// campos ocupan 7 filas en dos columnas, y los 12 que quedan más el URL a ancho
-// completo siguen siendo 7. Lo que cambia es que la URL se lee entera, y una URL
-// truncada no se puede copiar, que es para lo que está.
-//
-// La escalera de degradación va de más a menos preferred y se devuelve el primer
-// candidato que entre. Si ninguno, se recorta por arriba (ver clipTop).
+// Pulling the URL out of the grid costs no height, which is what used to look wrong: the 13 fields take
+// 7 rows in two columns, and the remaining 12 plus the full-width URL still take 7. What changes is
+// that the URL reads whole, and a URL that cannot be copied is no use at all.
 func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	if !ok {
 		return []string{styleDim.Render("no selection: move the cursor onto an item")}
@@ -57,22 +42,15 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 		{"Author", orDash(it.Author)},
 		{"Source", orDash(it.SourceBranch)},
 		{"Target", orDash(it.TargetBranch)},
-		// No hay campo Number porque refLabel ya termina en "#42": una fila
-		// entera de la rejilla para repetir el número que está a tres columnas de
-		// ahí. Ese hueco lo ocupa Draft, que sí aporta un dato que no estaba.
+		// There is no Number field because refLabel already ends in "#42": a whole grid row to repeat the
+		// number three columns away. Draft takes that space, since it brings a datum that was not there.
 	}
-	// El orden de los campos de estado no es neutro: la rejilla los empareja por
-	// posición, así que el último par es la última fila, que es lo único que sobrevive
-	// al recorte en un panel diminuto. Review y Role van al final a propósito, porque
-	// son los dos que dicen si la acción procede; si el recorte se los come, la ficha
-	// deja de responder a la pregunta para la que está.
+	// Review and Role go last on purpose: they are the two that say whether the action applies, and if the
+	// clip eats them the card stops answering the question it exists for.
 	status := []detailField{
 		{"State", state.Derive(it).String()},
-		// Draft va al lado de State y no dentro de él porque son preguntas
-		// distintas. State es prioridad de atención —"este PR tiene cambios
-		// pedidos"—, y por su precedencia un borrador aprobado sale como
-		// "approved": el hecho de que sea borrador se pierde. Draft es el dato
-		// que reporta el forge, y contesta a la pregunta que State no contesta.
+		// Draft is not inside State because they are different questions. State is attention priority, and by
+		// its precedence an approved draft comes out as "approved" and the draft is lost.
 		{"Draft", yesNo(it.IsDraft)},
 		{"Checks", checksDetail(it.Checks)},
 		{"Diff", diffDetail(it.Diff)},
@@ -86,29 +64,22 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	url := []string{fullWidthField(detailField{"URL", orDash(it.URL)}, inner)}
 	avisos := m.detailWarnings(it)
 
-	// El presupuesto de los comentarios es lo que sobra tras la cabecera de la
-	// ficha, y se calcula antes de componerlos porque de él depende cuántas filas
-	// puede gastar cada uno. Sin esto, un bloque de cinco comentarios de cuatro
-	// filas no entraría en un panel de 18 y la escalera lo tiraría entero.
+	// The comments' budget is what is left after the card's header, and it is computed before composing
+	// them because it decides how many rows each may spend. Without it a block of five four-line comments
+	// would not fit an 18-row panel and the ladder would drop the whole thing.
 	avail := commentBudget(rows, len(grid), len(url), len(avisos))
 	comments := m.commentLines(it, avail, inner)
 
-	// El orden de lo que se cae sale de dos criterios, y no es el orden en que se
-	// enumeran: primero lo que se puede volver a pedir, y después lo más reciente.
+	// What goes first is what can be asked for again, then the most recent. Comments go first because they
+	// are the only thing that can be re-requested with a key (or the next tick) and the only thing that was
+	// not on the card before this section existed; then the gap after the title, which is decorative and
+	// the title's own style compensates for; then the URL row, a whole row sacrificed for a datum that `o`
+	// re-reads; and last the diffstat, on the criterion the grid already had: a datum just lost is worse
+	// than one never painted. Same criterion as the list's DIFF column, which is also last.
 	//
-	// Los comentarios son lo primero porque son lo único repedible con una tecla (o
-	// con el siguiente tick) y lo único que no estaba en la ficha antes de existir
-	// esta sección; luego el hueco tras el título, que es decorativo y lo compensa
-	// el estilo del propio título; luego la fila del URL, que es una fila entera
-	// sacrificada por un dato que se puede volver a leer con `o`; y por último el
-	// diffstat, con el criterio que ya tenía la rejilla: un dato que se acaba de
-	// perder es peor que uno que nunca se pintó. Es el mismo criterio que la columna
-	// DIFF de la lista, que también va la última.
-	//
-	// El salto del cuarto al quinto candidato se lleva tres cosas a la vez
-	// (comentarios, hueco y fila del URL) porque entre ellas no hay ningún tamaño
-	// intermedio: quitar solo el URL deja la misma altura, y quitar solo el Diff
-	// también, porque la rejilla pasa de 13 a 12 campos y ambas caben en 6 filas.
+	// The jump from the fourth to the fifth candidate drops three things at once because there is no
+	// intermediate size: dropping only the URL leaves the same height, and dropping only the diffstat too,
+	// since the grid goes from 13 to 12 fields and both fit in 6 rows.
 	withGap := []string{title, ""}
 	noGap := []string{title}
 	layouts := [][]string{
@@ -126,7 +97,6 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	return clipTop(stackDetail(noGap, noDiff, avisos), rows)
 }
 
-// withField concatena bloques de campos en uno nuevo, sin tocar los de entrada.
 func withField(blocks ...[]detailField) []detailField {
 	var out []detailField
 	for _, b := range blocks {
@@ -135,8 +105,6 @@ func withField(blocks ...[]detailField) []detailField {
 	return out
 }
 
-// stackDetail concatena los trozos del detalle. El hueco decorativo va como
-// línea vacía explícita y no como trozo: se quita del medio, no de un extremo.
 func stackDetail(parts ...[]string) []string {
 	var out []string
 	for _, p := range parts {
@@ -145,8 +113,6 @@ func stackDetail(parts ...[]string) []string {
 	return out
 }
 
-// withoutField quita un campo por su etiqueta. Se usa para dropear el diffstat
-// cuando el detalle no tiene sitio para todo.
 func withoutField(fields []detailField, key string) []detailField {
 	out := make([]detailField, 0, len(fields))
 	for _, f := range fields {
@@ -157,24 +123,18 @@ func withoutField(fields []detailField, key string) []detailField {
 	return out
 }
 
-// detailWarnings son los avisos de acción deshabilitada del ítem.
+// The forge's veto is also sticky: it is remembered per item until a refresh lifts it, so it can still be
+// there after the header stopped warning, which is why it earns a row.
 //
-// Solo el veto que impone el forge, que además es pegajoso: se recuerda por ítem
-// hasta que un refresco lo levanta, así que puede seguir ahí después de que la
-// cabecera haya dejado de avisar. Por eso merece una fila.
+// The own-approval veto is deliberately NOT painted: it derives from the item and the login, so it
+// would show on every render of every one of your PRs — which is nearly all of "Created by me" — and
+// the card would end with a permanent line repeating what the Role field already says. It is also the
+// only one that can be asked for elsewhere: the reason is delivered on the keypress, in the warning,
+// which is when it can be acted on.
 //
-// El veto de aprobar lo propio NO se pinta, y es a propósito. Se deriva del ítem y
-// del login, así que saldría en todos los renders de todos tus PRs —que son casi
-// todos los de "Created by me"— y la ficha acabaría con una línea permanente
-// repitiendo lo que el campo Role ya dice. Además es lo único que se puede pedir
-// de otro modo: la razón se entrega al pulsar la tecla, en el aviso, que es
-// cuando se puede actuar sobre ella. En la ficha solo ocuparía filas.
-//
-// El forge sin autenticar SÍ se pinta, y con su motivo, que es justo lo que antes
-// se perdía: el adapter sabe distinguir "el token no vale" de "este forge no está
-// implementado", y la etiqueta genérica de "not authenticated" mandaba a la
-// persona a la autenticación a buscar un token que ya funcionaba. El motivo del
-// adapter es el dato accionable y no ocupaba ninguna fila.
+// An unauthenticated forge IS painted, with its reason, which is exactly what used to get lost: the
+// adapter tells "the token is no good" from "this forge is not implemented", and the generic
+// "not authenticated" label sent the user to authenticate a token that already worked.
 func (m *Model) detailWarnings(it model.Item) []string {
 	if reason := m.denied[it.ID()]; reason != "" {
 		return []string{"", styleWarn.Render("  action disabled: " + reason)}
@@ -185,12 +145,8 @@ func (m *Model) detailWarnings(it model.Item) []string {
 	return nil
 }
 
-// authReason compone el motivo de un forge no autenticado, con un texto por
-// defecto cuando el adapter no dio ninguno.
-//
-// El motivo es lo que decide qué hace el operador: "not authenticated" se
-// arregla retomando el token y "not implemented" no se arregla de ninguna forma.
-// Confundirlos cuesta una sesión entera de depuración.
+// The reason decides what the operator does: "not authenticated" is fixed by resuming the token and
+// "not implemented" is not fixed at all. Confusing them costs a whole debugging session.
 func authReason(auth model.AuthState) string {
 	if auth.Reason != "" {
 		return auth.Reason
@@ -198,41 +154,29 @@ func authReason(auth model.AuthState) string {
 	return "not authenticated"
 }
 
-// fullWidthField compone un campo que ocupa la fila entera en vez de media.
-//
-// Existe para el URL, y por un motivo concreto: una URL de GitLab self-managed
-// con subcarpeta se pasa fácil de 80 caracteres, así que en media columna se leen
-// 40 y queda un resto inútil. Y una URL que no se puede copiar entera no sirve
-// para nada, que es justo para lo que está en la ficha. El ancho entero lo hace
-// legible sin gastar una fila más, porque los 12 campos cortos siguen cabiendo en
-// las mismas 6.
+// It exists for the URL, for a concrete reason: a self-managed GitLab URL with a subfolder easily
+// goes past 80 characters, so in half a column you read 40 and get a useless remainder. The full
+// width makes it readable without spending another row, since the 12 short fields still fit in the
+// same 6.
 func fullWidthField(f detailField, inner int) string {
 	return label(f.key, styleDiffText(truncate(f.value, max(1, inner-labelWidth))))
 }
 
-// commentBudget son las filas que le quedan al bloque de comentarios de la ficha.
+// Its own function because it is the arithmetic that decides how much is seen, and inside the composition
+// that arithmetic was hidden: a bigger budget does not give a taller block, it gives a block that
+// clipTop trims at the end, so the trim cancelled out and the last line never changed. As a pure
+// function the number is checked directly and the trim is seen for what it is.
 //
-// Vive aparte porque es la aritmética que decide cuánto se ve, y dentro de la
-// composición esa aritmética quedaba tapada: un presupuesto un módulo más grande no
-// da un bloque más alto, da un bloque RECORTADO por clipTop al final, así que el
-// recorte se compensaba y la línea final no cambiaba. Con el presupuesto en una
-// función pura, el número se comprueba directo y el recorte se ve como lo que es, que
-// es un recorte.
+// The 2 are the card's title and the blank line separating it from the fields: not comment content,
+// but they take rows, so they are discounted. A budget that did not would give one comment row too
+// many and the step below would lose it without warning.
 //
-// El 2 son el título de la ficha y la línea en blanco que lo separa de los campos: no
-// son contenido de comentarios, pero ocupan filas igual, así que se descuentan. Un
-// presupuesto que no los descontara daría una fila de comentarios de más, y el
-// escalón de abajo la perdería sin avisar.
-//
-// Y puede quedar NEGATIVO, y está bien que quede: es lo que dice que la cabecera no
-// cabe ni sola. Lo que se hace con un presupuesto negativo es no pintar comentarios,
-// no intentar pintar un número negativo de ellos.
+// It may come out NEGATIVE and that is correct: it says the header does not fit even alone. A negative
+// budget paints no comments rather than trying to paint a negative number of them.
 func commentBudget(rows, gridLines, urlLines, warningLines int) int {
 	return rows - gridLines - urlLines - 2 - warningLines
 }
 
-// detailGrid reparte los campos en dos columnas de ancho fijo, por filas
-// (izquierda, derecha): así se lee como una ficha y no como dos listas.
 func detailGrid(fields []detailField, inner int) []string {
 	cell := max(24, (inner-detailGap)/2)
 	out := make([]string, 0, (len(fields)+1)/2)
@@ -242,24 +186,17 @@ func detailGrid(fields []detailField, inner int) []string {
 		if i+1 < len(fields) {
 			right, _ = detailCell(fields[i+1], cell)
 		}
-		// El hueco mínimo evita que un valor largo llegue a pisar la columna de
-		// al lado cuando el campo ocupa la celda entera.
 		out = append(out, left+strings.Repeat(" ", max(detailGap, cell-leftW))+right)
 	}
 	return out
 }
 
-// detailCell compone un campo ajustado a un ancho y devuelve su ancho real en
-// texto plano, que es lo que necesita el padding de la columna de al lado.
 func detailCell(f detailField, width int) (string, int) {
 	value := truncate(f.value, max(1, width-labelWidth))
-	// El ancho se mide sobre el valor recortado y en plano; el color va encima,
-	// ya sin que nadie lo mida (ver styleDiffText).
 	return label(f.key, styleDiffText(value)), labelWidth + utf8.RuneCountInString(value)
 }
 
-// clipTop recorta por arriba lo que no cabe: el final del detalle (estado,
-// review y rol) es lo que dice si la acción procede.
+// The END of the detail is the part that says whether the action applies, so that is what survives.
 func clipTop(lines []string, rows int) []string {
 	if rows <= 0 || len(lines) <= rows {
 		return lines
@@ -267,13 +204,10 @@ func clipTop(lines []string, rows int) []string {
 	return lines[len(lines)-rows:]
 }
 
-// label compone una línea "etiqueta: valor" del detalle, sin salto de línea: el
-// detalle se compone como lista de líneas y quien la pinta decide los saltos.
 func label(key, value string) string {
 	return styleDetailKey.Render(pad(key+":", labelWidth)) + value
 }
 
-// reviewLabel traduce la decisión de review y el tipo de review a texto.
 func reviewLabel(it model.Item) string {
 	decision := it.ReviewDecision
 	switch decision {
@@ -297,7 +231,6 @@ func reviewLabel(it model.Item) string {
 	}
 }
 
-// checksDetail describe el estado de los checks para el detalle.
 func checksDetail(c model.Checks) string {
 	if c.Total == 0 && c.State == model.ChecksUnknown {
 		return "no checks"
@@ -311,10 +244,6 @@ func checksDetail(c model.Checks) string {
 	return base
 }
 
-// diffDetail describe el diffstat con los números sin compactar y el recuento de
-// ficheros. Aquí sí cabe la cifra exacta: la columna de la lista es la que
-// abrevia, y un detalle que dijera "1.2k" cuando la cifra real es 1.234 no
-// serviría para nada.
 func diffDetail(d model.DiffStat) string {
 	if !d.Known {
 		return "unknown (forge did not report it)"
@@ -329,7 +258,6 @@ func diffDetail(d model.DiffStat) string {
 	return fmt.Sprintf("+%d -%d (%d %s)", d.Additions, d.Deletions, d.Files, noun)
 }
 
-// relativeTime formatea una marca temporal como "3h", "2d".
 func relativeTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"
@@ -354,9 +282,7 @@ func orDash(s string) string {
 	return s
 }
 
-// yesNo renderiza un booleano que el forge sí reportó. No usa orDash porque un
-// false aquí no es un dato ausente: es la respuesta, y "no" dice lo que "-" no
-// diría.
+// Not orDash: a false here is the answer, not a missing datum.
 func yesNo(b bool) string {
 	if b {
 		return "yes"

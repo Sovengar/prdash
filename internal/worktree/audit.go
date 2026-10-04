@@ -9,30 +9,21 @@ import (
 	"strings"
 )
 
-// LabelPrefix es el prefijo de ownership de los worktrees de review de prdash.
-// Un worktree ajeno (cualquier otro nombre) nunca se lista ni se borra.
+// A worktree with any other name is never listed and never deleted.
 const LabelPrefix = "prdash-"
 
-// Owned informa si un worktree pertenece a prdash por su etiqueta o por el
-// nombre de su ruta. Es la única puerta de entrada a la limpieza: lo que no es
-// propio no se toca.
+// The only gate into cleanup: whatever is not ours is not touched.
 func Owned(label, path string) bool {
 	return strings.HasPrefix(label, LabelPrefix) || strings.HasPrefix(filepath.Base(path), LabelPrefix)
 }
 
-// Entry es un worktree propio auditado.
 type Entry struct {
 	Worktree
-	// Orphan marca un worktree cuyo repo de origen ya no es accesible, de modo
-	// que la limpieza pueda reportarlo antes de borrarlo.
+	// Lets cleanup report it before deleting, so an unreachable source is visible.
 	Orphan bool
-	// Reason explica por qué se considera huérfano.
 	Reason string
 }
 
-// Audit recorre la raíz y devuelve solo los worktrees con ownership prdash,
-// ordenados por ruta. Marca huérfano el worktree cuyo enlace al repo de origen
-// está roto (gitdir inexistente).
 func (g *GitDirect) Audit(ctx context.Context) []Entry {
 	if g.Base == "" {
 		return nil
@@ -70,8 +61,6 @@ func (g *GitDirect) Audit(ctx context.Context) []Entry {
 	return out
 }
 
-// linkedGitDir devuelve el gitdir apuntado por el fichero .git de un worktree
-// enlazado, resuelto a absoluto, o "" si la ruta no lo declara.
 func linkedGitDir(path string) string {
 	raw, err := os.ReadFile(filepath.Join(path, ".git"))
 	if err != nil {
@@ -91,8 +80,6 @@ func linkedGitDir(path string) string {
 	return gitdir
 }
 
-// sourceReachable informa si el gitdir al que apunta el worktree sigue
-// existiendo: un enlace roto es un worktree huérfano.
 func sourceReachable(path string) bool {
 	gitdir := linkedGitDir(path)
 	if gitdir == "" {

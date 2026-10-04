@@ -12,13 +12,6 @@ import (
 	"prdash/internal/sim"
 )
 
-// TestSimulateEndToEndThroughThePaneLayer recorre la cadena entera con las dos
-// piezas de verdad: el socket de Herdr y el git-sim instalado. Las piezas sueltas ya
-// tienen tests con dobles; lo que esto comprueba es que encajan y que Herdr acepta
-// de verdad el mensaje, con su límite de tamaño y su formato.
-//
-// Deja pasar un momento una imagen real en el pane donde corre el test, y la quita
-// al terminar. Se salta fuera de Herdr, donde la capa no existe.
 func TestSimulateEndToEndThroughThePaneLayer(t *testing.T) {
 	if os.Getenv("HERDR_ENV") != "1" {
 		t.Skip("fuera de Herdr no hay capa de gráficos")
@@ -62,13 +55,10 @@ func TestSimulateEndToEndThroughThePaneLayer(t *testing.T) {
 			"celdas pintadas: %d", len(m.sim.cells))
 	}
 
-	// El ratio de celda tiene que venir medido, no supuesto: es lo que hace que la
-	// imagen no se deforme y no se mande más resolución de la que se ve.
 	if m.sim.cellW_px <= 1 || m.sim.cellH_px <= 2 {
 		t.Errorf("celda = %dx%d, want la medida del pane (9x19 en kitty)", m.sim.cellW_px, m.sim.cellH_px)
 	}
 
-	// El marco se sigue pintando: es lo que dice qué se está viendo y da la ayuda.
 	view := viewText(m)
 	if !strings.Contains(view, "simulate: merge") {
 		t.Errorf("el popup perdió el título:\n%s", view)
@@ -77,7 +67,6 @@ func TestSimulateEndToEndThroughThePaneLayer(t *testing.T) {
 		t.Errorf("el popup perdió la ayuda:\n%s", view)
 	}
 
-	// Cerrar tiene que quitar la capa, o la imagen se queda encima de la TUI.
 	m = press(t, m, "esc")
 	if m.sim.state != simClosed {
 		t.Errorf("state = %v, want cerrado", m.sim.state)

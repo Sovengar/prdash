@@ -1,10 +1,8 @@
-// Overlay de simulación: un popup que elige el comando, lo renderiza con
-// git-sim y enseña la imagen resultante encima del inbox.
-//
-// El popup vive en la misma vista que el resto, no en una pantalla aparte: la
-// simulación es una consulta sobre el ítem que ya está seleccionado, y tapar la
-// vista entera para preguntar durante un par de segundos por un grafo esconde
-// justo lo que hay que estar mirando mientras se responde.
+// Simulation overlay: a popup that picks the command, renders it with git-sim and shows the resulting
+// image over the inbox.
+// It lives in the same view as everything else rather than on a screen of its own: a simulation is a
+// query about the item already selected, and hiding the whole view for a couple of seconds to ask about
+// a graph hides exactly what you are supposed to be looking at while it answers.
 package tui
 
 import (
@@ -23,123 +21,82 @@ import (
 	"prdash/internal/tui/bordered"
 )
 
-// simTimeout acota la simulación completa. El runner tiene el suyo propio y más
-// corto; este es la red que cubre también preparar el directorio de trabajo.
 const simTimeout = 90 * time.Second
 
-// simLayer es la capa donde se publica la imagen. Vive en el herdr porque la capa
-// es un recurso del pane, pero el nombre lo elige prdash y lo borra al cerrar el
-// popup, para no tocar nada que no sea suyo.
 const simLayer = herdr.GraphicsLayer
 
-// Geometría del popup.
 const (
-	// simChooserWidth es el ancho del selector: la estrategia, su flujo y la
-	// ayuda. Ancho de más solo añade aire.
 	simChooserWidth = 64
-	// simChrome son las líneas del popup que no son imagen: borde de arriba,
-	// borde de abajo y la de ayuda.
-	simChrome = 3
-	// simHeightNum y simHeightDen son la fracción de la altura de la terminal que
-	// el popup se queda, como numerador y denominador y no como una división: en
-	// una constante de Go 3/4 vale 0, y el popup se quedaba con el suelo de filas.
-	// No es el 100% porque un overlay que tapa la vista entera deja de ser un
-	// overlay: perder el inbox justo cuando se está mirando una simulación es
-	// perder el contexto de lo que se está mirando.
-	simHeightNum = 3
-	simHeightDen = 4
-	// simMargin son las filas que el popup deja libres arriba y abajo, y
-	// simSideMargin las columnas de los lados. El fondo se ve justo en eso.
+	simChrome       = 3
+	// Numerator and denominator rather than a division, because in a Go constant 3/4 is 0 and the popup
+	// would fall back to its row floor.
+	// Not 100%: an overlay that covers the whole view stops being an overlay, and losing the inbox exactly
+	// when a simulation is being looked at loses the context of what is being looked at.
+	simHeightNum  = 3
+	simHeightDen  = 4
 	simMargin     = 2
 	simSideMargin = 4
-	// simMinCols y simMinRows son el suelo del popup, para que en una terminal
-	// diminuta salga algo en vez de una caja de tres caracteres.
-	simMinCols = 20
-	simMinRows = 6
+	simMinCols    = 20
+	simMinRows    = 6
 )
 
-// simState es la fase del overlay.
 type simState int
 
 const (
 	simClosed simState = iota
-	// simChoosing muestra las dos Strategies y espera una tecla.
 	simChoosing
-	// simRendering muestra el progreso del render en segundo plano.
 	simRendering
-	// simShowing muestra la imagen ya generada.
 	simShowing
 )
 
-// simKinds son las estrategias que se ofrecen, en el orden en que se recorren.
-//
-// Rebase está excluido a propósito, no por prudencia: git-sim 0.3.5 no lo sabe
-// dibujar. Si la rama del ítem ya está basada en la base —el caso normal de una
-// PR— responde "Branch 'main' is already based on active branch 'feat'" y sale
-// con código 1, con el mensaje puesto del revés; y si las ramas divergen, revienta
-// con un IndexError de Python. Merge funciona en los tres casos. Cuando el
-// proyecto lo arregle, esta lista es lo único que haya que tocar.
+// Rebase is excluded on purpose, not out of caution: git-sim 0.3.5 cannot draw it. If the item's branch
+// is already based on the base (the normal PR case) it answers "Branch 'main' is already based on
+// active branch 'feat'" and exits 1 with the message the wrong way round; if the branches diverged it
+// blows up with a Python IndexError. Merge works in all three cases. This list is the only thing to
+// touch when the project fixes it.
 var simKinds = []sim.Kind{sim.KindMerge}
 
-// simPanel es el estado del overlay. Va en la Model y no aparte porque comparte
-// ciclo de vida con ella: se abre con una tecla, vive mientras el render corre y
-// se cierra con otra tecla.
+// In the Model rather than apart, because it shares its lifecycle: opened by a key, alive while the
+// render runs, closed by another key.
 type simPanel struct {
 	state  simState
 	item   model.Item
 	cursor int
 	kind   sim.Kind
-	// img es la imagen decodificada: se conserva para no volver a leer el JPEG
-	// en cada resize, que es lo único que cambia la geometría.
+	// Kept so a resize does not re-read the JPEG, and the size is all a resize changes.
 	img   image.Image
 	cells []string
 	cellW int
 	cellH int
 	image string
-	// viaGraphics dice que la imagen está publicada en la capa del pane y que por
-	// eso el popup no la pinta con celdas. La capa vive por encima del contenido
-	// del pane: si el popup se cierra y no se quita, la imagen se queda encima de
-	// la TUI.
+	// The layer sits above the pane's content: if the popup closes without removing it, the image stays on
+	// top of the UI.
 	viaGraphics bool
-	// cellW_px y cellH_px son los píxeles de una celda, medidos por Herdr. Cero =
-	// no se sabe, y entonces se supone 1×2.
+	// Zero means unknown, and then 1x2 is assumed.
 	cellW_px int
 	cellH_px int
 }
 
-// Simulator renderiza simulaciones. Es un puerto opcional: sin él la acción
-// explica que falta git-sim en vez de fallar.
 type Simulator interface {
 	Available() bool
 	Simulate(ctx context.Context, it model.Item, kind sim.Kind) (sim.Result, error)
 }
 
-// Graphics publica la imagen en la capa gráfica del pane, que es lo que la pinta a
-// resolución nativa en vez de a una celda por píxel de la imagen.
-//
-// Es un puerto opcional y el que decide la calidad: sin él, la imagen se dibuja con
-// half-blocks, que se ve pixelado porque cuantiza a la rejilla de celdas (con una
-// imagen de 1920 px en 84 columnas, cada bloque son 23×23 celdas). Con él, la escala
-// la hace el terminal y se ve como una imagen.
+// An optional port, and the one that decides quality: without it the image is drawn with half-blocks
+// and looks pixelated because it quantises to the cell grid (a 1920px image in 84 columns makes each
+// block 23x23 pixels). With it the terminal does the scaling and it looks like an image.
 type Graphics interface {
-	// Available informa si la capa es un camino posible ahora mismo.
 	Available() bool
-	// CellSize son los píxeles de una celda del pane, que es lo que permite no
-	// deformar la imagen y no mandar más resolución de la que se ve. (0, 0) si no
-	// se sabe.
+	// (0, 0) when unknown.
 	CellSize(ctx context.Context) (cellW, cellH int)
-	// SetImage publica la imagen en la capa, colocada en un rectángulo de celdas
-	// del viewport del pane. La colocación es el tipo de Herdr porque es su
-	// concepto: el pane es una rejilla y la imagen se coloca en celdas, no en
-	// píxeles.
+	// Placement is Herdr's type because it is Herdr's concept: a pane is a grid and the image is placed
+	// in cells, not pixels.
 	SetImage(ctx context.Context, layer string, img image.Image, p herdr.Placement) error
-	// Clear quita la capa.
 	Clear(ctx context.Context, layer string) error
 }
 
-// simMsg entrega el resultado de una simulación. seq identifica la petición:
-// un render que llega tarde, con el popup ya cerrado o reabierto, se descarta en
-// lugar de saltar a la pantalla de arriba.
+// seq identifies the request, so a render that arrives late with the popup closed or reopened is
+// discarded instead of jumping to the screen.
 type simMsg struct {
 	seq  int
 	kind sim.Kind
@@ -147,22 +104,12 @@ type simMsg struct {
 	err  error
 }
 
-// SetSimulator inyecta el simulador. nil lo deshabilita: la acción informa
-// entonces que hace falta git-sim.
 func (m *Model) SetSimulator(s Simulator) { m.simulator = s }
 
-// SetGraphics inyecta la capa de gráficos del pane. nil deja el popup en
-// half-blocks, que es el camino de fuera de Herdr.
 func (m *Model) SetGraphics(g Graphics) { m.graphics = g }
 
-// openSimulator abre el selector sobre el ítem seleccionado. Los guards son los
-// mismos que los del resto de acciones: la simulación necesita un ítem y una
-// rama base, y sin ellos la caja solo podría ofrecer una vista vacía.
-//
-// Con el merge armado esta tecla no llega aquí: la segunda pulsación de un merge
-// solo puede ser un modo, así que la `v` desarma y se consume. Es lo mismo que
-// hace con cualquier otra tecla, y evita que una pulsación a destiempo abra un
-// popup modal.
+// With a merge armed this key does not get here: the second press of a merge can only be a mode, so the
+// `v` disarms and is consumed, which avoids an out-of-time press opening a modal popup.
 func (m Model) openSimulator() (tea.Model, tea.Cmd) {
 	if m.simulator == nil || !m.simulator.Available() {
 		m.setNotice("simulate: git-sim is not installed", levelWarn)
@@ -177,20 +124,17 @@ func (m Model) openSimulator() (tea.Model, tea.Cmd) {
 		m.setNotice("simulate: the forge reports no target branch for "+refLabel(it), levelWarn)
 		return m, nil
 	}
-	// Abrir la simulación con un merge armado ya está resuelto antes de llegar
-	// aquí, pero el disarmado se deja explícito: si mañana alguien enruta la
-	// acción desde otro sitio, el popup no puede coexistir con una Confirmación
-	// de merge esperando su segunda tecla.
+	// Disarming is left explicit even though an armed merge is already resolved before this point: if the
+	// action is ever routed from elsewhere, the popup must not coexist with a merge confirmation waiting
+	// for its second key.
 	m.disarmMerge()
 	m.sim = simPanel{state: simChoosing, item: it}
 	return m, nil
 }
 
-// moveSimCursor mueve el cursor del selector y dice si la tecla era de
-// navegación. Solo navega cuando hay algo que recorrer: con una sola estrategia no
-// hay menú, y una flecha que no mueve nada tiene que caer en el default —que
-// cierra— en vez de quedarse swallowed sin hacer nada. La condición es explícita
-// para que añadir una segunda estrategia no deje las flechas muertas.
+// Navigates only when there is something to walk: with a single strategy there is no menu, and an arrow
+// that moves nothing has to fall through to the default (which closes) instead of being swallowed. The
+// condition is explicit so adding a second strategy does not leave the arrows dead.
 func (m *Model) moveSimCursor(key string) bool {
 	if len(simKinds) < 2 {
 		return false
@@ -206,19 +150,14 @@ func (m *Model) moveSimCursor(key string) bool {
 	return true
 }
 
-// closeSim cierra el overlay e invalida el render en vuelo: su resultado se
-// descarta, aunque la imagen se haya quedado en el caché. Si había una imagen
-// publicada en la capa del pane, la quita: la capa vive por encima del contenido
-// del pane, así que quedarse ahí taparía la TUI entera.
 func (m *Model) closeSim() {
 	m.simSeq++
 	m.releaseSimLayer()
 	m.sim = simPanel{}
 }
 
-// releaseSimLayer quita la imagen de la capa de gráficos si se publicó. Va en
-// segundo plano y con un contexto propio: si el popup se cierra al salir de la TUI,
-// el contexto de la app ya está cancelado y la imagen se quedaría pegada.
+// In the background with its own context: if the popup closes on TUI exit, the app's context is already
+// cancelled and the image would stay stuck.
 func (m *Model) releaseSimLayer() {
 	if !m.sim.viaGraphics || m.graphics == nil {
 		return
@@ -231,14 +170,11 @@ func (m *Model) releaseSimLayer() {
 	}()
 }
 
-// handleSimKey atiende el popup mientras está abierto. `q` y `ctrl+c` salen, como
-// en el resto de la vista: cerrar con `esc` y salir con `q` son dos intenciones
-// distintas.
-//
-// Cualquier otra tecla cierra el popup, y mientras se elige una estrategia solo
-// cuentan las que la nombran. Es la misma política que el merge armado, y por el
-// mismo motivo: una pulsación que no es una elección no debe poder caer en una
-// acción.
+// `q` and `ctrl+c` quit, as in the rest of the view: closing with esc and quitting with q are two
+// different intentions.
+
+// Any other key closes the popup, and while a strategy is being picked only the ones naming one count. Same
+// policy as the armed merge, for the same reason: a press that is not a choice must not land on an action.
 func (m Model) handleSimKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q", "ctrl+c":
@@ -264,24 +200,20 @@ func (m Model) handleSimKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd
 		if key == "enter" {
 			return m, m.startSim(simKinds[m.sim.cursor])
 		}
-		// Cualquier otra tecla cierra el popup sin más.
 		m.closeSim()
 		return m, nil
 
 	default:
-		// Renderizando o enseñando la imagen: el popup ya no espera ninguna
-		// tecla en concreto, así que cualquier pulsación lo cierra.
+		// While rendering or showing the image the popup waits for no particular key, so any press closes it.
 		m.closeSim()
 		return m, nil
 	}
 }
 
-// startSim lanza el render en segundo plano. No bloquea la TUI: son un par de
-// segundos, pero bloquear el update loop se nota como un congelón de la vista,
-// que es justo lo que un overlay no puede hacer.
-//
-// Mientras corre, el resultado se manda al canal de eventos como cualquier otro
-// trabajo, para que su entrega no dependa de que el usuario siga tocando teclas.
+// In the background because blocking the update loop reads as a freeze, which is the one thing an overlay
+// cannot do.
+// While it runs the result goes to the events channel like any other work, so its delivery does not
+// depend on the user still pressing keys.
 func (m *Model) startSim(kind sim.Kind) tea.Cmd {
 	m.sim.state = simRendering
 	m.sim.kind = kind
@@ -299,9 +231,8 @@ func (m *Model) startSim(kind sim.Kind) tea.Cmd {
 	return nil
 }
 
-// applySim recoge el resultado de una simulación. Un fallo cierra el popup y
-// avisa en la cabecera, que es donde viven los avisos: un popup explicando su
-// propio error encima de la vista es un popup más difícil de leer que el aviso.
+// A failure closes the popup and warns in the header, where warnings live: a popup explaining its own
+// error on top of the view is harder to read than the warning.
 func (m *Model) applySim(msg simMsg) {
 	if msg.seq != m.simSeq {
 		return // petición obsoleta: el popup se cerró o se reabrió mientras corría
@@ -325,42 +256,22 @@ func (m *Model) applySim(msg simMsg) {
 	}
 }
 
-// publishSimImage intenta publicar la imagen en la capa de gráficos del pane y dice
-// si lo consiguió. Si no, el popup la pintará con half-blocks.
-//
-// La imagen se reescala al tamaño en píxeles del rectángulo antes de mandarla: el
-// terminal la va a dibujar a ese tamaño, así que mandar los 1920 px originales solo
-// añade bytes en base64 sin ganar un detalle que se pueda ver. Y se ajusta al alto
-// real de la celda, que no es 2× el ancho sino lo que mida el terminal.
+// The image is rescaled to the rectangle's pixel size before being sent, because that is the size the
+// terminal draws it at: sending the original 1920px only adds base64 bytes without gaining a visible
+// detail. It also fits the cell's real height, which is not twice its width but whatever the terminal
+// measures.
 func (m *Model) publishSimImage(img image.Image) bool {
 	if m.graphics == nil || !m.graphics.Available() {
 		return false
 	}
 	cols, rows := m.simBox()
 	col, row := m.simBoxOrigin(cols, rows)
-	// El hueco interior NO se comprueba contra cero, y antes se comprobaba. Es
-	// INALCANZABLE en los TRES estados, y aquí la cuenta es una más que en
-	// `renderSimCells` porque esta función también se llama con el selector abierto:
 	//
 	//   - en modo imagen, `simBox` devuelve `cols+2, rows+simChrome` y `FitCells`
-	//     devuelve `max(..., 1)` en las dos dimensiones;
 	//   - en modo selector y en modo renderizando, `simBox` devuelve
-	//     `min(contentWidth(), simChooserWidth), simChrome + 2`, y el suelo de 38 columnas
-	//     de `contentWidth` deja el hueco en 36 columnas por 2 filas;
-	//   - y aquí se resta exactamente `2` y `simChrome`, que es lo que `simBox` añadió.
 	//
-	// Y el suelo que cierra el caso del selector NO es el de `simMaxCols`/`simMaxRows`, que son
-	// del modo imagen y no pasan por aquí: es el de `contentWidth`. Ese es el detalle que hace
-	// falta mirar para no trabajar con la cuenta incompleta, y por eso el invariante está
 	// comprobado en `TestElHuecoInteriorDelPopupNuncaDesaparecePorMuchoQueSeEstrecheLaTerminal`,
-	// que recorre los tres estados con terminales de 0 a 400 columnas.
 	//
-	// Y la comprobación se quita en vez de quedarse, y no es indiferente: un guard que no
-	// puede dispararse lee como si protegiera algo, y quien lo lea creería que sin él
-	// la imagen se publicaría en un rectángulo de tamaño negativo. No se publicaría: `SetImage`
-	// recibe un rectángulo de 36×2 como mínimo. Y `renderSimCells` —la otra mitad de este mismo
-	// popup, que pinta las celdas cuando no hay capa de gráficos— ya dice exactamente esto con
-	// la misma cuenta. Dos caminos del mismo popup con reglas distintas sería peor que no
 	// tener ninguna.
 	innerCols, innerRows := cols-2, rows-simChrome
 
@@ -372,8 +283,8 @@ func (m *Model) publishSimImage(img image.Image) bool {
 		cellW, cellH = 1, 2
 	}
 	m.sim.cellW_px, m.sim.cellH_px = cellW, cellH
-	// El tamaño en píxeles del rectángulo, con la celda medida. Mandar la imagen
-	// original aquí solo añadiría bytes: el terminal la va a dibujar a este tamaño.
+	// The rectangle in pixels, with the measured cell: sending the original image here would only add
+	// bytes, since the terminal draws it at this size.
 	resized := sim.Resize(img, innerCols*cellW, innerRows*cellH)
 	if resized == nil {
 		return false
@@ -388,9 +299,8 @@ func (m *Model) publishSimImage(img image.Image) bool {
 	return true
 }
 
-// republishSimImage vuelve a publicar la imagen en la capa con la geometría
-// actual. Se llama en cada resize: la colocación va en celdas, así que cambia con
-// el tamaño de la terminal igual que el marco.
+// On every resize: the placement is in cells, so it changes with the terminal size exactly like the
+// frame does.
 func (m *Model) republishSimImage() {
 	img := m.sim.img
 	if img == nil {
@@ -398,38 +308,32 @@ func (m *Model) republishSimImage() {
 	}
 	m.sim.viaGraphics = false
 	if !m.publishSimImage(img) {
-		// Si la capa deja de estar disponible (pane oculto, Herdr que no
-		// responde), se vuelve a half-blocks en vez de dejar un hueco.
+		// If the layer stops being available (hidden pane, unresponsive Herdr) it falls back to
+		// half-blocks rather than leaving a hole.
 		m.renderSimCells()
 	}
 }
 
-// simBox es la geometría del popup: sus dimensiones exteriores. Es la única
-// fuente, y las celdas de la imagen se derivan de aquí.
-//
-// Que sea una sola fuente no es PURITANISMO: cuando el ancho de la caja y el de
-// las celdas los decidía cada uno por su cuenta, la imagen se dibujaba a 94
-// columnas dentro de una caja de 200 y ocupaba el tercio izquierdo del popup, con
-// un borde vacío a su derecha que parecía parte de la imagen.
+// One source, not puritanism: when the box's width and the cells' width were decided separately, the
+// image drew at 94 columns inside a 200-column box and took the left third of the popup with what looked
+// like part of the image on its right.
 func (m Model) simBox() (w, h int) {
 	switch m.sim.state {
 	case simChoosing:
-		// El selector no enseña imagen: es una caja estrecha con tres líneas.
 		return min(m.contentWidth(), simChooserWidth), simChrome + 2
 	case simRendering:
 		return min(m.contentWidth(), simChooserWidth), simChrome + 2
 	}
 
-	// La imagen manda: la caja se ajusta a lo que la imagen necesita, no al revés.
+	// The image decides: the box fits what the image needs, not the other way round.
 	cellW, cellH := m.cellSize()
 	cols, rows := sim.FitCells(m.sim.img, cellW, cellH, m.simMaxCols(), m.simMaxRows())
 	return cols + 2, rows + simChrome
 }
 
-// cellSize son los píxeles de una celda. Herdr los mide (en kitty con la fuente por
-// defecto son 9×19, no 2×1) y usarlos hace dos cosas a la vez: que la imagen no se
-// deforme y que no se mande más resolución de la que se ve. Sin Herdr se supone 1×2,
-// que es lo que hacen casi todos los terminales.
+// Herdr measures them (in kitty with the default font 9x19, not 2x1) and using them does two things at
+// once: the image does not distort and no more resolution than is visible is sent. Without Herdr, 1x2 is
+// assumed, which is what most terminals do.
 func (m Model) cellSize() (w, h int) {
 	if m.sim.cellW_px > 0 && m.sim.cellH_px > 0 {
 		return m.sim.cellW_px, m.sim.cellH_px
@@ -437,50 +341,33 @@ func (m Model) cellSize() (w, h int) {
 	return 1, 2
 }
 
-// simBoxOrigin es la esquina del popup en la vista, en celdas. Lo comparte con el
-// overlay: es lo que permite que la imagen en la capa de gráficos caiga justo en el
-// hueco del marco.
 func (m Model) simBoxOrigin(cols, rows int) (col, row int) {
 	return centeredOrigin(m.contentWidth(), m.height, cols, rows)
 }
 
-// simMaxCols son las columnas que el popup puede usar, dejando fondo a los lados.
 func (m Model) simMaxCols() int {
 	return max(simMinCols, m.contentWidth()-simSideMargin)
 }
 
-// simMaxRows son las líneas que el popup puede usar, dejando fondo arriba y abajo.
 func (m Model) simMaxRows() int {
 	free := m.height - 2*simMargin
 	return max(simMinRows, free*simHeightNum/simHeightDen)
 }
 
-// renderSimCells (re)dibuja la imagen a la geometría del popup. Se llama al llegar
-// el resultado y en cada resize, que es lo único que cambia el tamaño disponible.
 func (m *Model) renderSimCells() {
 	if m.sim.state != simShowing || m.sim.img == nil || m.sim.viaGraphics {
-		// Con la imagen en la capa de gráficos no hay celdas que pintar: el popup
-		// solo dibuja el marco y Herdr pone la imagen encima.
 		m.sim.cells, m.sim.cellW, m.sim.cellH = nil, 0, 0
 		return
 	}
 	cols, rows := m.simBox()
-	// El hueco interior NO se comprueba contra cero, y antes se comprobaba. Es
-	// INALCANZABLE, y la cuenta es corta:
-	//
-	//   - `simBox` devuelve, en modo imagen, `cols+2, rows+simChrome`;
-	//   - `sim.FitCells` devuelve `max(..., 1)` en las dos dimensiones, en las dos
-	//     ramas que tiene;
-	//   - y aquí se resta exactamente `2` y `simChrome`, que es lo que `simBox` añadió.
-	//
-	// O sea que `w` y `h` son exactamente lo que devolvió `FitCells`, y eso es al menos
-	// 1. Ni medio celda. Un hueco de cero columnas no se puede construir.
-	//
-	// Y la comprobación, aunque se pudiera, no cambiaría nada: `sim.Cells` devuelve `nil`
-	// con `w <= 0 || h <= 0`, o sea que sin celdas tampoco habría geometría que anotar
-	// más que un cero. La guarda era una tercera forma de decir lo mismo que dicen
-	// `FitCells` y `Cells`, y la menos clara de las tres porque era la única que no
-	// decía por qué.
+	// The inner gap is not checked against zero and used to be. It is unreachable: `simBox` returns
+	// `cols+2, rows+simChrome`, `sim.FitCells` returns `max(..., 1)` in both dimensions in both of its
+	// branches, and exactly `2` and `simChrome` are subtracted here. So `w` and `h` are what FitCells
+	// returned, at least 1.
+	// And the check would not change anything even if it could: `sim.Cells` returns nil for
+	// `w <= 0 || h <= 0`, so without cells there would be no geometry to record but a zero. The guard was
+	// a third way of saying what `FitCells` and `Cells` already say, and the least clear of the three
+	// because it was the only one that did not say why.
 	w, h := cols-2, rows-simChrome
 	if m.sim.cells != nil && m.sim.cellW == w && m.sim.cellH == h {
 		return
@@ -489,10 +376,8 @@ func (m *Model) renderSimCells() {
 	m.sim.cellW, m.sim.cellH = w, h
 }
 
-// simOverlay compone la caja del popup. Devuelve false si no hay nada que pintar,
-// que es el caso normal. La anchura con la que se centra el overlay es la de la
-// vista, no la de la caja: son cosas distintas y confundirlas es lo que dejaba la
-// imagen en un rincón.
+// The width it centres in is the VIEW's, not the box's: they are different things, and confusing them is
+// what left the image in a corner.
 func (m Model) simOverlay() (string, bool) {
 	switch m.sim.state {
 	case simChoosing:
@@ -506,12 +391,10 @@ func (m Model) simOverlay() (string, bool) {
 	}
 }
 
-// simChooserBox es la primera fase: confirmar la estrategia. Ninguna tiene modo
-// por defecto, igual que en el merge: la simulación que se enseña tiene que ser la
-// que el usuario quiso ver, y una estrategia implícita la cambiaría por otra sin
-// dejar rastro. Con una sola estrategia disponible el popup no pregunta, sino
-// confirma: enseñar qué se va a simular antes de gastar el render es justo lo
-// que hace útil un popup de dos segundos.
+// No default mode, like the merge: the simulation shown has to be the one the user wanted, and an
+// implicit strategy would silently swap it for another.
+// With a single strategy available the popup confirms instead of asking, which is what makes a two-second
+// popup worth having.
 func (m Model) simChooserBox() string {
 	width, _ := m.simBox()
 	it := m.sim.item
@@ -538,10 +421,6 @@ func (m Model) simChooserBox() string {
 	return borderedBox(" simulate "+refLabel(it), strings.Join(lines, "\n"), width)
 }
 
-// simBusyBox es la fase intermedia: el render corre y se dice cuánto se espera de
-// forma honesta, que es "un momento". Solo se ve unos segundos y por eso no
-// necesita un cronómetro: untruecer un progreso que no se puede medir es peor que
-// no medirlo.
 func (m Model) simBusyBox() string {
 	width, _ := m.simBox()
 	body := m.spinner.View() + styleInfo.Render(" rendering "+string(m.sim.kind)+"…")
@@ -549,32 +428,16 @@ func (m Model) simBusyBox() string {
 	return borderedBox(" simulate: "+string(m.sim.kind), body, width)
 }
 
-// simImageBox es la fase final: la imagen del render, con su pie de ayuda.
-//
-// Con la imagen en la capa de gráficos, el interior va vacío de propósito: la
-// imagen la pinta Herdr por encima. Rellenarlo con celdas sería mandar por el
-// terminal lo que ya está en pantalla y encima lo taparía dos veces.
 func (m Model) simImageBox() string {
 	width, height := m.simBox()
-	// El cuerpo se rellena hasta el alto MENOS el marco y la línea del pie, que es
-	// justo lo que mide simChrome. Antes se rellenaba hasta alto - marco - 1, y la
-	// caja salía una fila más corta de lo que decía simBox: como el alto lo
-	// heredan el centrado y la colocación de la imagen, esa fila se nota.
+	// Filled to the height MINUS the frame and the footer line, which is exactly what simChrome measures.
+	// It used to be filled to height - frame - 1 and the box came out a row shorter than simBox said: the
+	// height is inherited by the centring and by the image placement, so that row shows.
 	body := padLines(m.sim.cells, height-simChrome)
 	body = append(body, styleDim.Render("esc close · o open image"))
 	return borderedBox(" simulate: "+string(m.sim.kind)+" "+refLabel(m.sim.item), strings.Join(body, "\n"), width)
 }
 
-// padLines completa una lista de líneas con líneas vacías hasta que mida `want`.
-//
-// Está en su propia función por la misma razón que la geometría de los
-// comentarios: el relleno decide el ALTO de la caja, y dentro del pintado ese alto
-// lo absorbe el borde. Una caja una fila más corta no se ve como una caja más
-// corta, se ve como una caja con el pie pegado al borde de arriba.
-//
-// El relleno es un SUELO y no un recorte: si ya hay más líneas de las pedidas, se
-// devuelven todas. Recortar el contenido para forzar una altura sería tirar
-// imagen, y la imagen es lo que el usuario está mirando.
 func padLines(lines []string, want int) []string {
 	out := make([]string, 0, max(0, want))
 	out = append(out, lines...)
@@ -584,17 +447,12 @@ func padLines(lines []string, want int) []string {
 	return out
 }
 
-// simBorder es el color del popup: el de la información, para que se distinga de
-// las cajas de la vista sin parecer un aviso.
 var simBorder = lipgloss.Color("39")
 
-// borderedBox dibuja el popup con su título embebido en el borde superior.
 func borderedBox(title, content string, width int) string {
 	return bordered.RenderWithTitle(bordered.Rounded(), simBorder, title, content, width)
 }
 
-// padRight completa con espacios hasta n columnas visibles, para que las
-// etiquetas del selector queden alineadas.
 func padRight(s string, n int) string {
 	if pad := n - ansi.StringWidth(s); pad > 0 {
 		return s + strings.Repeat(" ", pad)

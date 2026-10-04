@@ -1,7 +1,3 @@
-// Tests de la doble confirmación de merge: la primera pulsación solo arma y la
-// segunda es la que elige el modo y ejecuta. Un merge reescribe historia y no se
-// deshace con un comando, así que lo que más importa es que no exista ningún
-// camino que lo dispare con una estrategia que el usuario no ha nombrado.
 package tui
 
 import (
@@ -19,10 +15,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// mergeFixture es un modelo con un ítem seleccionable, accionable y releíble por
-// el adapter. Los tres hacen falta: sin selección no hay nada que armar, sin
-// releer el forge RunAction aborta antes de llegar a Merge, y sin releer no se
-// puede comprobar que el modo llegó a la CLI.
 type mergeFixture struct {
 	m     Model
 	adp   *testutil.FakeAdapter
@@ -36,8 +28,6 @@ func mergeItems() []model.Item {
 	}
 }
 
-// newMergeFixture monta el modelo con los ítems dados ya presentes en la sección
-// de review y registrados en el adapter para que ItemState los devuelva.
 func newMergeFixture(t *testing.T, items ...model.Item) mergeFixture {
 	t.Helper()
 	adp := ghAdapter()
@@ -51,12 +41,10 @@ func newMergeFixture(t *testing.T, items ...model.Item) mergeFixture {
 	return mergeFixture{m: m, adp: adp, items: items}
 }
 
-// stateKey es la clave con la que FakeAdapter indexa ItemState.
 func stateKey(it model.Item) string {
 	return it.Ref.Project + "#" + strconv.Itoa(it.Number)
 }
 
-// waitOutcome lee el resultado de la acción del canal de eventos.
 func waitOutcome(t *testing.T, m Model) forge.Outcome {
 	t.Helper()
 	ev := waitMount(t, m)
@@ -67,17 +55,11 @@ func waitOutcome(t *testing.T, m Model) forge.Outcome {
 	return msg.outcome
 }
 
-// toasts aplana los avisos vivos a un string, para afirmar sobre el texto sin
-// depender de cuántas vistas hay apiladas.
 func toasts(m Model) string { return strings.Join(toastTexts(m), " | ") }
 
-// TestMergeArmsOnFirstPress: la primera pulsación no ejecuta nada. Es el test que
-// sostiene la doble verificación: si el merge saliera aquí, la segunda tecla no
-// sería una confirmación sino un adorno.
 func TestMergeArmsOnFirstPress(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
-	// El cursor no tiene por qué estar en el primer ítem de la página: las filas
-	// se ordenan, así que se lee lo que hay seleccionado en vez de suponerlo.
+	// The cursor need not be on the first row of the page: the rows are ordered.
 	armed, ok := f.m.selected()
 	if !ok {
 		t.Fatal("el fixture necesita una selección")
@@ -95,9 +77,6 @@ func TestMergeArmsOnFirstPress(t *testing.T) {
 	}
 }
 
-// TestMergeArmedShowsConfirmInKeybinds: la confirmación sustituye a la barra de
-// atajos. Es la caja siempre visible, no un toast, porque una confirmación a la
-// que se contesta después de mirar a otro lado tiene que seguir ahí.
 func TestMergeArmedShowsConfirmInKeybinds(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -108,14 +87,11 @@ func TestMergeArmedShowsConfirmInKeybinds(t *testing.T) {
 			t.Errorf("la confirmación no menciona %q\n%s", want, view)
 		}
 	}
-	// La barra normal no debe seguir compitiendo con la confirmación.
 	if strings.Contains(view, "pgup/dn page") {
 		t.Errorf("con el merge armado la barra de atajos debería ceder\n%s", view)
 	}
 }
 
-// TestMergeSecondKeyPicksMode es el núcleo: cada segunda tecla ejecuta con SU modo,
-// y no hay modo por defecto.
 func TestMergeSecondKeyPicksMode(t *testing.T) {
 	for _, tc := range []struct {
 		key  string
@@ -147,8 +123,6 @@ func TestMergeSecondKeyPicksMode(t *testing.T) {
 	}
 }
 
-// TestMergeSecondKeyOnlyPicksItsOwnMode: la segunda tecla de un modo no dispara
-// los otros dos. Sin esto, `ms` podría llegar a hacer un rebase.
 func TestMergeSecondKeyOnlyPicksItsOwnMode(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -162,15 +136,8 @@ func TestMergeSecondKeyOnlyPicksItsOwnMode(t *testing.T) {
 	}
 }
 
-// TestMergeArmedConsumesOtherKey: unarmed y ADEMÁS se come la tecla.
-//
-// Antes se delegaba en handleKey, y eso convertía un merge mal armado en una
-// acción distinta: `m` y luego `a` aprobaba el PR y `m` y luego `m` mergeaba con
-// merge commit sin haber pasado por la confirmación. El motivo original del
-// default —que un `m` a destiempo no dejara la vista esperando— se cumple igual
-// sin re-despachar: la vista deja de esperar, y la tecla que no era un modo no
-// hace nada. Consumirla es la única forma de que el gesto de confirmar no pueda
-// terminar en una acción que el usuario no pidió.
+// It ALSO eats the key. It used to delegate to handleKey, which turned a mis-armed merge into an
+// approve: `m` then `a` approved the PR.
 func TestMergeArmedConsumesOtherKey(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	start := f.m.cursor
@@ -188,9 +155,6 @@ func TestMergeArmedConsumesOtherKey(t *testing.T) {
 	}
 }
 
-// TestMergeArmedApproveKeyDoesNotApprove blinda el agujero concreto: la tecla de
-// approve es la más cercana a `m` en el teclado y con el fallback anterior
-// aprobaba el PR. Aquí afirma que no hay ninguna acción registrada.
 func TestMergeArmedApproveKeyDoesNotApprove(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -205,9 +169,6 @@ func TestMergeArmedApproveKeyDoesNotApprove(t *testing.T) {
 	}
 }
 
-// TestMergeEscCancels: esc cancela y lo dice, y q sigue cerrando la TUI. Son dos
-// intenciones distintas —descartar y salir— y colapsarlas haría que q dejara de
-// cerrar la aplicación.
 func TestMergeEscCancels(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -234,9 +195,6 @@ func TestMergeQuittingStillQuits(t *testing.T) {
 	}
 }
 
-// TestMergeArmedGuardsBeforeArming: armar un merge que ya se sabe inválido solo
-// genera una confirmación que no puede terminar bien, así que los guards corren
-// antes de armar.
 func TestMergeArmedGuardsBeforeArming(t *testing.T) {
 	m := newTestModel(t, ghAdapter()) // sin selección
 
@@ -249,9 +207,6 @@ func TestMergeArmedGuardsBeforeArming(t *testing.T) {
 	}
 }
 
-// TestMergeArmedRefusesAlreadyDenied: un merge que ya volvió denegado por el
-// forge no se arma. Armarlo y solo avisar al confirmar sería hacer esperar al
-// usuario por un error que ya se conoce.
 func TestMergeArmedRefusesAlreadyDenied(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := f.m
@@ -270,17 +225,11 @@ func TestMergeArmedRefusesAlreadyDenied(t *testing.T) {
 	}
 }
 
-// TestMergeOnChangedItemAborts: un refresco puede recolocar el cursor entre el
-// armado y la confirmación. El merge sale sobre lo que el usuario confirmó o no
-// sale; nunca sobre lo que ahora esté debajo del cursor.
 func TestMergeOnChangedItemAborts(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
 	armed, _ := m.selected()
 
-	// Lo que hace un ciclo de refresco: la selección se mueve. Se mueve el
-	// cursor directamente porque lo que se prueba es el guard, no la cadena de
-	// refresco que reposiciona.
 	m.cursor = (m.cursor + 1) % len(m.rows())
 	if moved, _ := m.selected(); moved.ID() == armed.ID() {
 		t.Skip("el fixture no tiene un segundo ítem al que moverse")
@@ -303,9 +252,6 @@ func TestMergeOnChangedItemAborts(t *testing.T) {
 	}
 }
 
-// TestMergeNoticeNamesTheMode: el resultado dice con qué estrategia se integró.
-// Sin eso, un "merge ok" no permite saber si se aplicó el rebase que el usuario
-// no quería.
 func TestMergeNoticeNamesTheMode(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")
@@ -318,10 +264,6 @@ func TestMergeNoticeNamesTheMode(t *testing.T) {
 	}
 }
 
-// ═══════════════ B — auto-borrado del worktree tras mergear ═══════════════
-
-// fakeRemover simula el auto-borrado del worktree del review. Registra el ítem
-// con el que se le pidió y devuelve un resultado fijo.
 type fakeRemover struct {
 	removed bool
 	reason  string
@@ -336,8 +278,6 @@ func (f *fakeRemover) RemoveReview(_ context.Context, it model.Item) (bool, stri
 	return f.removed, f.reason, f.err
 }
 
-// mergeOutcome arma un merge rebase desde la TUI, lo dispara y devuelve el modelo
-// (con el remover inyectado) junto al resultado del forge, sin aplicarlo.
 func mergeOutcome(t *testing.T, remover ReviewRemover) (Model, forge.Outcome) {
 	t.Helper()
 	f := newMergeFixture(t, mergeItems()...)
@@ -350,10 +290,6 @@ func mergeOutcome(t *testing.T, remover ReviewRemover) (Model, forge.Outcome) {
 	return m, waitOutcome(t, m)
 }
 
-// applyMerge dispara un merge rebase y devuelve el modelo con el resultado ya
-// volcado junto al comando de limpieza que el update devuelve (nil si el merge no
-// lo dispara). Volcar el resultado es síncrono, así que los tests no dependen de
-// goroutines ni de sleeps.
 func applyMerge(t *testing.T, remover ReviewRemover) (Model, tea.Cmd) {
 	t.Helper()
 	m, out := mergeOutcome(t, remover)
@@ -374,8 +310,6 @@ func runCleanup(t *testing.T, m Model, cmd tea.Cmd) (Model, bool) {
 	return send(t, m, msg), true
 }
 
-// TestMergeOKRemovesCleanWorktree cubre el caso feliz: el merge OK borra el
-// worktree del ítem seleccionado y el aviso dice las dos cosas.
 func TestMergeOKRemovesCleanWorktree(t *testing.T) {
 	remover := &fakeRemover{removed: true}
 	m, out := mergeOutcome(t, remover)
@@ -394,7 +328,6 @@ func TestMergeOKRemovesCleanWorktree(t *testing.T) {
 	}
 }
 
-// TestMergeOKKeepsDirtyWorktree fija el texto exacto del caso sucio.
 func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
 	remover := &fakeRemover{reason: worktree.KeptUncommitted}
 	m, cmd := applyMerge(t, remover)
@@ -417,8 +350,6 @@ func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
 	}
 }
 
-// TestMergeOKWithoutReviewReportsNoError: sin review montado el merge termina
-// igual y no aparece ningún aviso de limpieza.
 func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
 	remover := &fakeRemover{} // (false, "", nil): no hay review montado
 	m, cmd := applyMerge(t, remover)
@@ -436,9 +367,6 @@ func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
 	}
 }
 
-// TestMergeCleanupNoopDoesNotDuplicateToast cubre que un no-op (sin review
-// montado) no re-emita el aviso del merge: los avisos vivos quedan como estaban,
-// sin apilar una copia idéntica.
 func TestMergeCleanupNoopDoesNotDuplicateToast(t *testing.T) {
 	remover := &fakeRemover{} // (false, "", nil)
 	m, cmd := applyMerge(t, remover)
@@ -449,10 +377,7 @@ func TestMergeCleanupNoopDoesNotDuplicateToast(t *testing.T) {
 	}
 }
 
-// TestReviewCleanupMsgDoesNotArmChannelReader: reviewCleanupMsg lo produce un
-// Cmd (no el canal de eventos), así que su case no debe rearmar un lector. Con
-// withPump devolvería un cmd de armReader —una goroutine lectora filtrada por
-// cada merge OK con removedor— y este test fallaría.
+// reviewCleanupMsg comes from a Cmd, not the events channel.
 func TestReviewCleanupMsgDoesNotArmChannelReader(t *testing.T) {
 	remover := &fakeRemover{removed: true}
 	m, cmd := applyMerge(t, remover)
@@ -470,9 +395,6 @@ func TestReviewCleanupMsgDoesNotArmChannelReader(t *testing.T) {
 	}
 }
 
-// TestMergeCleanupRemovedDoesNotDuplicateToast: en el caso borrado la limpieza
-// actualiza el aviso del merge con el hecho nuevo en vez de apilar un segundo
-// aviso que repite su texto. Debe quedar un único aviso con los dos hechos.
 func TestMergeCleanupRemovedDoesNotDuplicateToast(t *testing.T) {
 	remover := &fakeRemover{removed: true}
 	m, out := mergeOutcome(t, remover)
@@ -498,8 +420,6 @@ func TestMergeCleanupRemovedDoesNotDuplicateToast(t *testing.T) {
 	}
 }
 
-// TestMergeOKCleanupErrorIsWarn: un fallo de borrado no convierte el merge en
-// error: el merge sí salió, así que se avisa como una advertencia.
 func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
 	remover := &fakeRemover{err: errors.New("boom")}
 	m, cmd := applyMerge(t, remover)
@@ -510,8 +430,6 @@ func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
 	}
 }
 
-// TestMergeCleanupComposesWithBranchNotDeleted: el aviso del borrado no pisa el
-// hecho de que la rama no se borró; los dos conviven.
 func TestMergeCleanupComposesWithBranchNotDeleted(t *testing.T) {
 	remover := &fakeRemover{reason: worktree.KeptUncommitted}
 	m, out := mergeOutcome(t, remover)
@@ -527,9 +445,6 @@ func TestMergeCleanupComposesWithBranchNotDeleted(t *testing.T) {
 	}
 }
 
-// TestReviewCleanupNoticeLevels fija el nivel del aviso compuesto: cubrir el
-// texto no basta, porque un borrado sobre un merge que ya avisaba (rama no
-// borrada) debe conservar el warning en vez de rebajarlo a OK.
 func TestReviewCleanupNoticeLevels(t *testing.T) {
 	const base = "merge (squash) ok · branch not deleted: protected"
 	cases := []struct {
@@ -558,9 +473,6 @@ func TestReviewCleanupNoticeLevels(t *testing.T) {
 	}
 }
 
-// TestMergeCleanupRemovedKeepsWarnLevel comprueba de punta a punta que el aviso
-// final de un borrado sobre un merge ya advertido (rama no borrada) sigue siendo
-// warning: el nivel forma parte del hecho, no solo el texto.
 func TestMergeCleanupRemovedKeepsWarnLevel(t *testing.T) {
 	remover := &fakeRemover{removed: true}
 	m, out := mergeOutcome(t, remover)
@@ -602,10 +514,6 @@ func TestTriggersReviewCleanup(t *testing.T) {
 	}
 }
 
-// TestCleanupDoesNotTriggerOnOtherOutcomes cubre los negativos: aprobar, cambiar
-// la base y un merge que no sale bien no disparan ningún borrado. Se asertan
-// sobre el comando devuelto (nil) además del contador del remover, así que no
-// dependen de que una goroutine llegue a arrancar.
 func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -663,8 +571,6 @@ func TestQuitDoesNotRemoveWorktrees(t *testing.T) {
 	}
 }
 
-// TestRefreshMergedItemDoesNotTriggerCleanup: un PR mergeado que se ve al
-// refrescar (fuera de prdash) no dispara la limpieza.
 func TestRefreshMergedItemDoesNotTriggerCleanup(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	remover := &fakeRemover{removed: true}

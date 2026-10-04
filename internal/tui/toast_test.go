@@ -12,8 +12,6 @@ import (
 	"prdash/internal/state"
 )
 
-// toastTestModel devuelve un modelo con reloj fijo: la caducidad se prueba
-// advancing the clock, not sleeping.
 func toastTestModel(t *testing.T) (Model, *time.Time) {
 	t.Helper()
 	m := newTestModel(t, ghAdapter())
@@ -22,8 +20,6 @@ func toastTestModel(t *testing.T) (Model, *time.Time) {
 	return m, &now
 }
 
-// TestToastAppearsAndExpires: un aviso se ve al salir y desaparece solo pasado su
-// TTL, sin que ningún evento de la app lo empuje.
 func TestToastAppearsAndExpires(t *testing.T) {
 	m, now := toastTestModel(t)
 	m = press(t, m, "a") // sin selección: lanza un aviso
@@ -31,7 +27,6 @@ func TestToastAppearsAndExpires(t *testing.T) {
 	if len(toastTexts(m)) == 0 {
 		t.Fatal("debería haber un aviso tras la pulsación")
 	}
-	// El tick poda lo caducado; antes del TTL sigue ahí.
 	m = send(t, m, toastTickMsg{})
 	if len(toastTexts(m)) != 1 {
 		t.Fatalf("el aviso shouldn't caducar antes de tiempo: %q", toastTexts(m))
@@ -43,8 +38,6 @@ func TestToastAppearsAndExpires(t *testing.T) {
 	}
 }
 
-// TestToastStacksInOrder cubre la pila: el último Lanzado es el que se lee y
-// todos se dibujan.
 func TestToastStacksInOrder(t *testing.T) {
 	m, _ := toastTestModel(t)
 	m.toast.show("first", toastInfo)
@@ -57,8 +50,6 @@ func TestToastStacksInOrder(t *testing.T) {
 	}
 }
 
-// TestToastIgnoresEmptyMessage: un aviso vacío no se apila (evita cajas en
-// blanco).
 func TestToastIgnoresEmptyMessage(t *testing.T) {
 	m, _ := toastTestModel(t)
 	m.toast.show("", toastInfo)
@@ -67,8 +58,6 @@ func TestToastIgnoresEmptyMessage(t *testing.T) {
 	}
 }
 
-// TestToastOverlaysView: el aviso se dibuja encima de la vista, en su propia
-// caja, y la vista sigue detrás.
 func TestToastOverlaysView(t *testing.T) {
 	m, _ := toastTestModel(t)
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
@@ -90,9 +79,8 @@ func TestToastOverlaysView(t *testing.T) {
 	}
 }
 
-// TestToastDoesNotBreakColumnWidths es la invariante delicate: componer el
-// overlay sobre líneas con ANSI no puede desplazar el texto de debajo, desbordar
-// el ancho útil ni añadir líneas.
+// The delicate invariant: compositing the overlay over lines must not widen them, or the
+// whole table misaligns.
 func TestToastDoesNotBreakColumnWidths(t *testing.T) {
 	m, _ := toastTestModel(t)
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
@@ -105,23 +93,16 @@ func TestToastDoesNotBreakColumnWidths(t *testing.T) {
 	if len(after) != len(before) {
 		t.Fatalf("el overlay añadió líneas: %d -> %d", len(before), len(after))
 	}
-	// El overlay no puede ensuciar el borde de las cajas: toda la vista mide el
-	// ancho exterior de la terminal (el del borde), y el aviso se recorta al
-	// interior.
 	for i, l := range after {
 		if w := ansi.StringWidth(l); w > m.outerWidth() {
 			t.Fatalf("línea %d mide %d columnas, excede %d:\n%q", i, w, m.outerWidth(), stripANSI(l))
 		}
 	}
-	// La tabla no se ha movido: el encabezado de columna sigue en su sitio.
 	if stripANSI(after[0]) != stripANSI(before[0]) {
 		t.Errorf("el overlay movió la cabecera:\n%q\n%q", stripANSI(before[0]), stripANSI(after[0]))
 	}
 }
 
-// marcoDe extrae el esqueleto de la vista: el primer y el último carácter de
-// cada línea. Es lo que dice si los marcos siguen en su sitio: si el overlay
-// pisa una línea de borde, el esqueleto cambia.
 func marcoDe(view string) []string {
 	out := make([]string, 0)
 	for _, l := range strings.Split(stripANSI(view), "\n") {
@@ -134,10 +115,6 @@ func marcoDe(view string) []string {
 	return out
 }
 
-// TestToastNoPisaBordes es el motivo de anclar el aviso al interior: la vista
-// es una pila de cajas y un aviso encima del borde inferior del detalle lo
-// destrozaba, dejando un marco partido. Ahora el aviso solo aterriza en interior
-// de caja, así que todos los marcos sobreviven intactos.
 func TestToastNoPisaBordes(t *testing.T) {
 	m, _ := toastTestModel(t)
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
@@ -159,9 +136,7 @@ func TestToastNoPisaBordes(t *testing.T) {
 	}
 }
 
-// TestToastNoTapaLaAyuda: la caja de atajos no cede su interior. Es la ayuda que
-// hay que leer cuando no se entiende una tecla, así que un aviso encima la
-// volvería ilegible justo cuando hace falta.
+// The hints box does not give up its interior: it is the help the user has to read.
 func TestToastNoTapaLaAyuda(t *testing.T) {
 	m, _ := toastTestModel(t)
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -174,8 +149,6 @@ func TestToastNoTapaLaAyuda(t *testing.T) {
 		if !strings.Contains(l, "q quit") {
 			continue
 		}
-		// La línea de atajos tiene que seguir siendo la caja de atajos, no un
-		// aviso superpuesto: su contenido intacto y sin glifos de aviso.
 		if !strings.Contains(l, "j/k move") {
 			t.Errorf("la línea de atajos quedó tapada por un aviso: %q", l)
 		}
@@ -185,8 +158,6 @@ func TestToastNoTapaLaAyuda(t *testing.T) {
 	}
 }
 
-// TestToastApilaVariosAvisos: los avisos se apilan hacia arriba sin pisar bordes
-// ni solaparse, y cada uno se ve entero.
 func TestToastApilaVariosAvisos(t *testing.T) {
 	m, _ := toastTestModel(t)
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -212,17 +183,12 @@ func TestToastApilaVariosAvisos(t *testing.T) {
 	}
 }
 
-// TestViewRowsCoincidenConLasLineas: la lista de filas que usa el overlay tiene
-// una entrada por línea de la vista. Si se desincronizara, el aviso aterrizaría
-// en la fila que no es.
 func TestViewRowsCoincidenConLasLineas(t *testing.T) {
 	m, _ := toastTestModel(t)
 	v := m.compose(m.layout(), m.listSection(m.layout()), m.detailSection(model.Item{}, false, m.layout().detailLines))
 	if got, want := len(v.rows), len(strings.Split(v.text, "\n")); got != want {
 		t.Errorf("rows = %d, want %d (una por línea)", got, want)
 	}
-	// Los bordes de las cajas no admiten aviso; el interior de la lista y del
-	// detalle, sí.
 	for i, ok := range v.rows {
 		l := stripANSI(strings.Split(v.text, "\n")[i])
 		borde := strings.HasPrefix(l, "╭") || strings.HasPrefix(l, "╰")
@@ -232,40 +198,29 @@ func TestViewRowsCoincidenConLasLineas(t *testing.T) {
 	}
 }
 
-// TestLandRowBuscaElHuecoMasBajo: la búsqueda del hueco es pura y su contrato es
-// exacto — la fila más baja que cabe, y solo sobre filas que lo admiten.
 func TestLandRowBuscaElHuecoMasBajo(t *testing.T) {
-	// 6 filas: las 3 últimas admiten aviso, las anteriores no.
 	rows := []bool{false, false, false, true, true, true}
 	if base, ok := landRow(rows, 5, 3); !ok || base != 5 {
 		t.Errorf("landRow = (%d, %v), want (5, true): el hueco más bajo es 3..5", base, ok)
 	}
-	// Un bloque de 4 no cabe en las 3 filas libres: no hay hueco.
 	if _, ok := landRow(rows, 5, 4); ok {
 		t.Error("landRow encontró hueco para 4 filas en 3 libres")
 	}
-	// Con anchor más arriba solo se pinta lo que queda por debajo de él: aquí
-	// las 3 primeras filas son las que admiten aviso, y el hueco es 0..2.
 	arriba := []bool{true, true, true, false, false, false}
 	if base, ok := landRow(arriba, 2, 3); !ok || base != 2 {
 		t.Errorf("landRow(arriba, 2, 3) = (%d, %v), want (2, true): el anchor limita la búsqueda", base, ok)
 	}
-	// Con anchor por debajo del hueco no se sube a buscarlo.
 	if _, ok := landRow(arriba, 1, 3); ok {
 		t.Error("landRow subió por encima del anchor")
 	}
-	// Si no hay ninguna fila que admita aviso, no se pinta.
 	if _, ok := landRow([]bool{false, false, false}, 2, 2); ok {
 		t.Error("landRow pintó sobre filas que no admiten aviso")
 	}
-	// Un anchor por debajo de cero no inventa filas.
 	if _, ok := landRow([]bool{true, true, true}, -5, 3); ok {
 		t.Error("landRow aceptó un anchor negativo")
 	}
 }
 
-// TestToastWrapsAndStaysBounded: un mensaje largo se envuelve y la caja nunca
-// se sale del máximo.
 func TestToastWrapsAndStaysBounded(t *testing.T) {
 	m, _ := toastTestModel(t)
 	long := strings.Repeat("very long toast message ", 12)
@@ -283,14 +238,11 @@ func TestToastWrapsAndStaysBounded(t *testing.T) {
 			t.Errorf("línea de caja con %d columnas, excede %d: %q", w, toastMaxWidth, l)
 		}
 	}
-	// Con poco hueco disponible la caja se encoge.
 	if w := ansi.StringWidth(strings.Split(m.toast.blocks(30)[0], "\n")[0]); w > 30 {
 		t.Errorf("la caja no respetó el hueco disponible: %d columnas", w)
 	}
 }
 
-// TestSetNoticeMapsLevels: el nivel interno se traduce al del toast y
-// levelNone no lanza nada.
 func TestSetNoticeMapsLevels(t *testing.T) {
 	m, _ := toastTestModel(t)
 	m.setNotice("hola", levelNone)
@@ -306,8 +258,7 @@ func TestSetNoticeMapsLevels(t *testing.T) {
 	}
 }
 
-// TestToastTickDoesNotTouchTheEventChannel: el tick viene del reloj, no del
-// canal: no puede rearmar un lector (el invariante de la bomba es 1).
+// The tick comes from the clock, not the channel, so it cannot re-arm a reader.
 func TestToastTickDoesNotTouchTheEventChannel(t *testing.T) {
 	m, _ := toastTestModel(t)
 	before := m.readers
@@ -321,8 +272,6 @@ func TestToastTickDoesNotTouchTheEventChannel(t *testing.T) {
 	}
 }
 
-// TestToastInViewOfDetail: el overlay también se aplica sobre el panel de
-// detalle, que es la única vista que hay.
 func TestToastInViewOfDetail(t *testing.T) {
 	m, _ := toastTestModel(t)
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
@@ -333,8 +282,6 @@ func TestToastInViewOfDetail(t *testing.T) {
 	}
 }
 
-// TestToastBorderMatchesLevel: cada nivel tiene su icono y su color, para que el
-// aviso se distinga de un vistazo.
 func TestToastBorderMatchesLevel(t *testing.T) {
 	m, _ := toastTestModel(t)
 	want := map[toastLevel]string{
@@ -355,11 +302,7 @@ func TestToastBorderMatchesLevel(t *testing.T) {
 	}
 }
 
-// TestToastReplaceFindsAnOlderToast: replace debe encontrar el objetivo aunque no
-// sea el aviso más nuevo. En producción el aviso del merge puede dejar de ser el
-// último índice si otra cosa avisa entre el merge y la limpieza; el escaneo hacia
-// atrás tiene que llegar hasta él y sustituirlo en su sitio, sin tocar el resto y
-// reiniciando su TTL.
+// replace must find its target even when it is not the newest.
 func TestToastReplaceFindsAnOlderToast(t *testing.T) {
 	m, now := toastTestModel(t)
 	m.toast.show("merge ok", toastSuccess)
@@ -383,15 +326,10 @@ func TestToastReplaceFindsAnOlderToast(t *testing.T) {
 	}
 }
 
-// TestToastReplaceAppendsWhenTheTargetIsGone: si el aviso objetivo ya no está
-// vivo (caducó y el tick lo podó), replace apila uno nuevo en vez de quedarse sin
-// hacer nada. Es el fallback del camino de sustitución.
 func TestToastReplaceAppendsWhenTheTargetIsGone(t *testing.T) {
 	m, now := toastTestModel(t)
 	m.toast.show("merge ok", toastSuccess)
 
-	// Pasa el TTL: el aviso del merge caduca y el tick lo poda. Llega después otro
-	// aviso, así que la pila no queda vacía pero ya no contiene el objetivo.
 	*now = now.Add(toastDuration + time.Second)
 	m.toast.update()
 	m.toast.show("refreshed", toastInfo)

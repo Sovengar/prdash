@@ -2,17 +2,7 @@ package bitbucket
 
 import "testing"
 
-// TestElHostPorDefectoSoloSeAplicaSinHost: el host por defecto es el de Bitbucket, y un
-// host propio se respeta.
-//
-// Y esto no es un detalle: el adapter es para un host, y el host decide dónde se busca cada
-// cosa —la API, la URL del PR, el remoto del worktree—. Con la condición al revés, un host
-// propio se sustituye por `bitbucket.org` y el adapter entero opera contra el sitio
-// equivocado: las llamadas irían a una instancia donde ese repositorio no existe, y el
-// error sería "no encontrado" de un repositorio que sí existe.
-//
-// Y el caso que lo distingue tiene que llevar las dos mitades: el host vacío, que es lo
-// que el suelo cubre, y un host propio, que es lo que la condición tiene que dejar pasar.
+// This is not a detail: the adapter is for a host that is NOT in the default config.
 func TestElHostPorDefectoSoloSeAplicaSinHost(t *testing.T) {
 	casos := []struct {
 		entrada, want string
@@ -32,9 +22,5 @@ func TestElHostPorDefectoSoloSeAplicaSinHost(t *testing.T) {
 		}
 	}
 
-	// Y no se puede afirmar nada más allá, porque este adapter es inerte: no tiene
-	// repoURL ni ItemState que usen el host, todo devuelve un "no implementado". El host
-	// se propaga por el constructor y no se usa más, con lo que `Host()` es toda la
-	// superficie observable. Decir lo contrario sería inventar un aserto que no puede
-	// fallar.
+	// Nothing beyond that can be asserted: the adapter is inert, everything answers "not implemented".
 }

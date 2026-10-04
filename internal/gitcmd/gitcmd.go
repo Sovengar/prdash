@@ -1,8 +1,3 @@
-// Package gitcmd ejecuta git por subproceso con un entorno no interactivo y
-// locale inglés, de modo que ningún comando abra editor, pager o pida
-// credenciales, y los mensajes de error sean parseables. Es el único adaptador
-// de subproceso de git: lo comparten el resolutor de repos y la provisión de
-// worktrees.
 package gitcmd
 
 import (
@@ -16,32 +11,24 @@ import (
 	"time"
 )
 
-// DefaultTimeout es el límite por invocación de git (fetch/clone pueden tardar).
+// fetch and clone legitimately take a while.
 const DefaultTimeout = 60 * time.Second
 
-// pipeCloseGrace es el margen para cerrar las tuberías de salida después de que el
-// contexto caduca. No es el timeout —ese lo da el contexto—: es la gracia para que un
-// proceso que YA está cerrando sus tuberías termine de hacerlo.
-//
-// Sin ella el timeout no corta, solo mata al proceso: con stdout y stderr en buffers,
-// `exec` copia en goroutines sobre tuberías del sistema, y un hijo que hereda los
-// descriptores las mantiene abiertas, así que `cmd.Run()` no vuelve. Es el mismo motivo y
-// el mismo arreglo que en `internal/herdr`; ver `pipeCloseGrace` allí para la medición.
+// A child that inherited our pipe descriptors keeps them open, so without this grace period the
+// timeout kills the process and `cmd.Run` still does not return. Same reason and fix as in herdr.
 const pipeCloseGrace = 250 * time.Millisecond
 
-// Runner ejecuta git.
 type Runner struct {
-	// Bin es el binario de git; vacío usa "git".
+	// Empty means "git" from PATH.
 	Bin string
-	// Timeout por invocación; <=0 usa DefaultTimeout.
+	// Non-positive means DefaultTimeout.
 	Timeout time.Duration
 }
 
-// New construye un Runner con el binario y timeout por defecto.
 func New() *Runner { return &Runner{Bin: "git", Timeout: DefaultTimeout} }
 
-// Error es el fallo de una invocación de git, con el código de salida y la
-// causa preservada (Unwrap) para poder clasificarlo sin depender del texto.
+// Exit code and unwrapped cause are preserved so callers can classify a failure without matching on
+// git's English message.
 type Error struct {
 	Args     []string
 	Dir      string
@@ -50,7 +37,6 @@ type Error struct {
 	Err      error
 }
 
-// Error compone el mensaje incluyendo el directorio y el código de salida.
 func (e *Error) Error() string {
 	base := fmt.Sprintf("git %s: %s", strings.Join(e.Args, " "), e.Msg)
 	if e.Dir != "" {
@@ -62,11 +48,9 @@ func (e *Error) Error() string {
 	return base
 }
 
-// Unwrap expone la causa subyacente (p. ej. *exec.ExitError).
 func (e *Error) Unwrap() error { return e.Err }
 
-// Run ejecuta git en dir (vacío = directorio actual) y devuelve stdout
-// recortado. Ante un fallo devuelve la salida parcial más el error.
+// An empty dir means the current directory. On failure it returns the partial output with the error.
 func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, error) {
 	bin := r.Bin
 	if bin == "" {
@@ -84,7 +68,7 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 		cmd.Dir = dir
 	}
 	cmd.Env = Env()
-	// Sin esto el timeout no corta: ver `pipeCloseGrace`.
+	// Without this the timeout cannot cut the read: see pipeCloseGrace.
 	cmd.WaitDelay = pipeCloseGrace
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
@@ -104,17 +88,10 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 	return out.String(), nil
 }
 
-// Env compone el entorno del subproceso: descarta el locale del usuario para
-// forzar mensajes en inglés, quita las variables GIT_* de localización y añade
-// modo no interactivo (sin prompt de credenciales, sin pager, sin color).
-//
-// Las GIT_* de localización se quitan porque le ganan a cmd.Dir: con GIT_DIR (o
-// GIT_WORK_TREE, GIT_INDEX_FILE…) en el entorno, git opera en ESE repo y da
-// igual el directorio en el que se le ejecute. prdash elige el repo de cada ítem
-// por su cuenta, así que heredar el contexto de git de quien lo lanzó haría que
-// una operación de la TUI cayera en un repo que no es el del ítem — que es
-// justo el fallo que borra la rama equivocada. prdash se llama siempre con el
-// repo explícito en el argumento, no con el contexto del shell.
+// The location GIT_* vars are stripped because they beat cmd.Dir: with GIT_DIR (or GIT_WORK_TREE,
+// GIT_INDEX_FILE...) set, git works on THAT repo whatever the directory it runs in. Inheriting the
+// caller's git context would make a UI action land in a repo that is not the item's, which is the
+// bug that deletes the wrong branch.
 func Env() []string {
 	env := os.Environ()
 	out := env[:0]

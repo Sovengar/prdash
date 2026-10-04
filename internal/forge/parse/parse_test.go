@@ -232,8 +232,6 @@ func TestGHChecksJSON(t *testing.T) {
 	}
 }
 
-// TestGLReviewDecisionFromApproved cubre C5: en CE solo hay `approved`; un MR
-// no aprobado se reporta como desconocido (no se inventa "review required").
 func TestGLReviewDecisionFromApproved(t *testing.T) {
 	raw := func(approved bool) string {
 		return `{"data":{"currentUser":{"authoredMergeRequests":{"nodes":[
@@ -303,8 +301,6 @@ func TestParseGLTodos(t *testing.T) {
 	}
 }
 
-// TestParseNeverPanics comprueba que ninguna función de parseo entra en panic
-// con entradas basura: siempre devuelven items más un error tipado.
 func TestParseNeverPanics(t *testing.T) {
 	inputs := []string{"", "null", "[]", "{}", "{", "\x00", "12345"}
 	for _, in := range inputs {
@@ -337,8 +333,6 @@ func assertParseError(t *testing.T, err error) {
 	}
 }
 
-// TestParseGHChecksBuckets cubre C9: un check cancelado no debe pintarse como
-// correcto.
 func TestParseGHChecksBuckets(t *testing.T) {
 	cases := []struct {
 		name string
@@ -364,11 +358,8 @@ func TestParseGHChecksBuckets(t *testing.T) {
 	}
 }
 
-// TestParseErrorDiceQueYDonde: un error de parseo tiene que decir qué falló
-// además de dónde. Sin la causa, "invalid JSON" no distingue un payload
-// truncado de una respuesta que no es JSON, y quien lee el aviso no puede
-// actuar. Y un error sin causa no debe inventar una: el motivo se compone tal
-// cual, sin un ": " colgando al final.
+// A parse error has to say WHAT failed as well as where: without the cause, "invalid JSON"
+// says nothing.
 func TestParseErrorDiceQueYDonde(t *testing.T) {
 	_, _, err := ParseGHGraphQLSearch("{")
 	if err == nil {
@@ -384,10 +375,7 @@ func TestParseErrorDiceQueYDonde(t *testing.T) {
 	}
 }
 
-// TestGHRollupDistinguePendienteDeTerminado: el `status` de un CheckRun es la
-// señal de "en curso", y su `conclusion` solo significa algo cuando el check ya
-// terminó. Un check con conclusion vacía no es un check que pasó ni uno que
-// falló: está corriendo, y el gate de merge lo trata distinto a un CI verde.
+// A CheckRun's `status` is the in-progress signal and its `conclusion` the finished one.
 func TestGHRollupDistinguePendienteDeTerminado(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"number":1,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[
 		{"__typename":"CheckRun","status":"IN_PROGRESS","conclusion":""},
@@ -406,9 +394,6 @@ func TestGHRollupDistinguePendienteDeTerminado(t *testing.T) {
 	}
 }
 
-// TestSplitRepoURL: el separador puede estar al principio de la ruta, y entonces
-// el repositorio es lo que viene detrás. Cortar el prefijo de host antes de
-// buscar "/repos/" perdería el ítem entero.
 func TestSplitRepoURL(t *testing.T) {
 	cases := []struct {
 		in          string
@@ -429,10 +414,7 @@ func TestSplitRepoURL(t *testing.T) {
 	}
 }
 
-// TestProjectFromRef: el proyecto sale de lo que precede al último "!". Una ref
-// sin proyecto ("!12", que es lo que devuelve GitLab cuando no lo conoce) deja
-// el proyecto vacío: inventarse un repo llamado "!12" convertiría un dato
-// ausente en una ruta que no existe.
+// A ref with no project ("!12") is what a raw forge returns.
 func TestProjectFromRef(t *testing.T) {
 	cases := map[string]string{
 		"grp/proj!12": "grp/proj",
@@ -449,9 +431,6 @@ func TestProjectFromRef(t *testing.T) {
 	}
 }
 
-// TestParseGHGraphQLSearchUnionFragments cubre C1: la respuesta real mezcla
-// StatusContext (state) y CheckRun (status/conclusion), y puede traer nodos que
-// no son PR (se descartan).
 func TestParseGHGraphQLSearchUnionFragments(t *testing.T) {
 	raw := `{"data":{"search":{"nodes":[
 		{"__typename":"PullRequest","number":5,"title":"t","url":"u","state":"OPEN",
@@ -476,9 +455,6 @@ func TestParseGHGraphQLSearchUnionFragments(t *testing.T) {
 	}
 }
 
-// glReviewRequestedRealFixture reproduce la forma real de
-// reviewRequestedMergeRequests (redactada): `iid` llega como string (ID!),
-// `pageInfo.endCursor` string y `hasNextPage` false.
 const glReviewRequestedRealFixture = `{
   "data": {
     "currentUser": {
@@ -503,8 +479,6 @@ const glReviewRequestedRealFixture = `{
   }
 }`
 
-// TestParseGLGraphQLStringIID cubre el tipo real de `iid` (ID! serializado como
-// string): sin esto las tres listas de GitLab fallan al parsear.
 func TestParseGLGraphQLStringIID(t *testing.T) {
 	items, page, err := ParseGLGraphQL(glReviewRequestedRealFixture)
 	if err != nil {
@@ -527,10 +501,7 @@ func TestParseGLGraphQLStringIID(t *testing.T) {
 	}
 }
 
-// TestGLDiffStatsSumsPerFileEntries cubre la trampa de GitLab: `diffStats` no es
-// un agregado sino una entrada POR FICHERO cambiado, así que hay que sumarla.
-// Estos números son los reales de APPCTTI/vsocial/backend/vsocial-api-actuacions
-// !1015, y su endpoint /diffs confirma exactamente los mismos dos ficheros.
+// GitLab's trap: diffStats is one entry PER FILE, not an aggregate.
 func TestGLDiffStatsSumsPerFileEntries(t *testing.T) {
 	raw := `{"data":{"project":{"mergeRequest":{"iid":"1015","diffStats":[
 		{"additions":40,"deletions":1},{"additions":2,"deletions":0}
@@ -554,10 +525,7 @@ func TestGLDiffStatsSumsPerFileEntries(t *testing.T) {
 	}
 }
 
-// TestGLDiffStatsEmptyVsAbsent separa las dos cosas que un slice vacío puede
-// significar. Presente-pero-vacío es un MR que no toca nada (0/0, conocido);
-// ausente es que la query no lo pidió, como en la API de Todos (desconocido).
-// Confundirlos pintaría un "cambia 0 líneas" donde no se sabe nada.
+// Present-but-empty is an MR that touches no files; absent is a query that did not ask.
 func TestGLDiffStatsEmptyVsAbsent(t *testing.T) {
 	withEmpty := `{"data":{"project":{"mergeRequest":{"iid":"7","diffStats":[]}}}}`
 	items, _, err := ParseGLGraphQL(withEmpty)
@@ -578,8 +546,6 @@ func TestGLDiffStatsEmptyVsAbsent(t *testing.T) {
 	}
 }
 
-// TestGLDiffStatsToleratesStringCounts: la instancia serializa los contadores
-// como número, pero flexInt los acepta igual que el iid, sin tumbar el parseo.
 func TestGLDiffStatsToleratesStringCounts(t *testing.T) {
 	raw := `{"data":{"project":{"mergeRequest":{"iid":"7","diffStats":[{"additions":"3","deletions":"4"}]}}}}`
 	items, _, err := ParseGLGraphQL(raw)
@@ -591,8 +557,6 @@ func TestGLDiffStatsToleratesStringCounts(t *testing.T) {
 	}
 }
 
-// TestGHDiffStatFromScalarFields: GitHub ya devuelve el diffstat agregado en
-// tres escalares, así que no hay nada que sumar.
 func TestGHDiffStatFromScalarFields(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"number":15,"additions":381,"deletions":36,"changedFiles":11}}}}`
 	items, _, err := ParseGHGraphQLSearch(raw)
@@ -607,9 +571,6 @@ func TestGHDiffStatFromScalarFields(t *testing.T) {
 	}
 }
 
-// TestGHDiffStatAbsentIsUnknown: `additions` es `Int!`, así que si el campo no
-// viene es que la respuesta no lo trajo (respaldo REST u otra forma de salida).
-// Reported=false, no un cambio de cero líneas.
 func TestGHDiffStatAbsentIsUnknown(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"number":15,"title":"t"}}}}`
 	items, _, err := ParseGHGraphQLSearch(raw)
@@ -634,9 +595,6 @@ func TestGHDiffStatZeroIsKnown(t *testing.T) {
 	}
 }
 
-// TestGLRESTAndTodosHaveNoDiffStat: ni el endpoint REST de merge requests ni la
-// API de Todos traen el diffstat (gitlab-org/gitlab#464260), así que ambos
-// parseos lo dejan desconocido en vez de报告显示 un cero.
 func TestGLRESTAndTodosHaveNoDiffStat(t *testing.T) {
 	mrs, err := ParseGLMRList(`[{"iid":5,"title":"t","references":{"full":"g/p!5"}}]`)
 	if err != nil {

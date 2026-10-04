@@ -1,6 +1,3 @@
-// Package tool ejecuta las CLIs de forge por subproceso con un entorno
-// homogéneo: locale inglés, sin interacción, timeout y clasificación de
-// errores. Es la única capa que lanza procesos; vive fuera del núcleo puro.
 package tool
 
 import (
@@ -16,29 +13,21 @@ import (
 	"time"
 )
 
-// DefaultTimeout es el límite por invocación de una CLI de forge.
 const DefaultTimeout = 30 * time.Second
 
-// pipeCloseGrace es el margen para cerrar las tuberías de salida tras caducar el
-// contexto. Sin ella el timeout mata al proceso pero `cmd.Run()` sigue esperando a que
-// un hijo que heredó los descriptores suelte la tubería. Mismo motivo y mismo arreglo que
-// en `internal/herdr`.
+// Same reason and same fix as in gitcmd and herdr: a child that inherited the pipe keeps it open.
 const pipeCloseGrace = 250 * time.Millisecond
 
-// Runner ejecuta un binario con timeout y entorno no interactivo.
 type Runner struct {
 	Bin     string
 	Timeout time.Duration
 	Extra   []string // variables extra del forge (p. ej. GH_PROMPT_DISABLED=1)
 }
 
-// New construye un Runner con timeout por defecto y las variables extra dadas.
 func New(bin string, extra ...string) *Runner {
 	return &Runner{Bin: bin, Timeout: DefaultTimeout, Extra: extra}
 }
 
-// Error es el fallo de una CLI, con el código de salida y la causa preservada
-// (Unwrap) para poder clasificarlo sin depender solo del texto.
 type Error struct {
 	Bin      string
 	Args     []string
@@ -47,7 +36,6 @@ type Error struct {
 	Err      error
 }
 
-// Error compone el mensaje del fallo incluyendo el código de salida.
 func (e *Error) Error() string {
 	base := fmt.Sprintf("%s %s: %s", e.Bin, strings.Join(e.Args, " "), e.Msg)
 	if e.ExitCode != 0 {
@@ -56,12 +44,9 @@ func (e *Error) Error() string {
 	return base
 }
 
-// Unwrap expone la causa subyacente (p. ej. *exec.ExitError).
 func (e *Error) Unwrap() error { return e.Err }
 
-// Run ejecuta el binario con los args dados y devuelve stdout. Ante un fallo
-// devuelve stdout igualmente (algunas CLIs, como `gh pr checks`, traen salida
-// válida con exit != 0) más un *Error con el código de salida.
+// stdout comes back even on failure: some CLIs (`gh pr checks`) print valid output with a non-zero exit.
 func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 	timeout := r.Timeout
 	if timeout <= 0 {
@@ -72,7 +57,7 @@ func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 
 	cmd := exec.CommandContext(cctx, r.Bin, args...)
 	cmd.Env = Env(r.Extra...)
-	// Sin esto el timeout no corta: ver `pipeCloseGrace`.
+	// Without this the timeout cannot cut the read: see pipeCloseGrace.
 	cmd.WaitDelay = pipeCloseGrace
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
@@ -92,9 +77,6 @@ func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 	return out.String(), nil
 }
 
-// Env compone el entorno del subproceso: descarta el locale del usuario para
-// forzar mensajes en inglés, y añade modo no interactivo más las variables
-// extra del forge.
 func Env(extra ...string) []string {
 	env := os.Environ()
 	out := env[:0]
@@ -112,7 +94,6 @@ func Env(extra ...string) []string {
 	return append(out, extra...)
 }
 
-// ExitCode devuelve el código de salida de un error de CLI, o 0.
 func ExitCode(err error) int {
 	var cerr *Error
 	if errors.As(err, &cerr) {
@@ -125,13 +106,11 @@ func ExitCode(err error) int {
 	return 0
 }
 
-// Re compila los patrones de código HTTP presentes en el stderr de las CLIs.
 var (
 	httpCodeRe   = regexp.MustCompile(`(?i)\bhttp(?:/\d(?:\.\d)?)?\s+(\d{3})\b`)
 	statusCodeRe = regexp.MustCompile(`(?i)\bstatus(?:\s+code)?[:\s]+(\d{3})\b`)
 )
 
-// HTTPStatus extrae el código HTTP de un mensaje de error, o 0 si no hay.
 func HTTPStatus(msg string) int {
 	for _, re := range []*regexp.Regexp{httpCodeRe, statusCodeRe} {
 		if m := re.FindStringSubmatch(msg); m != nil {
@@ -145,30 +124,17 @@ func HTTPStatus(msg string) int {
 	return 0
 }
 
-// Kind clasifica un error de CLI en la clase de warning correspondiente.
+// The order of the checks is a precedence table between signals that contradict each other, not an
+// arbitrary order: rate-limit text before the HTTP code, because GitHub uses 403 for both a permission
+// and a rate limit; unmergeable text before it, because 409 means both a rejection and a state a refresh
+// fixes; self-review text before it, because GitHub answers 422 to "you cannot approve your own PR" and
+// 422 is the content-validation class.
 //
-// El orden de las comprobaciones es una tabla de precedencias entre señales que se
-// contradicen, y no un orden arbitrario:
-//
-//  1. Texto de rate limit, antes que el código HTTP, porque GitHub usa 403 tanto para
-//     permiso como para rate limit.
-//  2. Texto de no integrable, antes que el código HTTP, por el mismo conflicto: GitHub
-//     responde 409 tanto a un rechazo de merge como a un estado que se resuelve
-//     refrescando.
-//  3. Texto de autorrechazo, antes que el código HTTP, porque GitHub responde 422 a
-//     "no puedes aprobar tu propio PR" y 422 es la clase de validación de contenido.
-//
-// Ese tercer punto estuvo en el sitio equivocado durante un tiempo, con el comentario
-// diciendo lo contrario del código: `isSelfReviewText` se comprobaba DESPUÉS del código
-// HTTP, así que nunca veía nada. Con el texto solo —sin el "(HTTP 422)" que gh añade al
-// stderr— la clasificación era correcta, y con el texto real de GitHub salía
-// "validation". Y "validation" no es permiso, así que la TUI no registraba la denegación
-// y volvía a intentarlo cada vez que se pulsaba la tecla, contra un PR que no se puede
-// aprobar nunca. El aserto que fija esto es el caso con el código HTTP incluido, no el
-// que se lo quita.
-//
-//  4. Código HTTP, que es lo único que queda cuando el texto no dice nada.
-//  5. Texto restante, como último recurso.
+// That last one was in the wrong place for a while, with the comment saying the opposite of the code, so
+// `isSelfReviewText` never fired. Without the "(HTTP 422)" that gh adds the classification was right;
+// with GitHub's real text it came out "validation", which is not a permission, so the UI did not record
+// the denial and retried on every keypress against a PR that can never be approved. The test that pins
+// this is the case WITH the HTTP code, not the one that strips it.
 func Kind(err error) string {
 	if err == nil {
 		return ""
@@ -178,16 +144,12 @@ func Kind(err error) string {
 	if isRateLimitText(msg) {
 		return "ratelimit"
 	}
-	// El texto de "no integrable" se mira antes que el código HTTP por la misma
-	// razón que el de rate limit, y por el mismo conflicto de vocabulario: GitHub
-	// responde 409 a un rechazo de merge por ramas y también a un estado que sí
-	// se resuelve refrescando, así que el código no distingue y el texto sí.
+	// Before the HTTP code for the same reason as rate limit: GitHub answers 409 both to a branch
+	// rejection and to a state a refresh would fix.
 	if isUnmergeableText(msg) {
 		return "unmergeable"
 	}
-	// El rechazo de auto-aprobación es la única razón por la que un forge veta aprobar,
-	// y no es un fallo de red ni un conflicto de estado. Antes que el código HTTP, que
-	// con 422 lo clasificaría como validación —ver el doc de la función.
+	// The only reason a forge vetoes an approval, and neither a network failure nor a state conflict.
 	if isSelfReviewText(msg) {
 		return "selfreview"
 	}
@@ -205,15 +167,9 @@ func Kind(err error) string {
 	case strings.Contains(msg, "409"), strings.Contains(msg, "conflict"),
 		strings.Contains(msg, "already closed"), strings.Contains(msg, "already merged"):
 		return "conflict"
-	// El 422 es "la petición está bien pero su contenido no vale": un base que no
-	// existe, un título vacío, una etiqueta mal formada. Es su propia clase y no
-	// cabe en ninguna de las de arriba. Antes caía en `network`, porque el texto
-	// que llega por stderr no tiene ni "conflict" ni "not found" —el motivo de
-	// verdad va en el cuerpo JSON—, y el clasificador se quedaba sin nada.
-	//
-	// No es conflicto (un refresco no lo arregla: el valor sigue siendo malo) ni
-	// permiso (eso dejaría la acción deshabilitada para siempre). Es un error de
-	// la llamada, que es lo que la TUI enseña sin prometerle nada a nadie.
+	// Its own class, fitting none above: the request is well formed and its content is not (a base
+	// that does not exist, an empty title). Neither a conflict (a refresh does not help, the value is still
+	// bad) nor a permission (that would disable the action for good), so it is a call error.
 	case strings.Contains(msg, "422"):
 		return "validation"
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"),
@@ -230,15 +186,8 @@ func Kind(err error) string {
 	}
 }
 
-// isUnmergeableText reconoce el rechazo de un merge porque el forge no puede
-// crearlo con las ramas como están.
-//
-// Cubre las redacciones de GitHub ("Pull request …#6 is not mergeable: the merge
-// commit cannot be cleanly created", y el 409 "Head branch was modified. Review
-// and try the merge again.") y las de GitLab ("The merge request cannot merge",
-// "You need to rebase", "Branch is not up to date"). Un texto que no se
-// reconoce cae en el cubo genérico, que es el comportamiento correcto ante lo
-// desconocido: se clasifica peor, no se miente mejor.
+// Unrecognised text falls into the generic bucket, which is the right behaviour on the unknown: it
+// classifies worse, it does not lie better.
 func isUnmergeableText(lower string) bool {
 	return strings.Contains(lower, "not mergeable") ||
 		strings.Contains(lower, "cannot be cleanly created") ||
@@ -249,22 +198,16 @@ func isUnmergeableText(lower string) bool {
 		strings.Contains(lower, "not up to date")
 }
 
-// isSelfReviewText reconoce el rechazo de aprobar un PR/MR propio. Cubre las
-// redacciones de GitHub ("Can not approve your own pull request") y GitLab
-// ("cannot approve your own merge request").
 func isSelfReviewText(lower string) bool {
 	return strings.Contains(lower, "approve your own")
 }
 
-// isRateLimitText reconoce los textos de límite de peticiones que GitHub y
-// GitLab devuelven con 403 o 429.
 func isRateLimitText(lower string) bool {
 	return strings.Contains(lower, "rate limit") ||
 		strings.Contains(lower, "abuse") ||
 		strings.Contains(lower, "too many requests")
 }
 
-// kindForHTTP traduce un código HTTP a la clase de warning.
 func kindForHTTP(code int) string {
 	switch {
 	case code == 401:
@@ -286,20 +229,12 @@ func kindForHTTP(code int) string {
 	}
 }
 
-// APIMessage saca el motivo que devuelve la API en el cuerpo de una respuesta con
-// salida distinta de cero.
+// The forge CLIs do not pass the API's reason on stderr: what arrives there is one line with the whole
+// argv, and the real reason is in the JSON body. Without this the user reads the command that failed
+// instead of why, and on a 422 the difference is enormous.
 //
-// Existe porque las CLIs de forge no lo pasan por stderr: a stderr llega una línea
-// con el argv entero (`gh api -X PATCH repos/o/r/pulls/1 -f base=x: gh: Validation
-// Failed (HTTP 422)`) y el motivo de verdad va en el cuerpo JSON. Sin esto, el
-// motivo que ve el usuario es el comando que falló y no por qué falló, y en un 422
-// la diferencia es enorme: `Proposed base branch 'main2' was not found` es
-// accionable y `Validation Failed` no lo es.
-//
-// Prefiere `errors[].message` sobre `message` porque las APIs los usan para cosas
-// distintas: GitHub escribe `Validation Failed` en el primero y el detalle de qué
-// campo no valía en el segundo, así que al revés se enseñaría el genérico. Cae a
-// `message` cuando no hay `errors`, que es lo que hace GitLab.
+// `errors[].message` is preferred over `message` because the APIs use them for different things: GitHub
+// writes "Validation Failed" in the first and which field was wrong in the second.
 func APIMessage(body string) string {
 	var payload struct {
 		Message any `json:"message"`
@@ -315,15 +250,12 @@ func APIMessage(body string) string {
 			return msg
 		}
 	}
-	// El `message` de GitLab puede ser un objeto cuando el error es de campo, y un
-	// objeto no es un motivo que se pueda enseñar: solo se acepta como string.
 	if msg, ok := payload.Message.(string); ok {
 		return strings.TrimSpace(msg)
 	}
 	return ""
 }
 
-// FirstLine recorta un mensaje a su primera línea.
 func FirstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return s[:i]

@@ -8,42 +8,28 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// TestCommentWidths: los dos anchos de texto de un comentario.
-//
-// La primera fila lleva el autor delante, así que su cuerpo dispone de MENOS ancho
-// que las siguientes. Ese es el invariante, y no se ve en el render: con un autor
-// largo la primera fila se parte antes, y como la caja trunca igual, la diferencia
-// se lee como "faltan caracteres" y no como "el ancho está mal".
-//
-// Por eso esto es una función aparte. Antes vivía dentro del bucle de pintado, y
-// desde ahí no se podía comprobar: el marco tapaba el error.
+// The first row carries the author and the rest only the continuation indent.
 func TestCommentWidths(t *testing.T) {
 	for _, inner := range []int{0, 1, 5, 10, 20, 30, 40, 60, 80, 120, 200} {
 		for _, author := range []string{"", "a", "alice", "someone-with-a-long-name"} {
 			first, cont := commentWidths(inner, author)
 
-			// La primera fila SIEMPRE va al menos tan estrecha como las demás: el
-			// autor solo puede quitar sitio, nunca dar.
 			if first > cont {
 				t.Errorf("inner=%d author=%q: la primera fila (%d) es más ANCHA que las siguientes (%d)",
 					inner, author, first, cont)
 			}
-			// Y el suelo de 8: por debajo, el texto no se lee. Con la caja más
-			// estrecha que el nombre del autor, el cuerpo se quedaría sin nada.
+			// The floor of 8: below it the text is unreadable.
 			if first < 8 || cont < 8 {
 				t.Errorf("inner=%d author=%q: (%d, %d), want >= 8 en los dos: por debajo no hay lectura",
 					inner, author, first, cont)
 			}
-			// Y la aritmética exacta, que es lo que hace que el corte caiga donde
-			// tiene que caer y no una palabra más allá.
 			wantFirst := max(8, inner-utf8.RuneCountInString(commentIndent+author+commentSep))
 			wantCont := max(8, inner-utf8.RuneCountInString(contIndent))
 			if first != wantFirst || cont != wantCont {
 				t.Errorf("inner=%d author=%q: dio (%d, %d), want (%d, %d)",
 					inner, author, first, cont, wantFirst, wantCont)
 			}
-			// La cuenta es en RUNES: un autor con acentos o emoji ocupa una
-			// columna por carácter, no dos.
+			// The count is in RUNES: an author with accents or emoji takes one column per character.
 			if author == "ñ" {
 				if first != cont {
 					t.Errorf("un autor de un rune ocupa una columna, pero la primera fila (%d) difiere de las siguientes (%d)",
@@ -52,15 +38,13 @@ func TestCommentWidths(t *testing.T) {
 			}
 		}
 	}
-	// Y dos autores del MISMO número de caracteres dan el mismo ancho: lo que
-	// cuenta es la longitud, no el nombre.
+	// Two authors of the SAME length give the same width: what counts is the length, not the text.
 	aF, _ := commentWidths(60, "alice")
 	bF, _ := commentWidths(60, "bobby")
 	if aF != bF {
 		t.Errorf("autores de la misma longitud dieron anchos distintos: %d vs %d", aF, bF)
 	}
-	// Y un autor más largo da la primera fila más ESTRECHA: el nombre se come
-	// sitio del cuerpo, y el cuerpo es lo único que dice algo.
+	// A longer author makes the first row NARROWER: the name eats the body's space.
 	cortoF, _ := commentWidths(60, "a")
 	largoF, _ := commentWidths(60, strings.Repeat("x", 40))
 	if largoF >= cortoF {
@@ -69,13 +53,6 @@ func TestCommentWidths(t *testing.T) {
 	}
 }
 
-// TestCommentBodyWidthDescuentaSangrioYBordes: el ancho de texto es más estrecho
-// que el de la caja por el sangrado de los dos lados más los dos bordes
-// verticales, y tiene suelo.
-//
-// El suelo importa porque sin él el ancho se vuelve negativo en una caja estrecha y
-// `truncate` con un ancho negativo hace un desastre. Con 8, una caja estrecha
-// muestra un trozo y se ve que está cortada.
 func TestCommentBodyWidthDescuentaSangrioYBordes(t *testing.T) {
 	for outer := -20; outer <= 200; outer++ {
 		got := commentBodyWidth(outer)
@@ -87,17 +64,12 @@ func TestCommentBodyWidthDescuentaSangrioYBordes(t *testing.T) {
 			t.Errorf("commentBodyWidth(%d) = %d, want >= 8", outer, got)
 		}
 	}
-	// Por encima del suelo, el descuento es exacto: caja menos sangrado menos
-	// bordes. Una columna de más y el texto pisa el borde; una de menos y sobra
-	// hueco a la derecha.
 	for outer := 40; outer <= 120; outer++ {
 		want := outer - 2*commentInset - commentBoxBorder
 		if got := commentBodyWidth(outer); got != want {
 			t.Errorf("commentBodyWidth(%d) = %d, want %d", outer, got, want)
 		}
 	}
-	// Y el suelo cubre los anchos MUY pequeños: con 10 de caja el texto son 8,
-	// porque 10 menos 2 de sangrado menos 2 de bordes daría 6.
 	if got := commentBodyWidth(10); got != 8 {
 		t.Errorf("commentBodyWidth(10) = %d, want 8 (el suelo)", got)
 	}
@@ -106,21 +78,9 @@ func TestCommentBodyWidthDescuentaSangrioYBordes(t *testing.T) {
 	}
 }
 
-// TestCommentRowReservaElHuecoDelEllipsis: cuando queda texto detrás, la fila
-// lleva "…" y el hueco de esa marca se DESCUENTA del ancho del texto. Si no se
-// descontara, la fila se iría una columna más allá del marco y el "…" caería
-// fuera.
-//
-// El borde es donde se separa un `>` de un `>=`: un texto que mide justo lo que
-// queda DESPUÉS de reservar la marca entra entero con la marca al lado, y uno que
-// mide una columna más ya no cabe y se recorta.
-//
-// Y sin corte no se reserva nada: un texto que cabe entero se devuelve entero, sin
-// marca. Poner la marca ahí sería decir "se perdió algo" de algo que no se perdió.
 func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 	const w = 20
-	// Con corte, un texto de exactamente (w-1) caracteres: cabe JUSTO con la
-	// marca. Este es el caso que separa el `<=` del `<`.
+	// With clipping, a text of exactly (w-1) characters fits JUST with the mark.
 	justo := strings.Repeat("x", w-1)
 	got := stripANSI(commentRow(0, "alice", ": ", justo, w, true))
 	if !strings.HasSuffix(got, justo+"…") {
@@ -130,8 +90,6 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 		utf8.RuneCountInString("alice: "); ancho > w {
 		t.Errorf("la fila mide %d columnas de texto, más que el ancho %d: la marca se salió de la caja", ancho, w)
 	}
-	// Una columna más: ya no cabe con la marca, así que se recorta a (w-1) con la
-	// marca dentro.
 	unoMas := strings.Repeat("x", w)
 	got = stripANSI(commentRow(0, "alice", ": ", unoMas, w, true))
 	if utf8.RuneCountInString(got) > utf8.RuneCountInString(commentIndent)+utf8.RuneCountInString("alice: ")+w {
@@ -140,10 +98,7 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 	if !strings.HasSuffix(got, "…") {
 		t.Errorf("un texto recortado debería llevar la marca, dio %q", got)
 	}
-	// Y que el recorte SATURA: un texto de w columnas y otro de w+5 dan la misma
-	// fila, porque los dos se cortan al hueco de la marca. Es lo que hace que el
-	// texto se lea siempre como "esto y más", y no como un fragmento de longitud
-	// arbitraria.
+	// The clipping SATURATES: w columns and w+5 give the same row.
 	dosMas := strings.Repeat("x", w+5)
 	if a, b := stripANSI(commentRow(0, "alice", ": ", unoMas, w, true)),
 		stripANSI(commentRow(0, "alice", ": ", dosMas, w, true)); a != b {
@@ -151,16 +106,12 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 			w, w+5, a, b)
 	}
 
-	// Sin corte: un texto que cabe entra entero y SIN marca. Y uno que no cabe
-	// (una palabra suelta más ancha que la caja) se recorta a w, sin marca.
+	// Without clipping a text that fits comes whole and WITHOUT a mark.
 	sinCorte := strings.Repeat("x", w-3)
 	if got := stripANSI(commentRow(0, "alice", ": ", sinCorte, w, false)); strings.Contains(got, "…") {
 		t.Errorf("un texto que cabe entero no debería llevar marca: %q", got)
 	}
-	// El BORDE: un texto de EXACTAMENTE w columnas, sin corte, entra entero y sin
-	// marca. Con un `>=` en vez de `>` searía a la rama de recorte y saldría con
-	// "…" un texto que cabía justo, que es decir que se perdió algo cuando no se
-	// perdió nada.
+	// The EDGE: a text of EXACTLY w columns goes in whole with no mark. A `>=` would add one.
 	justoSinCorte := strings.Repeat("x", w)
 	got = stripANSI(commentRow(0, "alice", ": ", justoSinCorte, w, false))
 	if strings.Contains(got, "…") {
@@ -170,7 +121,6 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 		utf8.RuneCountInString("alice: "); n != w {
 		t.Errorf("un texto de %d columnas dio una fila de %d: la fila exacta no debe cambiar de largo", w, n)
 	}
-	// Y una columna más: ya no cabe y sí se recorta.
 	got = stripANSI(commentRow(0, "alice", ": ", strings.Repeat("x", w+1), w, false))
 	if !strings.Contains(got, "…") {
 		t.Errorf("un texto de %d columnas en una fila de %d debería recortarse, dio %q", w+1, w, got)
@@ -185,8 +135,6 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 		t.Errorf("la palabra recortada se pasó del ancho: %q", got)
 	}
 
-	// La sangría: la primera fila lleva el autor y las siguientes solo el sangrado
-	// de continuación. Es lo que hace que el cuerpo se lea como un bloque.
 	primera := stripANSI(commentRow(0, "alice", ": ", "texto", w, false))
 	siguiente := stripANSI(commentRow(1, "alice", ": ", "texto", w, false))
 	if !strings.HasPrefix(primera, commentIndent+"alice: ") {
@@ -195,15 +143,8 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 	if strings.Contains(siguiente, "alice") {
 		t.Errorf("la segunda fila no debería llevar el autor: %q", siguiente)
 	}
-	// Y la continuación lleva un sangrado FIJO, el mismo con cualquier autor. Eso
-	// es lo que hace que el cuerpo de un comentario se lea como un bloque y no
-	// como trozos sueltos.
-	//
-	// OJO: el sangrado de continuación NO se alinea con el texto de la primera
-	// fila, que empieza en 2 + nombre + 2. El comentario de commentRow dice que
-	// "se alinean", y no es lo que hace el código: el de continuación es
-	// constante y el de la primera depende de lo largo que sea el nombre. Aquí se
-	// afirma lo que el código hace, que es lo comprobable.
+	// The continuation carries a FIXED indent whatever the author, which is what makes the body read
+	//as a block.
 	if !strings.HasPrefix(siguiente, contIndent) {
 		t.Errorf("la segunda fila debería ir con el sangrado de continuación, dio %q", siguiente)
 	}
@@ -225,27 +166,13 @@ func TestCommentRowReservaElHuecoDelEllipsis(t *testing.T) {
 	}
 }
 
-// TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna: cuando el comentario no cabe en las
-// filas que le tocan, la última fila se VUELVE A COMPONER marcando el corte. No se
-// añade una fila nueva, y no se recorta la primera.
-//
-// Es el contrato de `lines`: da exactamente las filas que se pidieron, ni una más,
-// con la última marcada. El borde que importa es un comentario que produce un
-// trozo MÁS de los que caben: ahí el corte tiene que caer en la fila pedida, y un
-// `>` en vez de `>=` lo dejaría caer una fila más abajo.
-//
-// El número de trozos NO se escribe a mano: sale de `wrapText`, que es la misma
-// función pura con la que compone el código. Si un día esa cambia, el test avisa
-// de que el número esperado cambió, en vez de quedarse verde con una cuenta vieja.
+// When the comment does not fit in the rows it gets.
 func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 	const inner = 40
 	first, _ := commentWidths(inner, "alice")
 
-	// Cada palabra ocupa una fila entera, así que el número de trozos es el número
-	// de palabras y el presupuesto se puede pedir sobre un corte exacto.
 	palabra := strings.Repeat("x", first)
 	for _, trozos := range []int{1, 2, 3, 4, 5, 6} {
-		// Un cuerpo cuyo primer párrafo da EXACTAMENTE `trozos` líneas.
 		cuerpo := palabra
 		for i := 1; i < trozos; i++ {
 			cuerpo += " " + palabra
@@ -258,7 +185,6 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 				"test ya no mide lo que cree medir", trozos, wantTrozos, trozos)
 		}
 
-		// Con presupuesto de sobra: sale entero, sin marcas.
 		todas := commentBody(c, trozos+3, inner)
 		if len(todas) != trozos {
 			t.Errorf("con %d trozos y presupuesto de sobrta salieron %d filas, want %d", trozos, len(todas), trozos)
@@ -269,8 +195,6 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 			}
 		}
 
-		// Con presupuesto EXACTO: sale entero y sin corte. Al valer justo, no se
-		// perdió nada, y marcar sería mentir.
 		exactas := commentBody(c, trozos, inner)
 		if len(exactas) != trozos {
 			t.Errorf("con %d trozos y presupuesto exacto salieron %d filas, want %d", trozos, len(exactas), trozos)
@@ -281,12 +205,7 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 			}
 		}
 
-		// Con un trozo menos: sale con una fila menos, la última marcada, y solo
-		// la última.
-		//
-		// El suelo de una fila: con presupuesto cero o negativo sale UNA fila, no
-		// cero. Nadie se queda sin fila por un descuadre de reparto, y sin ella el
-		// `out[len(out)-1]` del corte reventaría.
+		// One piece less: one row less, the last one marked, and only the last.
 		pide := max(1, trozos-1)
 		corta := commentBody(c, pide, inner)
 		if len(corta) != pide {
@@ -296,9 +215,8 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 		if len(corta) == 0 {
 			continue
 		}
-		// La marca solo se espera si de verdad se perdió algo: con un solo trozo y
-		// presupuesto de una fila, la fila lo tiene todo y no hay "después" que
-		// señalar. Marcarlo ahí sería mentir sobre un comentario completo.
+		// The mark only appears when something was really lost: with one chunk and enough budget there
+		// is nothing to say.
 		if pide < trozos {
 			if ultima := stripANSI(corta[len(corta)-1]); !strings.Contains(ultima, "…") {
 				t.Errorf("con %d trozos y presupuesto de %d la última fila no lleva marca: %q",
@@ -310,8 +228,6 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 				t.Errorf("con presupuesto corto la fila %d lleva marca: solo la última puede cortarse", i)
 			}
 		}
-		// Y el texto que se perdió se marca sin pasarse del ancho de la fila: la
-		// marca seMétió dentro, no encima del marco.
 		for i, l := range corta {
 			if ancho := utf8.RuneCountInString(stripANSI(l)) -
 				utf8.RuneCountInString(commentIndent) - utf8.RuneCountInString("alice: "); ancho > first && i == 0 {
@@ -320,8 +236,7 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 		}
 	}
 
-	// Un segundo párrafo: el corte tiene que caer en el último trozo escrito, no
-	// en el primero del párrafo, y el total de filas sigue siendo el pedido.
+	// A second paragraph: the cut has to land on the last chunk written.
 	cuerpo := palabra + "\n\n" + palabra + " " + palabra + " " + palabra
 	c := model.Comment{Author: "alice", Body: cuerpo}
 	primerParrafo := len(wrapText(palabra, first))
@@ -332,8 +247,7 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 			primerParrafo, segundo, len(conDos), primerParrafo+segundo)
 	}
 
-	// Y el cuerpo vacío: una fila que lo dice, en vez de una lista vacía que
-	// parecería un comentario que no se ha pintado.
+	// And the empty body: one row saying so, instead of an empty list that would look broken.
 	for _, vacio := range []string{"", "   ", "\n\n"} {
 		got := commentBody(model.Comment{Author: "alice", Body: vacio}, 5, inner)
 		if len(got) != 1 {
@@ -343,9 +257,7 @@ func TestElCorteMarcaLaUltimaFilaYNoAnadeNinguna(t *testing.T) {
 		}
 	}
 
-	// Y con cero filas de presupuesto sale una, no cero: nadie se queda sin fila
-	// por un descuadre de reparto, y sin ella el `out[len(out)-1]` del corte
-	// reventaría.
+	// With zero rows of budget there is one, not zero: nobody loses their row to a rounding.
 	for _, n := range []int{-5, 0, 1} {
 		if got := commentBody(model.Comment{Author: "alice", Body: "hola"}, n, inner); len(got) == 0 {
 			t.Errorf("con presupuesto %d no salió ninguna fila: una fila vacía es mejor que un índice fuera de rango", n)

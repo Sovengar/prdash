@@ -56,7 +56,6 @@ func TestFirstLine(t *testing.T) {
 	}
 }
 
-// TestKindHTTPFirst cubre M5: el código HTTP manda sobre el fraseo.
 func TestKindHTTPFirst(t *testing.T) {
 	cases := map[string]string{
 		"glab api: HTTP 403: Forbidden":         "permission",
@@ -76,13 +75,6 @@ func TestKindHTTPFirst(t *testing.T) {
 	}
 }
 
-// TestKindUnmergeableIsNotConflict: las ramas que se pisan y el ítem que cambió
-// son hechos opuestos y ambos suenan a "conflict" en el texto del forge.
-//
-// La diferencia no es cosmética: un conflicto de estado se resuelve solo con
-// refrescar, y uno de ramas no se resuelve nunca así. Meterlos en el mismo cubo
-// obligaba a la TUI a prometer un refresco que no servía de nada, que es la peor
-// forma de equivocarse porque el aviso no dice qué hacer.
 func TestKindUnmergeableIsNotConflict(t *testing.T) {
 	unmergeable := map[string]string{
 		// GitHub
@@ -92,8 +84,7 @@ func TestKindUnmergeableIsNotConflict(t *testing.T) {
 		"405 Method Not Allowed: The merge request cannot merge.":    "unmergeable",
 		"You need to rebase the branch before you can merge.":        "unmergeable",
 		"Branch is not up to date. Please update it before merging.": "unmergeable",
-		// Y un texto que no se reconoce NO se mete en el cubo nuevo: es
-		// clasificación conservadora, no una promesa.
+		// Text that is not recognised does NOT go into the new bucket: it is conservative classification.
 		"something entirely new happened": "network",
 	}
 	for msg, want := range unmergeable {
@@ -124,8 +115,6 @@ func TestErrorPreservesCauseAndExitCode(t *testing.T) {
 	}
 }
 
-// TestRunKeepsStdoutOnNonZeroExit cubre C8: `gh pr checks` sale con exit != 0
-// pero trae JSON válido; el runner debe devolverlo igualmente.
 func TestRunKeepsStdoutOnNonZeroExit(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "fake")
@@ -144,8 +133,6 @@ func TestRunKeepsStdoutOnNonZeroExit(t *testing.T) {
 	}
 }
 
-// TestKindRateLimit403 cubre H-1: GitHub usa 403 tanto para permiso como para
-// primary/secondary rate limit; el texto delata el límite.
 func TestKindRateLimit403(t *testing.T) {
 	cases := map[string]string{
 		"HTTP 403: API rate limit exceeded for user ID 123":         "ratelimit",
@@ -161,9 +148,6 @@ func TestKindRateLimit403(t *testing.T) {
 	}
 }
 
-// TestKindSelfReview cubre el rechazo de aprobar lo propio: es una denegación
-// permanente, no un conflicto ni un fallo de red. Sin ella el aviso salía como
-// "conflicto en el forge" tras tres llamadas a la CLI.
 func TestKindSelfReview(t *testing.T) {
 	cases := map[string]string{
 		"failed to create review: GraphQL: Review Can not approve your own pull request (addPullRequestReview)": "selfreview",
