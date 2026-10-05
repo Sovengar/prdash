@@ -1,7 +1,8 @@
 package inbox
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"prdash/internal/forge/model"
 	"prdash/internal/state"
@@ -113,15 +114,15 @@ func rank(kind model.Section) int {
 	return len(sectionOrder)
 }
 
+// The score key has its operands swapped because the most urgent item goes first; a tie falls to the
+// update time (the newest one first) and then to the number.
 func sortItems(items []model.Item) {
-	sort.SliceStable(items, func(i, j int) bool {
-		si, sj := state.Derive(items[i]).Score(), state.Derive(items[j]).Score()
-		if si != sj {
-			return si > sj
-		}
-		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
-			return items[i].UpdatedAt.After(items[j].UpdatedAt)
-		}
-		return items[i].Number < items[j].Number
+	slices.SortStableFunc(items, func(a, b model.Item) int {
+		sa, sb := state.Derive(a).Score(), state.Derive(b).Score()
+		return cmp.Or(
+			cmp.Compare(sb, sa),
+			b.UpdatedAt.Compare(a.UpdatedAt),
+			cmp.Compare(a.Number, b.Number),
+		)
 	})
 }

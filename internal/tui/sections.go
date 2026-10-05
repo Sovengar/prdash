@@ -141,9 +141,7 @@ func (m Model) detailSection(it model.Item, ok bool, rows int) box {
 
 func (m Model) keybindsSection(hintLines int) box {
 	lines := m.hintLines()
-	if hintLines < len(lines) {
-		lines = lines[:max(0, hintLines)]
-	}
+	lines = lines[:max(0, min(hintLines, len(lines)))]
 	return m.sectionLines("Keybinds", lines, false)
 }
 
@@ -164,9 +162,7 @@ func (m Model) dynamicHints() config.HintState {
 
 func wrapHint(text string, width int, paint func(string) string) []string {
 	plain := wrapText(text, width)
-	if len(plain) > maxHintLines {
-		plain = plain[:maxHintLines]
-	}
+	plain = plain[:max(0, min(maxHintLines, len(plain)))]
 	lines := make([]string, 0, len(plain))
 	for _, l := range plain {
 		lines = append(lines, paint(l))

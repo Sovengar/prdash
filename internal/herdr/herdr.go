@@ -21,14 +21,19 @@ type Version struct {
 }
 
 func (v Version) AtLeast(min Version) bool {
-	switch {
-	case v.Major != min.Major:
-		return v.Major > min.Major
-	case v.Minor != min.Minor:
-		return v.Minor > min.Minor
-	default:
-		return v.Patch >= min.Patch
+	if v.Major > min.Major {
+		return true
 	}
+	if v.Major < min.Major {
+		return false
+	}
+	if v.Minor > min.Minor {
+		return true
+	}
+	if v.Minor < min.Minor {
+		return false
+	}
+	return v.Patch >= min.Patch
 }
 
 func (v Version) String() string { return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch) }

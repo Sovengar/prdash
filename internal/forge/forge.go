@@ -47,9 +47,9 @@ type CommentPage struct {
 // Trims the TAIL, not the head: the request is reversed, so what overflows at the front is exactly
 // what the pane was never going to show. Total stays untouched.
 func (p CommentPage) KeepLast() CommentPage {
-	if len(p.Comments) > CommentLimit {
-		p.Comments = p.Comments[len(p.Comments)-CommentLimit:]
-	}
+	// Total, so there is no boundary to argue about: max(0, …) is the floor that keeps a short
+	// list intact, and there is no comparison left whose equality case could be equivalent.
+	p.Comments = p.Comments[max(0, len(p.Comments)-CommentLimit):]
 	return p
 }
 

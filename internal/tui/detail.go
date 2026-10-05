@@ -163,10 +163,10 @@ func detailCell(f detailField, width int) (string, int) {
 
 // The END of the detail is the part that says whether the action applies, so that is what survives.
 func clipTop(lines []string, rows int) []string {
-	if rows <= 0 || len(lines) <= rows {
+	if rows <= 0 {
 		return lines
 	}
-	return lines[len(lines)-rows:]
+	return lines[max(0, len(lines)-rows):]
 }
 
 func label(key, value string) string {

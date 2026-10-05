@@ -79,13 +79,12 @@ func sectionPrefix(items []model.Item) string {
 		return ""
 	}
 	segs := make([][]string, 0, len(items))
-	minSegs := -1
 	for _, it := range items {
-		s := strings.Split(it.Ref.Project, "/")
-		if minSegs < 0 || len(s) < minSegs {
-			minSegs = len(s)
-		}
-		segs = append(segs, s)
+		segs = append(segs, strings.Split(it.Ref.Project, "/"))
+	}
+	minSegs := len(segs[0])
+	for _, s := range segs[1:] {
+		minSegs = min(minSegs, len(s))
 	}
 	common := 0
 	for i := range minSegs - 1 {
