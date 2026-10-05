@@ -422,8 +422,5 @@ func borderedBox(title, content string, width int) string {
 }
 
 func padRight(s string, n int) string {
-	if pad := n - ansi.StringWidth(s); pad > 0 {
-		return s + strings.Repeat(" ", pad)
-	}
-	return s
+	return s + strings.Repeat(" ", max(0, n-ansi.StringWidth(s)))
 }

@@ -334,8 +334,8 @@ func escapeGraphQL(s string) string { return forge.EscapeGraphQL(s) }
 
 func splitProject(project string) (string, string) {
 	project = strings.Trim(project, "/")
-	if i := strings.Index(project, "/"); i >= 0 {
-		return project[:i], project[i+1:]
+	if owner, name, found := strings.Cut(project, "/"); found {
+		return owner, name
 	}
 	return "", project
 }

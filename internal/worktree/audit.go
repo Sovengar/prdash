@@ -1,11 +1,12 @@
 package worktree
 
 import (
+	"cmp"
 	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -57,7 +58,7 @@ func (g *GitDirect) Audit(ctx context.Context) []Entry {
 		out = append(out, e)
 		return fs.SkipDir
 	})
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	slices.SortFunc(out, func(a, b Entry) int { return cmp.Compare(a.Path, b.Path) })
 	return out
 }
 

@@ -507,8 +507,8 @@ func glItems(conn *glConn, section model.Section, kind model.ReviewKind) []model
 
 func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.Item {
 	owner := mr.Project.FullPath
-	if i := strings.LastIndex(owner, "/"); i >= 0 {
-		owner = owner[:i]
+	if strings.Contains(owner, "/") {
+		owner = owner[:strings.LastIndex(owner, "/")]
 	} else {
 		owner = ""
 	}
@@ -721,10 +721,11 @@ func joinProject(owner, name string) string {
 
 func splitProject(path string) (string, string) {
 	path = strings.Trim(path, "/")
-	if i := strings.LastIndex(path, "/"); i >= 0 {
-		return path[:i], path[i+1:]
+	if !strings.Contains(path, "/") {
+		return "", path
 	}
-	return "", path
+	i := strings.LastIndex(path, "/")
+	return path[:i], path[i+1:]
 }
 
 func projectFromRef(ref string) string {

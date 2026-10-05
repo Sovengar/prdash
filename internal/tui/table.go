@@ -284,11 +284,7 @@ func compactCount(n int) string {
 }
 
 func pad(s string, w int) string {
-	n := utf8.RuneCountInString(s)
-	if n >= w {
-		return s
-	}
-	return s + strings.Repeat(" ", w-n)
+	return s + strings.Repeat(" ", max(0, w-utf8.RuneCountInString(s)))
 }
 
 func truncate(s string, w int) string {

@@ -87,11 +87,9 @@ func (m *Model) applyComments(msg commentsMsg) {
 		ready: true,
 		err:   msg.err,
 	}
-	if st.total < len(st.list) {
-		// GitLab exposes no count, so the total is what was read. It is floored at the list's height so the
-		// count arithmetic does not invent comments that are not there.
-		st.total = len(st.list)
-	}
+	// GitLab exposes no count, so the total is what was read. It is floored at the list's height so the
+	// count arithmetic does not invent comments that are not there.
+	st.total = max(st.total, len(st.list))
 	m.comments[msg.id] = st
 }
 
@@ -130,10 +128,7 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 
 	// Bounded here and not only in the adapter. CommentLimit is the card's decision, and a card that
 	// skipped it because it trusted whoever filled it would show comments that do not fit its own height.
-	shown := st.list
-	if len(shown) > forge.CommentLimit {
-		shown = shown[:forge.CommentLimit]
-	}
+	shown := st.list[:min(forge.CommentLimit, len(st.list))]
 	// There is deliberately NO second floor on `len(shown)`: it would be `avail < chrome+len(shown)`
 	// and the guard above already implies it, since `len(shown) <= len(st.list)` by the cap of five.
 
@@ -142,10 +137,8 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	// Each comment's needed rows are counted by composing it at the tall cap, with the same code
 	// that paints it, so the allocation cannot lie about what fits.
 	need := make([]int, len(shown))
-	total := 0
 	for i, c := range shown {
 		need[i] = len(commentBody(c, maxCommentLines, bodyWidth))
-		total += need[i]
 	}
 
 	// The count lives on the bottom border, not in the body: every body row is something a person
@@ -153,11 +146,11 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 	body := make([]string, 0, budget)
 
 	// When they fit, each takes what it needs, which stops a six-paragraph comment starving four
-	// one-liners. When they do not, everyone gets one row and the surplus goes to whoever has most to lose.
-	rows := need
-	if total > budget {
-		rows = allocate(need, budget)
-	}
+	// one-liners. When they do not, everyone gets one row and the surplus goes to whoever has most
+	// to lose. There is deliberately no fit check around the call: while the budget covers the sum,
+	// allocate hands out the leftovers until every comment sits at its own count and returns `need`
+	// itself, so one call covers both cases.
+	rows := allocate(need, budget)
 
 	for i, c := range shown {
 		// No safety net here, and there used to be: `budget >= len(need)` already, so allocate
@@ -206,7 +199,9 @@ func commentBodyWidth(outer int) int {
 // grey told them apart but goes yellowish on warm palettes: a colour fix for a shape problem.
 const commentInset = 1
 
-func commentBoxWidth(outer int) int { return max(8, outer-2*commentInset) }
+// One subtraction per side and not `2*commentInset`: the product's only mutant divides by an inset
+// of one and comes out the same value, a survivor no test can kill.
+func commentBoxWidth(outer int) int { return max(8, outer-commentInset-commentInset) }
 
 // One at a time, not neediest first: levelling shares the damage among those who will suffer it,
 // while "the first keeps it" depends only on who wrote first.

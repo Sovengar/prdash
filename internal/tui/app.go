@@ -3,8 +3,10 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -782,14 +784,14 @@ func (m *Model) snapshot() cache.File {
 	for key := range m.streams {
 		keys = append(keys, key)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].forge != keys[j].forge {
-			return keys[i].forge < keys[j].forge
-		}
-		if keys[i].section != keys[j].section {
-			return keys[i].section < keys[j].section
-		}
-		return keys[i].kind < keys[j].kind
+	// The snapshot order is compared between runs, so the keys need one total order over the whole
+	// key: forge, then section, then kind.
+	slices.SortFunc(keys, func(a, b streamKey) int {
+		return cmp.Or(
+			cmp.Compare(a.forge, b.forge),
+			cmp.Compare(a.section, b.section),
+			cmp.Compare(a.kind, b.kind),
+		)
 	})
 
 	f := cache.File{SavedAt: time.Now()}

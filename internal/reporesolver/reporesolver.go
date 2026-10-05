@@ -282,12 +282,11 @@ func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]str
 		path = u.Path
 	} else if at := strings.Index(raw, "@"); at > 0 {
 		rest := raw[at+1:]
-		colon := strings.Index(rest, ":")
-		if colon < 0 {
+		var ok bool
+		host, path, ok = strings.Cut(rest, ":")
+		if !ok {
 			return model.RepoRef{}, false
 		}
-		host = rest[:colon]
-		path = rest[colon+1:]
 	} else {
 		return model.RepoRef{}, false
 	}

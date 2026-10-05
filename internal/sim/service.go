@@ -252,9 +252,7 @@ func prune(dir string, keep int) {
 }
 
 func pruneWith(dir string, keep int, listing func(string) ([]os.DirEntry, error)) {
-	if keep < 0 {
-		keep = 0
-	}
+	keep = max(keep, 0)
 	entries, err := listing(dir)
 	if err != nil {
 		return
@@ -274,15 +272,15 @@ func pruneWith(dir string, keep int, listing func(string) ([]os.DirEntry, error)
 		}
 		files = append(files, aged{path: filepath.Join(dir, e.Name()), mod: info.ModTime()})
 	}
-	if len(files) <= keep {
-		return
-	}
+	// No early return: the cut is total, min(keep, len(files)) leaves an empty tail when there is
+	// nothing to prune, and the order of the local slice is never observable.
 	for i := 1; i < len(files); i++ {
 		for j := i; j > 0 && files[j].mod.After(files[j-1].mod); j-- {
 			files[j], files[j-1] = files[j-1], files[j]
 		}
 	}
-	for _, f := range files[keep:] {
+	files = files[min(keep, len(files)):]
+	for _, f := range files {
 		_ = os.Remove(f.path)
 	}
 }
