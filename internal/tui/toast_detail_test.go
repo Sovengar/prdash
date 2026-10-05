@@ -8,89 +8,89 @@ import (
 // Three guards, three places, same shape: an exact edge that can break.
 
 // Clipping from the top with ZERO rows leaves the detail whole.
-func TestClipTopConCeroFilasDejaElDetalleEntero(t *testing.T) {
-	tres := []string{"estado: abierto", "review: aprobado", "rol: autor"}
+func TestClipTopWithZeroRowsLeavesTheWholeDetail(t *testing.T) {
+	three := []string{"state: open", "review: aprobado", "rol: autor"}
 
-	for _, filas := range []int{-5, 0} {
-		if got := clipTop(tres, filas); len(got) != len(tres) {
-			t.Errorf("con %d filas el detalle quedó en %d líneas, want %d: sin sitio para "+
-				"recortar no se recorta. Con el cero pasando las dos comprobaciones el "+
-				"recorte devuelve un slice vacío y la ficha se queda en blanco",
-				filas, len(got), len(tres))
+	for _, rows := range []int{-5, 0} {
+		if got := clipTop(three, rows); len(got) != len(three) {
+			t.Errorf("with %d rows the detail ended at %d lines, want %d: with no room to "+
+				"clip it does not clip. With zero passing both checks the "+
+				"clip returns an empty slice and the card is left blank",
+				rows, len(got), len(three))
 		}
 	}
 
-	if got := clipTop(tres, 1); len(got) != 1 || got[0] != "rol: autor" {
-		t.Errorf("con una fila quedó %v, want la última: el recorte es por arriba para "+
-			"que el final del detalle sobreviva", got)
+	if got := clipTop(three, 1); len(got) != 1 || got[0] != "rol: autor" {
+		t.Errorf("with one row it ended at %v, want the last: the clip is from the top so "+
+			"the end of the detail survives", got)
 	}
 
-	for _, filas := range []int{3, 4, 100} {
-		if got := clipTop(tres, filas); len(got) != len(tres) {
-			t.Errorf("con %d filas para %d líneas quedó en %d: no hay nada que recortar",
-				filas, len(tres), len(got))
+	for _, rows := range []int{3, 4, 100} {
+		if got := clipTop(three, rows); len(got) != len(three) {
+			t.Errorf("with %d rows for %d lines it ended at %d: there is nothing to clip",
+				rows, len(three), len(got))
 		}
 	}
 }
 
 // The warning anchors to the LAST row of the view.
-func TestElAvisoSePegaAbajoEnLaUltimaFila(t *testing.T) {
-	const filas, ancho = 12, 40
+func TestTheNoticeSticksToTheBottomOnTheLastRow(t *testing.T) {
+	const rowCount, width = 12, 40
 
-	rows := make([]bool, filas)
+	rows := make([]bool, rowCount)
 	for i := range rows {
 		rows[i] = true
 	}
-	base := make([]string, filas)
+	base := make([]string, rowCount)
 	for i := range base {
-		base[i] = strings.Repeat("·", ancho)
+		base[i] = strings.Repeat("·", width)
 	}
 
-	caja := strings.Join([]string{
+	box := strings.Join([]string{
 		"+--------------+",
-		"| un aviso     |",
+		"| a notice     |",
 		"+--------------+",
 	}, "\n")
 
-	got := overlayToasts(strings.Join(base, "\n"), []string{caja}, ancho, rows)
-	lineas := strings.Split(got, "\n")
+	got := overlayToasts(strings.Join(base, "\n"), []string{box}, width, rows)
+	lines := strings.Split(got, "\n")
 
-	if len(lineas) != filas {
-		t.Fatalf("la superposición cambió el número de filas: %d, want %d. El aviso se "+
-			"pinta encima recortando el fondo, no añadiendo filas", len(lineas), filas)
-	}
-
-	ultima := lineas[filas-1]
-	if !strings.Contains(ultima, "+--------------+") {
-		t.Errorf("la última fila es %q y no lleva el borde del aviso: el bloque tiene "+
-			"que terminar en la última fila de la vista", primeraLineaCon(ultima, 60))
-	}
-	if !strings.Contains(lineas[filas-3], "+--------------+") {
-		t.Errorf("la antepenúltima fila es %q y no lleva el borde superior del aviso",
-			primeraLineaCon(lineas[filas-3], 60))
-	}
-	if !strings.Contains(lineas[filas-2], "un aviso") {
-		t.Errorf("la penúltima fila es %q y no lleva el texto del aviso",
-			primeraLineaCon(lineas[filas-2], 60))
+	if len(lines) != rowCount {
+		t.Fatalf("the overlay changed the number of rows: %d, want %d. The notice is "+
+			"painted over the background by clipping it, not by adding rows", len(lines), rowCount)
 	}
 
-	rowsConHueco := make([]bool, filas)
-	copy(rowsConHueco, rows)
-	rowsConHueco[filas-1] = false // la última fila es borde de algo
-	got = overlayToasts(strings.Join(base, "\n"), []string{caja}, ancho, rowsConHueco)
-	lineas = strings.Split(got, "\n")
-	if strings.Contains(lineas[filas-1], "un aviso") {
-		t.Errorf("el aviso se pintó en la última fila, que es borde: %q",
-			primeraLineaCon(lineas[filas-1], 60))
+	last := lines[rowCount-1]
+	if !strings.Contains(last, "+--------------+") {
+		t.Errorf("the last row is %q and does not carry the notices border: the block has "+
+			"to end on the last row of the view", firstLineWith(last, 60))
+	}
+	if !strings.Contains(lines[rowCount-3], "+--------------+") {
+		t.Errorf("the third from last row is %q and does not carry the notices top border",
+			firstLineWith(lines[rowCount-3], 60))
+	}
+	if !strings.Contains(lines[rowCount-2], "a notice") {
+		t.Errorf("the second to last row is %q and does not carry the notices text",
+			firstLineWith(lines[rowCount-2], 60))
+	}
+
+	rowsWithGap := make([]bool, rowCount)
+	copy(rowsWithGap, rows)
+	rowsWithGap[rowCount-1] = false // the last row is somebody elses border
+	got = overlayToasts(strings.Join(base, "\n"), []string{box}, width, rowsWithGap)
+	lines = strings.Split(got, "\n")
+	if strings.Contains(lines[rowCount-1], "a notice") {
+		t.Errorf("the notice was painted on the last row, which is border: %q",
+			firstLineWith(lines[rowCount-1], 60))
 	}
 	// It moves exactly enough: the block needs THREE rows and with the last one closed only two fit.
-	if !strings.Contains(lineas[filas-3], "un aviso") {
-		t.Errorf("con la última fila cerrada el aviso debería subir una fila y quedar en "+
-			"la tercera desde abajo, y quedó %q en esa fila",
-			primeraLineaCon(lineas[filas-3], 60))
+	if !strings.Contains(lines[rowCount-3], "a notice") {
+		t.Errorf("with the last row closed the notice should rise one row and land on "+
+			"the third from the bottom, and it ended up as %q on that row",
+			firstLineWith(lines[rowCount-3], 60))
 	}
-	if strings.Contains(lineas[filas-2], "un aviso") {
-		t.Errorf("el aviso se quedó pegado al fondo con la última fila cerrada: %q",
-			primeraLineaCon(lineas[filas-2], 60))
+	if strings.Contains(lines[rowCount-2], "a notice") {
+		t.Errorf("the notice stayed stuck to the background with the last row closed: %q",
+			firstLineWith(lines[rowCount-2], 60))
 	}
 }

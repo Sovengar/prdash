@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestRunSaleAlBinarioDeVerdad(t *testing.T) {
+func TestRunExecutesTheRealBinary(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "args.log")
 
@@ -18,110 +18,110 @@ func TestRunSaleAlBinarioDeVerdad(t *testing.T) {
 		"echo 'esto es stdout'\n" +
 		"echo 'esto es stderr' >&2\n" +
 		"exit ${FAKE_RC:-0}\n"
-	bin := escribirBinario(t, dir, "herdr-falso", script)
+	bin := writeBinary(t, dir, "herdr-falso", script)
 
 	c := &Client{Bin: bin, getenv: func(string) string { return "1" }}
 
 	out, errb, err := c.run(context.Background(), "pane", "list", "--json")
 	if err != nil {
-		t.Fatalf("run devolvio error: %v", err)
+		t.Fatalf("run returned an error: %v", err)
 	}
 	if !strings.Contains(string(out), "esto es stdout") {
-		t.Errorf("stdout salio %q", out)
+		t.Errorf("stdout came out as %q", out)
 	}
 	if !strings.Contains(string(errb), "esto es stderr") {
-		t.Errorf("stderr salio %q", errb)
+		t.Errorf("stderr came out as %q", errb)
 	}
 	// stdout and stderr are NOT mixed: mixed, a CLI warning would look like a successful answer.
 	if strings.Contains(string(out), "stderr") {
-		t.Errorf("stderr se metio en stdout: %q", out)
+		t.Errorf("stderr got into stdout: %q", out)
 	}
 
-	crudo, err := os.ReadFile(log)
+	raw, err := os.ReadFile(log)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(string(crudo)); got != "pane list --json" {
-		t.Errorf("al binario le llego %q, want %q", got, "pane list --json")
+	if got := strings.TrimSpace(string(raw)); got != "pane list --json" {
+		t.Errorf("the binary received %q, want %q", got, "pane list --json")
 	}
 
 	t.Setenv("FAKE_RC", "3")
 	if _, _, err := c.run(context.Background(), "pane", "list"); err == nil {
-		t.Error("un binario que sale con codigo 3 no dio error")
+		t.Error("a binary exiting with code 3 gave no error")
 	}
 }
 
-func TestElBinarioPorDefectoSaleDelEntornoYNoDelCampo(t *testing.T) {
+func TestDefaultBinaryComesFromTheEnvironmentNotTheField(t *testing.T) {
 	t.Setenv("HERDR_BIN_PATH", "")
 	if got := defaultBin(); got != "herdr" {
-		t.Errorf("sin HERDR_BIN_PATH devolvio %q, want herdr", got)
+		t.Errorf("without HERDR_BIN_PATH it returned %q, want herdr", got)
 	}
 
 	t.Setenv("HERDR_BIN_PATH", "/opt/herdr/bin/herdr")
 	if got := defaultBin(); got != "/opt/herdr/bin/herdr" {
-		t.Errorf("con HERDR_BIN_PATH devolvio %q, want la ruta de la variable", got)
+		t.Errorf("with HERDR_BIN_PATH it returned %q, want the path from the variable", got)
 	}
 
 	c := New()
 	if c.Bin != "/opt/herdr/bin/herdr" {
-		t.Errorf("New().Bin = %q, want la ruta de HERDR_BIN_PATH", c.Bin)
+		t.Errorf("New().Bin = %q, want the HERDR_BIN_PATH route", c.Bin)
 	}
 	if c.getenv == nil {
-		t.Error("New() dejo getenv a nil, con lo que env() cae a os.Getenv en vez de " +
-			"usar el lector propio")
+		t.Error("New() left getenv as nil, so env() falls back to os.Getenv instead of " +
+			"using its own reader")
 	}
 }
 
 // The ONLY read of HERDR_ENV in the whole program.
-func TestInHerdrSoloMiraLaVariable(t *testing.T) {
-	casos := []struct {
-		valor string
+func TestInHerdrOnlyReadsTheVariable(t *testing.T) {
+	cases := []struct {
+		value string
 		want  bool
-		nota  string
+		note  string
 	}{
-		{"1", true, "el valor exacto"},
-		{"", false, "sin variable"},
-		{"0", false, "cero no es uno"},
-		{"true", false, `"true" no es "1": es el caso que un Parse booleano se tragaria`},
-		{"yes", false, "lo mismo con yes"},
-		{"11", false, "empieza por uno pero no es"},
-		{" 1", false, "con espacio delante no es"},
+		{"1", true, "the exact value"},
+		{"", false, "no variable"},
+		{"0", false, "zero is not one"},
+		{"true", false, `"true" is not "1": the case a boolean Parse would swallow`},
+		{"yes", false, "same with yes"},
+		{"11", false, "starts with one but is not"},
+		{" 1", false, "with a space in front it is not"},
 	}
-	for _, c := range casos {
-		t.Setenv("HERDR_ENV", c.valor)
+	for _, c := range cases {
+		t.Setenv("HERDR_ENV", c.value)
 		if got := InHerdr(); got != c.want {
-			t.Errorf("HERDR_ENV=%q dio %v, want %v. %s", c.valor, got, c.want, c.nota)
+			t.Errorf("HERDR_ENV=%q gave %v, want %v. %s", c.value, got, c.want, c.note)
 		}
 	}
 }
 
-func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
-	llamadas := 0
-	vistos := [][]string{}
+func TestMutatingOperationsAreVetoedOutsideHerdr(t *testing.T) {
+	calls := 0
+	seen := [][]string{}
 	c := &Client{
-		Bin:    "no-debe-ejecutarse",
+		Bin:    "must-not-run",
 		getenv: func(k string) string { return "" },
 		execFn: func(context.Context, ...string) ([]byte, []byte, error) {
-			llamadas++
+			calls++
 			return nil, nil, nil
 		},
 	}
 
 	if err := c.WorktreeRemove(context.Background(), "w1", true); err == nil {
-		t.Error("worktree remove fuera de Herdr no dio error")
+		t.Error("worktree remove outside Herdr gave no error")
 	}
 	if err := c.WorkspaceClose(context.Background(), "w1", false); err == nil {
-		t.Error("workspace close fuera de Herdr no dio error")
+		t.Error("workspace close outside Herdr gave no error")
 	}
 	if err := c.PaneFocus(context.Background(), "left"); err == nil {
-		t.Error("pane focus fuera de Herdr no dio error")
+		t.Error("pane focus outside Herdr gave no error")
 	}
-	if llamadas != 0 {
-		t.Errorf("se ejecutaron %d llamadas al binario estando fuera de Herdr: el veto "+
-			"tiene que ir ANTES de salir a la CLI, no despues", llamadas)
+	if calls != 0 {
+		t.Errorf("%d calls to the binary ran while outside Herdr: the veto has to go "+
+			"BEFORE reaching out to the CLI, not after", calls)
 	}
 
-	dentro := &Client{
+	inside := &Client{
 		Bin: "herdr",
 		getenv: func(k string) string {
 			if k == "HERDR_ENV" {
@@ -130,88 +130,88 @@ func TestLasOperacionesMutantesSeVetanFueraDeHerdr(t *testing.T) {
 			return ""
 		},
 		execFn: func(_ context.Context, args ...string) ([]byte, []byte, error) {
-			vistos = append(vistos, args)
+			seen = append(seen, args)
 			return []byte(`{"id":"cli:ok","result":{"type":"ok"}}`), nil, nil
 		},
 	}
-	if err := dentro.PaneFocus(context.Background(), "left"); err != nil {
-		t.Errorf("dentro de Herdr, pane focus falló: %v", err)
+	if err := inside.PaneFocus(context.Background(), "left"); err != nil {
+		t.Errorf("inside Herdr, pane focus failed: %v", err)
 	}
 	// Counting carefully is the trap: guard calls Available(), which queries the version, and THAT is
 	// a call to the binary.
-	if len(vistos) != 2 {
-		t.Errorf("dentro de Herdr se hicieron %d llamadas, want 2 (version + operacion): "+
-			"%v", len(vistos), vistos)
+	if len(seen) != 2 {
+		t.Errorf("inside Herdr %d calls were made, want 2 (version + operation): "+
+			"%v", len(seen), seen)
 	}
-	if len(vistos) == 2 && !strings.Contains(strings.Join(vistos[1], " "), "focus") {
-		t.Errorf("la segunda llamada fue %v y no es la operación", vistos[1])
+	if len(seen) == 2 && !strings.Contains(strings.Join(seen[1], " "), "focus") {
+		t.Errorf("the second call was %v and is not the operation", seen[1])
 	}
 }
 
-func TestPaneFocusSinDireccionVaADerecha(t *testing.T) {
-	var vistos [][]string
-	nuevo := func() *Client {
+func TestPaneFocusWithoutDirectionGoesRight(t *testing.T) {
+	var seen [][]string
+	newClient := func() *Client {
 		return &Client{
 			Bin:    "herdr",
 			getenv: func(k string) string { return "1" },
 			execFn: func(_ context.Context, args ...string) ([]byte, []byte, error) {
-				vistos = append(vistos, args)
+				seen = append(seen, args)
 				return []byte(`{"id":"cli:ok","result":{"type":"ok"}}`), nil, nil
 			},
 		}
 	}
 
-	if err := nuevo().PaneFocus(context.Background(), ""); err != nil {
-		t.Fatalf("pane focus sin dirección: %v", err)
+	if err := newClient().PaneFocus(context.Background(), ""); err != nil {
+		t.Fatalf("pane focus without direction: %v", err)
 	}
-	if !contieneArg(vistos, "right") {
-		t.Errorf("sin dirección se mandó %v y ninguna lleva right", vistos)
+	if !containsArg(seen, "right") {
+		t.Errorf("without a direction %v was sent and none carries right", seen)
 	}
 
-	vistos = nil
-	if err := nuevo().PaneFocus(context.Background(), "up"); err != nil {
-		t.Fatalf("pane focus con dirección: %v", err)
+	seen = nil
+	if err := newClient().PaneFocus(context.Background(), "up"); err != nil {
+		t.Fatalf("pane focus with direction: %v", err)
 	}
-	if !contieneArg(vistos, "up") {
-		t.Errorf("con dirección up se mandó %v y ninguna lleva up", vistos)
+	if !containsArg(seen, "up") {
+		t.Errorf("with direction up %v was sent and none carries up", seen)
 	}
 }
 
-func TestElTimeoutDeRunSeAplica(t *testing.T) {
+func TestRunTimeoutApplies(t *testing.T) {
 	dir := t.TempDir()
-	bin := escribirBinario(t, dir, "herdr-colgado", "#!/bin/sh\nsleep 5\n")
+	bin := writeBinary(t, dir, "herdr-colgado", "#!/bin/sh\nsleep 5\n")
 
 	c := &Client{Bin: bin, getenv: func(string) string { return "1" }, Timeout: 50 * time.Millisecond}
 
-	inicio := time.Now()
+	start := time.Now()
 	_, _, err := c.run(context.Background(), "pane", "list")
-	elapsed := time.Since(inicio)
+	elapsed := time.Since(start)
 
 	if err == nil {
-		t.Error("un binario colgado no dio error")
+		t.Error("a hung binary gave no error")
 	}
 	if elapsed > 2*time.Second {
-		t.Errorf("run tardó %s con un timeout de 50ms: el contexto no está cortando la "+
-			"llamada", elapsed)
+		t.Errorf("run took %s with a timeout of 50ms: the context is not cutting the "+
+			"call", elapsed)
 	}
 	// The default floor applies when Timeout is empty, and it is proved by checking what run computes
 	//rather than by waiting 30s.
-	bin1s := escribirBinario(t, dir, "herdr-corto", "#!/bin/sh\nsleep 1\n")
+	bin1s := writeBinary(t, dir, "herdr-corto", "#!/bin/sh\nsleep 1\n")
 	c.Bin = bin1s
 	c.Timeout = 0
-	inicio = time.Now()
+	start = time.Now()
 	if _, _, err := c.run(context.Background(), "pane", "list"); err != nil {
-		t.Errorf("con Timeout a cero y un binario que duerme 1s dio error: %v", err)
+		t.Errorf("with Timeout at zero and a binary that sleeps 1s it gave an error: %v", err)
 	}
-	if elapsed := time.Since(inicio); elapsed < 900*time.Millisecond {
-		t.Errorf("con Timeout a cero run tardó %s: se aplicó el timeout de 50ms del caso "+
-			"anterior en vez del suelo por defecto", elapsed)
+	if elapsed := time.Since(start); elapsed < 900*time.Millisecond {
+		t.Errorf("with Timeout at zero run took %s: the 50ms timeout of the previous "+
+			"case was applied instead of the default floor", elapsed)
 	}
 }
 
-// contieneArg looks through ALL the calls, because the guard's first one is `--version`.
-func contieneArg(llamadas [][]string, arg string) bool {
-	for _, c := range llamadas {
+// containsArg looks through ALL the calls, because the guard's first one is `--version`.
+func containsArg(calls [][]string, arg string) bool {
+	for _, c := range calls {
 		for _, a := range c {
 			if a == arg {
 				return true
@@ -221,11 +221,11 @@ func contieneArg(llamadas [][]string, arg string) bool {
 	return false
 }
 
-func escribirBinario(t *testing.T, dir, nombre, cuerpo string) string {
+func writeBinary(t *testing.T, dir, name, body string) string {
 	t.Helper()
-	ruta := filepath.Join(dir, nombre)
-	if err := os.WriteFile(ruta, []byte(cuerpo), 0o755); err != nil {
-		t.Fatalf("escribir %s: %v", ruta, err)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
 	}
-	return ruta
+	return path
 }

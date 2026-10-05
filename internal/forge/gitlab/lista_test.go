@@ -34,72 +34,72 @@ const graphqlJSON = `{"data":{"currentUser":{"reviewRequestedMergeRequests":{"no
 }],"pageInfo":{"hasNextPage":true,"endCursor":"Y3Vyc29yOjI="}}}}}`
 
 // The cursor is what stops the TUI from asking for the first page again.
-func TestElListadoPorGraphQLTraeElCursorDelForge(t *testing.T) {
-	script, _ := glabQueRegistra(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
+func TestTheGraphQLListingBringsTheForgesCursor(t *testing.T) {
+	script, _ := glabThatLogs(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
 	a := New("h.example", script)
 
 	page, warns := a.List(context.Background(), forge.Query{Section: model.SectionReview})
 
 	if len(warns) != 0 {
-		t.Errorf("el camino bueno dio avisos %+v", warns)
+		t.Errorf("the good path gave warnings %+v", warns)
 	}
 	if len(page.Items) != 1 {
-		t.Fatalf("salieron %d items, want 1: %+v", len(page.Items), page.Items)
+		t.Fatalf("%d items came out, want 1: %+v", len(page.Items), page.Items)
 	}
 	if !page.More {
-		t.Error("pageInfo.hasNextPage no llegó a More")
+		t.Error("pageInfo.hasNextPage did not reach More")
 	}
 	if page.Next != "Y3Vyc29yOjI=" {
-		t.Errorf("el cursor es %q, want el endCursor del forge", page.Next)
+		t.Errorf("the cursor is %q, want the forge's endCursor", page.Next)
 	}
 
 	it := page.Items[0]
 	// The stamp: GraphQL items carry no section and no review kind, the query does not ask for them.
 	if it.Section != model.SectionReview {
-		t.Errorf("el item quedó en la sección %q: sin stamp no aparece en el inbox", it.Section)
+		t.Errorf("the item ended up in section %q: without a stamp it does not appear in the inbox", it.Section)
 	}
 	if it.Forge != ForgeName || it.Host != "h.example" {
-		t.Errorf("el item quedó como %s@%s, y el host sale de la config", it.Forge, it.Host)
+		t.Errorf("the item ended up as %s@%s, and the host comes from the config", it.Forge, it.Host)
 	}
 	if it.Ref.Project == "" {
-		t.Error("el item no trae proyecto")
+		t.Error("the item brings no project")
 	}
 }
 
 // The forge's cursor is passed through as given.
-func TestLaPrimeraPaginaUsaElCursorYLaSiguienteLoPasaTalCual(t *testing.T) {
-	script, argsFile := glabQueRegistra(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
+func TestTheFirstPageUsesTheCursorAndTheNextOnePassesItThroughAsIs(t *testing.T) {
+	script, argsFile := glabThatLogs(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
 	a := New("h.example", script)
 
 	cursor := "Y3Vyc29yOjI="
 	a.List(context.Background(), forge.Query{Section: model.SectionReview, Cursor: cursor})
 
-	args := argsRegistrados(t, argsFile)
+	args := loggedArgs(t, argsFile)
 	if !strings.Contains(args, cursor) {
-		t.Errorf("el cursor no llegó a la query: %s", args)
+		t.Errorf("the cursor did not reach the query: %s", args)
 	}
 	if strings.Contains(args, "after: null") {
-		t.Errorf("la query mandó un cursor nulo explícito: %s", args)
+		t.Errorf("the query sent an explicit null cursor: %s", args)
 	}
 
 	// On the last page: More false and Next empty. Without an empty Next the TUI would keep paging.
-	fin := strings.Replace(graphqlJSON, `"hasNextPage":true,"endCursor":"Y3Vyc29yOjI="`,
+	last := strings.Replace(graphqlJSON, `"hasNextPage":true,"endCursor":"Y3Vyc29yOjI="`,
 		`"hasNextPage":false,"endCursor":null`, 1)
-	script, _ = glabQueRegistra(t, "cat <<'JSON'\n"+fin+"\nJSON\n")
+	script, _ = glabThatLogs(t, "cat <<'JSON'\n"+last+"\nJSON\n")
 	a = New("h.example", script)
 	page, _ := a.List(context.Background(), forge.Query{Section: model.SectionReview})
 	if page.More {
-		t.Error("la última página salió con More=true")
+		t.Error("the last page came out with More=true")
 	}
 	if page.Next != "" {
-		t.Errorf("la última página trajo cursor %q", page.Next)
+		t.Errorf("the last page brought cursor %q", page.Next)
 	}
 }
 
 // Three cases and three different decisions.
-func TestElRespaldoRESTSoloEntraParaLaPrimeraPaginaDeLosPropios(t *testing.T) {
+func TestTheRESTFallbackOnlyKicksInForTheFirstAuthoredPage(t *testing.T) {
 	ctx := context.Background()
-	cuerpo := `case "$*" in
+	body := `case "$*" in
   *graphql*) echo "boom" >&2; exit 1;;
   *merge_requests*) cat <<'JSON'
 ` + mrJSON + `
@@ -108,92 +108,92 @@ JSON
 esac
 exit 1
 `
-	script, _ := glabQueRegistra(t, cuerpo)
+	script, _ := glabThatLogs(t, body)
 	a := New("h.example", script)
 
 	page, warns := a.List(ctx, forge.Query{Section: model.SectionAuthored})
 	if len(page.Items) != 1 {
-		t.Errorf("el respaldo no devolvió items en el caso que sí debe entrar: %+v", page.Items)
+		t.Errorf("the fallback did not return items in the case where it must kick in: %+v", page.Items)
 	}
 	if len(warns) != 1 || warns[0].Kind != "degraded" {
-		t.Fatalf("avisos = %+v, want un único degraded", warns)
+		t.Fatalf("warnings = %+v, want a single degraded", warns)
 	}
 
-	script, _ = glabQueRegistra(t, cuerpo)
+	script, _ = glabThatLogs(t, body)
 	a = New("h.example", script)
 	page, warns = a.List(ctx, forge.Query{Section: model.SectionAuthored, Cursor: "2"})
 	if len(page.Items) != 0 {
-		t.Errorf("con cursor el respaldo devolvió %d items: no pagina", len(page.Items))
+		t.Errorf("with a cursor the fallback returned %d items: it does not page", len(page.Items))
 	}
 	if len(warns) != 1 || warns[0].Kind == "degraded" {
-		t.Errorf("avisos = %+v: con cursor no debería entrar el respaldo", warns)
+		t.Errorf("warnings = %+v: with a cursor the fallback should not kick in", warns)
 	}
 
-	script, _ = glabQueRegistra(t, cuerpo)
+	script, _ = glabThatLogs(t, body)
 	a = New("h.example", script)
 	page, warns = a.List(ctx, forge.Query{Section: model.SectionMentions})
 	if len(page.Items) != 0 {
-		t.Errorf("en menciones el respaldo devolvió %d items de los propios", len(page.Items))
+		t.Errorf("in mentions the fallback returned %d items from the authored ones", len(page.Items))
 	}
 	if len(warns) != 1 || warns[0].Kind == "degraded" {
-		t.Errorf("avisos = %+v: en menciones no debería entrar", warns)
+		t.Errorf("warnings = %+v: in mentions it should not kick in", warns)
 	}
 }
 
 // The failure has to carry a warning even when there is no list to show.
-func TestUnListadoQueNoSePuedeLeerDaUnAvisoAsociadoASuSeccion(t *testing.T) {
-	script, _ := glabQueRegistra(t, "echo 'se rompio' >&2\nexit 1\n")
+func TestAListingThatCannotBeReadGivesAWarningAttachedToItsSection(t *testing.T) {
+	script, _ := glabThatLogs(t, "echo 'it broke' >&2\nexit 1\n")
 	a := New("h.example", script)
 
 	page, warns := a.List(context.Background(), forge.Query{Section: model.SectionReview})
 
 	if len(page.Items) != 0 {
-		t.Errorf("un listado que falla devolvió %d items", len(page.Items))
+		t.Errorf("a failing listing returned %d items", len(page.Items))
 	}
 	if len(warns) != 1 {
-		t.Fatalf("avisos = %+v, want 1: un fallo sin aviso deja el inbox en blanco", warns)
+		t.Fatalf("warnings = %+v, want 1: a failure with no warning leaves the inbox blank", warns)
 	}
 	if warns[0].Section != model.SectionReview {
-		t.Errorf("el aviso quedó en la sección %q, want la que se pidió", warns[0].Section)
+		t.Errorf("the warning ended up in section %q, want the requested one", warns[0].Section)
 	}
 	if warns[0].Forge != ForgeName {
-		t.Errorf("el aviso no trae el nombre del forge: %+v", warns[0])
+		t.Errorf("the warning does not bring the forge name: %+v", warns[0])
 	}
 	if strings.TrimSpace(warns[0].Msg) == "" {
-		t.Error("el aviso llegó sin texto")
+		t.Error("the warning arrived with no text")
 	}
 	// NOT "degraded": degraded means "works halfway", and this does not work.
 	if warns[0].Kind == "degraded" {
-		t.Error("un fallo total se marcó como degraded: el usuario creería que tiene datos")
+		t.Error("a total failure was marked as degraded: the user would believe they have data")
 	}
 }
 
 // The case nobody remembers: the fallback only enters if restAuthored actually parses.
-func TestElRespaldoRESTNoEntraSiLaRespuestaNoSeEntiende(t *testing.T) {
-	cuerpo := `case "$*" in
+func TestTheRESTFallbackDoesNotKickInIfTheResponseIsUnreadable(t *testing.T) {
+	body := `case "$*" in
   *graphql*) echo "boom" >&2; exit 1;;
-  *merge_requests*) echo 'esto no es json'; exit 0;;
+  *merge_requests*) echo 'this is not json'; exit 0;;
 esac
 exit 1
 `
-	script, _ := glabQueRegistra(t, cuerpo)
+	script, _ := glabThatLogs(t, body)
 	a := New("h.example", script)
 
 	page, warns := a.List(context.Background(), forge.Query{Section: model.SectionAuthored})
 
 	if len(page.Items) != 0 {
-		t.Errorf("con basura en el respaldo salieron %d items", len(page.Items))
+		t.Errorf("with garbage in the fallback %d items came out", len(page.Items))
 	}
 	if len(warns) != 1 {
-		t.Fatalf("avisos = %+v, want 1", warns)
+		t.Fatalf("warnings = %+v, want 1", warns)
 	}
 	if warns[0].Kind == "degraded" {
-		t.Error("un respaldo ilegible se'annonceó como degradado: no es un respaldo, es un fallo")
+		t.Error("an unreadable fallback announced itself as degraded: it is not a fallback, it is a failure")
 	}
 }
 
 // "Comes full" is `total >= pageSize`, not "has items".
-func TestLaListaDeTodosSoloMarcaMasCuandoVieneLlena(t *testing.T) {
+func TestTheTodosListOnlyMarksMoreWhenItComesFull(t *testing.T) {
 	dir := t.TempDir()
 	short := `[{"iid":1,"title":"a","web_url":"u","state":"opened",
 "source_branch":"s","target_branch":"main","updated_at":"2026-09-21T07:00:00Z",
@@ -202,39 +202,39 @@ func TestLaListaDeTodosSoloMarcaMasCuandoVieneLlena(t *testing.T) {
 	a := New("h.example", script)
 	page, _ := a.List(context.Background(), forge.Query{Section: model.SectionMentions})
 	if page.More {
-		t.Error("una respuesta corta se marcó como More")
+		t.Error("a short response was marked as More")
 	}
 	if page.Next != "" {
-		t.Errorf("una respuesta corta trajo cursor %q", page.Next)
+		t.Errorf("a short response brought cursor %q", page.Next)
 	}
 
 	fail := writeScript(t, dir, "glab-2", "#!/bin/sh\necho 'nope' >&2\nexit 1\n")
 	a = New("h.example", fail)
 	page, warns := a.List(context.Background(), forge.Query{Section: model.SectionMentions})
 	if len(page.Items) != 0 || len(warns) != 1 {
-		t.Errorf("un fallo de Todos dio %d items y %d avisos", len(page.Items), len(warns))
+		t.Errorf("a Todos failure gave %d items and %d warnings", len(page.Items), len(warns))
 	}
 }
 
 // The number is passed AS GIVEN and only if it is a positive number.
-func TestLaListaDeTodosSigueElCursorDePagina(t *testing.T) {
-	script, argsFile := glabQueRegistra(t, "echo '[]'")
+func TestTheTodosListFollowsThePageCursor(t *testing.T) {
+	script, argsFile := glabThatLogs(t, "echo '[]'")
 	a := New("h.example", script)
 	a.List(context.Background(), forge.Query{Section: model.SectionMentions, Cursor: "3"})
-	if args := argsRegistrados(t, argsFile); !strings.Contains(args, "todos") {
-		t.Errorf("no se llamó a la API de Todos: %s", args)
+	if args := loggedArgs(t, argsFile); !strings.Contains(args, "todos") {
+		t.Errorf("the Todos API was not called: %s", args)
 	}
 
 	for _, cursor := range []string{"", "abc", "-1", "0"} {
-		script, _ = glabQueRegistra(t, "echo '[]'")
+		script, _ = glabThatLogs(t, "echo '[]'")
 		a = New("h.example", script)
 		page, warns := a.List(context.Background(),
 			forge.Query{Section: model.SectionMentions, Cursor: cursor})
 		if len(warns) != 0 {
-			t.Errorf("con cursor %q dio avisos %+v", cursor, warns)
+			t.Errorf("with cursor %q it gave warnings %+v", cursor, warns)
 		}
 		if len(page.Items) != 0 {
-			t.Errorf("con cursor %q devolvió items de una respuesta vacía", cursor)
+			t.Errorf("with cursor %q it returned items from an empty response", cursor)
 		}
 	}
 }

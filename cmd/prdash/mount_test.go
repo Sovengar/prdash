@@ -15,7 +15,7 @@ func TestPaneToolUsesVerbatimOverride(t *testing.T) {
 
 	tool := paneTool(cfg, "hunk")
 	if !tool.Override {
-		t.Fatalf("hunk debería resolverse como override: %+v", tool)
+		t.Fatalf("hunk should resolve as an override: %+v", tool)
 	}
 	if got := strings.Join(tool.Argv, " "); got != "hunk diff develop...HEAD --watch" {
 		t.Fatalf("argv = %q", got)
@@ -28,7 +28,7 @@ func TestPaneToolFallsBackToToolsBase(t *testing.T) {
 
 	tool := paneTool(cfg, "hunk")
 	if tool.Override {
-		t.Fatalf("sin `[commands]` no debería marcarse override: %+v", tool)
+		t.Fatalf("without `[commands]` it should not be marked as an override: %+v", tool)
 	}
 	if got := strings.Join(tool.Argv, " "); got != "myhunk" {
 		t.Fatalf("argv = %q", got)
@@ -43,7 +43,7 @@ func TestToolAvailabilityReportsMissingBinary(t *testing.T) {
 		Editor: plan.Tool{Argv: []string{"vi"}},
 	}
 	if toolAvailability(tools)[string(plan.KindHunk)] {
-		t.Fatal("un binario ausente debería reportarse como no disponible")
+		t.Fatal("a missing binary should be reported as unavailable")
 	}
 }
 
@@ -55,12 +55,12 @@ func TestToolAvailabilityDoesNotGateTheEditor(t *testing.T) {
 		Editor: plan.Tool{Argv: []string{"vi"}},
 	}
 	if _, ok := toolAvailability(tools)[string(plan.KindEditor)]; ok {
-		t.Fatal("el editor no debería pasar por el chequeo de disponibilidad")
+		t.Fatal("the editor should not go through the availability check")
 	}
 
 	pl := plan.Build(model.Item{}, plan.Worktree{Path: "/wt"}, tools, plan.Env{Available: map[string]bool{}})
 	if pl.PaneCount() != 1 {
-		t.Fatalf("panes = %d, quiero solo el editor: %+v", pl.PaneCount(), pl)
+		t.Fatalf("panes = %d, want only the editor: %+v", pl.PaneCount(), pl)
 	}
 	if len(pl.Tabs) != 1 || pl.Tabs[0].Panes[0].Kind != plan.KindEditor {
 		t.Fatalf("tabs = %+v", pl.Tabs)
@@ -79,7 +79,7 @@ func TestClonePrefixesOf(t *testing.T) {
 		t.Fatalf("prefixes = %v", got)
 	}
 	if _, ok := got["github.com"]; ok {
-		t.Fatalf("github no debería tener prefijo: %v", got)
+		t.Fatalf("github should have no prefix: %v", got)
 	}
 }
 
@@ -95,6 +95,6 @@ func TestClonePrefixesOfHonorsExplicitOverride(t *testing.T) {
 		t.Fatalf("github enterprise = %v", got)
 	}
 	if _, ok := got["gitlab.example.com"]; ok {
-		t.Fatalf("gitlab raíz no debería tener prefijo: %v", got)
+		t.Fatalf("root gitlab should have no prefix: %v", got)
 	}
 }

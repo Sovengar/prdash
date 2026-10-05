@@ -12,156 +12,156 @@ import (
 )
 
 // Three pieces, not one, because each answers a different question about a git failure.
-func TestElMensajeDeErrorTraeLoQueHaceFaltaParaArreglarlo(t *testing.T) {
-	casos := []struct {
-		nombre string
-		e      *Error
-		want   string
+func TestTheErrorMessageBringsWhatIsNeededToFixIt(t *testing.T) {
+	cases := []struct {
+		name string
+		e    *Error
+		want string
 	}{
 		{
-			nombre: "con directorio y codigo",
-			e:      &Error{Args: []string{"rev-parse", "HEAD"}, Dir: "/repos/proy", Msg: "fatal: not a git repository", ExitCode: 128},
-			want:   "git -C /repos/proy rev-parse HEAD: fatal: not a git repository (exit 128)",
+			name: "with dir and exit code",
+			e:    &Error{Args: []string{"rev-parse", "HEAD"}, Dir: "/repos/proy", Msg: "fatal: not a git repository", ExitCode: 128},
+			want: "git -C /repos/proy rev-parse HEAD: fatal: not a git repository (exit 128)",
 		},
 		{
-			nombre: "sin directorio",
-			e:      &Error{Args: []string{"status"}, Msg: "no changes", ExitCode: 1},
-			want:   "git status: no changes (exit 1)",
+			name: "without dir",
+			e:    &Error{Args: []string{"status"}, Msg: "no changes", ExitCode: 1},
+			want: "git status: no changes (exit 1)",
 		},
 		{
-			nombre: "error sin codigo",
-			e:      &Error{Args: []string{"log"}, Msg: "interrumpido"},
-			want:   "git log: interrumpido",
+			name: "error without exit code",
+			e:    &Error{Args: []string{"log"}, Msg: "interrupted"},
+			want: "git log: interrupted",
 		},
 		{
-			nombre: "sin argumentos",
-			e:      &Error{Msg: "algo"},
-			want:   "git : algo",
+			name: "no arguments",
+			e:    &Error{Msg: "something"},
+			want: "git : something",
 		},
 		{
-			nombre: "varios argumentos",
-			e:      &Error{Args: []string{"worktree", "add", "-b", "b", "/r"}, Msg: "ya existe"},
-			want:   "git worktree add -b b /r: ya existe",
+			name: "several arguments",
+			e:    &Error{Args: []string{"worktree", "add", "-b", "b", "/r"}, Msg: "already exists"},
+			want: "git worktree add -b b /r: already exists",
 		},
 	}
-	for _, c := range casos {
+	for _, c := range cases {
 		if got := c.e.Error(); got != c.want {
-			t.Errorf("%s: Error() dio %q, want %q", c.nombre, got, c.want)
+			t.Errorf("%s: Error() gave %q, want %q", c.name, got, c.want)
 		}
 	}
 }
 
 // Unwrap is what lets us say "this is not git's error": errors.As(err, &exitError) needs the
 // chain mounted.
-func TestElErrorDesenvuelveLaCausa(t *testing.T) {
-	sinCausa := &Error{Args: []string{"x"}, Msg: "m"}
-	if sinCausa.Unwrap() != nil {
-		t.Error("Unwrap devolvio algo en un Error sin causa")
+func TestTheErrorUnwrapsTheCause(t *testing.T) {
+	withoutCause := &Error{Args: []string{"x"}, Msg: "m"}
+	if withoutCause.Unwrap() != nil {
+		t.Error("Unwrap returned something in an Error with no cause")
 	}
-	if errors.Unwrap(sinCausa) != nil {
-		t.Error("errors.Unwrap devolvio algo en un Error sin causa")
+	if errors.Unwrap(withoutCause) != nil {
+		t.Error("errors.Unwrap returned something in an Error with no cause")
 	}
 
 	cmd := exec.Command("sh", "-c", "exit 42")
 	err := cmd.Run()
 	if err == nil {
-		t.Fatal("esperaba que sh -c 'exit 42' fallara")
+		t.Fatal("expected sh -c 'exit 42' to fail")
 	}
-	conCausa := &Error{Args: []string{"x"}, Msg: "m", Err: err}
+	withCause := &Error{Args: []string{"x"}, Msg: "m", Err: err}
 
-	if !errors.Is(conCausa, err) {
-		t.Error("errors.Is no llega a la causa")
+	if !errors.Is(withCause, err) {
+		t.Error("errors.Is does not reach the cause")
 	}
 	var exit *exec.ExitError
-	if !errors.As(conCausa, &exit) {
-		t.Fatal("errors.As no llega al *exec.ExitError: sin esto ExitCode es 0 siempre")
+	if !errors.As(withCause, &exit) {
+		t.Fatal("errors.As does not reach the *exec.ExitError: without it ExitCode is always 0")
 	}
 	if exit.ExitCode() != 42 {
 		t.Errorf("ExitCode = %d, want 42", exit.ExitCode())
 	}
-	if !strings.Contains(conCausa.Error(), "m") {
-		t.Errorf("el mensaje perdió el texto propio: %q", conCausa.Error())
+	if !strings.Contains(withCause.Error(), "m") {
+		t.Errorf("the message lost its own text: %q", withCause.Error())
 	}
 }
 
-func TestRunTraeElErrorRealDeGit(t *testing.T) {
-	dir := repoVacio(t)
+func TestRunBringsTheRealGitError(t *testing.T) {
+	dir := emptyRepo(t)
 
-	_, err := New().Run(context.Background(), dir, "cat-file", "-p", "no-existe")
+	_, err := New().Run(context.Background(), dir, "cat-file", "-p", "does-not-exist")
 	if err == nil {
-		t.Fatal("git cat-file sobre un objeto inexistente dio nil")
+		t.Fatal("git cat-file on a nonexistent object gave nil")
 	}
 	gerr, ok := err.(*Error)
 	if !ok {
-		t.Fatalf("Run devolvió %T, want *Error", err)
+		t.Fatalf("Run returned %T, want *Error", err)
 	}
 	if gerr.ExitCode == 0 {
-		t.Error("ExitCode = 0 en un fallo de git: el código de salida no se leyó")
+		t.Error("ExitCode = 0 on a git failure: the exit code was not read")
 	}
 	if strings.HasPrefix(gerr.Msg, "exit status") {
-		t.Errorf("el mensaje es %q: se cogió el error del proceso en vez de su stderr", gerr.Msg)
+		t.Errorf("the message is %q: the process error was taken instead of its stderr", gerr.Msg)
 	}
 	if strings.TrimSpace(gerr.Msg) == "" {
-		t.Error("el mensaje quedó vacío")
+		t.Error("the message ended up empty")
 	}
 	if strings.Contains(gerr.Msg, "\n") {
-		t.Errorf("el mensaje tiene saltos de línea: %q", gerr.Msg)
+		t.Errorf("the message has line breaks: %q", gerr.Msg)
 	}
 	if !strings.Contains(gerr.Error(), "cat-file") {
-		t.Errorf("Error() no nombra el comando: %q", gerr.Error())
+		t.Errorf("Error() does not name the command: %q", gerr.Error())
 	}
 	if !strings.Contains(gerr.Error(), dir) {
-		t.Errorf("Error() no nombra el directorio: %q", gerr.Error())
+		t.Errorf("Error() does not name the directory: %q", gerr.Error())
 	}
 }
 
 // Returning what was written before the failure is the right behaviour for what prdash does with
 // git.
-func TestRunDevuelveLaSalidaParcialCuandoFalla(t *testing.T) {
+func TestRunReturnsPartialOutputWhenItFails(t *testing.T) {
 	dir := t.TempDir()
-	parcial := filepath.Join(dir, "git-parcial")
-	if err := os.WriteFile(parcial, []byte("#!/bin/sh\necho 'linea buena'\necho 'fatal: se rompio' >&2\nexit 7\n"), 0o755); err != nil {
+	partial := filepath.Join(dir, "git-partial")
+	if err := os.WriteFile(partial, []byte("#!/bin/sh\necho 'good line'\necho 'fatal: it broke' >&2\nexit 7\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := (&Runner{Bin: parcial}).Run(context.Background(), dir, "log")
+	out, err := (&Runner{Bin: partial}).Run(context.Background(), dir, "log")
 	if err == nil {
-		t.Fatal("un binario que sale con 7 dio nil")
+		t.Fatal("a binary that exits with 7 gave nil")
 	}
-	if !strings.Contains(out, "linea buena") {
-		t.Errorf("la salida anterior al fallo se perdió: %q", out)
+	if !strings.Contains(out, "good line") {
+		t.Errorf("the output before the failure was lost: %q", out)
 	}
 	gerr, ok := err.(*Error)
 	if !ok {
-		t.Fatalf("Run devolvió %T, want *Error", err)
+		t.Fatalf("Run returned %T, want *Error", err)
 	}
 	if gerr.ExitCode != 7 {
 		t.Errorf("ExitCode = %d, want 7", gerr.ExitCode)
 	}
-	if !strings.Contains(gerr.Msg, "se rompio") {
-		t.Errorf("el mensaje no trae el stderr: %q", gerr.Msg)
+	if !strings.Contains(gerr.Msg, "it broke") {
+		t.Errorf("the message does not carry the stderr: %q", gerr.Msg)
 	}
 
-	if err := os.WriteFile(parcial, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+	if err := os.WriteFile(partial, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err = (&Runner{Bin: parcial}).Run(context.Background(), dir, "log")
+	out, err = (&Runner{Bin: partial}).Run(context.Background(), dir, "log")
 	if err == nil {
-		t.Fatal("un binario que sale con 7 dio nil")
+		t.Fatal("a binary that exits with 7 gave nil")
 	}
 	if out != "" {
-		t.Errorf("un binario que no escribió devolvió %q", out)
+		t.Errorf("a binary that wrote nothing returned %q", out)
 	}
 	if strings.TrimSpace(gerr.Msg) == "" {
-		t.Error("el mensaje del primer caso quedó vacío")
+		t.Error("the message from the first case ended up empty")
 	}
 }
 
-func TestElCaminoFelizTraeLaSalidaEntera(t *testing.T) {
-	dir := repoVacio(t)
+func TestTheHappyPathBringsTheWholeOutput(t *testing.T) {
+	dir := emptyRepo(t)
 	r := New()
 
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hola\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.Run(context.Background(), dir, "add", "a.txt"); err != nil {
@@ -172,70 +172,70 @@ func TestElCaminoFelizTraeLaSalidaEntera(t *testing.T) {
 		t.Fatalf("git diff --cached: %v", err)
 	}
 	if !strings.Contains(out, "a.txt") {
-		t.Errorf("la salida de git no llegó intacta: %q", out)
+		t.Errorf("git's output did not arrive intact: %q", out)
 	}
 }
 
 // The order matters: the width trim first, then the first-line cut.
-func TestFirstLineCortaLoQueNoCabeEnElToast(t *testing.T) {
-	casos := []struct {
-		entrada string
-		want    string
+func TestFirstLineCutsWhatDoesNotFitInTheToast(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
 	}{
-		{"primera\nsegunda\ntercera", "primera"},
-		{"  con espacios  \nsegunda", "  con espacios  "},
-		{"una sola linea", "una sola linea"},
+		{"first\nsecond\nthird", "first"},
+		{"  with spaces  \nsecond", "  with spaces  "},
+		{"one single line", "one single line"},
 		{"", ""},
-		{"\nempieza con salto", ""},
-		{"con\n", "con"},
+		{"\nstarts with newline", ""},
+		{"with\n", "with"},
 		{"trailing  \n", "trailing  "},
 	}
-	for _, c := range casos {
-		if got := firstLine(c.entrada); got != c.want {
-			t.Errorf("firstLine(%q) dio %q, want %q", c.entrada, got, c.want)
+	for _, c := range cases {
+		if got := firstLine(c.input); got != c.want {
+			t.Errorf("firstLine(%q) gave %q, want %q", c.input, got, c.want)
 		}
-		if strings.ContainsAny(firstLine(c.entrada), "\n") {
-			t.Errorf("firstLine(%q) devolvio texto con salto", c.entrada)
+		if strings.ContainsAny(firstLine(c.input), "\n") {
+			t.Errorf("firstLine(%q) returned text with a newline", c.input)
 		}
 	}
 }
 
 // The most important thing Env does.
-func TestElEntornoDeGitNoHeredaelContextoDelShell(t *testing.T) {
-	hostiles := map[string]string{
-		"GIT_DIR":                          "/otro/repo/.git",
-		"GIT_WORK_TREE":                    "/otro/repo",
-		"GIT_INDEX_FILE":                   "/otro/index",
-		"GIT_COMMON_DIR":                   "/otro/common",
-		"GIT_OBJECT_DIRECTORY":             "/otro/objs",
-		"GIT_ALTERNATE_OBJECT_DIRECTORIES": "/otro/alt",
-		"GIT_NAMESPACE":                    "otro",
-		"GIT_CEILING_DIRECTORIES":          "/otro/techo",
+func TestTheGitEnvironmentDoesNotInheritTheShellContext(t *testing.T) {
+	hostile := map[string]string{
+		"GIT_DIR":                          "/other/repo/.git",
+		"GIT_WORK_TREE":                    "/other/repo",
+		"GIT_INDEX_FILE":                   "/other/index",
+		"GIT_COMMON_DIR":                   "/other/common",
+		"GIT_OBJECT_DIRECTORY":             "/other/objs",
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES": "/other/alt",
+		"GIT_NAMESPACE":                    "other",
+		"GIT_CEILING_DIRECTORIES":          "/other/ceiling",
 		"GIT_PREFIX":                       "src/",
 		"LC_ALL":                           "es_ES.UTF-8",
 		"LANG":                             "es_ES.UTF-8",
 		"LANGUAGE":                         "es",
 		"LC_MESSAGES":                      "es_ES.UTF-8",
 	}
-	for k, v := range hostiles {
+	for k, v := range hostile {
 		t.Setenv(k, v)
 	}
 
 	env := Env()
-	vistos := map[string]string{}
+	seen := map[string]string{}
 	for _, kv := range env {
 		if i := strings.IndexByte(kv, '='); i > 0 {
-			vistos[kv[:i]] = kv[i+1:]
+			seen[kv[:i]] = kv[i+1:]
 		}
 	}
 
-	for k := range hostiles {
-		if _, sigue := vistos[k]; sigue {
+	for k := range hostile {
+		if _, stillPresent := seen[k]; stillPresent {
 			if k == "LC_ALL" || k == "LANG" {
 				continue
 			}
-			t.Errorf("%s sigue en el entorno con el valor %q: git operaría en ese "+
-				"contexto en vez del que se le pide", k, vistos[k])
+			t.Errorf("%s is still in the environment with the value %q: git would operate in "+
+				"that context instead of the one it is asked for", k, seen[k])
 		}
 	}
 
@@ -245,67 +245,67 @@ func TestElEntornoDeGitNoHeredaelContextoDelShell(t *testing.T) {
 		"GIT_PAGER":           "cat",
 		"NO_COLOR":            "1",
 	} {
-		if vistos[k] != want {
-			t.Errorf("%s = %q, want %q", k, vistos[k], want)
+		if seen[k] != want {
+			t.Errorf("%s = %q, want %q", k, seen[k], want)
 		}
 	}
-	if _, sigue := vistos["LANG"]; sigue {
-		t.Error("LANG sigue presente: compite con el LC_ALL que se pone")
+	if _, stillPresent := seen["LANG"]; stillPresent {
+		t.Error("LANG is still present: it competes with the LC_ALL that is set")
 	}
 
-	t.Setenv("PRDASH_TEST_QUE_SI_SE_CONSERVA", "valor")
-	vistos = map[string]string{}
+	t.Setenv("PRDASH_TEST_QUE_SI_SE_CONSERVA", "value")
+	seen = map[string]string{}
 	for _, kv := range Env() {
 		if i := strings.IndexByte(kv, '='); i > 0 {
-			vistos[kv[:i]] = kv[i+1:]
+			seen[kv[:i]] = kv[i+1:]
 		}
 	}
-	if vistos["PRDASH_TEST_QUE_SI_SE_CONSERVA"] != "valor" {
-		t.Error("Env tiró una variable que no debía: el entorno se filtra de más")
+	if seen["PRDASH_TEST_QUE_SI_SE_CONSERVA"] != "value" {
+		t.Error("Env dropped a variable it should not have: the environment is over-filtered")
 	}
 }
 
-func TestElTimeoutDeRunCortaDeVerdad(t *testing.T) {
+func TestTheRunTimeoutActuallyCuts(t *testing.T) {
 	dir := t.TempDir()
-	colgado := filepath.Join(dir, "git-colgado")
+	hung := filepath.Join(dir, "git-hung")
 	script := "#!/bin/sh\nsh -c 'sleep 5' &\nsleep 5\n"
-	if err := os.WriteFile(colgado, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(hung, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	r := &Runner{Bin: colgado, Timeout: 50 * time.Millisecond}
-	inicio := time.Now()
+	r := &Runner{Bin: hung, Timeout: 50 * time.Millisecond}
+	start := time.Now()
 	_, err := r.Run(context.Background(), dir, "status")
-	elapsed := time.Since(inicio)
+	elapsed := time.Since(start)
 
 	if err == nil {
-		t.Error("un git colgado dio nil")
+		t.Error("a hung git gave nil")
 	}
 	if elapsed > 2*time.Second {
-		t.Errorf("Run tardó %s con un timeout de 50ms: el contexto no corta la llamada, "+
-			"solo mata al proceso", elapsed)
+		t.Errorf("Run took %s with a 50ms timeout: the context does not cut the call, it only "+
+			"kills the process", elapsed)
 	}
 
-	corto := filepath.Join(dir, "git-corto")
-	if err := os.WriteFile(corto, []byte("#!/bin/sh\nsleep 1\n"), 0o755); err != nil {
+	short := filepath.Join(dir, "git-short")
+	if err := os.WriteFile(short, []byte("#!/bin/sh\nsleep 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	r = &Runner{Bin: corto}
-	inicio = time.Now()
+	r = &Runner{Bin: short}
+	start = time.Now()
 	if _, err := r.Run(context.Background(), dir, "status"); err != nil {
-		t.Errorf("con el suelo por defecto y un binario sano dio error: %v", err)
+		t.Errorf("with the default floor and a healthy binary it errored: %v", err)
 	}
-	if elapsed := time.Since(inicio); elapsed < 900*time.Millisecond {
-		t.Errorf("con Timeout vacío tardó %s: se aplicó un timeout corto en vez del suelo",
+	if elapsed := time.Since(start); elapsed < 900*time.Millisecond {
+		t.Errorf("with an empty Timeout it took %s: a short timeout was applied instead of the floor",
 			elapsed)
 	}
 }
 
 // A name and not a resolved path, so the Runner normalises it.
-func TestElBinarioPorDefectoEsGitYNoElCampoVacio(t *testing.T) {
-	dir := repoVacio(t)
+func TestTheDefaultBinaryIsGitAndNotTheEmptyField(t *testing.T) {
+	dir := emptyRepo(t)
 	if _, err := (&Runner{}).Run(context.Background(), dir, "rev-parse", "--git-dir"); err != nil {
-		t.Fatalf("sin Bin, Run falló: %v", err)
+		t.Fatalf("without Bin, Run failed: %v", err)
 	}
 	if got := New().Bin; got != "git" {
 		t.Errorf("New().Bin = %q, want git", got)
@@ -315,7 +315,7 @@ func TestElBinarioPorDefectoEsGitYNoElCampoVacio(t *testing.T) {
 	}
 }
 
-func repoVacio(t *testing.T) string {
+func emptyRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	r := New()

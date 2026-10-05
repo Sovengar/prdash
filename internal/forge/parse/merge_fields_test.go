@@ -30,14 +30,14 @@ func TestGHNodeCarriesThePinAndTheRules(t *testing.T) {
 		t.Errorf("HeadSHA = %q, want deadbeefcafe", items[0].HeadSHA)
 	}
 	if !items[0].Merge.Known {
-		t.Error("Merge.Known = false, want true: los tres flags venían en la respuesta")
+		t.Error("Merge.Known = false, want true: the three flags came in the response")
 	}
 	if !items[0].Merge.Rebase || !items[0].Merge.MergeCommit {
-		t.Errorf("Merge = %+v, want rebase y merge commit permitidos", items[0].Merge)
+		t.Errorf("Merge = %+v, want rebase and merge commit allowed", items[0].Merge)
 	}
 	// The case that matters: squash disabled in the repo has to read as disabled.
 	if items[0].Merge.Squash {
-		t.Errorf("Merge.Squash = true, want false: el repositorio lo tiene desactivado")
+		t.Errorf("Merge.Squash = true, want false: the repository has it disabled")
 	}
 }
 
@@ -59,7 +59,7 @@ func TestGHNodeWithoutRulesStaysUnknown(t *testing.T) {
 		t.Errorf("Merge = %+v, want Known=false", items[0].Merge)
 	}
 	if got := len(allowed(items[0].Merge)); got != 3 {
-		t.Errorf("con reglas desconocidas se ofrecen %d modos, want 3", got)
+		t.Errorf("with unknown rules %d modes are offered, want 3", got)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestGHNodeWithPartialRulesStaysUnknown(t *testing.T) {
 		t.Fatalf("ParseGHGraphQLSearch: %v", err)
 	}
 	if items[0].Merge.Known {
-		t.Errorf("Merge = %+v, want Known=false con reglas parciales", items[0].Merge)
+		t.Errorf("Merge = %+v, want Known=false with partial rules", items[0].Merge)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestGLNodeCarriesThePin(t *testing.T) {
 	// GitLab does not expose the strategies over GraphQL, so they arrive unknown: no filtering
 	// rather than filtering on nothing.
 	if items[0].Merge.Known {
-		t.Errorf("Merge = %+v, want Known=false en GitLab", items[0].Merge)
+		t.Errorf("Merge = %+v, want Known=false on GitLab", items[0].Merge)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestGLNodeWithNullPinStaysUnpinned(t *testing.T) {
 		t.Fatalf("ParseGLGraphQL: %v", err)
 	}
 	if items[0].HeadSHA != "" {
-		t.Errorf("HeadSHA = %q, want vacío: un diff null no es un SHA", items[0].HeadSHA)
+		t.Errorf("HeadSHA = %q, want empty: a null diff is not a SHA", items[0].HeadSHA)
 	}
 }
 

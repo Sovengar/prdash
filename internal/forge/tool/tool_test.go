@@ -13,7 +13,7 @@ func TestEnvIsNonInteractive(t *testing.T) {
 	joined := strings.Join(Env("GH_PROMPT_DISABLED=1"), "\n")
 	for _, want := range []string{"LC_ALL=C", "GIT_TERMINAL_PROMPT=0", "NO_COLOR=1", "GH_PROMPT_DISABLED=1"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("Env no contiene %q", want)
+			t.Errorf("Env does not contain %q", want)
 		}
 	}
 	count := 0
@@ -23,7 +23,7 @@ func TestEnvIsNonInteractive(t *testing.T) {
 		}
 	}
 	if count != 1 {
-		t.Errorf("LC_ALL aparece %d veces, want 1", count)
+		t.Errorf("LC_ALL appears %d times, want 1", count)
 	}
 }
 
@@ -46,12 +46,12 @@ func TestKind(t *testing.T) {
 		}
 	}
 	if Kind(nil) != "" {
-		t.Error("Kind(nil) debería ser vacío")
+		t.Error("Kind(nil) should be empty")
 	}
 }
 
 func TestFirstLine(t *testing.T) {
-	if got := FirstLine("uno\ndos"); got != "uno" {
+	if got := FirstLine("one\ntwo"); got != "one" {
 		t.Errorf("FirstLine = %q", got)
 	}
 }
@@ -106,10 +106,10 @@ func TestErrorPreservesCauseAndExitCode(t *testing.T) {
 		t.Errorf("ExitCode = %d", ExitCode(err))
 	}
 	if !errors.Is(err, cause) {
-		t.Error("el error debe preservar la causa (%w / Unwrap)")
+		t.Error("the error must preserve the cause (%w / Unwrap)")
 	}
 	if !strings.Contains(err.Error(), "exit 8") {
-		t.Errorf("el mensaje debería incluir el exit code: %q", err.Error())
+		t.Errorf("the message should include the exit code: %q", err.Error())
 	}
 }
 
@@ -121,13 +121,13 @@ func TestRunKeepsStdoutOnNonZeroExit(t *testing.T) {
 	}
 	out, err := New(script).Run(context.Background(), "pr", "checks")
 	if err == nil {
-		t.Fatal("se esperaba error por exit 8")
+		t.Fatal("an error from exit 8 was expected")
 	}
 	if ExitCode(err) != 8 {
 		t.Errorf("ExitCode = %d, want 8", ExitCode(err))
 	}
 	if !strings.Contains(out, "pending") {
-		t.Errorf("stdout debería conservarse pese al exit != 0: %q", out)
+		t.Errorf("stdout should be kept despite exit != 0: %q", out)
 	}
 }
 
@@ -158,6 +158,6 @@ func TestKindSelfReview(t *testing.T) {
 		}
 	}
 	if k := Kind(errors.New("gh: Can not approve your own pull request (exit 1)")); k == "network" || k == "conflict" {
-		t.Errorf("el rechazo propio se clasificó como %q", k)
+		t.Errorf("your own rejection was classified as %q", k)
 	}
 }

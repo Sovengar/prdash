@@ -13,185 +13,185 @@ import (
 )
 
 // A single segment is not a repo.
-func TestSplitProjectSeparaDuePartsYNadaMas(t *testing.T) {
-	casos := []struct {
-		proyecto    string
+func TestSplitProjectSeparatesTwoPartsAndNothingMore(t *testing.T) {
+	cases := []struct {
+		project     string
 		wantOwner   string
 		wantName    string
-		descripcion string
+		description string
 	}{
-		{"owner/repo", "owner", "repo", "el caso normal"},
-		{"acme/widget", "acme", "widget", "con Organization"},
-		{"/owner/repo", "owner", "repo", "barra inicial"},
-		{"owner/repo/", "owner", "repo", "barra final"},
-		{"/owner/repo/", "owner", "repo", "barras a los dos lados"},
-		{"repo", "", "repo", "un segmento"},
-		{"", "", "", "vacío"},
-		{"/", "", "", "solo barras"},
-		{"///", "", "", "solo barras, varias"},
-		{"a/b/c", "a", "b/c", "tres segmentos"},
+		{"owner/repo", "owner", "repo", "the normal case"},
+		{"acme/widget", "acme", "widget", "with Organization"},
+		{"/owner/repo", "owner", "repo", "leading slash"},
+		{"owner/repo/", "owner", "repo", "trailing slash"},
+		{"/owner/repo/", "owner", "repo", "slashes on both sides"},
+		{"repo", "", "repo", "a single segment"},
+		{"", "", "", "empty"},
+		{"/", "", "", "only slashes"},
+		{"///", "", "", "only slashes, several"},
+		{"a/b/c", "a", "b/c", "three segments"},
 	}
 
-	for _, c := range casos {
-		owner, name := splitProject(c.proyecto)
+	for _, c := range cases {
+		owner, name := splitProject(c.project)
 		if owner != c.wantOwner || name != c.wantName {
-			t.Errorf("%s: splitProject(%q) = %q, %q; quiero %q, %q",
-				c.descripcion, c.proyecto, owner, name, c.wantOwner, c.wantName)
+			t.Errorf("%s: splitProject(%q) = %q, %q; want %q, %q",
+				c.description, c.project, owner, name, c.wantOwner, c.wantName)
 		}
-		if strings.Contains(name, "/") && c.descripcion != "tres segmentos" {
-			t.Errorf("%s: el nombre %q sale con barras", c.descripcion, name)
+		if strings.Contains(name, "/") && c.description != "three segments" {
+			t.Errorf("%s: the name %q comes out with slashes", c.description, name)
 		}
 	}
 
 	// The rule that matters, stated as a rule: owner and name, or it is not a repo.
-	for _, proyecto := range []string{"", "repo", "/", "///"} {
-		owner, name := splitProject(proyecto)
+	for _, project := range []string{"", "repo", "/", "///"} {
+		owner, name := splitProject(project)
 		if owner == "" || name == "" {
-			continue // es lo esperado: no es un repo
+			continue // that is expected: it is not a repo
 		}
-		t.Errorf("splitProject(%q) dio dueño %q y nombre %q, y un segmento solo no es un repo",
-			proyecto, owner, name)
+		t.Errorf("splitProject(%q) gave owner %q and name %q, and a single segment is not a repo",
+			project, owner, name)
 	}
 }
 
 // The warning is of type "notfound", not "network": nothing was queried.
-func TestUnaReferenciaInvalidaNoSaleALaRed(t *testing.T) {
+func TestAnInvalidRefDoesNotGoOutToTheNetwork(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args.log")
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho \"$@\" >> \""+argsFile+"\"\necho '{}'\n")
 	a := New("h.example", script)
 
-	for _, proyecto := range []string{"", "repo", "/", "///"} {
-		_, warns := a.ItemState(context.Background(), model.RepoRef{Project: proyecto}, 1)
+	for _, project := range []string{"", "repo", "/", "///"} {
+		_, warns := a.ItemState(context.Background(), model.RepoRef{Project: project}, 1)
 		if len(warns) == 0 {
-			t.Errorf("proyecto %q: no salió ningún aviso, debería decir que no hay a qué preguntar", proyecto)
+			t.Errorf("project %q: no warning came out, it should say there is nothing to ask", project)
 			continue
 		}
 		if warns[0].Kind != "notfound" {
-			t.Errorf("proyecto %q: el aviso es de tipo %q, want notfound", proyecto, warns[0].Kind)
+			t.Errorf("project %q: the warning is of kind %q, want notfound", project, warns[0].Kind)
 		}
 	}
 	if _, err := os.Stat(argsFile); err == nil {
 		raw, _ := os.ReadFile(argsFile)
-		t.Errorf("una referencia inválida salió a la red:\n%s", raw)
+		t.Errorf("an invalid ref went out to the network:\n%s", raw)
 	}
 
 	_, _ = a.ItemState(context.Background(), model.RepoRef{Project: "acme/widget"}, 1)
 	raw, err := os.ReadFile(argsFile)
 	if err != nil {
-		t.Fatal("con una referencia válida no salió a la red: el guard se tragó la llamada buena")
+		t.Fatal("with a valid ref it did not go out to the network: the guard swallowed the good call")
 	}
 	if !strings.Contains(string(raw), "acme") {
-		t.Errorf("la llamada no lleva el proyecto: %s", raw)
+		t.Errorf("the call does not carry the project: %s", raw)
 	}
 }
 
-func TestFailureMsgPrefiereElMotivoDelServidor(t *testing.T) {
+func TestFailureMsgPrefersTheServersReason(t *testing.T) {
 	err := errors.New("gh api graphql -f query=... (exit 1)")
 
-	casos := []struct {
-		nombre string
-		body   string
-		want   string
+	cases := []struct {
+		name string
+		body string
+		want string
 	}{
-		{"con mensaje", `{"message":"Reference 'x' does not exist"}`, "Reference 'x' does not exist"},
-		{"con errors", `{"errors":[{"message":"Bad credentials"}]}`, "Bad credentials"},
-		{"cuerpo vacío", "", err.Error()},
-		{"cuerpo en blanco", "   \n", err.Error()},
-		{"no es json", "404 page not found", err.Error()},
-		{"json sin mensaje", `{"documentation_url":"https://docs"}`, err.Error()},
-		{"json vacío", `{}`, err.Error()},
-		{"lista vacía", `[]`, err.Error()},
-		{"mensaje vacío", `{"message":""}`, err.Error()},
+		{"with message", `{"message":"Reference 'x' does not exist"}`, "Reference 'x' does not exist"},
+		{"with errors", `{"errors":[{"message":"Bad credentials"}]}`, "Bad credentials"},
+		{"empty body", "", err.Error()},
+		{"blank body", "   \n", err.Error()},
+		{"not json", "404 page not found", err.Error()},
+		{"json without message", `{"documentation_url":"https://docs"}`, err.Error()},
+		{"empty json", `{}`, err.Error()},
+		{"empty list", `[]`, err.Error()},
+		{"empty message", `{"message":""}`, err.Error()},
 	}
 
-	for _, c := range casos {
+	for _, c := range cases {
 		if got := failureMsg(c.body, err); got != c.want {
-			t.Errorf("%s: failureMsg(%q) = %q, want %q", c.nombre, c.body, got, c.want)
+			t.Errorf("%s: failureMsg(%q) = %q, want %q", c.name, c.body, got, c.want)
 		}
 	}
 
 	// What matters: the message is NEVER empty, because a failure with no text cannot be acted on.
-	for _, body := range []string{"", "  ", "nada", "{}", `{"message":""}`, `{"message":null}`} {
+	for _, body := range []string{"", "  ", "nothing", "{}", `{"message":""}`, `{"message":null}`} {
 		if strings.TrimSpace(failureMsg(body, err)) == "" {
-			t.Errorf("con el cuerpo %q el mensaje quedó vacío", body)
+			t.Errorf("with body %q the message ended up empty", body)
 		}
 	}
 	// And with an empty error either: the error's own message, empty text or not, is all there is.
 }
 
 // Same pattern as the binary: what is not set falls back.
-func TestElHostPorDefectoEsGithubYElRestoNo(t *testing.T) {
+func TestTheDefaultHostIsGithubAndTheRestAreNot(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args.log")
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho \"$@\" >> \""+argsFile+"\"\necho '{}'\n")
 
-	for _, c := range []struct{ dado, quiere string }{
+	for _, c := range []struct{ given, want string }{
 		{"", "github.com"},
 		{"github.com", "github.com"},
 		{"h.example", "h.example"},
 		{"gitlab.example.com", "gitlab.example.com"},
 	} {
-		a := New(c.dado, script)
-		if a.host != c.quiere {
-			t.Errorf("New(%q) dio host %q, want %q", c.dado, a.host, c.quiere)
+		a := New(c.given, script)
+		if a.host != c.want {
+			t.Errorf("New(%q) gave host %q, want %q", c.given, a.host, c.want)
 		}
 		// The host reaches the items, and NOT gh's argv: the binary is configured another way.
 		items := []model.Item{{Number: 1}}
 		a.stamp(items, forge.Query{Section: model.SectionReview})
-		if items[0].Host != c.quiere {
-			t.Errorf("con host %q el item quedó con host %q", c.quiere, items[0].Host)
+		if items[0].Host != c.want {
+			t.Errorf("with host %q the item ended up with host %q", c.want, items[0].Host)
 		}
-		if items[0].Ref.Host != c.quiere {
-			t.Errorf("con host %q la referencia del item quedó con host %q", c.quiere, items[0].Ref.Host)
+		if items[0].Ref.Host != c.want {
+			t.Errorf("with host %q the item's ref ended up with host %q", c.want, items[0].Ref.Host)
 		}
 	}
 
-	otro := t.TempDir()
-	registro := filepath.Join(otro, "args.log")
-	scriptFalso := writeScript(t, otro, "falso", "#!/bin/sh\necho \"$0\" >> \""+registro+"\"\necho '{}'\n")
-	a := New("h.example", scriptFalso)
+	other := t.TempDir()
+	logFile := filepath.Join(other, "args.log")
+	fakeScript := writeScript(t, other, "fake", "#!/bin/sh\necho \"$0\" >> \""+logFile+"\"\necho '{}'\n")
+	a := New("h.example", fakeScript)
 	_, _ = a.ItemState(context.Background(), model.RepoRef{Project: "acme/widget"}, 1)
-	if raw, _ := os.ReadFile(registro); !strings.Contains(string(raw), scriptFalso) {
-		t.Errorf("la petición no salió por el binario dado: %s", raw)
+	if raw, _ := os.ReadFile(logFile); !strings.Contains(string(raw), fakeScript) {
+		t.Errorf("the request did not go out through the given binary: %s", raw)
 	}
 }
 
 // Not an interesting test on its own, but it is the existence condition of the rest.
-func TestUnRunnerQueFallaDaUnAvisoYNoUnPanic(t *testing.T) {
+func TestAFailingRunnerGivesAWarningAndNotAPanic(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho '{\"message\":\"boom\"}'\nexit 1\n")
 	a := New("h.example", script)
 
 	_, warns := a.ItemState(context.Background(), model.RepoRef{Project: "acme/widget"}, 1)
 	if len(warns) == 0 {
-		t.Fatal("un runner que falla no dio ningún aviso")
+		t.Fatal("a runner that fails gave no warning")
 	}
 	if strings.TrimSpace(warns[0].Msg) == "" {
-		t.Errorf("el aviso quedó vacío: %+v", warns[0])
+		t.Errorf("the warning ended up empty: %+v", warns[0])
 	}
 	if warns[0].Forge != ForgeName {
-		t.Errorf("el aviso no dice de qué forge es: %q", warns[0].Forge)
+		t.Errorf("the warning does not say which forge it is from: %q", warns[0].Forge)
 	}
 }
 
 // The review kind belongs to the review section.
-func TestStampPoneElReviewKindSoloEnReview(t *testing.T) {
-	for _, seccion := range []model.Section{model.SectionReview, model.SectionAuthored, model.SectionMentions} {
+func TestStampPutsTheReviewKindOnlyInReview(t *testing.T) {
+	for _, section := range []model.Section{model.SectionReview, model.SectionAuthored, model.SectionMentions} {
 		a := New("h.example", "gh")
 		items := []model.Item{{Number: 1, Ref: model.RepoRef{Forge: ForgeName, Host: "h.example", Project: "acme/widget", Owner: "acme", Name: "widget"}}}
-		a.stamp(items, forge.Query{Section: seccion, ReviewKind: model.ReviewRequested})
+		a.stamp(items, forge.Query{Section: section, ReviewKind: model.ReviewRequested})
 
-		tiene := items[0].ReviewKind != ""
-		quiere := seccion == model.SectionReview
-		if tiene != quiere {
-			t.Errorf("sección %v: ReviewKind %q presente=%v, quiere %v",
-				seccion, items[0].ReviewKind, tiene, quiere)
+		has := items[0].ReviewKind != ""
+		want := section == model.SectionReview
+		if has != want {
+			t.Errorf("section %v: ReviewKind %q present=%v, want %v",
+				section, items[0].ReviewKind, has, want)
 		}
 		// The section is stamped ALWAYS, because without it the item does not know which column it
 		// belongs to.
-		if items[0].Section != seccion {
-			t.Errorf("sección %v: quedó estampada como %v", seccion, items[0].Section)
+		if items[0].Section != section {
+			t.Errorf("section %v: ended up stamped as %v", section, items[0].Section)
 		}
 	}
 }

@@ -228,82 +228,82 @@ func ItemKey(project string, number int) string {
 }
 
 type ConformanceOptions struct {
-	Unsupported   bool // el adapter debe responder "unsupported" en todo
-	MissingBinary bool // el CLI no existe: los listados deben avisar, no romper
+	Unsupported   bool
+	MissingBinary bool
 }
 
 // A gate that cannot be tested does not distinguish a gate from a sign: with the checks in a list
 // and not touching the test, a test can hand it a broken adapter and see what comes out.
 func RunConformance(t testReport, a forge.Adapter, opts ConformanceOptions) {
 	t.Helper()
-	reportaIncumplimientos(a, opts, func(v string) { t.Error(v) })
+	reportViolations(a, opts, func(v string) { t.Error(v) })
 }
 
-func reportaIncumplimientos(a forge.Adapter, opts ConformanceOptions, informa func(string)) {
+func reportViolations(a forge.Adapter, opts ConformanceOptions, report func(string)) {
 	for _, v := range ConformanceViolations(a, opts) {
-		informa(v)
+		report(v)
 	}
 }
 
 // A list and not an error because there are several independent violations, and reporting only the
 // first forces a fix-and-rerun to find the next. A broken adapter has five or six.
 func ConformanceViolations(a forge.Adapter, opts ConformanceOptions) []string {
-	var fuera []string
+	var violations []string
 	if a.Forge() == "" {
-		fuera = append(fuera, "Forge() vacío")
+		violations = append(violations, "Forge() is empty")
 	}
 	if a.Host() == "" {
-		fuera = append(fuera, "Host() vacío")
+		violations = append(violations, "Host() is empty")
 	}
 	ctx := context.Background()
 
 	for _, q := range forge.Streams {
 		page, warns := a.List(ctx, q)
 		if page.More && page.Next == "" {
-			fuera = append(fuera, fmt.Sprintf("%s: List(%v) More=true sin Next", a.Forge(), q))
+			violations = append(violations, fmt.Sprintf("%s: List(%v) More=true without Next", a.Forge(), q))
 		}
 		if opts.Unsupported {
 			if !hasKind(warns, "unsupported") {
-				fuera = append(fuera, fmt.Sprintf("%s: List(%v) debería reportar unsupported", a.Forge(), q))
+				violations = append(violations, fmt.Sprintf("%s: List(%v) should report unsupported", a.Forge(), q))
 			}
 			if len(page.Items) != 0 {
-				fuera = append(fuera, fmt.Sprintf("%s: List(%v) no debería devolver ítems", a.Forge(), q))
+				violations = append(violations, fmt.Sprintf("%s: List(%v) should not return items", a.Forge(), q))
 			}
 		}
 		if opts.MissingBinary {
 			if len(page.Items) != 0 {
-				fuera = append(fuera, fmt.Sprintf("%s: List(%v) sin binario no debería devolver ítems", a.Forge(), q))
+				violations = append(violations, fmt.Sprintf("%s: List(%v) with no binary should not return items", a.Forge(), q))
 			}
 			if len(warns) == 0 {
-				fuera = append(fuera, fmt.Sprintf("%s: List(%v) sin binario debería devolver un warning", a.Forge(), q))
+				violations = append(violations, fmt.Sprintf("%s: List(%v) with no binary should return a warning", a.Forge(), q))
 			}
 		}
 	}
 
 	ref := model.RepoRef{Forge: a.Forge(), Host: a.Host(), Project: "o/r", Owner: "o", Name: "r"}
 	if _, warns := a.ItemState(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
-		fuera = append(fuera, fmt.Sprintf("%s: ItemState debería reportar unsupported", a.Forge()))
+		violations = append(violations, fmt.Sprintf("%s: ItemState should report unsupported", a.Forge()))
 	}
 	if _, warns := a.Comments(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
-		fuera = append(fuera, fmt.Sprintf("%s: Comments debería reportar unsupported", a.Forge()))
+		violations = append(violations, fmt.Sprintf("%s: Comments should report unsupported", a.Forge()))
 	}
 	if warns := a.Approve(ctx, ref, 1); opts.Unsupported && !hasKind(warns, "unsupported") {
-		fuera = append(fuera, fmt.Sprintf("%s: Approve debería reportar unsupported", a.Forge()))
+		violations = append(violations, fmt.Sprintf("%s: Approve should report unsupported", a.Forge()))
 	}
 	if warns := a.Merge(ctx, ref, 1, forge.MergeRequest{Mode: forge.Squash, HeadSHA: "deadbeef"}); opts.Unsupported && !hasKind(warns, "unsupported") {
-		fuera = append(fuera, fmt.Sprintf("%s: Merge debería reportar unsupported", a.Forge()))
+		violations = append(violations, fmt.Sprintf("%s: Merge should report unsupported", a.Forge()))
 	}
 	if warns := a.Retarget(ctx, ref, 1, "release/2.0"); opts.Unsupported && !hasKind(warns, "unsupported") {
-		fuera = append(fuera, fmt.Sprintf("%s: Retarget debería reportar unsupported", a.Forge()))
+		violations = append(violations, fmt.Sprintf("%s: Retarget should report unsupported", a.Forge()))
 	}
 	// The picker opens even when the listing came back empty, so what is checked is the warning and
 	// that there are no branches: an empty list silently would be a different diagnosis.
 	if names, warns := a.Branches(ctx, ref); opts.Unsupported && !hasKind(warns, "unsupported") {
-		fuera = append(fuera, fmt.Sprintf("%s: Branches debería reportar unsupported", a.Forge()))
+		violations = append(violations, fmt.Sprintf("%s: Branches should report unsupported", a.Forge()))
 	} else if len(names) != 0 {
-		fuera = append(fuera, fmt.Sprintf("%s: Branches no debería devolver ramas (%v)", a.Forge(), names))
+		violations = append(violations, fmt.Sprintf("%s: Branches should not return branches (%v)", a.Forge(), names))
 	}
-	return fuera
+	return violations
 }
 
 func hasKind(warns []model.Warning, kind string) bool {

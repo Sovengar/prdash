@@ -40,7 +40,7 @@ func TestBuildShowsThreeSectionsWithBothForges(t *testing.T) {
 	box := Build([]ForgeResult{gh, gl})
 
 	if len(box.Sections) != 3 {
-		t.Fatalf("secciones = %d, want 3", len(box.Sections))
+		t.Fatalf("sections = %d, want 3", len(box.Sections))
 	}
 	if got := box.Section(model.SectionAuthored); len(got.Items) != 2 {
 		t.Errorf("authored = %d items, want 2", len(got.Items))
@@ -55,10 +55,10 @@ func TestBuildShowsThreeSectionsWithBothForges(t *testing.T) {
 	for _, sec := range box.Sections {
 		for _, it := range sec.Items {
 			if it.Forge == "" || it.Host == "" {
-				t.Errorf("ítem sin forge/host: %+v", it)
+				t.Errorf("item without forge/host: %+v", it)
 			}
 			if it.Section != sec.Kind {
-				t.Errorf("ítem %v marcado como %v", it.ID(), it.Section)
+				t.Errorf("item %v marked as %v", it.ID(), it.Section)
 			}
 		}
 	}
@@ -79,8 +79,8 @@ func TestAuthoredOnlyOpenByMe(t *testing.T) {
 	}
 }
 
-// TestReviewIncludesRequestedAndAssigned cubre el escenario "review / asignados
-// incluye review pedido y asignaciones".
+// TestReviewIncludesRequestedAndAssigned covers the "review / assigned includes requested review
+// and assignments" scenario.
 func TestReviewIncludesRequestedAndAssigned(t *testing.T) {
 	requested := mkItem("github", "github.com", "acme/widget", 10, "REVIEW_REQUIRED")
 	requested.ReviewKind = model.ReviewRequested
@@ -102,10 +102,10 @@ func TestReviewIncludesRequestedAndAssigned(t *testing.T) {
 		kinds[it.Number] = it.ReviewKind
 	}
 	if kinds[10] != model.ReviewRequested {
-		t.Errorf("kind de #10 = %q", kinds[10])
+		t.Errorf("kind of #10 = %q", kinds[10])
 	}
 	if kinds[11] != model.ReviewAssigned {
-		t.Errorf("kind de #11 = %q", kinds[11])
+		t.Errorf("kind of #11 = %q", kinds[11])
 	}
 }
 
@@ -122,7 +122,7 @@ func TestDedupeKeepsHighestAuthority(t *testing.T) {
 		t.Fatalf("authored = %d, want 1", len(got.Items))
 	}
 	if got := box.Section(model.SectionMentions); len(got.Items) != 0 {
-		t.Fatalf("mentions = %d, want 0 (deduplicado)", len(got.Items))
+		t.Fatalf("mentions = %d, want 0 (deduplicated)", len(got.Items))
 	}
 
 	total := 0
@@ -147,49 +147,49 @@ func TestDedupeWithinSection(t *testing.T) {
 }
 
 // Three levels of tie-break, and the tie-break matters because the list is what the user reads.
-func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
-	reciente := mkItem("github", "github.com", "acme/widget", 9, "APPROVED")
-	antiguo := mkItem("github", "github.com", "acme/widget", 1, "APPROVED")
-	reciente.UpdatedAt = time.Unix(2000, 0)
-	antiguo.UpdatedAt = time.Unix(1000, 0)
+func TestSortItemsBreaksTiesInACascade(t *testing.T) {
+	newer := mkItem("github", "github.com", "acme/widget", 9, "APPROVED")
+	older := mkItem("github", "github.com", "acme/widget", 1, "APPROVED")
+	newer.UpdatedAt = time.Unix(2000, 0)
+	older.UpdatedAt = time.Unix(1000, 0)
 
-	items := []model.Item{antiguo, reciente}
+	items := []model.Item{older, newer}
 	sortItems(items)
 	if items[0].Number != 9 {
-		t.Errorf("a igual atención manda la fecha más reciente, primero = #%d", items[0].Number)
+		t.Errorf("with equal attention the most recent date wins, first = #%d", items[0].Number)
 	}
 
 	// Same attention and same date: the lowest number wins, so the order does not depend on input
 	// order.
-	menor := mkItem("github", "github.com", "acme/widget", 3, "APPROVED")
-	mayor := mkItem("github", "github.com", "acme/widget", 7, "APPROVED")
-	menor.UpdatedAt = time.Unix(1000, 0)
-	mayor.UpdatedAt = time.Unix(1000, 0)
+	smaller := mkItem("github", "github.com", "acme/widget", 3, "APPROVED")
+	bigger := mkItem("github", "github.com", "acme/widget", 7, "APPROVED")
+	smaller.UpdatedAt = time.Unix(1000, 0)
+	bigger.UpdatedAt = time.Unix(1000, 0)
 
-	items = []model.Item{mayor, menor}
+	items = []model.Item{bigger, smaller}
 	sortItems(items)
 	if items[0].Number != 3 {
-		t.Errorf("a igual de todo manda el número más bajo, primero = #%d", items[0].Number)
+		t.Errorf("with everything equal the lowest number wins, first = #%d", items[0].Number)
 	}
 
 	// The same tie with the input ALREADY in the right order: the case that separates a real
 	//comparison from one that always says "yes".
-	items = []model.Item{reciente, antiguo}
+	items = []model.Item{newer, older}
 	sortItems(items)
 	if items[0].Number != 9 || items[1].Number != 1 {
-		t.Errorf("con la entrada ya en orden, un empate no debe reordenarla: %d, %d", items[0].Number, items[1].Number)
+		t.Errorf("with the input already ordered a tie must not reorder it: %d, %d", items[0].Number, items[1].Number)
 	}
 
 	// Two items with the SAME number (different repos, so both survive dedupe) and the same
 	//attention and date; with different numbers the number decides.
-	igualA := mkItem("github", "github.com", "acme/widget", 5, "APPROVED")
-	igualB := mkItem("gitlab", "gitlab.example.com", "grp/proj", 5, "APPROVED")
-	igualA.UpdatedAt = time.Unix(1000, 0)
-	igualB.UpdatedAt = time.Unix(1000, 0)
-	items = []model.Item{igualA, igualB}
+	tiedA := mkItem("github", "github.com", "acme/widget", 5, "APPROVED")
+	tiedB := mkItem("gitlab", "gitlab.example.com", "grp/proj", 5, "APPROVED")
+	tiedA.UpdatedAt = time.Unix(1000, 0)
+	tiedB.UpdatedAt = time.Unix(1000, 0)
+	items = []model.Item{tiedA, tiedB}
 	sortItems(items)
 	if items[0].Ref.Project != "acme/widget" || items[1].Ref.Project != "grp/proj" {
-		t.Errorf("con empate total la lista debe conservar el orden de entrada, dio %s, %s",
+		t.Errorf("with a total tie the list must keep the input order, got %s, %s",
 			items[0].Ref.Project, items[1].Ref.Project)
 	}
 
@@ -201,19 +201,19 @@ func TestSortItemsRompeLosEmpatesEnCascada(t *testing.T) {
 	items = []model.Item{approved, changes}
 	sortItems(items)
 	if items[0].Number != 1 {
-		t.Errorf("la atención manda sobre la fecha, primero = #%d", items[0].Number)
+		t.Errorf("attention beats the date, first = #%d", items[0].Number)
 	}
 }
 
-func TestRankOrdenaLasSecciones(t *testing.T) {
+func TestRankOrdersTheSections(t *testing.T) {
 	for i, kind := range sectionOrder {
 		if got := rank(kind); got != i {
-			t.Errorf("rank(%v) = %d, want %d (su posición en sectionOrder)", kind, got, i)
+			t.Errorf("rank(%v) = %d, want %d (its position in sectionOrder)", kind, got, i)
 		}
 	}
 	// A section not in the list goes last, not to an arbitrary place.
-	if got := rank(model.Section("inventada")); got != len(sectionOrder) {
-		t.Errorf("rank(inventada) = %d, want %d (al final)", got, len(sectionOrder))
+	if got := rank(model.Section("made-up")); got != len(sectionOrder) {
+		t.Errorf("rank(made-up) = %d, want %d (at the end)", got, len(sectionOrder))
 	}
 }
 
@@ -231,7 +231,7 @@ func TestOrderByAttention(t *testing.T) {
 		t.Fatalf("items = %d", len(items))
 	}
 	if items[0].Number != 2 {
-		t.Fatalf("el primero debería ser el de changes requested, fue #%d", items[0].Number)
+		t.Fatalf("the first should be the changes requested one, it was #%d", items[0].Number)
 	}
 }
 
@@ -247,9 +247,9 @@ func TestBuildAggregatesWarnings(t *testing.T) {
 		t.Fatalf("warnings = %+v", box.Warnings)
 	}
 	if !box.Empty() {
-		t.Fatal("el inbox debería estar vacío")
+		t.Fatal("the inbox should be empty")
 	}
 	if len(box.Sections) != 3 {
-		t.Fatalf("secciones = %d, want 3", len(box.Sections))
+		t.Fatalf("sections = %d, want 3", len(box.Sections))
 	}
 }

@@ -15,45 +15,45 @@ func sizedRetarget(t *testing.T, w, h int, branches ...string) Model {
 }
 
 // The popup draws ON TOP, in both dimensions.
-func TestElPopupDeRetargetRespetaLaTerminalEnLasDosDimensiones(t *testing.T) {
+func TestTheRetargetPopupRespectsTheTerminalInBothDimensions(t *testing.T) {
 	for _, w := range []int{20, 40, 64, 80, 200} {
 		for _, h := range []int{5, 8, 12, 20, 60} {
-			m := sizedRetarget(t, w, h, "main", "release/2.0", "fix/uno")
+			m := sizedRetarget(t, w, h, "main", "release/2.0", "fix/one")
 			box := m.retargetOverlay2()
 			if box == "" {
 				continue
 			}
-			lineas := strings.Split(stripANSI(box), "\n")
-			ancho := m.retargetBoxWidth()
-			for i, l := range lineas {
-				if got := ansi.StringWidth(l); got != ancho {
-					t.Errorf("terminal %dx%d: la línea %d mide %d columnas y la caja %d: %q",
-						w, h, i, got, ancho, l)
+			lines := strings.Split(stripANSI(box), "\n")
+			width := m.retargetBoxWidth()
+			for i, l := range lines {
+				if got := ansi.StringWidth(l); got != width {
+					t.Errorf("terminal %dx%d: line %d measures %d columns and the box %d: %q",
+						w, h, i, got, width, l)
 				}
 			}
 			// The width never exceeds the popup's design width however wide the terminal.
-			if ancho > retargetChooserWidth {
-				t.Errorf("terminal %dx%d: caja de %d columnas, want <= %d", w, h, ancho, retargetChooserWidth)
+			if width > retargetChooserWidth {
+				t.Errorf("terminal %dx%d: box of %d columns, want <= %d", w, h, width, retargetChooserWidth)
 			}
-			if want := min(m.contentWidth(), retargetChooserWidth); ancho != want {
-				t.Errorf("terminal %dx%d: caja de %d columnas, want %d (contenido acotado)", w, h, ancho, want)
+			if want := min(m.contentWidth(), retargetChooserWidth); width != want {
+				t.Errorf("terminal %dx%d: box of %d columns, want %d (content bounded)", w, h, width, want)
 			}
 		}
 	}
 }
 
 // The number of branch rows is what decides the height.
-func TestLasFilasDelPopupCabenEntreElMargenYElTecho(t *testing.T) {
+func TestThePopupsRowsFitBetweenTheMarginAndTheCeiling(t *testing.T) {
 	branches := []string{"main", "a/1", "a/2", "a/3", "a/4", "a/5", "a/6", "a/7", "a/8", "a/9", "a/10", "a/11", "a/12", "a/13"}
 	for _, h := range []int{4, 6, 8, 10, 14, 20, 40, 100} {
 		m := sizedRetarget(t, 80, h, branches...)
 		got := m.retargetRows()
 
 		if got < retargetMinRows {
-			t.Errorf("altura %d: %d filas, want >= %d (sin filas el popup parece vacío)", h, got, retargetMinRows)
+			t.Errorf("height %d: %d rows, want >= %d (with no rows the popup looks empty)", h, got, retargetMinRows)
 		}
 		if got > retargetRows {
-			t.Errorf("altura %d: %d filas, want <= %d", h, got, retargetRows)
+			t.Errorf("altura %d: %d rows, want <= %d", h, got, retargetRows)
 		}
 		want := h - 2*retargetMargin - retargetChrome
 		if want < retargetMinRows {
@@ -63,55 +63,55 @@ func TestLasFilasDelPopupCabenEntreElMargenYElTecho(t *testing.T) {
 			want = retargetRows
 		}
 		if got != want {
-			t.Errorf("altura %d: %d filas, want %d (h - 2*margen - marco, acotado a [%d, %d])",
+			t.Errorf("height %d: %d rows, want %d (h - 2*margin - frame, bounded to [%d, %d])",
 				h, got, want, retargetMinRows, retargetRows)
 		}
 	}
 }
 
 // Filter and arrows share the same window calculation.
-func TestMoverElCursorRecalculaLaVentana(t *testing.T) {
+func TestMovingTheCursorRecalculatesTheWindow(t *testing.T) {
 	m := sizedRetarget(t, 80, 60, "a", "b", "c", "d", "e")
 	if win := m.retargetWindow(); win != 0 {
-		t.Errorf("con la lista entera win = %d, want 0", win)
+		t.Errorf("with the whole list win = %d, want 0", win)
 	}
 
-	filas := m.retargetRows()
-	m.retarget.view = seqBranches(filas)
+	rows := m.retargetRows()
+	m.retarget.view = seqBranches(rows)
 	m.retarget.cursor, m.retarget.win = 0, 0
 	if win := m.retargetWindow(); win != 0 {
-		t.Errorf("lista de %d filas con ventana de %d y cursor arriba: win = %d, want 0: la primera rama se vería escondida",
-			filas, filas, win)
+		t.Errorf("list of %d rows with window of %d and cursor above: win = %d, want 0: the first branch would be hidden",
+			rows, rows, win)
 	}
 
-	m.retarget.view = seqBranches(filas + 4)
-	for cursor := 0; cursor < filas+4; cursor++ {
+	m.retarget.view = seqBranches(rows + 4)
+	for cursor := 0; cursor < rows+4; cursor++ {
 		m.retarget.cursor, m.retarget.win = cursor, 0
 		// This is what moveRetargetCursor does: the arithmetic lives in retargetWindow and the render
 		//reads m.retarget.win.
 		m.retarget.win = m.retargetWindow()
 		visibles, start := m.retargetVisible()
 		if cursor < start || cursor >= start+len(visibles) {
-			t.Errorf("cursor %d: la ventana [%d, %d) no lo contiene (visibles %d)", cursor, start, start+len(visibles), len(visibles))
+			t.Errorf("cursor %d: the window [%d, %d) does not contain it (visible %d)", cursor, start, start+len(visibles), len(visibles))
 		}
 		if start+len(visibles) > len(m.retarget.view) {
-			t.Errorf("cursor %d: la ventana [%d, %d) se pasa de las %d ramas", cursor, start, start+len(visibles), len(m.retarget.view))
+			t.Errorf("cursor %d: the window [%d, %d) goes past the %d branches", cursor, start, start+len(visibles), len(m.retarget.view))
 		}
 	}
 
-	m.retarget.cursor, m.retarget.win = filas+3, 0
-	m.moveRetargetCursor(-(filas + 3))
+	m.retarget.cursor, m.retarget.win = rows+3, 0
+	m.moveRetargetCursor(-(rows + 3))
 	if m.retarget.cursor != 0 {
-		t.Errorf("cursor = %d tras subir del todo, want 0", m.retarget.cursor)
+		t.Errorf("cursor = %d after going all the way up, want 0", m.retarget.cursor)
 	}
 	if m.retarget.win != 0 {
-		t.Errorf("win = %d tras subir del todo, want 0", m.retarget.win)
+		t.Errorf("win = %d after going all the way up, want 0", m.retarget.win)
 	}
 	m.retarget.view = []string{"a", "b"}
 	m.retarget.cursor, m.retarget.win = 1, 0
 	m.moveRetargetCursor(5)
 	if m.retarget.win != 0 {
-		t.Errorf("lista de 2 filas con ventana de %d: win = %d, want 0", filas, m.retarget.win)
+		t.Errorf("list of 2 rows with window of %d: win = %d, want 0", rows, m.retarget.win)
 	}
 }
 
@@ -123,8 +123,8 @@ func seqBranches(n int) []string {
 	return out
 }
 
-func TestLaFlechaDeLaConfirmacionCaeEnUnaColumnaFija(t *testing.T) {
-	columna := func(base string) int {
+func TestTheConfirmationArrowFallsInAFixedColumn(t *testing.T) {
+	column := func(base string) int {
 		t.Helper()
 		m, _ := retargetFixture(t, base, "destino")
 		m.retarget.item.TargetBranch = base
@@ -134,7 +134,7 @@ func TestLaFlechaDeLaConfirmacionCaeEnUnaColumnaFija(t *testing.T) {
 
 		box := stripANSI(m.retargetConfirmBox())
 		wantCol := 2 + (m.retargetBoxWidth()-6)/2
-		visto := -1
+		seen := -1
 		for _, l := range strings.Split(box, "\n") {
 			i := strings.Index(l, "→")
 			if i < 0 {
@@ -142,33 +142,33 @@ func TestLaFlechaDeLaConfirmacionCaeEnUnaColumnaFija(t *testing.T) {
 			}
 			col := ansi.StringWidth(l[:i])
 			if ansi.StringWidth(base) <= (m.retargetBoxWidth()-6)/2 && col != wantCol {
-				t.Errorf("base %q: la flecha cae en la columna %d, want %d (media caja, el relleno de la base): %q",
+				t.Errorf("base %q: the arrow falls at column %d, want %d (half box, the bases padding): %q",
 					base, col, wantCol, l)
 			}
 			if !strings.Contains(l, "→ "+m.retarget.chosen) {
-				t.Errorf("base %q: la flecha no está pegada al destino: %q", base, l)
+				t.Errorf("base %q: the arrow is not stuck to the target: %q", base, l)
 			}
-			visto = col
+			seen = col
 		}
-		if visto < 0 {
-			t.Fatalf("base %q: la caja no tiene flecha: %q", base, box)
+		if seen < 0 {
+			t.Fatalf("base %q: the box has no arrow: %q", base, box)
 		}
-		return visto
+		return seen
 	}
 
-	want := columna("main")
+	want := column("main")
 	for _, base := range []string{"main", "release/2.0", "feature/x", "x", "fix/hunk"} {
-		if got := columna(base); got != want {
-			t.Errorf("la columna de la flecha depende de la base: %q dio %d y %q dio %d", "main", want, base, got)
+		if got := column(base); got != want {
+			t.Errorf("the arrows column depends on the base: %q gave %d and %q gave %d", "main", want, base, got)
 		}
 	}
 	larga := "feature/" + strings.Repeat("x", 40)
-	if columna(larga) <= want {
-		t.Errorf("una base de %d columnas debería empujar la flecha más allá de %d", len(larga), want)
+	if column(larga) <= want {
+		t.Errorf("a base of %d columns should push the arrow past %d", len(larga), want)
 	}
 }
 
-func TestLaCajaDeConfirmacionNombraLasDosRamas(t *testing.T) {
+func TestTheConfirmationBoxNamesTheTwoBranches(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "release/2.0")
 	m.retarget.cursor = 1
 	m.retarget.chosen = "release/2.0"
@@ -177,39 +177,39 @@ func TestLaCajaDeConfirmacionNombraLasDosRamas(t *testing.T) {
 	box := stripANSI(m.retargetConfirmBox())
 	for _, want := range []string{"main", "release/2.0", "enter apply", "esc back"} {
 		if !strings.Contains(box, want) {
-			t.Errorf("la caja debería contener %q: %q", want, box)
+			t.Errorf("the box should contain %q: %q", want, box)
 		}
 	}
 	// Without it the box only lists the keys and the user cannot tell what stopped being true.
 	if !strings.Contains(box, "recomputed") {
-		t.Errorf("la caja debería decir que se recalcula: %q", box)
+		t.Errorf("the box should say it is recalculated: %q", box)
 	}
 
-	sinBase := m
-	sinBase.retarget.item.TargetBranch = ""
-	box = stripANSI(sinBase.retargetConfirmBox())
+	withoutBase := m
+	withoutBase.retarget.item.TargetBranch = ""
+	box = stripANSI(withoutBase.retargetConfirmBox())
 	if !strings.Contains(box, "unknown") {
-		t.Errorf("sin base conocida la caja debería decir unknown: %q", box)
+		t.Errorf("with no known base the box should say unknown: %q", box)
 	}
 	if strings.Contains(box, " →  ") || strings.Contains(box, "(→") {
-		t.Errorf("sin base conocida la caja dejó un hueco en la flecha: %q", box)
+		t.Errorf("with no known base the box left a gap in the arrow: %q", box)
 	}
 }
 
 // The in-progress warning is the only thing that distinguishes one retarget from another.
-func TestRetargetProgressNoticeDistingueLasDosRamas(t *testing.T) {
-	conBase := stripANSI(retargetProgressNotice("main", "release/2.0"))
-	if !strings.Contains(conBase, "main") || !strings.Contains(conBase, "release/2.0") {
-		t.Errorf("el aviso debería nombrar las dos ramas: %q", conBase)
+func TestRetargetProgressNoticeDistinguishesTheTwoBranches(t *testing.T) {
+	withBase := stripANSI(retargetProgressNotice("main", "release/2.0"))
+	if !strings.Contains(withBase, "main") || !strings.Contains(withBase, "release/2.0") {
+		t.Errorf("the notice should name the two branches: %q", withBase)
 	}
-	sinBase := stripANSI(retargetProgressNotice("", "release/2.0"))
-	if !strings.Contains(sinBase, "release/2.0") {
-		t.Errorf("sin base de origen el aviso debería nombrar el destino: %q", sinBase)
+	withoutBase := stripANSI(retargetProgressNotice("", "release/2.0"))
+	if !strings.Contains(withoutBase, "release/2.0") {
+		t.Errorf("with no source base the notice should name the target: %q", withoutBase)
 	}
-	if strings.Contains(sinBase, "( →") || strings.Contains(sinBase, "(→  ") {
-		t.Errorf("sin base de origen el aviso dejó un hueco: %q", sinBase)
+	if strings.Contains(withoutBase, "( →") || strings.Contains(withoutBase, "(→  ") {
+		t.Errorf("with no source base the notice left a gap: %q", withoutBase)
 	}
-	if conBase == sinBase {
-		t.Errorf("con y sin base de origen el aviso es el mismo: %q", conBase)
+	if withBase == withoutBase {
+		t.Errorf("with and without a source base the notice is the same: %q", withBase)
 	}
 }

@@ -505,9 +505,9 @@ func (m *Model) launchAction(kind forge.ActionKind, it model.Item, a forge.Adapt
 
 func actionProgressNotice(kind forge.ActionKind, mode forge.MergeMode) string {
 	if kind == forge.ActionMerge {
-		return string(kind) + " (" + mode.Label() + ") en curso…"
+		return string(kind) + " (" + mode.Label() + ") in progress…"
 	}
-	return string(kind) + " en curso…"
+	return string(kind) + " in progress…"
 }
 
 func (m Model) startMount() (tea.Model, tea.Cmd) {

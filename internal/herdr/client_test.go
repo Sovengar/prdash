@@ -52,7 +52,7 @@ func versionOK(_ []string) ([]byte, []byte, error) {
 func TestAvailableRequiresHerdrEnv(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{}, respond: versionOK}
 	if f.client().Available() {
-		t.Fatal("sin HERDR_ENV no debería estar disponible")
+		t.Fatal("without HERDR_ENV it should not be available")
 	}
 }
 
@@ -61,7 +61,7 @@ func TestAvailableRequiresMinVersion(t *testing.T) {
 		return []byte("herdr 0.8.2\n"), nil, nil
 	}}
 	if f.client().Available() {
-		t.Fatal("0.8.2 no alcanza el mínimo 0.9.0")
+		t.Fatal("0.8.2 does not reach the 0.9.0 minimum")
 	}
 }
 
@@ -69,7 +69,7 @@ func TestAvailableWithSupportedVersion(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}, respond: versionOK}
 	c := f.client()
 	if !c.Available() {
-		t.Fatal("dentro de Herdr con 0.9.1 debería estar disponible")
+		t.Fatal("inside Herdr with 0.9.1 it should be available")
 	}
 	if v, ok := c.Version(); !ok || v.String() != "0.9.1" {
 		t.Fatalf("version = %v ok=%v", v, ok)
@@ -81,7 +81,7 @@ func TestAvailableToleratesUnknownVersion(t *testing.T) {
 		return []byte("herdr dev\n"), nil, nil
 	}}
 	if !f.client().Available() {
-		t.Fatal("una versión ilegible no debería bloquear por drift")
+		t.Fatal("an unreadable version should not block on drift")
 	}
 }
 
@@ -109,7 +109,7 @@ func TestWorktreeCreateBuildsArgsAndParses(t *testing.T) {
 	}
 	for _, want := range []string{"--cwd", "/repo", "--branch", "prdash/pr-7", "--path", "/wt/prdash-pr-7", "--label", "prdash-pr-7", "--no-focus"} {
 		if !contains(got, want) {
-			t.Fatalf("faltó %q en %v", want, got)
+			t.Fatalf("missing %q in %v", want, got)
 		}
 	}
 }
@@ -123,11 +123,11 @@ func TestErrorIsTypedFromStderrJSON(t *testing.T) {
 	}}
 	_, err := f.client().WorktreeCreate(context.Background(), WorktreeSpec{Cwd: "/repo", Branch: "x"})
 	if err == nil {
-		t.Fatal("esperaba error")
+		t.Fatal("expected an error")
 	}
 	var herr *Error
 	if !errors.As(err, &herr) {
-		t.Fatalf("error no tipado: %T", err)
+		t.Fatalf("untyped error: %T", err)
 	}
 	if herr.Code != "worktree_create_failed" || !strings.Contains(herr.Msg, "already checked out") {
 		t.Fatalf("error = %+v", herr)
@@ -146,7 +146,7 @@ func TestPaneRunJoinsArgv(t *testing.T) {
 	}
 	want := []string{"pane", "run", "w18:p1", "tuicr pr https://github.com/o/r/pull/7"}
 	if len(f.calls) == 0 || !equalSlices(f.calls[len(f.calls)-1], want) {
-		t.Fatalf("llamada = %v, want %v", f.calls, want)
+		t.Fatalf("call = %v, want %v", f.calls, want)
 	}
 }
 
@@ -157,7 +157,7 @@ func TestNotifyBuildsArgs(t *testing.T) {
 		}
 		return []byte(fixtureNotification), nil, nil
 	}}
-	if err := f.client().Notify(context.Background(), "review listo", NotifyOptions{Sound: "done"}); err != nil {
+	if err := f.client().Notify(context.Background(), "review ready", NotifyOptions{Sound: "done"}); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
 	last := f.calls[len(f.calls)-1]
@@ -186,13 +186,13 @@ func TestGuardErrorNamesSubcommand(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{}, respond: versionOK}
 	_, err := f.client().WorktreeCreate(context.Background(), WorktreeSpec{Cwd: "/repo", Branch: "x"})
 	if err == nil {
-		t.Fatal("esperaba error fuera de Herdr")
+		t.Fatal("expected an error outside Herdr")
 	}
 	if !strings.Contains(err.Error(), "worktree create") {
-		t.Fatalf("error = %q, debería nombrar el subcomando", err.Error())
+		t.Fatalf("error = %q, it should name the subcommand", err.Error())
 	}
 	if strings.Contains(err.Error(), "herdr []") {
-		t.Fatalf("error = %q, no debería salir con args vacíos", err.Error())
+		t.Fatalf("error = %q, it should not come out with empty args", err.Error())
 	}
 }
 
@@ -223,22 +223,22 @@ func TestMutationsRefusedWithoutHerdrEnv(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := c.WorktreeCreate(ctx, WorktreeSpec{Cwd: "/repo", Branch: "x"}); err == nil {
-		t.Fatal("no debería crear worktree fuera de Herdr")
+		t.Fatal("it should not create a worktree outside Herdr")
 	}
 	if _, err := c.WorkspaceCreate(ctx, WorkspaceSpec{Cwd: "/repo"}); err == nil {
-		t.Fatal("no debería crear workspace fuera de Herdr")
+		t.Fatal("it should not create a workspace outside Herdr")
 	}
 	if err := c.PaneRun(ctx, "w1:p1", []string{"ls"}); err == nil {
-		t.Fatal("no debería correr comandos fuera de Herdr")
+		t.Fatal("it should not run commands outside Herdr")
 	}
-	if err := c.Notify(ctx, "hola", NotifyOptions{}); err == nil {
-		t.Fatal("no debería notificar fuera de Herdr")
+	if err := c.Notify(ctx, "hello", NotifyOptions{}); err == nil {
+		t.Fatal("it should not notify outside Herdr")
 	}
 	if _, err := c.MountLayout(ctx, Container{PaneID: "w1:p1"}, plan.Plan{Tabs: []plan.Tab{{Panes: []plan.Pane{{Label: "X", Argv: []string{"x"}}}}}}); err == nil {
-		t.Fatal("no debería montar layout fuera de Herdr")
+		t.Fatal("it should not mount a layout outside Herdr")
 	}
 	if len(f.calls) != 0 {
-		t.Fatalf("no debería invocar la CLI: %v", f.calls)
+		t.Fatalf("it should not invoke the CLI: %v", f.calls)
 	}
 }
 
@@ -247,11 +247,11 @@ func TestMutationsRefusedBelowMinVersion(t *testing.T) {
 		return []byte("herdr 0.8.2\n"), nil, nil
 	}}
 	if _, err := f.client().WorktreeCreate(context.Background(), WorktreeSpec{Cwd: "/repo", Branch: "x"}); err == nil {
-		t.Fatal("una versión antigua no debería mutar")
+		t.Fatal("an old version should not mutate")
 	}
 	for _, call := range f.calls {
 		if call[0] == "worktree" {
-			t.Fatalf("no debería invocar worktree create: %v", f.calls)
+			t.Fatalf("it should not invoke worktree create: %v", f.calls)
 		}
 	}
 }

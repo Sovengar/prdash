@@ -15,7 +15,7 @@ type envelope[T any] struct {
 func decodeResult[T any](raw []byte) (T, error) {
 	var e envelope[T]
 	if err := json.Unmarshal(raw, &e); err != nil {
-		return e.Result, fmt.Errorf("herdr: respuesta ilegible: %w", err)
+		return e.Result, fmt.Errorf("herdr: unreadable response: %w", err)
 	}
 	return e.Result, nil
 }

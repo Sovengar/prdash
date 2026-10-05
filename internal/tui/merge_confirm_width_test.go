@@ -15,7 +15,7 @@ func TestMergeConfirmKeepsTheDeleteValueWhenItWraps(t *testing.T) {
 
 		view := stripANSI(m.View().Content)
 		if !strings.Contains(view, "yes (tab)") {
-			t.Errorf("ancho %d: el valor del borrado no se lee entero\n%s", width, view)
+			t.Errorf("width %d: the delete value is not fully readable\n%s", width, view)
 		}
 	}
 }
@@ -30,10 +30,10 @@ func TestMergeConfirmKeepsBothDeleteValuesVisible(t *testing.T) {
 
 		view := stripANSI(m.View().Content)
 		if !strings.Contains(view, "no (tab)") {
-			t.Errorf("ancho %d: el valor conmutado no aparece\n%s", width, view)
+			t.Errorf("width %d: the toggled value does not appear\n%s", width, view)
 		}
 		if strings.Contains(view, "yes (tab)") {
-			t.Errorf("ancho %d: sigue enseñando el valor anterior\n%s", width, view)
+			t.Errorf("width %d: it still shows the previous value\n%s", width, view)
 		}
 	}
 }

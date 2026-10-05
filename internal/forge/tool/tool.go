@@ -21,7 +21,7 @@ const pipeCloseGrace = 250 * time.Millisecond
 type Runner struct {
 	Bin     string
 	Timeout time.Duration
-	Extra   []string // variables extra del forge (p. ej. GH_PROMPT_DISABLED=1)
+	Extra   []string // extra forge env vars (e.g. GH_PROMPT_DISABLED=1)
 }
 
 func New(bin string, extra ...string) *Runner {

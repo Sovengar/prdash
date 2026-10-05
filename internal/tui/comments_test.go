@@ -12,7 +12,7 @@ import (
 	"prdash/internal/testutil"
 )
 
-func conv(author, body string) model.Comment {
+func commentOf(author, body string) model.Comment {
 	return model.Comment{Author: author, Body: body}
 }
 
@@ -34,7 +34,7 @@ func withConversation(t *testing.T, m Model, it model.Item, p forge.CommentPage)
 	t.Helper()
 	id := it.ID()
 	if _, asked := m.comments[id]; !asked {
-		m.comments[id] = &commentState{} // marcada como pedida, como hace el sondeo
+		m.comments[id] = &commentState{} // marked as asked, as the polling does
 	}
 	return send(t, m, commentsMsg{id: id, page: p})
 }
@@ -43,7 +43,7 @@ func detailText(t *testing.T, m Model) string {
 	t.Helper()
 	rows := m.layout().detailLines
 	if rows <= 0 {
-		t.Fatal("el layout no ha reservado filas para el detalle: falta WindowSizeMsg")
+		t.Fatal("the layout has not reserved rows for the detail: WindowSizeMsg is missing")
 	}
 	return stripANSI(strings.Join(m.detailLines(mustSelected(t, m), true, rows), "\n"))
 }
@@ -52,7 +52,7 @@ func mustSelected(t *testing.T, m Model) model.Item {
 	t.Helper()
 	it, ok := m.selected()
 	if !ok {
-		t.Fatal("no hay ítem seleccionado")
+		t.Fatal("there is no selected item")
 	}
 	return it
 }
@@ -66,7 +66,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("no se cumplió a tiempo: %s", what)
+	t.Fatalf("it did not happen in time: %s", what)
 }
 
 var detailLabels = []string{
@@ -108,30 +108,30 @@ func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 	m.width, m.height = 160, 45
 	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionReview, model.ReviewRequested, []model.Item{it}, false))
 	m = withConversation(t, m, it, forge.CommentPage{
-		Comments: []model.Comment{conv("alice", "ok for me")}, Total: 1,
+		Comments: []model.Comment{commentOf("alice", "ok for me")}, Total: 1,
 	})
 
 	rows := m.detailLines(it, true, m.layout().detailLines)
 	urlRow := rowWithField(rows, "URL:")
 	if urlRow < 0 {
-		t.Fatalf("no hay fila de URL:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("there is no URL row:\n%s", strings.Join(rows, "\n"))
 	}
 
 	plain := stripANSI(rows[urlRow])
 	if !strings.Contains(plain, long) {
-		t.Errorf("el URL debería salir entero, no recortado:\n%s", plain)
+		t.Errorf("the URL should come out whole, not clipped:\n%s", plain)
 	}
 	for _, label := range detailLabels {
 		if strings.Contains(plain, label) {
-			t.Errorf("la fila del URL comparte fila con %q:\n%s", label, plain)
+			t.Errorf("the URL row shares a row with %q:\n%s", label, plain)
 		}
 	}
 	iComment := rowWithCommentBox(rows)
 	if iComment < 0 {
-		t.Fatalf("los comentarios deberían caber a esta altura:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("the comments should fit at this height:\n%s", strings.Join(rows, "\n"))
 	}
 	if urlRow > iComment {
-		t.Errorf("el URL (fila %d) debería ir antes que los comentarios (fila %d)", urlRow, iComment)
+		t.Errorf("the URL (row %d) should come before the comments (row %d)", urlRow, iComment)
 	}
 }
 
@@ -147,33 +147,33 @@ func TestSelfDenyTakesNoRoomInTheDetail(t *testing.T) {
 	m = showSection(m, model.SectionAuthored)
 
 	if m.selfDenied[it.ID()] == "" {
-		t.Fatal("el ítem propio debería estar vetado")
+		t.Fatal("my own item should be vetoed")
 	}
 	detail := detailText(t, m)
 	if strings.Contains(detail, "approve unavailable") {
-		t.Errorf("el veto no debería pintar nada en la ficha:\n%s", detail)
+		t.Errorf("the veto should not paint anything on the card:\n%s", detail)
 	}
 	if !strings.Contains(detail, "Role:") || !strings.Contains(detail, "own") {
-		t.Errorf("el campo Role debería seguir diciendo que es propio:\n%s", detail)
+		t.Errorf("the Role field should keep saying it is my own:\n%s", detail)
 	}
 	m.denied[it.ID()] = "the forge refused the action"
 	if !strings.Contains(detailText(t, m), "action disabled") {
-		t.Error("el aviso de denegación del forge debería seguir en la ficha")
+		t.Error("the forges denial notice should still be on the card")
 	}
 }
 
 func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
 
 	top := rowWithCommentBox(rows)
 	if top < 0 {
-		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("there is no comments box:\n%s", strings.Join(rows, "\n"))
 	}
 	first := stripANSI(rows[top])
 	for _, want := range []string{"╭", commentTitle, "╮"} {
 		if !strings.Contains(first, want) {
-			t.Errorf("el borde de arriba debería llevar %q:\n%s", want, first)
+			t.Errorf("the top border should carry %q:\n%s", want, first)
 		}
 	}
 	bottom := -1
@@ -184,17 +184,17 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 		}
 	}
 	if bottom < 0 {
-		t.Fatalf("la caja no se cierra por abajo:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("the box does not close at the bottom:\n%s", strings.Join(rows, "\n"))
 	}
 	width := m.contentWidth()
 	for i := top; i <= bottom; i++ {
 		if n := len([]rune(stripANSI(rows[i]))); n != width {
-			t.Errorf("línea %d de la caja mide %d, want %d (el ancho del panel)", i, n, width)
+			t.Errorf("line %d of the box measures %d, want %d (the panels width)", i, n, width)
 		}
 	}
 	for i := top; i <= bottom; i++ {
 		if strings.Contains(stripANSI(rows[i]), "Comments:") {
-			t.Errorf("dentro de la caja no debería repetirse la etiqueta:\n%s", stripANSI(rows[i]))
+			t.Errorf("inside the box the label should not repeat:\n%s", stripANSI(rows[i]))
 		}
 	}
 }
@@ -202,42 +202,42 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 // Against the panel's border its verticals overlap and every row comes out as `||`; a lighter grey
 // told them apart but goes yellowish on warm palettes.
 func TestBoxIsInsetSoNestingReadsByShape(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
 
 	top := rowWithCommentBox(rows)
 	if top < 0 {
-		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("there is no comments box:\n%s", strings.Join(rows, "\n"))
 	}
 	for i := top; i < len(rows); i++ {
 		plain := stripANSI(rows[i])
 		r := []rune(plain)
 		if strings.ContainsRune("│╭╰", r[0]) {
-			t.Errorf("línea %d: la caja no puede apoyarse en el borde izquierdo del panel:\n%q", i, plain)
+			t.Errorf("line %d: the box cannot sit on the panels left border:\n%q", i, plain)
 		}
 		if last := r[len(r)-1]; strings.ContainsRune("│╮╯", last) {
-			t.Errorf("línea %d: la caja no puede apoyarse en el borde derecho del panel:\n%q", i, plain)
+			t.Errorf("line %d: the box cannot sit on the panels right border:\n%q", i, plain)
 		}
 		if !strings.HasPrefix(plain, " │") && !strings.HasPrefix(plain, " ╭") && !strings.HasPrefix(plain, " ╰") {
-			break // el anidamiento se acaba aquí: lo que viene son avisos o relleno
+			break // the nesting ends here: what follows is notices or filler
 		}
 	}
 }
 
 func TestCommentBoxSharesTheBorderColor(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 1)
 	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
 	top := rowWithCommentBox(rows)
 	if top < 0 {
-		t.Fatalf("no hay caja de comentarios:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("there is no comments box:\n%s", strings.Join(rows, "\n"))
 	}
 	panel, box := ansiColors(rows[0]), ansiColors(rows[top])
 	if panel != box {
-		t.Errorf("la caja de comentarios se pinta con %q y el panel con %q, y deben ser el mismo",
+		t.Errorf("the comments box is painted with %q and the panel with %q, and they must be the same",
 			box, panel)
 	}
 	if box == "" {
-		t.Error("ninguna de las dos líneas lleva color: el test no estaría comprobando nada")
+		t.Error("neither of the two lines carries color: the test would be checking nothing")
 	}
 }
 
@@ -256,11 +256,11 @@ func ansiColors(line string) string {
 // What broke the dash closing the bottom line is that the count's style ends with a reset, and a reset
 // does not restore what was there: it takes the border's grey with it.
 func TestEveryBorderGlyphIsPainted(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 3)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 3)
 	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
 	for i, l := range rows {
 		if bad := unpaintedBorderGlyphs(l); bad != "" {
-			t.Errorf("línea %d: estos glifos de borde salen sin pintar, con el color por defecto del terminal: %q\n%q",
+			t.Errorf("line %d: these border glyphs come out unpainted, with the terminals default color: %q\n%q",
 				i, bad, stripANSI(l))
 		}
 	}
@@ -294,39 +294,39 @@ func TestNoBoxWhenThereAreNoComments(t *testing.T) {
 	m := modelWithComments(t, 45, nil, 0)
 	detail := stripANSI(strings.Join(m.detailLines(mustSelected(t, m), true, m.layout().detailLines), "\n"))
 	if hasCommentBox(detail) {
-		t.Errorf("sin comentarios no debería haber caja:\n%s", detail)
+		t.Errorf("with no comments there should be no box:\n%s", detail)
 	}
 	if !strings.Contains(detail, "Comments:") || !strings.Contains(detail, "none") {
-		t.Errorf("debería quedarse la línea de campo como estaba:\n%s", detail)
+		t.Errorf("the field line should stay as it was:\n%s", detail)
 	}
 }
 
 // One of the box's two rows is a border, and a clipped box does not look clipped: it looks like the
 // PR only has that comment.
 func TestBoxIsAllOrNothing(t *testing.T) {
-	list := []model.Comment{conv("alice", "one"), conv("bob", "two"), conv("carol", "three")}
+	list := []model.Comment{commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three")}
 	for _, tc := range []struct {
 		name    string
 		avail   int
 		wantBox bool
 	}{
-		{"caben los tres más los dos bordes", commentChrome + 3, true},
-		{"falta una fila para un comentario", commentChrome + 2, false},
-		{"solo caben los bordes", commentChrome, false},
-		{"no cabe ni un borde", 1, false},
+		{"the three plus the two borders fit", commentChrome + 3, true},
+		{"one row short for a comment", commentChrome + 2, false},
+		{"only the borders fit", commentChrome, false},
+		{"not even a border fits", 1, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := modelWithComments(t, 45, list, 3)
 			rows := m.commentLines(mustSelected(t, m), tc.avail, m.contentWidth())
 			got := len(rows) > 0
 			if got != tc.wantBox {
-				t.Errorf("con avail=%d la caja=%v, want %v", tc.avail, got, tc.wantBox)
+				t.Errorf("with avail=%d the box=%v, want %v", tc.avail, got, tc.wantBox)
 			}
 			if !got {
 				return
 			}
 			if n := len(rows); n != tc.avail {
-				t.Errorf("la caja ocupa %d filas y el presupuesto era %d", n, tc.avail)
+				t.Errorf("the box takes %d rows and the budget was %d", n, tc.avail)
 			}
 		})
 	}
@@ -337,7 +337,7 @@ func TestBoxNeverOverflowsItsBudget(t *testing.T) {
 		for _, n := range []int{1, 3, 5} {
 			list := make([]model.Comment, n)
 			for i := range list {
-				list[i] = conv("u", strings.Repeat("texto largo ", 20))
+				list[i] = commentOf("u", strings.Repeat("text long ", 20))
 			}
 			m := modelWithComments(t, height, list, n)
 			rows := m.layout().detailLines
@@ -348,7 +348,7 @@ func TestBoxNeverOverflowsItsBudget(t *testing.T) {
 				}
 				lines := m.detailLines(it, true, rows)
 				if len(lines) > rows {
-					t.Fatalf("alto %d con %d comentarios: el detalle devolvió %d filas para un panel de %d (denied=%v)",
+					t.Fatalf("height %d with %d comments: the detail returned %d rows for a panel of %d (denied=%v)",
 						height, n, len(lines), rows, denied)
 				}
 			}
@@ -357,15 +357,15 @@ func TestBoxNeverOverflowsItsBudget(t *testing.T) {
 }
 
 func TestURLRowDoesNotCostHeight(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", "ok for me")}, 1)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
 
 	urlRow := rowWithField(rows, "URL:")
 	if urlRow < 0 {
-		t.Fatalf("no hay fila de URL:\n%s", strings.Join(rows, "\n"))
+		t.Fatalf("there is no URL row:\n%s", strings.Join(rows, "\n"))
 	}
 	if got := len(detailLabels); got != 12 {
-		t.Fatalf("el test espera 12 etiquetas de rejilla, tiene %d", got)
+		t.Fatalf("the test waits 12 grid labels, has %d", got)
 	}
 	seen := map[string]bool{}
 	for _, l := range rows {
@@ -378,7 +378,7 @@ func TestURLRowDoesNotCostHeight(t *testing.T) {
 	}
 	for _, label := range detailLabels {
 		if !seen[label] {
-			t.Errorf("la ficha perdió el campo %q al darle su fila al URL:\n%s",
+			t.Errorf("the card lost the field %q when giving its row to the URL:\n%s",
 				label, strings.Join(rows, "\n"))
 		}
 	}
@@ -397,7 +397,7 @@ func TestURLRowDoesNotCostHeight(t *testing.T) {
 		}
 	}
 	if gridRows != 6 {
-		t.Errorf("la rejilla ocupa %d filas, want 6 (12 campos en dos columnas):\n%s",
+		t.Errorf("the grid takes %d rows, want 6 (12 fields in two columns):\n%s",
 			gridRows, strings.Join(rows, "\n"))
 	}
 }
@@ -414,7 +414,7 @@ func TestLastGridRowCarriesTheActionFields(t *testing.T) {
 	joined := stripANSI(strings.Join(m.detailLines(it, true, 4), "\n"))
 	for _, want := range []string{"Review:", "changes requested", "Role:"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("el recorte perdió %q, que es lo que dice si la acción procede:\n%s", want, joined)
+			t.Errorf("the clipping lost %q, which is what says whether the action applies:\n%s", want, joined)
 		}
 	}
 }
@@ -427,18 +427,18 @@ func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 		want   []int
 	}{
 		{"caben enteros", []int{1, 4, 1, 1, 1}, 10, []int{1, 4, 1, 1, 1}},
-		{"sobra una fila", []int{1, 4, 1, 1, 1}, 8, []int{1, 4, 1, 1, 1}},
-		{"falta una fila", []int{1, 4, 1, 1, 1}, 7, []int{1, 3, 1, 1, 1}},
-		{"todos largos", []int{4, 4, 4, 4, 4}, 11, []int{3, 2, 2, 2, 2}},
-		{"uno larguísimo", []int{4, 1, 1, 1, 1}, 6, []int{2, 1, 1, 1, 1}},
-		{"sin presupuesto", []int{1, 4}, 1, []int{1, 1}},
-		{"uno solo", []int{4}, 1, []int{1}},
+		{"a spare row", []int{1, 4, 1, 1, 1}, 8, []int{1, 4, 1, 1, 1}},
+		{"one row short", []int{1, 4, 1, 1, 1}, 7, []int{1, 3, 1, 1, 1}},
+		{"all largos", []int{4, 4, 4, 4, 4}, 11, []int{3, 2, 2, 2, 2}},
+		{"a very long one", []int{4, 1, 1, 1, 1}, 6, []int{2, 1, 1, 1, 1}},
+		{"no budget", []int{1, 4}, 1, []int{1, 1}},
+		{"a single one", []int{4}, 1, []int{1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := allocate(tc.need, tc.budget)
 			if len(got) != len(tc.want) {
-				t.Fatalf("allocate devolvió %d cuotas, want %d", len(got), len(tc.want))
+				t.Fatalf("allocate returned %d quotas, want %d", len(got), len(tc.want))
 			}
 			for i := range got {
 				if got[i] != tc.want[i] {
@@ -448,15 +448,15 @@ func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 			sum := 0
 			for i, n := range got {
 				if n > tc.need[i] {
-					t.Errorf("la cuota %d (%d) supera lo que necesita (%d)", i, n, tc.need[i])
+					t.Errorf("quota %d (%d) exceeds what it needs (%d)", i, n, tc.need[i])
 				}
 				if n < 1 {
-					t.Errorf("la cuota %d es 0: el comentario desaparecería", i)
+					t.Errorf("quota %d is 0: the comment would disappear", i)
 				}
 				sum += n
 			}
 			if tc.budget >= len(tc.need) && sum > tc.budget {
-				t.Errorf("el reparto suma %d y el presupuesto es %d", sum, tc.budget)
+				t.Errorf("the split adds up to %d and the budget is %d", sum, tc.budget)
 			}
 		})
 	}
@@ -465,13 +465,13 @@ func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 func TestAllocateIsDeterministic(t *testing.T) {
 	first := allocate([]int{2, 2, 2}, 4)
 	if first[0] != 2 || first[1] != 1 || first[2] != 1 {
-		t.Errorf("con una fila sobrante se la lleva siempre el primero: %v", first)
+		t.Errorf("with a leftover row the first one always takes it: %v", first)
 	}
 	for range 50 {
 		got := allocate([]int{2, 2, 2}, 4)
 		for i := range got {
 			if got[i] != first[i] {
-				t.Fatalf("allocate no es determinista: %v != %v", got, first)
+				t.Fatalf("allocate is not deterministic: %v != %v", got, first)
 			}
 		}
 	}
@@ -479,12 +479,12 @@ func TestAllocateIsDeterministic(t *testing.T) {
 
 func TestLongCommentKeepsItsRowsWhenOthersAreShort(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
-		conv("alice", "one liner"),
-		conv("bob", "the timeout is 30x too high\n\nI would put it at 2s like the rest of the endpoints, "+
+		commentOf("alice", "one liner"),
+		commentOf("bob", "the timeout is 30x too high\n\nI would put it at 2s like the rest of the endpoints, "+
 			"otherwise the pool exhausts and the requests die in the queue without ever logging"),
-		conv("carol", "one liner"),
-		conv("dave", "one liner"),
-		conv("erin", "one liner"),
+		commentOf("carol", "one liner"),
+		commentOf("dave", "one liner"),
+		commentOf("erin", "one liner"),
 	}, 5)
 	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "reviewer"}})
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{
@@ -492,56 +492,56 @@ func TestLongCommentKeepsItsRowsWhenOthersAreShort(t *testing.T) {
 	}, false))
 	m = withConversation(t, m, mustSelected(t, m), forge.CommentPage{
 		Comments: []model.Comment{
-			conv("alice", "one liner"),
-			conv("bob", "the timeout is 30x too high\n\nI would put it at 2s like the rest of the endpoints, "+
+			commentOf("alice", "one liner"),
+			commentOf("bob", "the timeout is 30x too high\n\nI would put it at 2s like the rest of the endpoints, "+
 				"otherwise the pool exhausts and the requests die in the queue without ever logging"),
-			conv("carol", "one liner"),
-			conv("dave", "one liner"),
-			conv("erin", "one liner"),
+			commentOf("carol", "one liner"),
+			commentOf("dave", "one liner"),
+			commentOf("erin", "one liner"),
 		},
 		Total: 5,
 	})
 
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "I would put it at 2s") {
-		t.Errorf("el comentario largo debería ocupar más de su primera línea:\n%s", detail)
+		t.Errorf("the long comment should take more than its first line:\n%s", detail)
 	}
 	for _, want := range []string{"alice:", "carol:", "dave:", "erin:"} {
 		if !strings.Contains(detail, want) {
-			t.Errorf("el reparto de filas no debería sacrificar a %q:\n%s", want, detail)
+			t.Errorf("the rows split should not sacrifice %q:\n%s", want, detail)
 		}
 	}
 }
 
 func TestCommentsShowBelowTheFields(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
-		conv("alice", "please add a test for the retry path"),
-		conv("bob", "the timeout is 30x too high"),
+		commentOf("alice", "please add a test for the retry path"),
+		commentOf("bob", "the timeout is 30x too high"),
 	}, 2)
 
 	detail := detailText(t, m)
 	iField := strings.Index(detail, "State:")
 	iComment := strings.Index(detail, " "+commentTitle+" ")
 	if iField < 0 || iComment < 0 {
-		t.Fatalf("faltan bloques en el detalle:\n%s", detail)
+		t.Fatalf("blocks are missing in the detail:\n%s", detail)
 	}
 	if iComment < iField {
-		t.Errorf("los comentarios deberían ir después de la ficha:\n%s", detail)
+		t.Errorf("the comments should come after the card:\n%s", detail)
 	}
 	for _, want := range []string{"alice:", "please add a test for the retry path", "bob:", "the timeout is 30x too high"} {
 		if !strings.Contains(detail, want) {
-			t.Errorf("falta %q en el detalle:\n%s", want, detail)
+			t.Errorf("%q is missing in the detail:\n%s", want, detail)
 		}
 	}
 }
 
 func TestFieldsStayInTwoColumns(t *testing.T) {
-	m := modelWithComments(t, 60, []model.Comment{conv("alice", "one")}, 1)
+	m := modelWithComments(t, 60, []model.Comment{commentOf("alice", "one")}, 1)
 	lines := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
 	joined := stripANSI(strings.Join(lines, "\n"))
 
 	if !strings.Contains(joined, "Item:") {
-		t.Fatalf("no está la fila de la rejilla:\n%s", joined)
+		t.Fatalf("the grid row is not there:\n%s", joined)
 	}
 	row := ""
 	for _, l := range strings.Split(joined, "\n") {
@@ -551,20 +551,20 @@ func TestFieldsStayInTwoColumns(t *testing.T) {
 		}
 	}
 	if !strings.Contains(row, "Forge:") {
-		t.Errorf("Item y Forge deberían ir en la misma fila de la rejilla, no apilados:\n%s", row)
+		t.Errorf("Item and Forge should go on the same grid row, not stacked:\n%s", row)
 	}
 	if fields := strings.Count(joined, ":"); fields < 13 {
-		t.Errorf("se perdieron campos en la rejilla (%d etiquetas):\n%s", fields, joined)
+		t.Errorf("fields were lost in the grid (%d labels):\n%s", fields, joined)
 	}
 	if rows := strings.Count(joined, "Item:"); rows != 1 {
-		t.Errorf("Item debería salir una vez, no %d", rows)
+		t.Errorf("Item should come out once, not %d", rows)
 	}
 }
 
 func TestCommentsCapAtFive(t *testing.T) {
 	var many []model.Comment
 	for i := 0; i < 9; i++ {
-		many = append(many, conv(fmt.Sprintf("u%d", i), fmt.Sprintf("body %d", i)))
+		many = append(many, commentOf(fmt.Sprintf("u%d", i), fmt.Sprintf("body %d", i)))
 	}
 	m := modelWithComments(t, 60, many, 9)
 	detail := detailText(t, m)
@@ -572,15 +572,15 @@ func TestCommentsCapAtFive(t *testing.T) {
 		body := fmt.Sprintf("body %d", i)
 		want := i < forge.CommentLimit
 		if got := strings.Contains(detail, body); got != want {
-			t.Errorf("%q presente=%v, want %v (solo los %d primeros)", body, got, want, forge.CommentLimit)
+			t.Errorf("%q present=%v, want %v (only the first %d)", body, got, want, forge.CommentLimit)
 		}
 	}
 }
 
 func TestCommentsAnnounceThereAreMore(t *testing.T) {
 	list := []model.Comment{
-		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
-		conv("dave", "four"), conv("erin", "five"),
+		commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three"),
+		commentOf("dave", "four"), commentOf("erin", "five"),
 	}
 	// A known viewer means the item is not the user's and there are no action warnings, which is what
 	// actually leaves the panel room: the own-approval veto no longer takes rows.
@@ -592,15 +592,15 @@ func TestCommentsAnnounceThereAreMore(t *testing.T) {
 
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "5 of 23") {
-		t.Errorf("con 23 comentarios la ficha debería decir cuáles enseña:\n%s", detail)
+		t.Errorf("with 23 comments the card should say which ones it shows:\n%s", detail)
 	}
 }
 
 // Free on the border, so it is not the first thing lost when the panel is tight.
 func TestCountLivesInTheBorder(t *testing.T) {
 	list := []model.Comment{
-		conv("alice", "one"), conv("bob", "two"), conv("carol", "three"),
-		conv("dave", "four"), conv("erin", "five"),
+		commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three"),
+		commentOf("dave", "four"), commentOf("erin", "five"),
 	}
 	m := modelWithComments(t, 45, list, 23)
 	it := mustSelected(t, m)
@@ -611,7 +611,7 @@ func TestCountLivesInTheBorder(t *testing.T) {
 
 	detail := detailText(t, m)
 	if !hasCommentBox(detail) {
-		t.Fatalf("la caja debería salir:\n%s", detail)
+		t.Fatalf("the box should come out:\n%s", detail)
 	}
 	rows := strings.Split(detail, "\n")
 	bottom := -1
@@ -622,79 +622,79 @@ func TestCountLivesInTheBorder(t *testing.T) {
 		}
 	}
 	if bottom < 0 {
-		t.Fatalf("la caja no se cierra por abajo:\n%s", detail)
+		t.Fatalf("the box does not close at the bottom:\n%s", detail)
 	}
 	row := rows[bottom]
 	if !strings.HasSuffix(strings.TrimSpace(row), "╯") {
-		t.Fatalf("el recuento debería ir en el borde de abajo de la caja:\n%s", detail)
+		t.Fatalf("the count should be on the boxes bottom border:\n%s", detail)
 	}
 	if !strings.HasSuffix(strings.TrimRight(row, " ╯"), "─") {
-		t.Errorf("el borde debería seguir después del recuento, no dejarlo suelto:\n%s", row)
+		t.Errorf("the border should follow after the count, not leave it loose:\n%s", row)
 	}
 	if !strings.Contains(row, "5 of 23") {
-		t.Errorf("el borde de abajo debería llevar el recuento, no el cuerpo:\n%s", row)
+		t.Errorf("the bottom border should carry the count, not the body:\n%s", row)
 	}
 	for _, want := range []string{"alice:", "bob:", "carol:", "dave:", "erin:"} {
 		if !strings.Contains(detail, want) {
-			t.Errorf("no debería caerse %q:\n%s", want, detail)
+			t.Errorf("%q should not drop:\n%s", want, detail)
 		}
 	}
 }
 
 func TestCountAlwaysSaysHowManyOfHowMany(t *testing.T) {
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", "one"), conv("bob", "two")}, 2)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "one"), commentOf("bob", "two")}, 2)
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "2 of 2") {
-		t.Errorf("con todo a la vista el recuento también dice el total:\n%s", detail)
+		t.Errorf("with everything in view the count also says the total:\n%s", detail)
 	}
 	if strings.Contains(detail, commentHint) {
-		t.Errorf("sin comentarios fuera no hay nada que abrir:\n%s", detail)
+		t.Errorf("with no comments outside there is nothing to open:\n%s", detail)
 	}
 	if !hasCommentBox(detail) {
-		t.Errorf("la caja de comentarios debería salir:\n%s", detail)
+		t.Errorf("the comments box should come out:\n%s", detail)
 	}
 }
 
 func TestCommentHeadlineSkipsBotBoilerplate(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{
-		conv("ssf-bot", "<!-- ssf: origin=acme/widget#553 -->\n\nattached the agent to the session"),
+		commentOf("ssf-bot", "<!-- ssf: origin=acme/widget#553 -->\n\nattached the agent to the session"),
 	}, 1)
 	detail := detailText(t, m)
 	if !strings.Contains(detail, "attached the agent to the session") {
-		t.Errorf("no se pintó el texto real del comentario:\n%s", detail)
+		t.Errorf("the real comment text was not painted:\n%s", detail)
 	}
 	if strings.Contains(detail, "ssf: origin") {
-		t.Errorf("se pintó el boilerplate del bot:\n%s", detail)
+		t.Errorf("the bots boilerplate was painted:\n%s", detail)
 	}
 }
 
 func TestCommentBodySplitsOverAvailableRows(t *testing.T) {
-	body := "el reintento no tiene backoff y por eso el servicio se cae cuando " +
-		"la dependencia tarda, y ademas el timeout esta a treinta veces lo que " +
-		"deberia, asi que el pool se agota y las peticiones mueren en cola sin " +
-		"llegar a loguear nada"
-	m := modelWithComments(t, 60, []model.Comment{conv("alice", body)}, 1)
+	body := "the retry has no backoff and that is why the service goes down when " +
+		"the dependency is slow, and the timeout is thirty times what it " +
+		"should be, so the pool is exhausted and the requests die queued " +
+		"before logging anything"
+	m := modelWithComments(t, 60, []model.Comment{commentOf("alice", body)}, 1)
 	detail := detailText(t, m)
 
-	if !strings.Contains(detail, "el reintento no tiene backoff") {
-		t.Fatalf("no se pintó el comentario:\n%s", detail)
+	if !strings.Contains(detail, "the retry has no backoff") {
+		t.Fatalf("the comment was not painted:\n%s", detail)
 	}
 	if strings.Count(detail, "alice:") != 1 {
-		t.Errorf("el autor debería salir una sola vez:\n%s", detail)
+		t.Errorf("the author should come out only once:\n%s", detail)
 	}
 	rows := 0
 	for _, l := range strings.Split(detail, "\n") {
 		if strings.Contains(l, "backoff") || strings.Contains(l, "dependencia") ||
-			strings.Contains(l, "treinta veces") || strings.Contains(l, "agota") {
+			strings.Contains(l, "thirty times") || strings.Contains(l, "exhausted") {
 			rows++
 		}
 	}
 	if rows < 2 {
-		t.Errorf("con un terminal alto el cuerpo debería ocupar varias filas, ocupó %d:\n%s", rows, detail)
+		t.Errorf("with a terminal height the body should take several rows, it took %d:\n%s", rows, detail)
 	}
 	for _, l := range strings.Split(detail, "\n") {
 		if n := len([]rune(l)); n > m.contentWidth() {
-			t.Errorf("fila de %d runes, más que el ancho útil %d:\n%q", n, m.contentWidth(), l)
+			t.Errorf("row of %d runes, more than the usable width %d:\n%q", n, m.contentWidth(), l)
 		}
 	}
 }
@@ -702,23 +702,23 @@ func TestCommentBodySplitsOverAvailableRows(t *testing.T) {
 // A tall terminal is needed for the block to fit: at 24 rows the grid already takes the panel.
 func TestCommentCutIsMarked(t *testing.T) {
 	long := strings.Repeat("palabra ", 400)
-	m := modelWithComments(t, 45, []model.Comment{conv("alice", long)}, 1)
+	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", long)}, 1)
 	detail := detailText(t, m)
 	if !hasCommentBox(detail) {
-		t.Fatalf("a 45 filas los comentarios deberían caber:\n%s", detail)
+		t.Fatalf("at 45 rows the comments should fit:\n%s", detail)
 	}
 	if !strings.Contains(detail, "…") {
-		t.Errorf("un comentario que no cabe debería acabar en …:\n%s", detail)
+		t.Errorf("a comment that does not fit should end in …:\n%s", detail)
 	}
 	for _, l := range strings.Split(detail, "\n") {
 		if n := len([]rune(l)); n > m.contentWidth() {
-			t.Errorf("fila de %d runes, más que el ancho útil %d:\n%q", n, m.contentWidth(), l)
+			t.Errorf("row of %d runes, more than the usable width %d:\n%q", n, m.contentWidth(), l)
 		}
 	}
 }
 
 func TestCommentsAreFirstToGo(t *testing.T) {
-	list := []model.Comment{conv("alice", "one"), conv("bob", "two"), conv("carol", "three")}
+	list := []model.Comment{commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three")}
 	gh := ghAdapter()
 	gh.Conversations = map[string]forge.CommentPage{testutil.ItemKey("acme/widget", 42): {Comments: list, Total: 3}}
 	m := newTestModel(t, gh)
@@ -729,21 +729,21 @@ func TestCommentsAreFirstToGo(t *testing.T) {
 
 	detail := stripANSI(strings.Join(m.detailLines(it, true, 9), "\n"))
 	if strings.Contains(detail, "alice:") {
-		t.Errorf("a 9 filas los comentarios deberían caerse:\n%s", detail)
+		t.Errorf("at 9 rows the comments should drop:\n%s", detail)
 	}
 	for _, want := range []string{"Add widget", "Item:", "State:", "Role:"} {
 		if !strings.Contains(detail, want) {
-			t.Errorf("la ficha no debería perder %q al caer los comentarios:\n%s", want, detail)
+			t.Errorf("the card should not lose %q when the comments drop:\n%s", want, detail)
 		}
 	}
 }
 
 func TestDetailAlwaysFitsThePanel(t *testing.T) {
 	for _, height := range []int{20, 24, 30, 40, 45, 60, 80} {
-		t.Run(fmt.Sprintf("alto %d", height), func(t *testing.T) {
+		t.Run(fmt.Sprintf("height %d", height), func(t *testing.T) {
 			var list []model.Comment
 			for i := 0; i < 12; i++ {
-				list = append(list, conv(fmt.Sprintf("u%d", i), strings.Repeat("texto largo ", 30)))
+				list = append(list, commentOf(fmt.Sprintf("u%d", i), strings.Repeat("text long ", 30)))
 			}
 			m := modelWithComments(t, height, list, 12)
 			rows := m.layout().detailLines
@@ -754,7 +754,7 @@ func TestDetailAlwaysFitsThePanel(t *testing.T) {
 				}
 				lines := m.detailLines(it, true, rows)
 				if len(lines) > rows {
-					t.Fatalf("el detalle devolvió %d filas para un panel de %d (denied=%v):\n%s",
+					t.Fatalf("the detail returned %d rows for a panel of %d (denied=%v):\n%s",
 						len(lines), rows, denied, strings.Join(lines, "\n"))
 				}
 			}
@@ -779,19 +779,19 @@ func TestCommentsStates(t *testing.T) {
 			want: "loading",
 		},
 		{
-			name: "sin preguntar",
+			name: "without asking",
 			set:  func(m *Model) {},
 			not:  "loading",
 		},
 		{
-			name: "sin comentarios",
+			name: "without comments",
 			set: func(m *Model) {
 				m.comments[it.ID()] = &commentState{ready: true}
 			},
 			want: "none", not: "loading",
 		},
 		{
-			name: "fallo de lectura",
+			name: "read failure",
 			set: func(m *Model) {
 				m.comments[it.ID()] = &commentState{ready: true, err: "rate limited"}
 			},
@@ -806,10 +806,10 @@ func TestCommentsStates(t *testing.T) {
 			tc.set(&m)
 			detail := stripANSI(strings.Join(m.detailLines(it, true, m.layout().detailLines), "\n"))
 			if !strings.Contains(detail, tc.want) {
-				t.Errorf("el panel debería decir %q:\n%s", tc.want, detail)
+				t.Errorf("the panel should say %q:\n%s", tc.want, detail)
 			}
 			if tc.not != "" && strings.Contains(detail, tc.not) {
-				t.Errorf("el panel no debería decir %q:\n%s", tc.not, detail)
+				t.Errorf("the panel should not say %q:\n%s", tc.not, detail)
 			}
 		})
 	}
@@ -829,10 +829,10 @@ func TestCommentFailIsNotCachedAsEmpty(t *testing.T) {
 
 	st := m.comments[it.ID()]
 	if st == nil || !st.ready || st.err == "" {
-		t.Fatalf("el fallo debería quedar registrado como error: %+v", st)
+		t.Fatalf("the failure should be recorded as an error: %+v", st)
 	}
 	if strings.Contains(detailText(t, m), "none") {
-		t.Errorf("un fallo no puede pintarse como \"no hay comentarios\":\n%s", detailText(t, m))
+		t.Errorf("a failure cannot be painted as \"there are no comments\":\n%s", detailText(t, m))
 	}
 }
 
@@ -850,17 +850,17 @@ func TestCommentsFetchedOnceForTheSelectedItem(t *testing.T) {
 	for range 3 {
 		m.requestComments()
 	}
-	waitFor(t, "la primera consulta de comentarios", func() bool { return gh.CommentCallCount() >= 1 })
+	waitFor(t, "the first comments query", func() bool { return gh.CommentCallCount() >= 1 })
 	if got := gh.CommentCallCount(); got != 1 {
-		t.Fatalf("Comments llamado %d veces, want 1 (los ticks no pueden duplicar la consulta)", got)
+		t.Fatalf("Comments called %d times, want 1 (the ticks cannot duplicate the query)", got)
 	}
 
 	m = send(t, m, commentsMsg{id: mustSelected(t, m).ID(), page: forge.CommentPage{
-		Comments: []model.Comment{conv("alice", "hi")}, Total: 1,
+		Comments: []model.Comment{commentOf("alice", "hi")}, Total: 1,
 	}})
 	m.requestComments()
 	if got := gh.CommentCallCount(); got != 1 {
-		t.Errorf("Comments llamado %d veces tras cachear, want 1", got)
+		t.Errorf("Comments called %d times after caching, want 1", got)
 	}
 }
 
@@ -876,13 +876,13 @@ func TestCommentsNotAskedWithoutSession(t *testing.T) {
 
 	m.requestComments()
 	if got := gh.CommentCallCount(); got != 0 {
-		t.Errorf("Comments llamado %d veces sin sesión, want 0", got)
+		t.Errorf("Comments called %d times with no session, want 0", got)
 	}
 	if _, marked := m.comments[mustSelected(t, m).ID()]; marked {
-		t.Error("no se debería marcar como pedida una consulta que no se lanza")
+		t.Error("a query that is not launched should not be marked as asked")
 	}
 	if detail := detailText(t, m); strings.Contains(detail, "loading") {
-		t.Errorf("sin consulta en vuelo no debería decir loading:\n%s", detail)
+		t.Errorf("with no query in flight it should not say loading:\n%s", detail)
 	}
 }
 
@@ -894,20 +894,20 @@ func TestCommentsInvalidatedByAction(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
 	m = showSection(m, model.SectionAuthored)
 	m = send(t, m, commentsMsg{id: it.ID(), page: forge.CommentPage{
-		Comments: []model.Comment{conv("alice", "hi")}, Total: 1,
+		Comments: []model.Comment{commentOf("alice", "hi")}, Total: 1,
 	}})
 	if _, ok := m.comments[it.ID()]; !ok {
-		t.Fatal("la conversación debería estar cacheada antes de la acción")
+		t.Fatal("the conversation should be cached before the action")
 	}
 
 	m.applyAction(forge.Outcome{Kind: forge.ActionApprove, ID: it.ID(), OK: true, Item: it, HasItem: true}, m.cycle)
 	if _, ok := m.comments[it.ID()]; ok {
-		t.Error("una acción debería invalidar la conversación cacheada del ítem")
+		t.Error("an action should invalidate the items cached conversation")
 	}
 	_ = m.requestComments()
-	waitFor(t, "la consulta tras invalidar", func() bool { return gh.CommentCallCount() >= 1 })
+	waitFor(t, "the query after invalidating", func() bool { return gh.CommentCallCount() >= 1 })
 	if got := gh.CommentCallCount(); got != 1 {
-		t.Errorf("Comments llamado %d veces tras invalidar, want 1", got)
+		t.Errorf("Comments called %d times after invalidating, want 1", got)
 	}
 }
 
@@ -917,13 +917,13 @@ func TestCommentsSurviveRefresh(t *testing.T) {
 	m.width, m.height = 160, 45
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
 	m = send(t, m, commentsMsg{id: it.ID(), page: forge.CommentPage{
-		Comments: []model.Comment{conv("alice", "hi")}, Total: 1,
+		Comments: []model.Comment{commentOf("alice", "hi")}, Total: 1,
 	}})
 
 	m.cycle = 2
 	m = send(t, m, page(2, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
 	if _, ok := m.comments[it.ID()]; !ok {
-		t.Error("el refresco del inbox no debería tirar la conversación cacheada")
+		t.Error("the inbox refresh should not kill the cached conversation")
 	}
 }
 
@@ -934,14 +934,14 @@ func TestCommentTotalNeverBelowShown(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{it}, false))
 	m = showSection(m, model.SectionAuthored)
 	m = send(t, m, commentsMsg{id: it.ID(), page: forge.CommentPage{
-		Comments: []model.Comment{conv("a", "1"), conv("b", "2"), conv("c", "3")}, Total: 1,
+		Comments: []model.Comment{commentOf("a", "1"), commentOf("b", "2"), commentOf("c", "3")}, Total: 1,
 	}})
 
 	detail := detailText(t, m)
 	if strings.Contains(detail, "of 1") || strings.Contains(detail, "3 of 1") {
-		t.Errorf("un total por debajo de lo mostrado no debe pintarse:\n%s", detail)
+		t.Errorf("a total below what is shown must not be painted:\n%s", detail)
 	}
 	if st := m.comments[it.ID()]; st.total < 3 {
-		t.Errorf("total = %d, want >= 3 (lo mostrado)", st.total)
+		t.Errorf("total = %d, want >= 3 (what is shown)", st.total)
 	}
 }

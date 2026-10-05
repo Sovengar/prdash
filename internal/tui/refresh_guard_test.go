@@ -9,7 +9,7 @@ import (
 
 func TestStalePageDoesNotRevertAction(t *testing.T) {
 	open := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
-	other := mkItem("github", "github.com", "acme/widget", "Otro", 2, "")
+	other := mkItem("github", "github.com", "acme/widget", "Other", 2, "")
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "", []model.Item{open, other}, false))
 
@@ -20,7 +20,7 @@ func TestStalePageDoesNotRevertAction(t *testing.T) {
 	}})
 
 	otherUpdated := other
-	otherUpdated.Title = "Otro actualizado"
+	otherUpdated.Title = "Other updated"
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "", []model.Item{open, otherUpdated}, false))
 
 	byID := map[model.ID]model.Item{}
@@ -28,10 +28,10 @@ func TestStalePageDoesNotRevertAction(t *testing.T) {
 		byID[it.ID()] = it
 	}
 	if got := byID[open.ID()].State; got != "MERGED" {
-		t.Fatalf("la página vieja revirtió la acción: state=%q, want MERGED", got)
+		t.Fatalf("the old page reverted the action: state=%q, want MERGED", got)
 	}
-	if got := byID[other.ID()].Title; got != "Otro actualizado" {
-		t.Fatalf("el resto de ítems debería actualizarse: title=%q", got)
+	if got := byID[other.ID()].Title; got != "Other updated" {
+		t.Fatalf("the rest of the items should be updated: title=%q", got)
 	}
 }
 
@@ -53,6 +53,6 @@ func TestNewerPageOverridesActionReread(t *testing.T) {
 
 	items := m.sectionItems(model.SectionAuthored)
 	if len(items) != 1 || items[0].State != "CLOSED" {
-		t.Fatalf("una página de un ciclo posterior debe mandar: %+v", items)
+		t.Fatalf("a page from a later cycle must win: %+v", items)
 	}
 }

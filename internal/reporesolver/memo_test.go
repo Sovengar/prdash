@@ -14,24 +14,24 @@ import (
 //and buildIndex's two prunings.
 
 // The two halves matter for opposite reasons.
-func TestQuitarElBareBorraLoQueHayYToleraLoQueNo(t *testing.T) {
+func TestRemovingTheBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 	r := New(Options{MemoPath: filepath.Join(t.TempDir(), "memo.json")})
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/r", Owner: "o", Name: "r"}
 
 	bare := r.barePath(ref)
 	if _, err := os.Stat(bare); err == nil {
-		t.Fatal("el bare ya existía antes de probar")
+		t.Fatal("the bare already existed before testing")
 	}
 	if err := r.RemoveBare(ref); err != nil {
-		t.Errorf("quitar un bare que no existe dio %v, want nil: la limpieza no puede "+
-			"fallar y tapar el error del montaje", err)
+		t.Errorf("removing a bare that does not exist gave %v, want nil: the cleanup cannot "+
+			"fail and mask the mount error", err)
 	}
 	// And the bare's path still does not exist. Checking the parent would prove nothing here.
 	if _, err := os.Stat(bare); err == nil {
-		t.Error("quitar un bare inexistente lo dejó creado")
+		t.Error("removing a nonexistent bare left it created")
 	}
 
-	// Existe: se borra entero.
+	// It exists: it is deleted whole.
 	if err := os.MkdirAll(filepath.Join(bare, "objects", "pack"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -42,30 +42,30 @@ func TestQuitarElBareBorraLoQueHayYToleraLoQueNo(t *testing.T) {
 		t.Fatalf("RemoveBare: %v", err)
 	}
 	if _, err := os.Stat(bare); err == nil {
-		t.Error("el bare sigue en disco después de quitarlo")
+		t.Error("the bare is still on disk after removing it")
 	}
 	if _, err := os.Stat(filepath.Dir(bare)); err != nil {
-		t.Errorf("RemoveBare se llevó el directorio padre: %v", err)
+		t.Errorf("RemoveBare took the parent directory with it: %v", err)
 	}
 
 	if err := r.RemoveBare(ref); err != nil {
-		t.Errorf("la segunda vez dio %v, want nil", err)
+		t.Errorf("the second time gave %v, want nil", err)
 	}
 
-	otro := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/otro", Owner: "o", Name: "otro"}
-	if err := os.MkdirAll(r.barePath(otro), 0o755); err != nil {
+	other := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/otro", Owner: "o", Name: "otro"}
+	if err := os.MkdirAll(r.barePath(other), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.RemoveBare(ref); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(r.barePath(otro)); err != nil {
-		t.Errorf("quitar un repo se llevó el bare del otro: %v", err)
+	if _, err := os.Stat(r.barePath(other)); err != nil {
+		t.Errorf("removing one repo took the other's bare with it: %v", err)
 	}
 }
 
 // Pruning hidden directories is noise with consequences: a `.git` directory is hidden.
-func TestElIndicePodaLoOcultoYNoIndexaLoQueNoEsRepo(t *testing.T) {
+func TestTheIndexPrunesHiddenDirsAndDoesNotIndexNonRepos(t *testing.T) {
 	base := t.TempDir()
 
 	repo := filepath.Join(base, "proyecto")
@@ -73,93 +73,93 @@ func TestElIndicePodaLoOcultoYNoIndexaLoQueNoEsRepo(t *testing.T) {
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
 	testutil.SetRemote(t, repo, "origin", "https://github.com/acme/proyecto.git")
 
-	oculto := filepath.Join(base, ".cache")
-	if err := os.MkdirAll(oculto, 0o755); err != nil {
+	hidden := filepath.Join(base, ".cache")
+	if err := os.MkdirAll(hidden, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	dentro := filepath.Join(oculto, "dentro")
-	testutil.InitRepo(t, dentro)
-	testutil.CommitFile(t, dentro, "x.txt", "x", "x")
-	testutil.SetRemote(t, dentro, "origin", "https://github.com/otro/oculto.git")
+	inside := filepath.Join(hidden, "dentro")
+	testutil.InitRepo(t, inside)
+	testutil.CommitFile(t, inside, "x.txt", "x", "x")
+	testutil.SetRemote(t, inside, "origin", "https://github.com/otro/oculto.git")
 
 	if err := os.MkdirAll(filepath.Join(base, "normal"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sinRemoto := filepath.Join(base, "sin-remoto")
-	testutil.InitRepo(t, sinRemoto)
-	testutil.CommitFile(t, sinRemoto, "y.txt", "y", "y")
+	noRemote := filepath.Join(base, "sin-remoto")
+	testutil.InitRepo(t, noRemote)
+	testutil.CommitFile(t, noRemote, "y.txt", "y", "y")
 
-	r := resolverConHosts(t, base)
+	r := resolverWithHosts(t, base)
 	idx := r.buildIndex()
 
-	claveRepo := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto",
+	goodKey := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto",
 		Owner: "acme", Name: "proyecto"})
-	claveOculto := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "otro/oculto",
+	hiddenKey := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "otro/oculto",
 		Owner: "otro", Name: "oculto"})
 
-	if _, ok := idx[claveRepo]; !ok {
-		t.Errorf("el repo normal no se indexo: %v", idx)
+	if _, ok := idx[goodKey]; !ok {
+		t.Errorf("the normal repo was not indexed: %v", idx)
 	}
-	if _, ok := idx[claveOculto]; ok {
-		t.Errorf("un repo dentro de un directorio oculto se indexo: %v", idx)
+	if _, ok := idx[hiddenKey]; ok {
+		t.Errorf("a repo inside a hidden directory was indexed: %v", idx)
 	}
-	for clave, local := range idx {
+	for k, local := range idx {
 		if strings.Contains(local, string(os.PathSeparator)+".cache") {
-			t.Errorf("una entrada del indice apunta dentro de un oculto: %s -> %s", clave, local)
+			t.Errorf("an index entry points inside a hidden dir: %s -> %s", k, local)
 		}
 		if !strings.HasPrefix(local, base) {
-			t.Errorf("una entrada del indice apunta fuera del root: %s -> %s", clave, local)
+			t.Errorf("an index entry points outside the root: %s -> %s", k, local)
 		}
 		// The key is the canonical one, not the raw URL: that is what lets ResolveLocal and the index
 		// agree.
-		if !strings.Contains(clave, "acme/proyecto") {
-			t.Errorf("una clave del indice no parece canonica: %q", clave)
+		if !strings.Contains(k, "acme/proyecto") {
+			t.Errorf("an index key does not look canonical: %q", k)
 		}
 	}
-	if got := idx[claveRepo]; got != repo {
-		t.Errorf("la entrada del indice apunta a %q, want %q", got, repo)
+	if got := idx[goodKey]; got != repo {
+		t.Errorf("the index entry points at %q, want %q", got, repo)
 	}
 }
 
 // Not general robustness: a configured root that does not exist is normal (an unmounted volume).
-func TestUnRootQueNoExisteNoSeLlevaPorDelanteElBueno(t *testing.T) {
+func TestAMissingRootDoesNotTakeDownTheGoodOne(t *testing.T) {
 	base := t.TempDir()
 	repo := filepath.Join(base, "proyecto")
 	testutil.InitRepo(t, repo)
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
 	testutil.SetRemote(t, repo, "origin", "https://github.com/acme/proyecto.git")
 
-	bueno := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto",
+	good := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto",
 		Owner: "acme", Name: "proyecto"})
-	inexistente := filepath.Join(base, "no-existe")
-	conMalo := resolverConHosts(t, inexistente, base).buildIndex()
-	soloBueno := resolverConHosts(t, base).buildIndex()
+	missing := filepath.Join(base, "no-existe")
+	withBad := resolverWithHosts(t, missing, base).buildIndex()
+	goodOnly := resolverWithHosts(t, base).buildIndex()
 
-	if _, ok := conMalo[bueno]; !ok {
-		t.Fatalf("un root inexistente se llevo por delante el bueno: %v", conMalo)
+	if _, ok := withBad[good]; !ok {
+		t.Fatalf("a nonexistent root took down the good one: %v", withBad)
 	}
-	if len(conMalo) != len(soloBueno) {
-		t.Errorf("un root inexistente cambio el indice: %d entradas con el malo, %d sin el",
-			len(conMalo), len(soloBueno))
+	if len(withBad) != len(goodOnly) {
+		t.Errorf("a nonexistent root changed the index: %d entries with the bad one, %d without it",
+			len(withBad), len(goodOnly))
 	}
-	fichero := filepath.Join(base, "un-fichero")
-	if err := os.WriteFile(fichero, []byte("no soy un directorio"), 0o644); err != nil {
+	file := filepath.Join(base, "un-fichero")
+	if err := os.WriteFile(file, []byte("I am not a directory"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	conFichero := resolverConHosts(t, fichero, base).buildIndex()
-	if len(conFichero) != len(soloBueno) {
-		t.Errorf("un root que es un fichero cambio el indice: %v", conFichero)
+	withFile := resolverWithHosts(t, file, base).buildIndex()
+	if len(withFile) != len(goodOnly) {
+		t.Errorf("a root that is a file changed the index: %v", withFile)
 	}
 
 	// And with no roots: an empty index, not an error.
-	vacio := resolverConHosts(t).buildIndex()
-	if len(vacio) != 0 {
-		t.Errorf("sin roots dio %v", vacio)
+	empty := resolverWithHosts(t).buildIndex()
+	if len(empty) != 0 {
+		t.Errorf("with no roots it gave %v", empty)
 	}
 }
 
 // Without the mapping, parseRemote does not know the host.
-func resolverConHosts(t *testing.T, roots ...string) *Resolver {
+func resolverWithHosts(t *testing.T, roots ...string) *Resolver {
 	t.Helper()
 	return New(Options{
 		Roots:    roots,

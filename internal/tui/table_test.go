@@ -29,33 +29,33 @@ func TestRenderCellsPadsBeforeStyle(t *testing.T) {
 	}
 }
 
-func TestNingunaCeldaLlenaSuColumna(t *testing.T) {
+func TestNoCellFillsItsColumn(t *testing.T) {
 	it := mkItem("github", "github.com", "APPCITTI/vsocial/backend/mobile-frontend",
 		strings.Repeat("t", colTitle+5), 1198, "")
-	it.ReviewKind = model.ReviewRequested // sin esto roleText devuelve "-"
+	it.ReviewKind = model.ReviewRequested // without this roleText returns "-"
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, mkItems("APPCITTI/vsocial/backend/mobile-frontend")...)}, prefixCommon)
-	cells := itemCells(it, model.SectionReview, "yo", lay)
+	cells := itemCells(it, model.SectionReview, "me", lay)
 
-	if got, want := utf8.RuneCountInString(roleText(it, "yo")), colRole-1; got != want {
-		t.Fatalf("el texto de ROLE mide %d runes, want %d: el caso que pegaba ya no se está probando", got, want)
+	if got, want := utf8.RuneCountInString(roleText(it, "me")), colRole-1; got != want {
+		t.Fatalf("the ROLE text measures %d runes, want %d: the case that overflowed is no longer being tested", got, want)
 	}
 	if got, want := utf8.RuneCountInString(cells[colRoleIdx].text), colRole-1; got != want {
-		t.Fatalf("celda ROLE = %d runes, want %d (colRole - hueco)", got, want)
+		t.Fatalf("cell ROLE = %d runes, want %d (colRole - gap)", got, want)
 	}
 	if got, want := utf8.RuneCountInString(cells[colTitleIdx].text), colTitle-1; got != want {
-		t.Fatalf("celda TITLE = %d runes, want %d (colTitle - hueco)", got, want)
+		t.Fatalf("cell TITLE = %d runes, want %d (colTitle - gap)", got, want)
 	}
 	if got, want := utf8.RuneCountInString(cells[colRefIdx].text), textWidth(lay.cols[colRefIdx].width); got != want {
-		t.Fatalf("celda ITEM = %d runes, want %d (presupuesto de la columna)", got, want)
+		t.Fatalf("cell ITEM = %d runes, want %d (the columns budget)", got, want)
 	}
 	for i, c := range cells {
 		if n := utf8.RuneCountInString(c.text); n > textWidth(c.width) {
-			t.Errorf("celda %d (%q) = %d runes, want <= %d (ancho %d - hueco)", i, c.text, n, textWidth(c.width), c.width)
+			t.Errorf("cell %d (%q) = %d runes, want <= %d (width %d - gap)", i, c.text, n, textWidth(c.width), c.width)
 		}
 	}
 }
 
-func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
+func TestColumnsSeparatedByOneSpace(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "APPCITTI/vsocial/backend/api-gateway", "api gateway", 1234, ""),
@@ -71,7 +71,7 @@ func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 		}
 	}
 	if row == "" {
-		t.Fatal("no se encontró la fila del ítem")
+		t.Fatal("the item row was not found")
 	}
 
 	runes := []rune(row)
@@ -79,10 +79,10 @@ func TestColumnasSeparadasPorUnEspacio(t *testing.T) {
 	for _, c := range lay.cols[:fitColumns(lay, inner)] {
 		end := off + c.width
 		if end > len(runes) {
-			t.Fatalf("fila %q más corta que la columna %q", row, c.title)
+			t.Fatalf("row %q shorter than the column %q", row, c.title)
 		}
 		if runes[end-1] != ' ' {
-			t.Errorf("la columna %q acaba en %q, want un espacio de separación en %q", c.title, runes[end-1], row)
+			t.Errorf("the column %q ends in %q, want a separating space at %q", c.title, runes[end-1], row)
 		}
 		off = end
 	}
@@ -119,7 +119,7 @@ func TestForgeBadgeCoversStandardAndSelfHosted(t *testing.T) {
 func TestForgeBadgeFitsColumn(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "empresaurbanisimaziyota.example.com", Project: "g/p"}, 1)
 	if got := truncate(forgeBadge(it), colForge); utf8.RuneCountInString(got) != colForge {
-		t.Errorf("celda forge = %q (%d runes), want %d", got, utf8.RuneCountInString(got), colForge)
+		t.Errorf("cell forge = %q (%d runes), want %d", got, utf8.RuneCountInString(got), colForge)
 	}
 }
 
@@ -132,28 +132,28 @@ func TestNavigationMovesCursor(t *testing.T) {
 	}, false))
 
 	if m.cursor != 0 {
-		t.Fatalf("cursor inicial = %d", m.cursor)
+		t.Fatalf("initial cursor = %d", m.cursor)
 	}
 	if it, ok := m.selected(); !ok || it.Number != 3 {
-		t.Fatalf("seleccionado inicial = %+v, want el #3 (más reciente)", it)
+		t.Fatalf("initial selection = %+v, want #3 (the most recent)", it)
 	}
 	m = press(t, m, "down")
 	if m.cursor != 1 {
-		t.Fatalf("cursor tras down = %d", m.cursor)
+		t.Fatalf("cursor after down = %d", m.cursor)
 	}
 	if it, ok := m.selected(); !ok || it.Number != 2 {
-		t.Fatalf("seleccionado tras down = %+v, want el #2", it)
+		t.Fatalf("selection after down = %+v, want #2", it)
 	}
 	m = press(t, m, "down")
 	if m.cursor != 2 {
-		t.Fatalf("cursor tras segundo down = %d", m.cursor)
+		t.Fatalf("cursor after the second down = %d", m.cursor)
 	}
 	m = press(t, m, "down")
 	if it, ok := m.selected(); !ok || it.Number != 1 {
-		t.Fatalf("seleccionado en el tope inferior = %+v, want el #1", it)
+		t.Fatalf("selection at the bottom edge = %+v, want #1", it)
 	}
 	if m.cursor != 2 || m.activeSection != model.SectionReview {
-		t.Fatalf("el cursor debería quedarse en la última fila de la activa: cursor=%d sección=%q", m.cursor, m.activeSection)
+		t.Fatalf("the cursor should stay on the last row of the active section: cursor=%d section=%q", m.cursor, m.activeSection)
 	}
 }
 
@@ -181,21 +181,21 @@ func TestSectionNextHonorsRebind(t *testing.T) {
 
 	m = press(t, m, "n")
 	if m.activeSection != model.SectionMentions {
-		t.Fatalf("n debería ciclar la sección activa: activeSection = %q", m.activeSection)
+		t.Fatalf("n should cycle the active section: activeSection = %q", m.activeSection)
 	}
 	m = press(t, m, "tab")
 	if m.activeSection != model.SectionMentions {
-		t.Fatalf("tab movió la sección aun estando rebindeada: activeSection = %q", m.activeSection)
+		t.Fatalf("tab moved the section even though it was rebound: activeSection = %q", m.activeSection)
 	}
 }
 
 func TestAuthoredOnlyShowsOwnItems(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Mío", 1, "")}, false))
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Mine", 1, "")}, false))
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/lib", "Ajeno", 2, "")}, false))
 
 	authored := m.sectionItems(model.SectionAuthored)
-	if len(authored) != 1 || authored[0].Title != "Mío" {
+	if len(authored) != 1 || authored[0].Title != "Mine" {
 		t.Fatalf("authored = %+v", authored)
 	}
 }
@@ -203,7 +203,7 @@ func TestAuthoredOnlyShowsOwnItems(t *testing.T) {
 func TestInitReturnsCmd(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	if m.Init() == nil {
-		t.Fatal("Init debería devolver un Cmd")
+		t.Fatal("Init should return a Cmd")
 	}
 }
 
@@ -219,16 +219,16 @@ func TestCompactCount(t *testing.T) {
 		}
 	}
 	if got := utf8.RuneCountInString(diffColumnText(model.DiffStat{Additions: 9999, Deletions: 9999, Known: true})); got > textWidth(colDiff) {
-		t.Errorf("el peor caso ocupa %d runes y la columna da %d", got, textWidth(colDiff))
+		t.Errorf("the worst case takes %d runes and the column gives %d", got, textWidth(colDiff))
 	}
 }
 
 func TestDiffColumnTextUnknownIsDash(t *testing.T) {
 	if got := diffColumnText(model.DiffStat{}); got != "-" {
-		t.Errorf("diffColumnText sin datos = %q, want %q", got, "-")
+		t.Errorf("diffColumnText with no data = %q, want %q", got, "-")
 	}
 	if got := diffColumnText(model.DiffStat{Known: true}); got != "+0 -0" {
-		t.Errorf("diffColumnText de un PR vacío = %q, want %q (conocido, cero líneas)", got, "+0 -0")
+		t.Errorf("diffColumnText of an empty PR = %q, want %q (known, zero lines)", got, "+0 -0")
 	}
 	if got := diffColumnText(model.DiffStat{Additions: 381, Deletions: 36, Known: true}); got != "+381 -36" {
 		t.Errorf("diffColumnText = %q, want %q", got, "+381 -36")
@@ -255,22 +255,22 @@ func TestDiffColumnAppearsOnlyOnWideTerminals(t *testing.T) {
 
 	_, narrow := render(124)
 	if strings.Contains(narrow, "+42 -1") {
-		t.Errorf("a 124 la columna DIFF no debería caber, pero la fila la trae:\n%s", narrow)
+		t.Errorf("at 124 the DIFF column should not fit, but the row carries it:\n%s", narrow)
 	}
 	header, wide := render(200)
 	if !strings.Contains(wide, "+42 -1") {
-		t.Errorf("a 200 la fila debería traer el diffstat:\n%s", wide)
+		t.Errorf("at 200 the row should carry the diffstat:\n%s", wide)
 	}
 	if !strings.Contains(header, "DIFF") {
-		t.Errorf("a 200 la cabecera debería traer la columna DIFF:\n%s", header)
+		t.Errorf("at 200 the header should carry the DIFF column:\n%s", header)
 	}
 }
 
 // The DIFF column carries two colours in the same cell.
-func TestDiffSpansColoreaSoloCifras(t *testing.T) {
+func TestDiffSpansColoursOnlyTheDigits(t *testing.T) {
 	cases := []struct {
 		plain string
-		want  []string // texto de cada tramo; nil = sin tramos (todo plano)
+		want  []string // text of each span; nil = no spans (all plain)
 	}{
 		{"+381 -36", []string{"+381", " ", "-36"}},
 		{"+1.2k -6.7k", []string{"+1.2k", " ", "-6.7k"}},
@@ -279,15 +279,15 @@ func TestDiffSpansColoreaSoloCifras(t *testing.T) {
 		{"-", nil},
 		{"no changes", nil},
 		{"unknown (forge did not report it)", nil},
-		{"+381", nil}, // truncado: sin el lado de las eliminaciones
+		{"+381", nil}, // truncated: without the deletions side
 		{"+abc -def", nil},
-		{"381 36", nil}, // sin signo no es un diffstat
+		{"381 36", nil}, // without a sign it is not a diffstat
 	}
 	for _, c := range cases {
 		spans := diffSpans(c.plain)
 		if c.want == nil {
 			if spans != nil {
-				t.Errorf("diffSpans(%q) = %+v, want nil (sin color)", c.plain, spans)
+				t.Errorf("diffSpans(%q) = %+v, want nil (no color)", c.plain, spans)
 			}
 			continue
 		}
@@ -307,16 +307,16 @@ func TestDiffSpansColoreaSoloCifras(t *testing.T) {
 	}
 }
 
-func TestDiffSpansSideColores(t *testing.T) {
+func TestDiffSpansSideColours(t *testing.T) {
 	spans := diffSpans("+381 -36")
 	if len(spans) != 3 {
 		t.Fatalf("spans = %d, want 3", len(spans))
 	}
 	if got := spans[0].style.Render("x"); got != styleDiffAdd.Render("x") {
-		t.Errorf("lo añadido debería ir en styleDiffAdd: %q", got)
+		t.Errorf("the added part should go in styleDiffAdd: %q", got)
 	}
 	if got := spans[2].style.Render("x"); got != styleDiffDel.Render("x") {
-		t.Errorf("lo quitado debería ir en styleDiffDel: %q", got)
+		t.Errorf("the removed part should go in styleDiffDel: %q", got)
 	}
 }
 
@@ -324,27 +324,27 @@ func TestRenderCellSpansKeepWidth(t *testing.T) {
 	c := diffCell(model.DiffStat{Additions: 1589, Deletions: 474, Files: 23, Known: true}, colDiff)
 	out := renderCell(c)
 	if got := utf8.RuneCountInString(stripANSI(out)); got != colDiff {
-		t.Errorf("la celda ocupa %d runes, want %d: %q", got, colDiff, stripANSI(out))
+		t.Errorf("the cell takes %d runes, want %d: %q", got, colDiff, stripANSI(out))
 	}
 	if got := strings.TrimRight(stripANSI(out), " "); got != "+1.6k -474" {
-		t.Errorf("celda = %q, want %q", got, "+1.6k -474")
+		t.Errorf("cell = %q, want %q", got, "+1.6k -474")
 	}
 	if !strings.Contains(out, "\x1b[") {
-		t.Errorf("la celda debería traer color: %q", out)
+		t.Errorf("the cell should carry color: %q", out)
 	}
 	unknown := renderCell(diffCell(model.DiffStat{}, colDiff))
 	if got := strings.TrimRight(stripANSI(unknown), " "); got != "-" {
-		t.Errorf("celda desconocida = %q, want %q", got, "-")
+		t.Errorf("unknown cell = %q, want %q", got, "-")
 	}
 	if got := utf8.RuneCountInString(stripANSI(unknown)); got != colDiff {
-		t.Errorf("la celda desconocida ocupa %d runes, want %d", got, colDiff)
+		t.Errorf("the unknown cell takes %d runes, want %d", got, colDiff)
 	}
 }
 
-func TestStyleDiffTextNoAlteraElAncho(t *testing.T) {
+func TestStyleDiffTextDoesNotAlterTheWidth(t *testing.T) {
 	for _, plain := range []string{"+381 -36", "+381 -36 (11 files)", "-", "no changes", "unknown (forge did not report it)"} {
 		if got := stripANSI(styleDiffText(plain)); got != plain {
-			t.Errorf("styleDiffText(%q) en plano = %q, want idéntico", plain, got)
+			t.Errorf("styleDiffText(%q) on plain = %q, want identical", plain, got)
 		}
 	}
 }

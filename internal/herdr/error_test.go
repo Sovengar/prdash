@@ -12,22 +12,22 @@ import (
 // A real process is spawned because *exec.ExitError only carries the code.
 func exitErrorFor(t *testing.T, code int) error {
 	t.Helper()
-	cmd := exec.Command(os.Args[0], "-test.run=TestProcesoAyudanteQueSaleConCodigo")
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcessExitsWithCode")
 	cmd.Env = append(os.Environ(), "PRDASH_TEST_RUN_HELPER=1", "PRDASH_TEST_EXIT_CODE="+strconv.Itoa(code))
 	err := cmd.Run()
 	if err == nil {
-		t.Fatalf("el proceso ayudante salió bien en vez de con %d", code)
+		t.Fatalf("the helper process exited cleanly instead of with %d", code)
 	}
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) {
-		t.Fatalf("el proceso ayudante dio %T y no un *exec.ExitError: %v", err, err)
+		t.Fatalf("the helper process gave %T instead of an *exec.ExitError: %v", err, err)
 	}
 	return err
 }
 
-func TestProcesoAyudanteQueSaleConCodigo(t *testing.T) {
+func TestHelperProcessExitsWithCode(t *testing.T) {
 	if os.Getenv("PRDASH_TEST_RUN_HELPER") == "" {
-		t.Skip("solo se ejecuta como proceso ayudante")
+		t.Skip("only runs as a helper process")
 	}
 	code, err := strconv.Atoi(os.Getenv("PRDASH_TEST_EXIT_CODE"))
 	if err != nil || code == 0 {
@@ -37,138 +37,138 @@ func TestProcesoAyudanteQueSaleConCodigo(t *testing.T) {
 }
 
 // Herdr's stderr JSON carries two things and both are used: a stable code and a message for humans.
-func TestNewErrorTomaElCodigoYElMensajeDelServidor(t *testing.T) {
-	casos := []struct {
-		nombre   string
+func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
+	cases := []struct {
+		name     string
 		stderr   string
 		wantCode string
 		wantMsg  string
 	}{
 		{
-			"código y mensaje anidados",
+			"nested code and message",
 			`{"error":{"code":"E_NOPE","message":"no existe la rama"}}`,
 			"E_NOPE", "no existe la rama",
 		},
 		{
-			"código y mensajes planos",
+			"flat code and message",
 			`{"code":"E_PLAN","message":"el plan no cabe"}`,
 			"E_PLAN", "el plan no cabe",
 		},
 		// Code only: the message comes from the exec error, not the server.
 		{
-			"solo código",
+			"code only",
 			`{"error":{"code":"E_SOLO"}}`,
 			"E_SOLO", "exit status 3",
 		},
 		{
-			"solo código plano",
+			"flat code only",
 			`{"code":"E_SOLO"}`,
 			"E_SOLO", "exit status 3",
 		},
 		{
-			"solo mensaje",
+			"message only",
 			`{"error":{"message":"algo falló"}}`,
 			"", "algo falló",
 		},
 		{
-			"solo mensaje plano",
+			"flat message only",
 			`{"message":"algo falló"}`,
 			"", "algo falló",
 		},
 		// An explicitly empty message with a code present: the empty message must NOT overwrite the one
 		// from the error.
 		{
-			"código con mensaje vacío",
+			"code with empty message",
 			`{"error":{"code":"E_VACIO","message":""}}`,
 			"E_VACIO", "exit status 3",
 		},
 		// JSON that is not Herdr's: no code and no message, so it is shown as the CLI printed it.
 		{
-			"JSON ajeno",
+			"foreign JSON",
 			`{"otra":"cosa"}`,
 			"", `{"otra":"cosa"}`,
 		},
 		{
-			"no es JSON",
+			"not JSON",
 			"panic: algo se rompió",
 			"", "panic: algo se rompió",
 		},
 		{
-			"stderr vacío",
+			"empty stderr",
 			"",
 			"", "exit status 3",
 		},
 	}
 
-	for _, c := range casos {
+	for _, c := range cases {
 		err := errors.New("exit status 3")
 		e := newError([]string{"herdr", "tab", "create"}, err, []byte(c.stderr))
 
 		if e.Code != c.wantCode {
-			t.Errorf("%s: el código quedó en %q, want %q", c.nombre, e.Code, c.wantCode)
+			t.Errorf("%s: the code ended up as %q, want %q", c.name, e.Code, c.wantCode)
 		}
 		if e.Msg != c.wantMsg {
-			t.Errorf("%s: el mensaje quedó en %q, want %q", c.nombre, e.Msg, c.wantMsg)
+			t.Errorf("%s: the message ended up as %q, want %q", c.name, e.Msg, c.wantMsg)
 		}
 		// The message is NEVER empty: an error with no message says nothing.
 		if e.Msg == "" {
-			t.Errorf("%s: el mensaje quedó vacío: un error sin texto no informa de nada", c.nombre)
+			t.Errorf("%s: the message ended up empty: an error with no text reports nothing", c.name)
 		}
 		// The original error is kept, so the stack can be unwound.
 		if !errors.Is(e.Err, err) {
-			t.Errorf("%s: el error original no se guardó", c.nombre)
+			t.Errorf("%s: the original error was not kept", c.name)
 		}
 		if strings.Join(e.Args, " ") != "herdr tab create" {
-			t.Errorf("%s: los args quedaron en %q", c.nombre, e.Args)
+			t.Errorf("%s: the args ended up as %q", c.name, e.Args)
 		}
 	}
 }
 
 // The exit code comes from the exec error and is only read if the error IS an exec one.
-func TestNewErrorTomaElCodigoDeSalidaSoloSiLoTiene(t *testing.T) {
+func TestNewErrorTakesExitCodeOnlyWhenItHasOne(t *testing.T) {
 	e := newError([]string{"herdr"}, exitErrorFor(t, 3), nil)
 	if e.Exit != 3 {
-		t.Errorf("con un ExitError(3) quedó Exit=%d, want 3", e.Exit)
+		t.Errorf("with an ExitError(3) it ended up as Exit=%d, want 3", e.Exit)
 	}
 	if e.Msg != "exit status 3" {
-		t.Errorf("el mensaje quedó en %q", e.Msg)
+		t.Errorf("the message ended up as %q", e.Msg)
 	}
 
 	normal := errors.New("exec: \"herdr\": executable file not found in $PATH")
 	e = newError([]string{"herdr"}, normal, nil)
 	if e.Exit != 0 {
-		t.Errorf("con un error normal quedó Exit=%d, want 0: no hay código de salida que leer", e.Exit)
+		t.Errorf("with an ordinary error it ended up as Exit=%d, want 0: there is no exit code to read", e.Exit)
 	}
 	if e.Msg != normal.Error() {
-		t.Errorf("el mensaje quedó en %q, want el del error: %q", e.Msg, normal.Error())
+		t.Errorf("the message ended up as %q, want the error's one: %q", e.Msg, normal.Error())
 	}
 	// The message of an ordinary error is the true one ("not in PATH"), not a fabricated text.
 	if strings.Contains(e.Msg, "exit status") {
-		t.Errorf("un error que no es de proceso dio %q: se inventó un código de salida", e.Msg)
+		t.Errorf("an error that is not from a process gave %q: an exit code was invented", e.Msg)
 	}
 }
 
 // The first line is shown, not the whole dump.
-func TestNewErrorSeQuedaConLaPrimeraLineaDeStderr(t *testing.T) {
+func TestNewErrorKeepsOnlyTheFirstStderrLine(t *testing.T) {
 	stderr := "error: no such workspace\ngoroutine 1 [running]:\n\therdr/main.go:42"
 	e := newError([]string{"herdr"}, errors.New("exit status 1"), []byte(stderr))
 
 	if e.Msg != "error: no such workspace" {
-		t.Errorf("el mensaje quedó en %q, want solo la primera línea", e.Msg)
+		t.Errorf("the message ended up as %q, want only the first line", e.Msg)
 	}
 	if strings.Contains(e.Msg, "goroutine") {
-		t.Errorf("el mensaje se tragó el stack: %q", e.Msg)
+		t.Errorf("the message swallowed the stack: %q", e.Msg)
 	}
 }
 
-func TestElMensajeDeUnErrorNuncaQuedaVacio(t *testing.T) {
+func TestErrorMessageNeverEndsUpEmpty(t *testing.T) {
 	for _, stderr := range []string{
 		"", "   ", "\n\n", "algo", "{}", `{"error":{}}`, `{"code":"","message":""}`,
 	} {
 		for _, err := range []error{errors.New("exit status 1"), exitErrorFor(t, 7)} {
 			e := newError([]string{"herdr"}, err, []byte(stderr))
 			if strings.TrimSpace(e.Msg) == "" {
-				t.Errorf("stderr=%q err=%v: el mensaje quedó vacío", stderr, err)
+				t.Errorf("stderr=%q err=%v: the message ended up empty", stderr, err)
 			}
 		}
 	}

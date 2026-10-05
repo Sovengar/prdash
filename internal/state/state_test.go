@@ -29,14 +29,14 @@ func TestDerive(t *testing.T) {
 	}{
 		{"merged", item("MERGED", "", model.Checks{}), StateMerged},
 		{"closed", item("CLOSED", "", model.Checks{}), StateClosed},
-		{"failing checks ganan", item("OPEN", "APPROVED", model.Checks{State: model.ChecksFailing}), StateError},
+		{"failing checks win", item("OPEN", "APPROVED", model.Checks{State: model.ChecksFailing}), StateError},
 		{"changes requested", item("OPEN", "CHANGES_REQUESTED", model.Checks{}), StateChangesRequested},
 		{"review required", item("OPEN", "REVIEW_REQUIRED", model.Checks{}), StateReviewRequired},
 		{"approved", item("OPEN", "APPROVED", model.Checks{}), StateApproved},
 		{"draft", draft("", model.Checks{}), StateDraft},
 		// Derive's precedence beats the draft on purpose: the column orders by attention.
-		{"draft con cambios pedidos", draft("CHANGES_REQUESTED", model.Checks{}), StateChangesRequested},
-		{"abierto sin decisión", item("OPEN", "", model.Checks{}), StatePending},
+		{"draft with changes requested", draft("CHANGES_REQUESTED", model.Checks{}), StateChangesRequested},
+		{"open without decision", item("OPEN", "", model.Checks{}), StatePending},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestScorePrecedence(t *testing.T) {
 	}
 	for i := 0; i < len(order)-1; i++ {
 		if order[i].Score() <= order[i+1].Score() {
-			t.Errorf("Score(%s)=%d no supera a Score(%s)=%d",
+			t.Errorf("Score(%s)=%d does not beat Score(%s)=%d",
 				order[i], order[i].Score(), order[i+1], order[i+1].Score())
 		}
 	}
@@ -71,9 +71,9 @@ func TestActionable(t *testing.T) {
 		item model.Item
 		want bool
 	}{
-		{"abierto", item("OPEN", "APPROVED", model.Checks{}), true},
-		{"mergeado", item("MERGED", "", model.Checks{}), false},
-		{"cerrado", item("CLOSED", "", model.Checks{}), false},
+		{"open", item("OPEN", "APPROVED", model.Checks{}), true},
+		{"merged", item("MERGED", "", model.Checks{}), false},
+		{"closed", item("CLOSED", "", model.Checks{}), false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestActionable(t *testing.T) {
 				t.Fatalf("Actionable = %v (%s), want %v", ok, reason, c.want)
 			}
 			if !ok && reason == "" {
-				t.Error("una acción no permitida debería traer motivo")
+				t.Error("a disallowed action should carry a reason")
 			}
 		})
 	}
@@ -120,13 +120,13 @@ func TestCanApprove(t *testing.T) {
 		wantOK  bool
 		wantMsg string
 	}{
-		{"login coincide", own(model.SectionReview, "Sovengar"), "Sovengar", false, SelfReviewReason},
-		{"login con otra caja", own(model.SectionReview, "sovengar"), "Sovengar", false, SelfReviewReason},
-		{"otro autor", own(model.SectionReview, "otra"), "Sovengar", true, ""},
-		{"seccion propia sin login", own(model.SectionAuthored, "quien sea"), "", false, SelfReviewReason},
-		{"seccion de review sin login", own(model.SectionReview, "quien sea"), "", true, ""},
-		{"login conocido sin autor", own(model.SectionAuthored, ""), "Sovengar", false, SelfReviewReason},
-		{"menciones sin login", own(model.SectionMentions, "otro"), "", true, ""},
+		{"matching login", own(model.SectionReview, "Sovengar"), "Sovengar", false, SelfReviewReason},
+		{"login with different case", own(model.SectionReview, "sovengar"), "Sovengar", false, SelfReviewReason},
+		{"another author", own(model.SectionReview, "someone"), "Sovengar", true, ""},
+		{"own section without login", own(model.SectionAuthored, "whoever"), "", false, SelfReviewReason},
+		{"review section without login", own(model.SectionReview, "whoever"), "", true, ""},
+		{"known login without author", own(model.SectionAuthored, ""), "Sovengar", false, SelfReviewReason},
+		{"mentions without login", own(model.SectionMentions, "other"), "", true, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

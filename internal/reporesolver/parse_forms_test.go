@@ -6,58 +6,58 @@ import (
 	"prdash/internal/forge/model"
 )
 
-func TestParseRemoteURLClasificaLasFormasAntesDeNormalizar(t *testing.T) {
+func TestParseRemoteURLClassifiesFormsBeforeNormalizing(t *testing.T) {
 	hosts := map[string]string{"github.com": "github", "gitlab.example.com": "gitlab"}
 
-	casos := []struct {
-		nombre string
-		raw    string
-		ok     bool
+	cases := []struct {
+		name string
+		raw  string
+		ok   bool
 	}{
-		{"con esquema https", "https://github.com/acme/widget.git", true},
-		{"con esquema ssh", "ssh://git@github.com/acme/widget.git", true},
+		{"with https scheme", "https://github.com/acme/widget.git", true},
+		{"with ssh scheme", "ssh://git@github.com/acme/widget.git", true},
 		{"scp", "git@github.com:acme/widget.git", true},
-		{"scp con usuario de una columna", "a@github.com:acme/widget.git", true},
+		{"scp with a one-character user", "a@github.com:acme/widget.git", true},
 
-		{"scp con usuario vacío", "@github.com:acme/widget.git", false},
-		{"scp con solo arroba", "@", false},
-		{"arroba al principio y dos puntos", "@github.com:acme/widget", false},
+		{"scp with an empty user", "@github.com:acme/widget.git", false},
+		{"scp with only an at-sign", "@", false},
+		{"at-sign first and colon", "@github.com:acme/widget", false},
 
-		{"esquema vacío con dos puntos", "://github.com:acme/widget", false},
-		{"esquema vacío y arroba", "://git@github.com/acme/widget", false},
-		{"solo esquema vacío", "://", false},
+		{"empty scheme with colon", "://github.com:acme/widget", false},
+		{"empty scheme and at-sign", "://git@github.com/acme/widget", false},
+		{"only an empty scheme", "://", false},
 
-		{"arroba sin dos puntos", "git@github.com", false},
-		{"arroba y barra", "git@github.com/acme/widget", false},
-		{"arroba y nada", "git@", false},
+		{"at-sign without colon", "git@github.com", false},
+		{"at-sign and slash", "git@github.com/acme/widget", false},
+		{"at-sign and nothing", "git@", false},
 
-		{"path local", "/home/u/dev/widget", false},
-		{"path relativo", "../widget", false},
-		{"solo dos puntos", "acme:widget", false},
-		{"solo una palabra", "widget", false},
+		{"local path", "/home/u/dev/widget", false},
+		{"relative path", "../widget", false},
+		{"only a colon", "acme:widget", false},
+		{"only one word", "widget", false},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			got, ok := ParseRemoteURL(c.raw, hosts, nil)
 			if ok != c.ok {
-				t.Fatalf("ParseRemoteURL(%q) dio ok=%v, quiero %v (ref %+v)", c.raw, ok, c.ok, got)
+				t.Fatalf("ParseRemoteURL(%q) gave ok=%v, want %v (ref %+v)", c.raw, ok, c.ok, got)
 			}
 			// And when it says no it does not return half a repo: a half-filled RepoRef would paint as
 			// real.
 			if !ok && got != (model.RepoRef{}) {
-				t.Errorf("ParseRemoteURL(%q) dijo que no pero devolvió %+v", c.raw, got)
+				t.Errorf("ParseRemoteURL(%q) said no but returned %+v", c.raw, got)
 			}
 		})
 	}
 }
 
 // The separators being looked for can appear BEFORE where they belong.
-func TestParseRemoteURLNoSeConfundeConUnSeparadorEnElSitioEquivocado(t *testing.T) {
+func TestParseRemoteURLIsNotConfusedByASeparatorInTheWrongPlace(t *testing.T) {
 	hosts := map[string]string{"github.com": "github"}
 
 	// Each entry with its exact result, because what is asserted is that the separator decides.
-	casos := []struct {
+	cases := []struct {
 		raw  string
 		want model.RepoRef
 	}{
@@ -75,14 +75,14 @@ func TestParseRemoteURLNoSeConfundeConUnSeparadorEnElSitioEquivocado(t *testing.
 			model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/wi:get", Owner: "acme", Name: "wi:get"}},
 	}
 
-	for _, c := range casos {
+	for _, c := range cases {
 		got, ok := ParseRemoteURL(c.raw, hosts, nil)
 		if !ok {
-			t.Errorf("ParseRemoteURL(%q) dijo que no, y es una de las tres formas", c.raw)
+			t.Errorf("ParseRemoteURL(%q) said no, and it is one of the three forms", c.raw)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("ParseRemoteURL(%q) dio %+v, want %+v: un separador de más no es un separador de menos",
+			t.Errorf("ParseRemoteURL(%q) gave %+v, want %+v: an extra separator is not a missing one",
 				c.raw, got, c.want)
 		}
 	}

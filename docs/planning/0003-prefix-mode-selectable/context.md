@@ -5,94 +5,94 @@ codegraph: not_initialized
 generated_by: codebase-researcher
 ---
 
-# Context: Prefijo de ruta seleccionable y toggleable
+# Context: Selectable and toggleable path prefix
 
 ## Scope
-- In: 3 modos de prefijo (`common`/`full`/`leaf`) ciclados con `p` (acción `prefix-mode`), globales y sin persistir; etiqueta de celda ITEM y ancho de columna según modo; línea de prefijo solo en `common`; hint que nombra el modo actual.
-- Out: persistencia (`fileConfig`/schema TOML), `--print`, `inbox.Build` y la autoridad de secciones, ciclo de `tab` y cursor/scroll por sección, `sectionPrefix`, detalle, leyenda, pipeline de datos.
+- In: 3 prefix modes (`common`/`full`/`leaf`) cycled with `p` (action `prefix-mode`), global and not persisted; ITEM cell label and column width per mode; prefix line only in `common`; hint naming the current mode.
+- Out: persistence (`fileConfig`/TOML schema), `--print`, `inbox.Build` and section authority, `tab` cycle and per-section cursor/scroll, `sectionPrefix`, detail, legend, data pipeline.
 
 ## Files to Touch
 | Symbol / Area | File | Lines | Why |
 |---------------|------|-------|-----|
-| `refLayout` | internal/tui/refcol.go | 27-30 | Añadir `mode prefixMode`: la celda lo necesita para etiquetar. |
-| `newRefLayout` | internal/tui/refcol.go | 42-58 | Nueva firma `(sections, mode)`. El prefijo se calcula **solo** en `common`; en los otros dos queda `""`. El ancho mide la etiqueta del modo. |
-| `prefixOf` | internal/tui/refcol.go | 62-64 | **Sin cambio**: ya devuelve `""` fuera de `common` y `list.go:46` ya lo comprueba. |
-| `sectionPrefix` | internal/tui/refcol.go | 72-98 | **Sin cambios**: el cálculo del prefijo común no varía. |
-| `refSuffix` | internal/tui/refcol.go | 103-113 | **Sin cambios**: pasa a ser la etiqueta de `common` y `full`; con prefijo vacío ya devuelve la referencia completa (degradación). |
-| `truncateTail` | internal/tui/refcol.go | 118-130 | **Sin cambios**: el recorte por la cola vale en los tres modos. |
-| `refCellText` / `refLeaf` | internal/tui/refcol.go | nuevo | Etiqueta de la celda por modo; `refLeaf` = hoja del proyecto + `#n`. |
-| `prefixMode` (+`String`/`next`) | internal/tui/refcol.go | nuevo | Tipo de 3 valores; `String()` es lo que va al hint, `next()` el ciclo. |
-| `listLines` | internal/tui/list.go | 32-70 | **Una línea**: pasar `m.prefixMode` a `newRefLayout` (40). El `if prefix != ""` (46) ya resuelve "no hay línea en `full`/`leaf`". |
-| `itemCells` | internal/tui/table.go | 115-129 | Línea 122: `refSuffix(it, l.prefixOf(sec))` → `refCellText(it, l.mode, l.prefixOf(sec))`. |
-| `handleKey` | internal/tui/update.go | 178-247 | Nuevo `case "prefix-mode"` en el `switch` de `ActionForKey` (221-245). |
-| `cyclePrefixMode` | internal/tui/update.go | nuevo | Ciclo + `syncScroll()` (el modo quita una línea en `full`/`leaf`). |
-| `Model` | internal/tui/app.go | 190-259 | Añadir `prefixMode`, default `prefixCommon`. |
-| `HintState` / `Hints` | internal/config/config.go | 446-459 | `Hints(state HintState)`: une `label + ": " + state[action]`. `HintState = map[string]string` por acción. |
-| `hint` | internal/config/config.go | 410-418 | **Sin cambio de campos**; `label` pasa a ser el valor por defecto. |
-| `hintOrder` | internal/config/config.go | 430-441 | Añadir `{action: "prefix-mode", label: "prefix"}` **después de `refresh`**. |
-| `DefaultKeybindings` | internal/config/config.go | 282-293 | Añadir `"prefix-mode": "p"`. |
-| `hintLines` | internal/tui/sections.go | 209-214 | Línea 213: `m.cfg.Hints(m.dynamicHints())`. |
-| `dynamicHints` | internal/tui/sections.go | nuevo | `config.HintState{"prefix-mode": m.prefixMode.String()}`. |
-| `runPrint` | cmd/prdash/print.go | 31-70 | **Sin cambios** (verificado: no usa `newRefLayout`/`refSuffix`/`sectionPrefix`). Guard con test nuevo. |
-| `TestHints` | internal/config/config_test.go | 327-336 | Lista `want` literal: añadir `p prefix: common` y el parámetro. |
+| `refLayout` | internal/tui/refcol.go | 27-30 | Add `mode prefixMode`: the cell needs it for its label. |
+| `newRefLayout` | internal/tui/refcol.go | 42-58 | New signature `(sections, mode)`. The prefix is computed **only** in `common`; in the other two it stays `""`. The width measures the mode label. |
+| `prefixOf` | internal/tui/refcol.go | 62-64 | **No change**: it already returns `""` outside `common` and `list.go:46` already checks it. |
+| `sectionPrefix` | internal/tui/refcol.go | 72-98 | **No changes**: the common-prefix computation does not vary. |
+| `refSuffix` | internal/tui/refcol.go | 103-113 | **No changes**: it becomes the label of `common` and `full`; with an empty prefix it already returns the full reference (degradation). |
+| `truncateTail` | internal/tui/refcol.go | 118-130 | **No changes**: tail truncation holds in all three modes. |
+| `refCellText` / `refLeaf` | internal/tui/refcol.go | new | Cell label per mode; `refLeaf` = project leaf + `#n`. |
+| `prefixMode` (+`String`/`next`) | internal/tui/refcol.go | new | 3-value type; `String()` is what goes to the hint, `next()` the cycle. |
+| `listLines` | internal/tui/list.go | 32-70 | **One line**: pass `m.prefixMode` to `newRefLayout` (40). The `if prefix != ""` (46) already resolves "no line in `full`/`leaf`". |
+| `itemCells` | internal/tui/table.go | 115-129 | Line 122: `refSuffix(it, l.prefixOf(sec))` → `refCellText(it, l.mode, l.prefixOf(sec))`. |
+| `handleKey` | internal/tui/update.go | 178-247 | New `case "prefix-mode"` in the `switch` of `ActionForKey` (221-245). |
+| `cyclePrefixMode` | internal/tui/update.go | new | Cycle + `syncScroll()` (the mode removes one line in `full`/`leaf`). |
+| `Model` | internal/tui/app.go | 190-259 | Add `prefixMode`, default `prefixCommon`. |
+| `HintState` / `Hints` | internal/config/config.go | 446-459 | `Hints(state HintState)`: joins `label + ": " + state[action]`. `HintState = map[string]string` per action. |
+| `hint` | internal/config/config.go | 410-418 | **No field change**; `label` becomes the default value. |
+| `hintOrder` | internal/config/config.go | 430-441 | Add `{action: "prefix-mode", label: "prefix"}` **after `refresh`**. |
+| `DefaultKeybindings` | internal/config/config.go | 282-293 | Add `"prefix-mode": "p"`. |
+| `hintLines` | internal/tui/sections.go | 209-214 | Line 213: `m.cfg.Hints(m.dynamicHints())`. |
+| `dynamicHints` | internal/tui/sections.go | new | `config.HintState{"prefix-mode": m.prefixMode.String()}`. |
+| `runPrint` | cmd/prdash/print.go | 31-70 | **No changes** (verified: it does not use `newRefLayout`/`refSuffix`/`sectionPrefix`). Guard with a new test. |
+| `TestHints` | internal/config/config_test.go | 327-336 | Literal `want` list: add `p prefix: common` and the parameter. |
 
 ## Contracts
-- `newRefLayout(sections []inbox.Section, mode prefixMode) refLayout` — `internal/tui/refcol.go:42`. **Firma con modo explícito**: el compilador obliga a cada llamador a nombrarlo (10 sitios: 1 producción + 9 tests).
-- `refLayout.prefixOf(model.Section) string` — `:62`. Vacío en `full`/`leaf` y cuando no hay prefijo común.
-- `refCellText(it model.Item, mode prefixMode, prefix string) string` — nuevo. `leaf` → `refLeaf`; `common`/`full` → `refSuffix`.
-- `refLeaf(it model.Item) string` — nuevo. `strings.LastIndex(project, "/")`; con proyecto vacío → `"#n"`.
+- `newRefLayout(sections []inbox.Section, mode prefixMode) refLayout` — `internal/tui/refcol.go:42`. **Signature with explicit mode**: the compiler forces every caller to name it (10 sites: 1 production + 9 tests).
+- `refLayout.prefixOf(model.Section) string` — `:62`. Empty in `full`/`leaf` and when there is no common prefix.
+- `refCellText(it model.Item, mode prefixMode, prefix string) string` — new. `leaf` → `refLeaf`; `common`/`full` → `refSuffix`.
+- `refLeaf(it model.Item) string` — new. `strings.LastIndex(project, "/")`; with an empty project → `"#n"`.
 - `prefixMode.String()` → `common`|`full`|`leaf`; `prefixMode.next()` → `(p+1)%3`.
-- `Config.Hints(state HintState) []string` — `internal/config/config.go:446`. `nil`/vacío = barra actual sin estado dinámico.
-- `Config.KeyFor(action)` / `ActionForKey(key)` — `:333` / `:342`: el rebind de `prefix-mode` es genérico, sin código nuevo.
-- `Config.ActionForKey` desempata recorriendo acciones **ordenadas** y devuelve la primera que coincide: `prefix-mode` no colisiona con ninguna otra tecla, así que no hay ambigüedad.
-- `Config.Hints` es la **única** fuente de la barra; `hintLines()` (`sections.go:209`) solo la envuelve al ancho. Con `mergeArmed` la sustituye la Confirmación.
-- `TestHintsCubrenTodosLosKeybindings` (`config_test.go:342`) exige que la tecla de **toda** acción de `DefaultKeybindings` aparezca en la barra: registrar `prefix-mode` sin meterlo en `hintOrder` rompe el test.
+- `Config.Hints(state HintState) []string` — `internal/config/config.go:446`. `nil`/empty = current bar without dynamic state.
+- `Config.KeyFor(action)` / `ActionForKey(key)` — `:333` / `:342`: the `prefix-mode` rebind is generic, no new code.
+- `Config.ActionForKey` tie-breaks by walking **ordered** actions and returns the first match: `prefix-mode` does not collide with any other key, so there is no ambiguity.
+- `Config.Hints` is the **only** source of the bar; `hintLines()` (`sections.go:209`) only wraps it to the width. With `mergeArmed` the Confirmation replaces it.
+- `TestHintsCoverAllKeybindings` (`config_test.go:342`) requires that the key of **every** action of `DefaultKeybindings` appear in the bar: registering `prefix-mode` without putting it in `hintOrder` breaks the test.
 - `syncScroll()` — `internal/tui/list.go:101`; `scrollFor(current,target,total,view)` — `:86`; `visibleList` — `:114`.
 
 ## Pattern to Follow
-- **Estado de vista en `Model` + efecto en `Update`**: `activeSection`/`cycleSection` (`app.go`, `update.go`) son el molde de "un campo global que cicla con una tecla y se pasa al render".
-- **Layout calculado una vez por render**: `newRefLayout` en `listLines` (`list.go:40`), no por fila. El requisito de "sin parpadeo" es este mismo invariante.
-- **Acción configurable**: registrar en `DefaultKeybindings` + `hintOrder` y despachar por `m.cfg.ActionForKey(key)` (`update.go:221`). Cero código de tecla cableada.
-- **Celdas texto+estilo con `pad()` antes del estilo** → `internal/tui/table.go:132-167`.
-- **Tests de modelo directo enviando msgs** → `internal/tui/app_test.go:23-101` (`newTestModel`/`mkItem`/`page`/`send`/`press`).
-- **Tests dirigidos de tabla para render** → `internal/tui/list_test.go` (`visibleLines`/`stripANSI`).
+- **View state in `Model` + effect in `Update`**: `activeSection`/`cycleSection` (`app.go`, `update.go`) are the template of "a global field that cycles with a key and is passed to the render".
+- **Layout computed once per render**: `newRefLayout` in `listLines` (`list.go:40`), not per row. The "no flicker" requirement is this very invariant.
+- **Configurable action**: register in `DefaultKeybindings` + `hintOrder` and dispatch through `m.cfg.ActionForKey(key)` (`update.go:221`). Zero hardcoded-key code.
+- **Text+style cells with `pad()` before the style** → `internal/tui/table.go:132-167`.
+- **Direct model tests sending msgs** → `internal/tui/app_test.go:23-101` (`newTestModel`/`mkItem`/`page`/`send`/`press`).
+- **Table-driven targeted tests for render** → `internal/tui/list_test.go` (`visibleLines`/`stripANSI`).
 
 ## Tests
 - Existing affected:
-  - `internal/config/config_test.go` — `TestHints` `:327` (lista `want` literal, hay que añadir `p prefix: …` y el parámetro `HintState`); `TestHintsCubrenTodosLosKeybindings` `:342` (debe seguir verde sin cambios); `TestHintsSiguenElRebind` `:353` (actualizar la llamada); `TestDefaultKeybindingsCoverActions` `:366` (lista explícita de acciones: añadir `prefix-mode`).
-  - `internal/tui/refcol_test.go` — llamadas a `newRefLayout` en `:100`, `:114`, `:125`, `:139`, `:280` (+`prefixCommon`); la ronda aleatoria de `:280` pasa a iterar también los otros dos modos.
-  - `internal/tui/table_test.go` — llamadas en `:28`, `:45`, `:81`, `:295` (+`prefixCommon`).
-  - `internal/tui/list_test.go` / `section_test.go` — los de la línea de prefijo y del ancho de la activa **siguen valiendo sin cambios** (el default es `common`): son el guard de "esta feature no cambia nada por defecto".
-- Nuevos:
-  - `refcol_test.go`: `refLeaf` (con subgrupo, sin subgrupo, proyecto vacío, proyecto de un segmento), ciclo `next()` ×3 + vuelta, `prefixOf` vacío en `full`/`leaf`, ancho por modo (24/34/16 en el fixture de `behavior.feature`, y acotado a `[6,34]` en los tres).
-  - `list_test.go`: línea de prefijo presente en `common` / ausente en `full` y `leaf`; `full` y `leaf` recuperan una línea (`len(listLines)`); `common` sin prefijo común se ve **exactamente** como `full`.
-  - `section_test.go`: `p` cicla los 3 modos y vuelve; rebind de `prefix-mode` desactiva `p`; `tab` no reinicia el modo ni el cursor/scroll por sección; `p` no aprueba, no mergea, no monta, no refresca, no sale y no arma el merge.
-  - `config_test.go`: `TestHintsConEstadoDinamico` — sin estado sale `p prefix`; con estado sale `p prefix: full`; con rebind sale `P prefix: leaf`.
-  - `section_test.go` o `app_test.go`: el hint de la barra nombra el modo y cambia al ciclar (extremo a extremo, con `mergeArmed` la Confirmación sigue sustituyendo la barra).
-  - `cmd/prdash/print_test.go`: `TestRunPrintNoAplicaElModoPrefijo` — ruta de subgrupo larga → sale **entera** en `--print`, sin `…` y sin línea de prefijo.
+  - `internal/config/config_test.go` — `TestHints` `:327` (literal `want` list, need to add `p prefix: …` and the `HintState` parameter); `TestHintsCoverAllKeybindings` `:342` (must stay green unchanged); `TestHintsFollowTheRebind` `:353` (update the call); `TestDefaultKeybindingsCoverActions` `:366` (explicit action list: add `prefix-mode`).
+  - `internal/tui/refcol_test.go` — calls to `newRefLayout` at `:100`, `:114`, `:125`, `:139`, `:280` (+`prefixCommon`); the random round at `:280` now iterates the other two modes as well.
+  - `internal/tui/table_test.go` — calls at `:28`, `:45`, `:81`, `:295` (+`prefixCommon`).
+  - `internal/tui/list_test.go` / `section_test.go` — the prefix-line and active-width ones **still hold unchanged** (the default is `common`): they are the guard of "this feature changes nothing by default".
+- New:
+  - `refcol_test.go`: `refLeaf` (with subgroup, without subgroup, empty project, single-segment project), `next()` cycle ×3 and back, `prefixOf` empty in `full`/`leaf`, width per mode (24/34/16 on the `behavior.feature` fixture, and bounded to `[6,34]` in the three of them).
+  - `list_test.go`: prefix line present in `common` / absent in `full` and `leaf`; `full` and `leaf` get back one line (`len(listLines)`); `common` without a common prefix looks **exactly** like `full`.
+  - `section_test.go`: `p` cycles the 3 modes and back; rebind of `prefix-mode` deactivates `p`; `tab` does not reset the mode nor the per-section cursor/scroll; `p` does not approve, does not merge, does not mount, does not refresh, does not quit and does not arm the merge.
+  - `config_test.go`: `TestHintsWithDynamicState` — without state it prints `p prefix`; with state it prints `p prefix: full`; with rebind it prints `P prefix: leaf`.
+  - `section_test.go` or `app_test.go`: the bar hint names the mode and changes when cycling (end to end, with `mergeArmed` the Confirmation keeps replacing the bar).
+  - `cmd/prdash/print_test.go`: `TestRunPrintNoAplicaElModoPrefijo` — long subgroup path → comes out **whole** in `--print`, with no `…` and no prefix line.
 - Framework / runner: Go testing; `make test` = `go build ./... && go vet ./... && gofmt -l . && go test -race ./...`.
-- Integration infra: unit only (`testutil.FakeAdapter`, cache aislado con `XDG_CACHE_HOME` en `newTestModel`).
+- Integration infra: unit only (`testutil.FakeAdapter`, cache isolated with `XDG_CACHE_HOME` in `newTestModel`).
 
 ## Conventions & Boundaries
-- Comentarios en **español**, sin referencias a specs/IDs/escenarios; el código es la fuente de verdad.
-- TUI no toca red ni disco; el pipeline (`streams → inbox.Build`) no se modifica.
-- Nada nuevo en `fileConfig`: el modo **no** es persistente (decisión del usuario).
-- `--print` usa `Section.String()` + `it.Ref.Project` crudo y **no** debe cambiar.
-- La TUI no puede importar nada de `config` que no exista ya, y `config` **no** puede importar `tui` (ciclo: `tui/app.go` ya importa `config`).
+- Comments in **Spanish**, no references to specs/IDs/scenarios; the code is the source of truth.
+- The TUI touches neither network nor disk; the pipeline (`streams → inbox.Build`) is not modified.
+- Nothing new in `fileConfig`: the mode is **not** persistent (user decision).
+- `--print` uses `Section.String()` + raw `it.Ref.Project` and **must not** change.
+- The TUI cannot import anything from `config` that does not already exist, and `config` **cannot** import `tui` (cycle: `tui/app.go` already imports `config`).
 
 ## Integration Points (non-obvious)
-- **La invariante "sin línea de prefijo" no necesita `if` nuevo**: `list.go:46` ya compara `prefix != ""`, y en `full`/`leaf` el prefijo es `""` por construcción (`newRefLayout`). Por eso `listLines` solo cambia en la llamada a `newRefLayout`. Si alguien "optimiza" `prefixOf` para que devuelva el prefijo común siempre, la línea reaparece en `full` sin que ninguna otra parte avise.
-- **La degradación `common` → `full` es el mecanismo ya existente**, no un caso especial: sin prefijo común, `sectionPrefix` devuelve `""` y `refSuffix` devuelve la referencia completa. Los tests existentes de "sección sin prefijo" (`refcol_test.go`) ya la cubren en `common`.
-- **`refLayout` indexa el prefijo por `model.Section`**: dos secciones con el mismo `Kind` se pisarían. Hoy es imposible (`inbox.Build` garantiza una por kind) y sigue siéndolo — `list.go:40` sigue pasando una rebanada de 1.
-- **`syncScroll` es necesario aunque `p` no mueva el cursor**: `full`/`leaf` acortan `listLines` en una línea, así que un `scroll` alto puede dejar el cursor fuera de la ventana. Mismo motivo que `goTop` (`update.go:506`).
-- **Orden en `hintOrder` = prioridad de supervivencia**: el recorte a `maxHintLines` (3) corta **por la cola** (`config.go:426-429`, `wrapHint` en `sections.go:218`). `p` detrás de `refresh` sobrevive a terminales estrechos; al final de la lista desaparecería primero.
-- **La etiqueta dinámica rompe la pureza de `Config.Hints()`**: es el precio consciente de nombrar el modo actual. Se paga con un parámetro explícito (`HintState`), no con un placeholder en el string, para que `hintOrder` siga siendo la fuente de lista, orden y etiqueta por defecto, y para que el rebind siga siendo genérico.
-- **`ActionForKey` desempata por orden alfabético de acciones**: si algún día `prefix-mode` compartiera tecla con otra acción, ganaría la alfabéticamente anterior. Hoy no comparte.
-- **Modo global + `tab`**: `tab` cambia `activeSection` y su prefijo común, pero **no** el modo. El hint nombra un modo que no aplica igual a las tres secciones; es coherente con que solo se pinte una, y es lo pedido.
+- **The "no prefix line" invariant needs no new `if`**: `list.go:46` already compares `prefix != ""`, and in `full`/`leaf` the prefix is `""` by construction (`newRefLayout`). That is why `listLines` changes only in the call to `newRefLayout`. If someone "optimizes" `prefixOf` to always return the common prefix, the line reappears in `full` without any other part warning.
+- **The `common` → `full` degradation is the already existing mechanism**, not a special case: with no common prefix, `sectionPrefix` returns `""` and `refSuffix` returns the full reference. The existing tests of "section without prefix" (`refcol_test.go`) already cover it in `common`.
+- **`refLayout` indexes the prefix by `model.Section`**: two sections with the same `Kind` would overwrite each other. Today it is impossible (`inbox.Build` guarantees one per kind) and it stays that way — `list.go:40` still passes a slice of 1.
+- **`syncScroll` is needed even though `p` does not move the cursor**: `full`/`leaf` shorten `listLines` by one line, so a high `scroll` can leave the cursor outside the window. Same reason as `goTop` (`update.go:506`).
+- **Order in `hintOrder` = survival priority**: the trim to `maxHintLines` (3) cuts **from the tail** (`config.go:426-429`, `wrapHint` in `sections.go:218`). `p` behind `refresh` survives narrow terminals; at the end of the list it would disappear first.
+- **The dynamic label breaks the purity of `Config.Hints()`**: it is the conscious price of naming the current mode. It is paid with an explicit parameter (`HintState`), not with a placeholder in the string, so that `hintOrder` keeps being the source of list, order and default label, and so the rebind keeps being generic.
+- **`ActionForKey` tie-breaks by alphabetical order of actions**: if someday `prefix-mode` shared a key with another action, the alphabetically earlier one would win. Today it shares none.
+- **Global mode + `tab`**: `tab` changes `activeSection` and its common prefix, but **not** the mode. The hint names a mode that does not apply equally to the three sections; that is coherent with only one being painted, and it is what was asked for.
 
 ## Risks / Assumptions
-- **Firma de `newRefLayout`**: 10 call sites. Todos explícitos a propósito (que el compilador los obligue), pero un `prefixCommon` mal puesto en un test haría verde una prueba que ya no prueba lo que dice.
-- **Ronda aleatoria de `refcol_test.go` (`:280`)**: hoy itera invariantes de `common`; si se extiende a los tres modos, `truncateTail` debe seguir garantizando cola intacta **en los tres** (en `leaf` la cola es `#n`, en `full` la hoja + `#n`).
-- **`p` durante el merge armado**: `handleMergeArmed` consume la pulsación y cancela (`update.go:306-309`); `p` no es un modo de merge, así que desarma sin mergear. Es el comportamiento correcto y no se toca.
-- **Overlay de simulación abierto**: `handleSimKey` captura el teclado entero; `p` cierra el overlay como cualquier tecla no-opción. No se toca.
-- **ADR**: el 0005 sustituye la cláusula del 0002 (prefijo anclado en cabecera) **y** la del 0004 §4 (línea siempre visible). `sectionPrefix`, la fórmula del ancho acotado y el recorte por la cola siguen vigentes: no se reescriben ADRs aceptados, se encadena.
+- **Signature of `newRefLayout`**: 10 call sites. All explicit on purpose (so the compiler forces them), but a wrongly placed `prefixCommon` in a test would turn green a test that no longer proves what it says.
+- **Random round of `refcol_test.go` (`:280`)**: today it iterates `common` invariants; if it is extended to the three modes, `truncateTail` must keep guaranteeing an intact tail **in the three** (in `leaf` the tail is `#n`, in `full` the leaf + `#n`).
+- **`p` during an armed merge**: `handleMergeArmed` consumes the keystroke and cancels (`update.go:306-309`); `p` is not a merge mode, so it disarms without merging. That is the correct behavior and it is not touched.
+- **Simulation overlay open**: `handleSimKey` captures the whole keyboard; `p` closes the overlay like any key that is not an option. Not touched.
+- **ADR**: the 0005 supersedes the clause of the 0002 (prefix anchored in a header) **and** the one of the 0004 §4 (always-visible line). `sectionPrefix`, the bounded width formula and the tail truncation stay in force: accepted ADRs are not rewritten, the chain is extended.

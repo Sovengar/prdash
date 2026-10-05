@@ -1,59 +1,59 @@
-# 0001 — prdash MVP: inbox multi-forge + orquestador de review (F1+F2)
+# 0001 — prdash MVP: multi-forge inbox + review orchestrator (F1+F2)
 
-## Problema
+## Problem
 
-Quien revisa PRs/MRs repartidos entre GitHub y GitLab self-managed vive saltando de web a web: cada forge tiene su propia UI, su propio estado y su propia noción de "pendiente para mí". El resultado es que el inbox real está fragmentado en dos pestañas, se pierde contexto entre ellas y cada review exige montar a mano el entorno (worktree de la rama, diff, agente, comentarios). No existe un punto único que responda "¿qué me toca revisar ahora?" ni que prepare el terreno de review automáticamente.
+Whoever reviews PRs/MRs spread across GitHub and a self-managed GitLab lives jumping from web to web: each forge has its own UI, its own state and its own notion of "pending for me". The result is that the real inbox is split across two tabs, context is lost between them and every review requires assembling the environment by hand (branch worktree, diff, agent, comments). There is no single point that answers "what do I have to review now?" nor that prepares the review ground automatically.
 
-prdash existe para cerrar esas dos brechas en una sola herramienta: un inbox cross-forge que unifica lo que me toca, y un orquestador que, al elegir un PR/MR, deja listo el worktree y el layout de review sobre Herdr para que el loop "comento → el agente aplica" ocurra sin fricción.
+prdash exists to close those two gaps in a single tool: a cross-forge inbox that unifies what falls to me, and an orchestrator that, when a PR/MR is chosen, lefts the worktree and the review layout over Herdr ready so that the "I comment → the agent applies" loop happens without friction.
 
-## Alcance (in)
+## Scope (in)
 
-**F1 — Inbox cross-forge.**
-- TUI Go (bubbletea v2) con tres secciones: *(1)* creados por mí, *(2)* review pedido / asignados a mí, *(3)* menciones.
-- Forges funcionales: GitHub (`github.com`, vía `gh`) y GitLab self-managed (`gitlab.example.com`, REST bajo subfolder `/git/api/v4/`, vía `glab`).
-- Estado rico de GitHub vía GraphQL (`gh api graphql`: `reviewDecision`, checks); GitLab vía GraphQL (`glab api graphql`: `currentUser` authored / reviewRequested / assigned) + Todos API para menciones.
-- Approve/merge rápido desde el inbox con `gh`/`glab` directo; delegan en `tuicr` cuando aplique (tuicr ya sube reviews reales vía gh/glab).
-- Interface de adapter de forge documentada, con Bitbucket *solo como interfaz* (compila, sin llamadas reales).
+**F1 — Cross-forge inbox.**
+- Go TUI (bubbletea v2) with three sections: *(1)* created by me, *(2)* review requested / assigned to me, *(3)* mentions.
+- Working forges: GitHub (`github.com`, via `gh`) and self-managed GitLab (`gitlab.example.com`, REST under subfolder `/git/api/v4/`, via `glab`).
+- Rich GitHub state via GraphQL (`gh api graphql`: `reviewDecision`, checks); GitLab via GraphQL (`glab api graphql`: `currentUser` authored / reviewRequested / assigned) + Todos API for mentions.
+- Fast approve/merge from the inbox with direct `gh`/`glab`; they delegate to `tuicr` when applicable (tuicr already pushes real reviews via gh/glab).
+- Documented forge adapter interface, with Bitbucket *interface only* (compiles, no real calls).
 
-**F2 — Orquestador de review por PR/MR.**
-- Al seleccionar un PR/MR: crear worktree de su rama y montar layout en Herdr con tres panes: TUICR sobre el PR, Hunk (diff) y agente opencode.
-- Loop de comentarios: el usuario comenta en TUICR/Hunk; el agente los lee y los aplica.
-- Plugin de Herdr: binario Go + `herdr-plugin.toml` (pane entrypoint con placement, keybind y link handler para URLs de PR). Target Herdr 0.9.x.
-- Degradación limpia fuera de Herdr: sin `HERDR_ENV=1` la app informa y no rompe.
+**F2 — Review orchestrator per PR/MR.**
+- On selecting a PR/MR: create the worktree of its branch and mount the layout on Herdr with three panes: TUICR over the PR, Hunk (diff) and the opencode agent.
+- Comment loop: the user comments in TUICR/Hunk; the agent reads them and applies them.
+- Herdr plugin: Go binary + `herdr-plugin.toml` (pane entrypoint with placement, keybind and link handler for PR URLs). Target Herdr 0.9.x.
+- Clean degradation outside Herdr: without `HERDR_ENV=1` the app reports and does not break.
 
-## No-alcance (out)
+## Out of scope (out)
 
-- Bitbucket funcional (solo la interfaz de adapter).
-- gitlab.com funcional (sin token; queda como futuro).
-- F3 auto-review/auto-approve: solo diseño y milestone post-MVP, sin implementación.
-- Vista de "todos los PRs abiertos" (el scope es mi inbox, no el backlog ajeno).
-- Webhooks, daemon servidor o cualquier componente push.
-- Gestión de repos locales (prdash no los descubre ni administra más allá del worktree de review).
-- Multi-usuario / multitenancy: asume una identidad por forge ya autenticada.
+- Working Bitbucket (only the adapter interface).
+- Working gitlab.com (no token; left as future).
+- F3 auto-review/auto-approve: design and post-MVP milestone only, no implementation.
+- "All open PRs" view (the scope is my inbox, not someone else's backlog).
+- Webhooks, server daemon or any push component.
+- Local repo management (prdash neither discovers nor administers them beyond the review worktree).
+- Multi-user / multitenancy: assumes one identity per forge already authenticated.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-- [ ] La TUI arranca y muestra las 3 secciones con datos reales de GitHub y del GitLab self-managed.
-- [ ] Cada PR/MR listado refleja el estado del forge (p. ej. `reviewDecision`/checks en GitHub, autoría/review-request en GitLab) sin salir de la TUI.
-- [ ] Las menciones provienen de la fuente correspondiente por forge (GraphQL en GitHub, Todos API en GitLab).
-- [ ] Seleccionar un PR/MR crea el worktree de su rama.
-- [ ] El layout de Herdr abre los 3 panes esperados (TUICR, Hunk, agente opencode).
-- [ ] Un comentario escrito en TUICR queda legible por el agente y este lo aplica.
-- [ ] Approve/merge rápido funciona desde el inbox en GitHub y en el GitLab self-managed, o delega en `tuicr` cuando aplica.
-- [ ] Fuera de Herdr, la app informa la limitación y no rompe (F1 sigue operativo).
-- [ ] El adapter de Bitbucket compila y está documentado, sin ninguna llamada real.
-- [ ] `go build ./... && go vet ./... && go test ./...` pasa y el binario queda instalable en PATH (`~/.local/bin/prdash`).
+- [ ] The TUI starts and shows the 3 sections with real data from GitHub and from the self-managed GitLab.
+- [ ] Every listed PR/MR reflects the state of the forge (e.g. `reviewDecision`/checks on GitHub, authorship/review-request on GitLab) without leaving the TUI.
+- [ ] Mentions come from the corresponding source per forge (GraphQL on GitHub, Todos API on GitLab).
+- [ ] Selecting a PR/MR creates the worktree of its branch.
+- [ ] The Herdr layout opens the 3 expected panes (TUICR, Hunk, opencode agent).
+- [ ] A comment written in TUICR is readable by the agent and it applies it.
+- [ ] Fast approve/merge works from the inbox on GitHub and on the self-managed GitLab, or delegates to `tuicr` when applicable.
+- [ ] Outside Herdr, the app reports the limitation and does not break (F1 stays operational).
+- [ ] The Bitbucket adapter compiles and is documented, with no real call at all.
+- [ ] `go build ./... && go vet ./... && go test ./...` passes and the binary is installable on PATH (`~/.local/bin/prdash`).
 
-## Preguntas abiertas (bloquean la aprobación)
+## Open questions (block approval)
 
-1. **PR → clon local**: para crear el worktree de un PR, prdash necesita la ruta local del repo de ese PR (`owner/repo` o proyecto GL → carpeta). No está definido cómo se resuelve. Propuesta por defecto: `roots` en la config TOML (patrón gitdash) + índice remoto→local construido al escanear esos roots, y si no hay match, pedir la ruta una vez y recordarla.
-2. **Cadencia de refresco del inbox**: ¿poll automático o refresh manual? Propuesta por defecto: refresh manual (`r`) + auto cada 60s configurable, con indicador de "última actualización".
+1. **PR → local clone**: to create the worktree of a PR, prdash needs the local path of the repo of that PR (`owner/repo` or GL project → folder). It is not defined how it is resolved. Default proposal: `roots` in the TOML config (gitdash pattern) + remote→local index built when scanning those roots, and if there is no match, ask for the path once and remember it.
+2. **Inbox refresh cadence**: automatic poll or manual refresh? Default proposal: manual refresh (`r`) + auto every 60s configurable, with a "last update" indicator.
 
-## Riesgos / verificaciones pendientes
+## Risks / pending verifications
 
-- **`tuicr pr` submit contra el GitLab self-managed**: verificar que tuicr sube reseñas reales por `glab` en `gitlab.example.com` y no solo en GitHub.
-- **`herdr worktree create --branch` con rama remota no local**: confirmar el comportamiento cuando la rama del PR aún no existe en el clon local (fetch implícito, fallo, o necesidad de fetch previo).
-- **Permisos de approve/merge en el self-managed**: verificar que el usuario (`<usuario>`) tiene capacidad de approve/merge, o el botón/acción rápida debe deshabilitarse.
-- **Placement del pane del plugin Herdr**: validar que `herdr-plugin.toml` coloca los panes como se espera en Herdr 0.9.x y que el link handler resuelve URLs de PR.
-- **Ancho/estilos de celdas de tabla**: el render ANSI y el cálculo de ancho pueden romper la tabla del inbox (patrón conocido: `pad()` antes de aplicar estilo).
-- **Degradación limpia**: comprobar que la detección de `HERDR_ENV=1` falla suave y no bloquea el arranque de la TUI.
+- **`tuicr pr` submit against the self-managed GitLab**: verify that tuicr pushes real reviews via `glab` on `gitlab.example.com` and not only on GitHub.
+- **`herdr worktree create --branch` with a remote branch that is not local**: confirm the behavior when the PR branch does not yet exist in the local clone (implicit fetch, failure, or need of a previous fetch).
+- **approve/merge permissions on the self-managed**: verify that the user (`<user>`) can approve/merge, or the quick button/action must be disabled.
+- **Placement of the Herdr plugin pane**: validate that `herdr-plugin.toml` places the panes as expected on Herdr 0.9.x and that the link handler resolves PR URLs.
+- **Table cell width/styles**: ANSI render and width computation can break the inbox table (known pattern: `pad()` before applying style).
+- **Clean degradation**: check that `HERDR_ENV=1` detection fails soft and does not block the TUI startup.

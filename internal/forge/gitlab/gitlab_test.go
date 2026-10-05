@@ -25,7 +25,7 @@ func TestGraphQLArgsPinHost(t *testing.T) {
 	joined := strings.Join(a.graphqlArgs("query { x }"), " ")
 	for _, want := range []string{"api", "--hostname h.example", "graphql", "-f query=query { x }"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("graphqlArgs no contiene %q: %q", want, joined)
+			t.Errorf("graphqlArgs does not contain %q: %q", want, joined)
 		}
 	}
 }
@@ -35,11 +35,11 @@ func TestRESTArgsUseGetAndRelativeEndpoint(t *testing.T) {
 	joined := strings.Join(a.getArgs("todos", "action=mentioned"), " ")
 	for _, want := range []string{"-X GET", " todos", "-f action=mentioned"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("getArgs no contiene %q: %q", want, joined)
+			t.Errorf("getArgs does not contain %q: %q", want, joined)
 		}
 	}
 	if strings.Contains(joined, "/git/api/v4") || strings.Contains(joined, "/api/v4") {
-		t.Errorf("no debe construir la ruta absoluta: %q", joined)
+		t.Errorf("it must not build the absolute path: %q", joined)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestQueryBuilders(t *testing.T) {
 		t.Errorf("glAssignedQuery = %s", q)
 	}
 	if q := glAuthoredQuery("CUR"); !strings.Contains(q, `after: "CUR"`) {
-		t.Errorf("la query paginada debería llevar el cursor: %s", q)
+		t.Errorf("the paginated query should carry the cursor: %s", q)
 	}
 	// The iid is a string literal: the schema declares String! and GraphQL does not coerce Int to
 	// it.
@@ -85,10 +85,10 @@ func TestQueryBuilders(t *testing.T) {
 		t.Errorf("glMRQuery = %s", q)
 	}
 	if q := glMRQuery("grp/proj", 7); strings.Contains(q, "mergeRequest(iid: 7)") {
-		t.Errorf("glMRQuery no debería pasar el iid como Int: %s", q)
+		t.Errorf("glMRQuery must not pass the iid as an Int: %s", q)
 	}
 	if !strings.Contains(mrFields, "approved") || strings.Contains(mrFields, "approvalsLeft") {
-		t.Errorf("mrFields debería usar approved y no approvalsLeft: %s", mrFields)
+		t.Errorf("mrFields should use approved and not approvalsLeft: %s", mrFields)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestConformanceMissingBinary(t *testing.T) {
 
 func TestListUnknownSectionReportsUnsupported(t *testing.T) {
 	a := New("gitlab.example.com", filepath.Join(t.TempDir(), "no-glab"))
-	_, warns := a.List(context.Background(), forge.Query{Section: "desconocida"})
+	_, warns := a.List(context.Background(), forge.Query{Section: "unknown"})
 	if len(warns) == 0 || warns[0].Kind != "unsupported" {
 		t.Fatalf("warnings = %+v", warns)
 	}
@@ -131,7 +131,7 @@ exit 1
 
 	log, _ := os.ReadFile(argsFile)
 	if !strings.Contains(string(log), "--hostname h.example") || !strings.Contains(string(log), "-X GET merge_requests") {
-		t.Fatalf("los args reales no fijan host/GET:\n%s", string(log))
+		t.Fatalf("the real args do not pin host/GET:\n%s", string(log))
 	}
 }
 
@@ -159,7 +159,7 @@ func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "glab", "#!/bin/sh\necho 'glab: logged in'\n")
 	if login := New("h.example", script).Auth(context.Background()).Login; login != "" {
-		t.Errorf("Login = %q, want vacío", login)
+		t.Errorf("Login = %q, want empty", login)
 	}
 }
 
@@ -186,11 +186,11 @@ func TestNotesQueryShape(t *testing.T) {
 		"createdAt",
 	} {
 		if !strings.Contains(q, want) {
-			t.Errorf("glNotesQuery no contiene %q:\n%s", want, q)
+			t.Errorf("glNotesQuery does not contain %q:\n%s", want, q)
 		}
 	}
 	if strings.Contains(q, `iid: 42`) {
-		t.Errorf("el iid no puede ir como Int (String! lo rechaza):\n%s", q)
+		t.Errorf("the iid cannot go as an Int (String! rejects it):\n%s", q)
 	}
 	if commentFetch <= forge.CommentLimit {
 		t.Errorf("commentFetch = %d, want > %d", commentFetch, forge.CommentLimit)
@@ -223,18 +223,18 @@ OUT
 	}
 	for _, c := range page.Comments {
 		if c.Body == "added 56 commits" {
-			t.Errorf("coló una nota de sistema: %q", c.Body)
+			t.Errorf("it slipped in a system note: %q", c.Body)
 		}
 	}
 	want := []string{"third human", "fourth human", "fifth human", "sixth human", "seventh human"}
 	for i, w := range want {
 		if page.Comments[i].Body != w {
-			t.Errorf("comments[%d] = %q, want %q (los últimos, en orden)", i, page.Comments[i].Body, w)
+			t.Errorf("comments[%d] = %q, want %q (the last ones, in order)", i, page.Comments[i].Body, w)
 		}
 	}
 	// GitLab exposes no count: the total is what was read (7), not what was painted (5).
 	if page.Total != 7 {
-		t.Errorf("total = %d, want 7 (las notas leídas, no las pintadas)", page.Total)
+		t.Errorf("total = %d, want 7 (the notes read, not the painted ones)", page.Total)
 	}
 }
 
@@ -251,9 +251,9 @@ func TestCommentsFailureIsWarning(t *testing.T) {
 	page, warns := New("gitlab.example.com", script).Comments(context.Background(),
 		model.RepoRef{Project: "grupo/proy"}, 42)
 	if len(page.Comments) != 0 {
-		t.Errorf("un fallo no debe devolver comentarios: %+v", page.Comments)
+		t.Errorf("a failure must not return comments: %+v", page.Comments)
 	}
 	if len(warns) == 0 {
-		t.Fatal("un fallo debería avisar")
+		t.Fatal("a failure should warn")
 	}
 }

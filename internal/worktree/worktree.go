@@ -31,7 +31,6 @@ type Worktree struct {
 
 // The reasons RemoveIfClean keeps a worktree: the answer to "I did not delete it, and this is why".
 const (
-	// archivos sin trackear).
 	KeptUncommitted = "the worktree has uncommitted changes"
 	KeptUnreadable  = "could not read the worktree status"
 )
@@ -45,7 +44,6 @@ type Provisioner interface {
 }
 
 type GitDirect struct {
-	// borrados de limpieza.
 	Base string
 	git  *gitcmd.Runner
 }

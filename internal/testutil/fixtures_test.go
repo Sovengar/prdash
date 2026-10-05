@@ -13,7 +13,7 @@ import (
 
 // It ends in a clone rather than in checking the remote exists: the question is "does a git clone of
 // this fixture bring the content?", which is what the tests using it ask.
-func TestElFixtureMontaUnRepoQueSePuedeClonarYEmpujar(t *testing.T) {
+func TestTheFixtureSetsUpARepoThatCanBeClonedAndPushed(t *testing.T) {
 	base := t.TempDir()
 
 	bare := filepath.Join(base, "origin.git")
@@ -21,54 +21,54 @@ func TestElFixtureMontaUnRepoQueSePuedeClonarYEmpujar(t *testing.T) {
 	repo := filepath.Join(base, "work")
 	InitRepo(t, repo)
 
-	CommitFile(t, repo, "src/main.go", "package main\n", "primer commit")
+	CommitFile(t, repo, "src/main.go", "package main\n", "first commit")
 
 	if !RefExists(t, repo, "refs/heads/main") {
-		t.Error("tras CommitFile no existe refs/heads/main")
+		t.Error("after CommitFile refs/heads/main does not exist")
 	}
-	if RefExists(t, repo, "refs/heads/inexistente") {
-		t.Error("RefExists dio true para un ref que no se creó nunca")
+	if RefExists(t, repo, "refs/heads/nonexistent") {
+		t.Error("RefExists returned true for a ref that was never created")
 	}
 
 	SetRemote(t, repo, "origin", bare)
 	Push(t, repo, "-u", "origin", "main")
 
 	if !RefExists(t, bare, "refs/heads/main") {
-		t.Error("tras el push el remoto no tiene refs/heads/main")
+		t.Error("after the push the remote has no refs/heads/main")
 	}
 
 	SetRemote(t, repo, "origin", bare)
-	remotos := RunGit(t, repo, "remote")
-	if !strings.Contains(remotos, "origin") {
-		t.Errorf("tras re-apuntar el remoto quedó %q", remotos)
+	remotes := RunGit(t, repo, "remote")
+	if !strings.Contains(remotes, "origin") {
+		t.Errorf("after re-pointing the remote %q is left", remotes)
 	}
-	SetRemote(t, repo, "otro", bare)
+	SetRemote(t, repo, "other", bare)
 	if r := RunGit(t, repo, "remote"); strings.Count(r, "origin") != 1 {
-		t.Errorf("re-apuntar dejó dos origins: %q", r)
+		t.Errorf("re-pointing left two origins: %q", r)
 	}
 
 	// Cloned for real, not rebuilt by hand: what is checked is that the result is usable, not that the
 	//push worked.
-	clon := filepath.Join(base, "clon")
-	RunGit(t, base, "clone", bare, clon)
-	if !RefExists(t, clon, "refs/heads/main") {
-		t.Error("el clon no trae la rama del remoto")
+	clone := filepath.Join(base, "clone")
+	RunGit(t, base, "clone", bare, clone)
+	if !RefExists(t, clone, "refs/heads/main") {
+		t.Error("the clone does not bring the remote branch")
 	}
-	contenido, err := os.ReadFile(filepath.Join(clon, "src", "main.go"))
+	content, err := os.ReadFile(filepath.Join(clone, "src", "main.go"))
 	if err != nil {
-		t.Fatalf("el clon no trae el fichero del remoto: %v", err)
+		t.Fatalf("the clone does not bring the remote file: %v", err)
 	}
-	if string(contenido) != "package main\n" {
-		t.Errorf("el clon trae %q", contenido)
+	if string(content) != "package main\n" {
+		t.Errorf("the clone brings %q", content)
 	}
-	if RunGit(t, clon, "rev-parse", "HEAD") != RunGit(t, repo, "rev-parse", "HEAD") {
-		t.Error("el clon y el repo no están en el mismo commit")
+	if RunGit(t, clone, "rev-parse", "HEAD") != RunGit(t, repo, "rev-parse", "HEAD") {
+		t.Error("the clone and the repo are not on the same commit")
 	}
 }
 
 // The no-arguments form is the rare default, since `Push(t, dir, "-u", "origin", "main")` is an
 // args case.
-func TestPushConArgsPropiosYSinArgs(t *testing.T) {
+func TestPushWithCustomArgsAndWithoutArgs(t *testing.T) {
 	base := t.TempDir()
 	bare := filepath.Join(base, "o.git")
 	InitBare(t, bare)
@@ -79,31 +79,31 @@ func TestPushConArgsPropiosYSinArgs(t *testing.T) {
 
 	Push(t, repo, "-u", "origin", "main")
 	if !RefExists(t, bare, "refs/heads/main") {
-		t.Fatal("el push con flags no llegó al remoto")
+		t.Fatal("the push with flags did not reach the remote")
 	}
 
 	// The result is NOT checked here: without --set-upstream and a destination git fails and RunGit
 	//would abort the test, so this only asserts the call is built and runs.
 	if got := RunGit(t, repo, "config", "remote.origin.url"); got != bare {
-		t.Fatalf("el remoto no quedó puesto: %q", got)
+		t.Fatalf("the remote was not set: %q", got)
 	}
 }
 
 // The part worth asserting is the abort: the message has to name the command AND the directory.
-func TestRunGitTraeLaSalidaYFallaConElComandoQueSeLePidio(t *testing.T) {
+func TestRunGitBringsTheOutputAndFailsWithTheCommandItWasAsked(t *testing.T) {
 	dir := t.TempDir()
 
 	if got := RunGit(t, dir, "--version"); got == "" {
-		t.Error("git --version dio salida vacia")
+		t.Error("git --version gave empty output")
 	}
-	salida := RunGit(t, dir, "--version")
-	if salida != strings.TrimSpace(salida) {
-		t.Errorf("la salida no viene recortada: %q", salida)
+	output := RunGit(t, dir, "--version")
+	if output != strings.TrimSpace(output) {
+		t.Errorf("the output does not come trimmed: %q", output)
 	}
 	repo := filepath.Join(dir, "r")
 	InitRepo(t, repo)
 	if got := RunGit(t, repo, "rev-parse", "--is-inside-work-tree"); got != "true" {
-		t.Errorf("git rev-parse dio %q, want true dentro de un repo recien creado", got)
+		t.Errorf("git rev-parse gave %q, want true inside a freshly created repo", got)
 	}
 	// With a bare TempDir git finds no repo, which is what gitEnv's isolation guarantees and what keeps
 	//the fixtures from hanging onto the repo the code is being read from.
@@ -111,144 +111,144 @@ func TestRunGitTraeLaSalidaYFallaConElComandoQueSeLePidio(t *testing.T) {
 
 // Three reasons, each preventing a different damage; the empty dir is the grave one, because git
 // would run in the real repo and write its config.
-func TestCheckDirExplicaCadaNegativaPorSeparado(t *testing.T) {
+func TestCheckDirExplainsEachRefusalSeparately(t *testing.T) {
 	err := checkDir("")
 	if err == nil {
-		t.Fatal("un dir vacío pasó")
+		t.Fatal("an empty dir passed")
 	}
-	if !strings.Contains(err.Error(), "repo real") {
-		t.Errorf("el motivo del dir vacío no dice qué pasa: %q", err)
+	if !strings.Contains(err.Error(), "the real repo") {
+		t.Errorf("the reason for the empty dir does not say what happens: %q", err)
 	}
 
-	inexistente := filepath.Join(t.TempDir(), "no-existe")
-	err = checkDir(inexistente)
+	nonexistent := filepath.Join(t.TempDir(), "does-not-exist")
+	err = checkDir(nonexistent)
 	if err == nil {
-		t.Fatal("un dir inexistente pasó")
+		t.Fatal("a nonexistent dir passed")
 	}
-	if !strings.Contains(err.Error(), inexistente) {
-		t.Errorf("el motivo %q no nombra el directorio", err)
+	if !strings.Contains(err.Error(), nonexistent) {
+		t.Errorf("the reason %q does not name the directory", err)
 	}
 
-	fichero := filepath.Join(t.TempDir(), "f")
-	if err := os.WriteFile(fichero, nil, 0o644); err != nil {
+	file := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err = checkDir(fichero)
+	err = checkDir(file)
 	if err == nil {
-		t.Fatal("un fichero pasó como directorio")
+		t.Fatal("a file passed as a directory")
 	}
-	if !strings.Contains(err.Error(), "no es un directorio") {
-		t.Errorf("el motivo %q no dice que no es un directorio", err)
+	if !strings.Contains(err.Error(), "is not a directory") {
+		t.Errorf("the reason %q does not say that it is not a directory", err)
 	}
 
 	if err := checkDir(t.TempDir()); err != nil {
-		t.Errorf("un TempDir dio error: %v", err)
+		t.Errorf("a TempDir gave an error: %v", err)
 	}
 }
 
 // The difference is not `--bare` but `-b main`: both force main as the initial branch, and without
 // that the fixtures depend on the global config of whoever runs them.
-func TestInitBareYInitRepoCreanLoQueDicen(t *testing.T) {
+func TestInitBareAndInitRepoCreateWhatTheySay(t *testing.T) {
 	base := t.TempDir()
 
 	repo := filepath.Join(base, "work")
 	InitRepo(t, repo)
 	if got := RunGit(t, repo, "symbolic-ref", "--short", "HEAD"); got != "main" {
-		t.Errorf("InitRepo dejó la rama en %q, want main", got)
+		t.Errorf("InitRepo left the branch at %q, want main", got)
 	}
-	for _, clave := range []string{"user.email", "user.name"} {
-		if RunGit(t, repo, "config", clave) == "" {
-			t.Errorf("InitRepo no puso %s", clave)
+	for _, key := range []string{"user.email", "user.name"} {
+		if RunGit(t, repo, "config", key) == "" {
+			t.Errorf("InitRepo did not set %s", key)
 		}
 	}
 	if got := RunGit(t, repo, "config", "commit.gpgsign"); got != "false" {
-		t.Errorf("InitRepo dejo commit.gpgsign en %q, want false", got)
+		t.Errorf("InitRepo left commit.gpgsign at %q, want false", got)
 	}
 
 	bare := filepath.Join(base, "o.git")
 	InitBare(t, bare)
 	if got := RunGit(t, bare, "rev-parse", "--is-bare-repository"); got != "true" {
-		t.Errorf("InitBare no creo un repo bare: %q", got)
+		t.Errorf("InitBare did not create a bare repo: %q", got)
 	}
 	// `--is-inside-work-tree` answers FALSE inside a bare; the name misleads, since it asks whether the
 	//current directory is inside a work tree, not whether the repo has one.
 	if got := RunGit(t, bare, "rev-parse", "--is-inside-work-tree"); got != "false" {
-		t.Errorf("dentro del bare, --is-inside-work-tree dio %q, want false", got)
+		t.Errorf("inside the bare, --is-inside-work-tree gave %q, want false", got)
 	}
 	if got := RunGit(t, repo, "rev-parse", "--is-inside-work-tree"); got != "true" {
-		t.Errorf("dentro de un repo normal dio %q, want true", got)
+		t.Errorf("inside a normal repo gave %q, want true", got)
 	}
 }
 
 // The message matters because some tests find the commit by its text; a fixed message would make two
 // tests indistinguishable.
-func TestCommitFileCreaLosPadresYAnota(t *testing.T) {
+func TestCommitFileCreatesTheParentsAndNotes(t *testing.T) {
 	dir := t.TempDir()
 	InitRepo(t, dir)
 
-	CommitFile(t, dir, "src/interno/deep.go", "package deep\n", "el commit con mensaje unico")
+	CommitFile(t, dir, "src/internal/deep.go", "package deep\n", "the commit with a unique message")
 
-	contenido, err := os.ReadFile(filepath.Join(dir, "src", "interno", "deep.go"))
+	content, err := os.ReadFile(filepath.Join(dir, "src", "internal", "deep.go"))
 	if err != nil {
-		t.Fatalf("CommitFile no creo los padres: %v", err)
+		t.Fatalf("CommitFile did not create the parents: %v", err)
 	}
-	if string(contenido) != "package deep\n" {
-		t.Errorf("el contenido escrito es %q", contenido)
+	if string(content) != "package deep\n" {
+		t.Errorf("the written content is %q", content)
 	}
-	if !strings.Contains(RunGit(t, dir, "log", "--oneline"), "el commit con mensaje unico") {
-		t.Error("el mensaje del commit no se guardó")
+	if !strings.Contains(RunGit(t, dir, "log", "--oneline"), "the commit with a unique message") {
+		t.Error("the commit message was not saved")
 	}
-	CommitFile(t, dir, "otro.txt", "y\n", "mensaje distinto")
+	CommitFile(t, dir, "another.txt", "y\n", "a different message")
 	log := RunGit(t, dir, "log", "--oneline")
-	if !strings.Contains(log, "el commit con mensaje unico") || !strings.Contains(log, "mensaje distinto") {
-		t.Errorf("los dos commits no se distinguen en el log: %q", log)
+	if !strings.Contains(log, "the commit with a unique message") || !strings.Contains(log, "a different message") {
+		t.Errorf("the two commits are not told apart in the log: %q", log)
 	}
 }
 
 // This is the path the three adapters take when unconfigured, so it was as untested as the other
 // half.
-func TestLaSuiteDeConformidadAceptaUnAdapterQueDiceUnsupported(t *testing.T) {
-	a := adapterInerte()
+func TestTheConformanceSuiteAcceptsAnAdapterThatSaysUnsupported(t *testing.T) {
+	a := inertAdapter()
 	RunConformance(t, a, ConformanceOptions{Unsupported: true})
 
-	names, warns := a.Branches(t.Context(), refDePrueba())
+	names, warns := a.Branches(t.Context(), testRef())
 	if len(names) != 0 {
-		t.Errorf("un adapter inerte devolvio ramas: %v", names)
+		t.Errorf("an inert adapter returned branches: %v", names)
 	}
 	if len(warns) == 0 || warns[0].Kind != "unsupported" {
-		t.Errorf("un adapter inerte dio %v en Branches, want un unsupported", warns)
+		t.Errorf("an inert adapter gave %v in Branches, want an unsupported", warns)
 	}
 }
 
 // A dumb predicate with a consequence: looking at the message instead of the kind would force every
 // adapter to phrase its `unsupported` one specific way.
-func TestHasKindMiraSoloElKind(t *testing.T) {
+func TestHasKindLooksOnlyAtTheKind(t *testing.T) {
 	warns := []model.Warning{
-		{Forge: "gh", Kind: "ratelimit", Msg: "lo que sea"},
-		{Forge: "gh", Kind: "unsupported", Msg: "otro texto"},
+		{Forge: "gh", Kind: "ratelimit", Msg: "whatever"},
+		{Forge: "gh", Kind: "unsupported", Msg: "some other text"},
 	}
 	if !hasKind(warns, "unsupported") {
-		t.Error("hasKind no encontró el kind que está ahí")
+		t.Error("hasKind did not find the kind that is there")
 	}
 	if !hasKind(warns, "ratelimit") {
-		t.Error("hasKind no encontró el primer kind")
+		t.Error("hasKind did not find the first kind")
 	}
 	if hasKind(warns, "permission") {
-		t.Error("hasKind encontró un kind que no está")
+		t.Error("hasKind found a kind that is not there")
 	}
 	if hasKind(nil, "unsupported") {
-		t.Error("hasKind encontró algo en una lista vacía")
+		t.Error("hasKind found something in an empty list")
 	}
 	if hasKind([]model.Warning{}, "unsupported") {
-		t.Error("hasKind encontró algo en una lista vacía")
+		t.Error("hasKind found something in an empty list")
 	}
 }
 
-func adapterInerte() *FakeAdapter {
-	w := []model.Warning{{Forge: "inerte", Kind: "unsupported", Msg: "sin credenciales"}}
-	ref := refDePrueba()
-	clave := ItemKey(ref.Project, 1)
-	a := &FakeAdapter{ForgeName: "inerte", HostName: "inerte.example"}
+func inertAdapter() *FakeAdapter {
+	w := []model.Warning{{Forge: "inert", Kind: "unsupported", Msg: "no credentials"}}
+	ref := testRef()
+	key := ItemKey(ref.Project, 1)
+	a := &FakeAdapter{ForgeName: "inert", HostName: "inert.example"}
 	for k := range a.Pages {
 		a.ListWarnings[k] = w
 	}
@@ -256,8 +256,8 @@ func adapterInerte() *FakeAdapter {
 	for _, q := range forge.Streams {
 		a.ListWarnings[FakeKey{Section: q.Section, Kind: q.ReviewKind}] = w
 	}
-	a.StateWarnings = map[string][]model.Warning{clave: w}
-	a.CommentWarnings = map[string][]model.Warning{clave: w}
+	a.StateWarnings = map[string][]model.Warning{key: w}
+	a.CommentWarnings = map[string][]model.Warning{key: w}
 	a.ActionWarnings = map[string][]model.Warning{
 		"approve:o/r#1": w, "merge:o/r#1": w, "retarget:o/r#1": w,
 	}
@@ -265,47 +265,47 @@ func adapterInerte() *FakeAdapter {
 	return a
 }
 
-func TestLaPuertaCierraAnteUnAdapterRoto(t *testing.T) {
-	f := adapterInerte()
-	if fuera := ConformanceViolations(f, ConformanceOptions{Unsupported: true}); len(fuera) != 0 {
-		t.Errorf("un adapter inerte dio %d incumplimientos:\n%s", len(fuera), strings.Join(fuera, "\n"))
+func TestTheGateClosesOnABrokenAdapter(t *testing.T) {
+	f := inertAdapter()
+	if violations := ConformanceViolations(f, ConformanceOptions{Unsupported: true}); len(violations) != 0 {
+		t.Errorf("an inert adapter gave %d violations:\n%s", len(violations), strings.Join(violations, "\n"))
 	}
 
-	roto := func(nombre, roto string, opts ConformanceOptions, quiere ...string) {
+	assertBroken := func(name, broken string, opts ConformanceOptions, want ...string) {
 		t.Helper()
-		fuera := ConformanceViolations(&adapterQueFalla{roto: roto}, opts)
-		if len(fuera) == 0 {
-			t.Errorf("%s: la suite dio el visto bueno a un adapter que rompe el contrato", nombre)
+		violations := ConformanceViolations(&failingAdapter{broken: broken}, opts)
+		if len(violations) == 0 {
+			t.Errorf("%s: the suite gave the green light to an adapter that breaks the contract", name)
 			return
 		}
-		for _, q := range quiere {
-			if !contains(fuera, q) {
-				t.Errorf("%s: la suite no se quejó de %q. Se quejó de:\n%s",
-					nombre, q, strings.Join(fuera, "\n"))
+		for _, q := range want {
+			if !contains(violations, q) {
+				t.Errorf("%s: the suite did not complain about %q. It complained about:\n%s",
+					name, q, strings.Join(violations, "\n"))
 			}
 		}
 	}
 
-	roto("forge sin nombre", "forge-vacio", ConformanceOptions{}, "Forge() vacío")
-	roto("host sin nombre", "host-vacio", ConformanceOptions{}, "Host() vacío")
-	roto("paginacion incoherente", "more-sin-next", ConformanceOptions{}, "More=true sin Next")
-	roto("no reporta unsupported", "no-avisar", ConformanceOptions{Unsupported: true},
-		"debería reportar unsupported")
-	roto("devuelve items siendo unsupported", "items", ConformanceOptions{Unsupported: true},
-		"no debería devolver ítems")
-	roto("devuelve ramas siendo unsupported", "ramas", ConformanceOptions{Unsupported: true},
-		"no debería devolver ramas")
-	roto("sin binario no avisa", "silencio", ConformanceOptions{MissingBinary: true},
-		"debería devolver un warning")
-	roto("sin binario devuelve items", "items", ConformanceOptions{MissingBinary: true},
-		"sin binario no debería devolver ítems")
+	assertBroken("empty forge", "empty-forge", ConformanceOptions{}, "Forge() is empty")
+	assertBroken("empty host", "empty-host", ConformanceOptions{}, "Host() is empty")
+	assertBroken("incoherent pagination", "more-without-next", ConformanceOptions{}, "More=true without Next")
+	assertBroken("does not report unsupported", "no-warning", ConformanceOptions{Unsupported: true},
+		"should report unsupported")
+	assertBroken("returns items while unsupported", "items", ConformanceOptions{Unsupported: true},
+		"should not return items")
+	assertBroken("returns branches while unsupported", "branches", ConformanceOptions{Unsupported: true},
+		"should not return branches")
+	assertBroken("no binary gives no warning", "silent", ConformanceOptions{MissingBinary: true},
+		"with no binary should return a warning")
+	assertBroken("no binary returns items", "items", ConformanceOptions{MissingBinary: true},
+		"with no binary should not return items")
 
-	fuera := ConformanceViolations(&adapterQueFalla{roto: "ramas"}, ConformanceOptions{})
-	if !contains(fuera, "no debería devolver ramas") {
-		t.Errorf("devolver ramas sin modo no se detectó: %v", fuera)
+	violations := ConformanceViolations(&failingAdapter{broken: "branches"}, ConformanceOptions{})
+	if !contains(violations, "should not return branches") {
+		t.Errorf("returning branches with no mode was not detected: %v", violations)
 	}
-	if fuera := ConformanceViolations(&adapterQueFalla{roto: "no-avisar"}, ConformanceOptions{}); len(fuera) != 0 {
-		t.Errorf("sin modo y sin romper nada dio %v", fuera)
+	if violations := ConformanceViolations(&failingAdapter{broken: "no-warning"}, ConformanceOptions{}); len(violations) != 0 {
+		t.Errorf("with no mode and nothing broken it gave %v", violations)
 	}
 }
 
@@ -318,126 +318,126 @@ func contains(xs []string, want string) bool {
 	return false
 }
 
-type adapterQueFalla struct {
-	roto string
+type failingAdapter struct {
+	broken string
 }
 
-func (a *adapterQueFalla) Forge() string {
-	if a.roto == "forge-vacio" {
+func (a *failingAdapter) Forge() string {
+	if a.broken == "empty-forge" {
 		return ""
 	}
-	return "roto"
+	return "broken"
 }
-func (a *adapterQueFalla) Host() string {
-	if a.roto == "host-vacio" {
+func (a *failingAdapter) Host() string {
+	if a.broken == "empty-host" {
 		return ""
 	}
-	return "roto.example"
+	return "broken.example"
 }
-func (a *adapterQueFalla) Auth(context.Context) model.AuthState {
-	return model.AuthState{Forge: "roto", OK: true}
+func (a *failingAdapter) Auth(context.Context) model.AuthState {
+	return model.AuthState{Forge: "broken", OK: true}
 }
 
-func (a *adapterQueFalla) List(context.Context, forge.Query) (forge.Page, []model.Warning) {
-	switch a.roto {
-	case "more-sin-next":
+func (a *failingAdapter) List(context.Context, forge.Query) (forge.Page, []model.Warning) {
+	switch a.broken {
+	case "more-without-next":
 		return forge.Page{More: true}, nil
 	case "items":
-		return forge.Page{Items: []model.Item{{Number: 1}}}, a.aviso()
-	case "silencio":
+		return forge.Page{Items: []model.Item{{Number: 1}}}, a.warn()
+	case "silent":
 		return forge.Page{}, nil
-	case "no-avisar":
+	case "no-warning":
 		return forge.Page{}, nil
 	default:
-		return forge.Page{}, a.aviso()
+		return forge.Page{}, a.warn()
 	}
 }
 
-func (a *adapterQueFalla) aviso() []model.Warning {
-	if a.roto == "no-avisar" {
+func (a *failingAdapter) warn() []model.Warning {
+	if a.broken == "no-warning" {
 		return nil
 	}
 	return warnUnsupported()
 }
 
-func (a *adapterQueFalla) ItemState(context.Context, model.RepoRef, int) (model.Item, []model.Warning) {
-	return model.Item{}, a.aviso()
+func (a *failingAdapter) ItemState(context.Context, model.RepoRef, int) (model.Item, []model.Warning) {
+	return model.Item{}, a.warn()
 }
-func (a *adapterQueFalla) Comments(context.Context, model.RepoRef, int) (forge.CommentPage, []model.Warning) {
-	return forge.CommentPage{}, a.aviso()
+func (a *failingAdapter) Comments(context.Context, model.RepoRef, int) (forge.CommentPage, []model.Warning) {
+	return forge.CommentPage{}, a.warn()
 }
-func (a *adapterQueFalla) Approve(context.Context, model.RepoRef, int) []model.Warning {
-	return a.aviso()
+func (a *failingAdapter) Approve(context.Context, model.RepoRef, int) []model.Warning {
+	return a.warn()
 }
-func (a *adapterQueFalla) Merge(context.Context, model.RepoRef, int, forge.MergeRequest) []model.Warning {
-	return a.aviso()
+func (a *failingAdapter) Merge(context.Context, model.RepoRef, int, forge.MergeRequest) []model.Warning {
+	return a.warn()
 }
-func (a *adapterQueFalla) Retarget(context.Context, model.RepoRef, int, string) []model.Warning {
-	return a.aviso()
+func (a *failingAdapter) Retarget(context.Context, model.RepoRef, int, string) []model.Warning {
+	return a.warn()
 }
 
-func (a *adapterQueFalla) Branches(context.Context, model.RepoRef) ([]string, []model.Warning) {
-	if a.roto == "ramas" {
-		return []string{"main"}, a.aviso()
+func (a *failingAdapter) Branches(context.Context, model.RepoRef) ([]string, []model.Warning) {
+	if a.broken == "branches" {
+		return []string{"main"}, a.warn()
 	}
-	return nil, a.aviso()
+	return nil, a.warn()
 }
 
 func warnUnsupported() []model.Warning {
-	return []model.Warning{{Forge: "roto", Kind: "unsupported", Msg: "esto es un doble roto"}}
+	return []model.Warning{{Forge: "broken", Kind: "unsupported", Msg: "a double break"}}
 }
 
 // The half of RunConformance that can be tested in process; the other half, the real t.Error, is
 // checked by subprocess.
-func TestElInformeSeLlamaUnaVezPorIncumplimientoYNingunaSinIncumplimientos(t *testing.T) {
-	var dichos []string
-	reportaIncumplimientos(adapterInerte(), ConformanceOptions{Unsupported: true},
-		func(v string) { dichos = append(dichos, v) })
-	if len(dichos) != 0 {
-		t.Errorf("un adapter inerte produjo %d informes: %v", len(dichos), dichos)
+func TestTheReportIsCalledOncePerViolationAndNeverWithoutViolations(t *testing.T) {
+	var said []string
+	reportViolations(inertAdapter(), ConformanceOptions{Unsupported: true},
+		func(v string) { said = append(said, v) })
+	if len(said) != 0 {
+		t.Errorf("an inert adapter produced %d reports: %v", len(said), said)
 	}
 
 	for _, c := range []struct {
-		nombre string
-		roto   string
+		name   string
+		broken string
 		opts   ConformanceOptions
-		quiere string
+		want   string
 	}{
-		{"forge sin nombre", "forge-vacio", ConformanceOptions{}, "Forge() vacío"},
-		{"host sin nombre", "host-vacio", ConformanceOptions{}, "Host() vacío"},
-		{"no reporta unsupported", "no-avisar", ConformanceOptions{Unsupported: true},
-			"debería reportar unsupported"},
-		{"devuelve items siendo unsupported", "items", ConformanceOptions{Unsupported: true},
-			"no debería devolver ítems"},
+		{"empty forge", "empty-forge", ConformanceOptions{}, "Forge() is empty"},
+		{"empty host", "empty-host", ConformanceOptions{}, "Host() is empty"},
+		{"does not report unsupported", "no-warning", ConformanceOptions{Unsupported: true},
+			"should report unsupported"},
+		{"returns items while unsupported", "items", ConformanceOptions{Unsupported: true},
+			"should not return items"},
 	} {
-		var dicho []string
-		reportaIncumplimientos(&adapterQueFalla{roto: c.roto}, c.opts,
-			func(v string) { dicho = append(dicho, v) })
+		var once []string
+		reportViolations(&failingAdapter{broken: c.broken}, c.opts,
+			func(v string) { once = append(once, v) })
 
-		if len(dicho) == 0 {
-			t.Errorf("%s: la puerta no dijo nada y un adapter roto pasó el visto bueno", c.nombre)
+		if len(once) == 0 {
+			t.Errorf("%s: the gate said nothing and a broken adapter passed the green light", c.name)
 			continue
 		}
 		found := false
-		for _, v := range dicho {
+		for _, v := range once {
 			if strings.TrimSpace(v) == "" {
-				t.Errorf("%s: un informe con texto vacío es indistinguible de no avisar",
-					c.nombre)
+				t.Errorf("%s: a report with empty text is indistinguishable from not warning",
+					c.name)
 			}
-			if strings.Contains(v, c.quiere) {
+			if strings.Contains(v, c.want) {
 				found = true
 			}
 		}
 		if !found {
-			t.Errorf("%s: los informes son %q, y ninguno dice %q", c.nombre, dicho, c.quiere)
+			t.Errorf("%s: the reports are %q, and none says %q", c.name, once, c.want)
 		}
 	}
 
-	var uno []string
-	reportaIncumplimientos(&adapterQueFalla{roto: "forge-vacio"}, ConformanceOptions{},
-		func(v string) { uno = append(uno, v) })
-	if len(uno) != 1 {
-		t.Errorf("un adapter que rompe una sola regla produjo %d informes, want 1: %v",
-			len(uno), uno)
+	var one []string
+	reportViolations(&failingAdapter{broken: "empty-forge"}, ConformanceOptions{},
+		func(v string) { one = append(one, v) })
+	if len(one) != 1 {
+		t.Errorf("an adapter that breaks a single rule produced %d reports, want 1: %v",
+			len(one), one)
 	}
 }

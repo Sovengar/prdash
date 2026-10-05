@@ -268,7 +268,7 @@ func landRow(rows []bool, anchor, bh int) (int, bool) {
 		return 0, false
 	}
 	for base := anchor; base >= bh-1; base-- {
-		if admitenAviso(rows, base-bh+1, bh) {
+		if admitsWarning(rows, base-bh+1, bh) {
 			return base, true
 		}
 	}
@@ -277,7 +277,7 @@ func landRow(rows []bool, anchor, bh int) (int, bool) {
 
 // A row that does not exist counts as not admitting one: not painting is better than painting
 // too much.
-func admitenAviso(rows []bool, from, n int) bool {
+func admitsWarning(rows []bool, from, n int) bool {
 	for i := from; i < from+n; i++ {
 		if i < 0 || i >= len(rows) || !rows[i] {
 			return false

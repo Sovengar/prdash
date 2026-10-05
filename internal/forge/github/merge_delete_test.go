@@ -14,10 +14,10 @@ func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		delete bool
-		want   bool // ¿debe aparecer --delete-branch?
+		want   bool // should --delete-branch appear?
 	}{
-		{"pedido", true, true},
-		{"apagado", false, false},
+		{"requested", true, true},
+		{"off", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -26,11 +26,11 @@ func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 			warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7,
 				forge.MergeRequest{Mode: forge.Squash, HeadSHA: headSHA, DeleteBranch: tc.delete})
 			if len(warns) != 0 {
-				t.Fatalf("Merge = %+v, want sin warnings", warns)
+				t.Fatalf("Merge = %+v, want no warnings", warns)
 			}
 			joined := strings.Join(readArgs(t, argsFile), " ")
 			if got := strings.Contains(joined, "--delete-branch"); got != tc.want {
-				t.Errorf("argv = %q, want --delete-branch presente = %v", joined, tc.want)
+				t.Errorf("argv = %q, want --delete-branch present = %v", joined, tc.want)
 			}
 		})
 	}
@@ -45,6 +45,6 @@ func TestMergeWithDeleteStillPins(t *testing.T) {
 
 	joined := strings.Join(readArgs(t, argsFile), " ")
 	if !strings.Contains(joined, "--match-head-commit "+headSHA) {
-		t.Errorf("argv = %q, want el pin a %s", joined, headSHA)
+		t.Errorf("argv = %q, want the pin to %s", joined, headSHA)
 	}
 }

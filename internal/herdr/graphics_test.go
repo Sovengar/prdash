@@ -28,7 +28,7 @@ type fakeSocket struct {
 
 func (f *fakeSocket) dial(ctx context.Context, _, _ string) (net.Conn, error) {
 	if f.fail {
-		return nil, errors.New("socket no disponible")
+		return nil, errors.New("socket not available")
 	}
 	f.dials++
 	if dl, ok := ctx.Deadline(); ok {
@@ -98,7 +98,7 @@ func boolJSON(v bool) string {
 	return "false"
 }
 
-func TestInfoLeeElTamanoDeCelda(t *testing.T) {
+func TestInfoReadsTheCellSize(t *testing.T) {
 	f := &fakeSocket{response: graphicsInfoJSON(9, 19, true)}
 	g := newTestGraphics(t, f)
 
@@ -107,17 +107,17 @@ func TestInfoLeeElTamanoDeCelda(t *testing.T) {
 		t.Fatalf("Info: %v", err)
 	}
 	if info.CellWidthPx != 9 || info.CellHeightPx != 19 {
-		t.Errorf("celda = %dx%d, want 9x19", info.CellWidthPx, info.CellHeightPx)
+		t.Errorf("cell = %dx%d, want 9x19", info.CellWidthPx, info.CellHeightPx)
 	}
 	if !info.PaneVisible {
-		t.Error("PaneVisible = false con la respuesta que lo dice true")
+		t.Error("PaneVisible = false with a response that says true")
 	}
 	if f.lastRequest["pane_id"] != "w1:p1" {
 		t.Errorf("pane_id = %v, want w1:p1", f.lastRequest["pane_id"])
 	}
 }
 
-func TestCellSizeUsaLaMedidaYCaenEnElHabitual(t *testing.T) {
+func TestCellSizeUsesTheMeasureAndFallsBackToTheUsualOne(t *testing.T) {
 	g := newTestGraphics(t, &fakeSocket{response: graphicsInfoJSON(9, 19, true)})
 	w, h := g.CellSize(context.Background())
 	if w != 9 || h != 19 {
@@ -127,11 +127,11 @@ func TestCellSizeUsaLaMedidaYCaenEnElHabitual(t *testing.T) {
 	g = newTestGraphics(t, &fakeSocket{response: `{"error":{"code":"x","message":"y"}}`})
 	w, h = g.CellSize(context.Background())
 	if w != 1 || h != 2 {
-		t.Errorf("CellSize sin servidor = %dx%d, want 1x2", w, h)
+		t.Errorf("CellSize without a server = %dx%d, want 1x2", w, h)
 	}
 }
 
-func TestSetImageMandaLaColocacionEnCeldas(t *testing.T) {
+func TestSetImageSendsThePlacementInCells(t *testing.T) {
 	f := &fakeSocket{response: `{"id":"x","result":{"type":"ok"}}`}
 	g := newTestGraphics(t, f)
 
@@ -152,7 +152,7 @@ func TestSetImageMandaLaColocacionEnCeldas(t *testing.T) {
 	}
 	placement, ok := f.lastRequest["placement"].(map[string]any)
 	if !ok {
-		t.Fatalf("placement = %v, want un objeto", f.lastRequest["placement"])
+		t.Fatalf("placement = %v, want an object", f.lastRequest["placement"])
 	}
 	for key, want := range map[string]float64{
 		"viewport_col": 10, "viewport_row": 5, "grid_cols": 40, "grid_rows": 20,
@@ -162,11 +162,11 @@ func TestSetImageMandaLaColocacionEnCeldas(t *testing.T) {
 		}
 	}
 	if data, _ := f.lastRequest["data_base64"].(string); data == "" {
-		t.Error("data_base64 vacío: la imagen no viajaría")
+		t.Error("data_base64 empty: the image would not travel")
 	}
 }
 
-func TestSetImageRechazaLoQueNoDibuja(t *testing.T) {
+func TestSetImageRejectsWhatItCannotDraw(t *testing.T) {
 	f := &fakeSocket{response: `{"id":"x","result":{"type":"ok"}}`}
 	g := newTestGraphics(t, f)
 
@@ -174,14 +174,14 @@ func TestSetImageRechazaLoQueNoDibuja(t *testing.T) {
 		t.Errorf("SetImage(nil) = %v, want ErrNoGraphics", err)
 	}
 	if err := g.SetImage(context.Background(), GraphicsLayer, solidImage(2, 2), Placement{}); !errors.Is(err, ErrNoGraphics) {
-		t.Errorf("SetImage(rect vacío) = %v, want ErrNoGraphics", err)
+		t.Errorf("SetImage(empty rect) = %v, want ErrNoGraphics", err)
 	}
 	if f.served != 0 {
-		t.Errorf("se enviaron %d peticiones, want 0", f.served)
+		t.Errorf("%d requests were sent, want 0", f.served)
 	}
 }
 
-func TestClearQuitaLaCapa(t *testing.T) {
+func TestClearRemovesTheLayer(t *testing.T) {
 	f := &fakeSocket{response: `{"id":"x","result":{"type":"ok"}}`}
 	g := newTestGraphics(t, f)
 
@@ -193,30 +193,30 @@ func TestClearQuitaLaCapa(t *testing.T) {
 	}
 }
 
-func TestElErrorDelServidorSePropaga(t *testing.T) {
+func TestServerErrorPropagates(t *testing.T) {
 	f := &fakeSocket{response: `{"error":{"code":"pane_graphics_disabled","message":"pane graphics are disabled by terminal.kitty_graphics"}}`}
 	g := newTestGraphics(t, f)
 
 	_, err := g.Info(context.Background())
 	if err == nil {
-		t.Fatal("Info no falló")
+		t.Fatal("Info did not fail")
 	}
 	if !strings.Contains(err.Error(), "kitty_graphics") {
-		t.Errorf("err = %v, want el motivo del servidor", err)
+		t.Errorf("err = %v, want the server's reason", err)
 	}
 	var rerr *rpcError
 	if !errors.As(err, &rerr) {
 		t.Errorf("err = %T, want *rpcError", err)
 	}
 	if g.Available() {
-		t.Error("Available = true con un servidor que rechaza el método")
+		t.Error("Available = true with a server that rejects the method")
 	}
 }
 
-func TestAvailableSinHerdrEsFalse(t *testing.T) {
+func TestAvailableWithoutHerdrIsFalse(t *testing.T) {
 	g := &Graphics{getenv: func(string) string { return "" }}
 	if g.Available() {
-		t.Error("Available = true sin HERDR_ENV")
+		t.Error("Available = true without HERDR_ENV")
 	}
 	g = &Graphics{getenv: func(key string) string {
 		if key == "HERDR_ENV" {
@@ -225,11 +225,11 @@ func TestAvailableSinHerdrEsFalse(t *testing.T) {
 		return ""
 	}}
 	if g.Available() {
-		t.Error("Available = true sin socket ni pane")
+		t.Error("Available = true without socket or pane")
 	}
 }
 
-func TestSocketCaidoNoRompe(t *testing.T) {
+func TestDownSocketDoesNotBreak(t *testing.T) {
 	f := &fakeSocket{fail: true}
 	g := newTestGraphics(t, f)
 

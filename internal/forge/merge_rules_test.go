@@ -13,10 +13,10 @@ func TestAllowedModesReadsTheRepository(t *testing.T) {
 		rules model.MergeRules
 		want  []MergeMode
 	}{
-		{"solo rebase", model.MergeRules{Known: true, Rebase: true}, []MergeMode{Rebase}},
-		{"rebase y squash", model.MergeRules{Known: true, Rebase: true, Squash: true}, []MergeMode{Rebase, Squash}},
-		{"los tres", model.MergeRulesAll(), []MergeMode{Rebase, MergeCommit, Squash}},
-		{"ninguno", model.MergeRules{Known: true}, nil},
+		{"only rebase", model.MergeRules{Known: true, Rebase: true}, []MergeMode{Rebase}},
+		{"rebase and squash", model.MergeRules{Known: true, Rebase: true, Squash: true}, []MergeMode{Rebase, Squash}},
+		{"all three", model.MergeRulesAll(), []MergeMode{Rebase, MergeCommit, Squash}},
+		{"none", model.MergeRules{Known: true}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := AllowedModes(tc.rules); !slices.Equal(got, tc.want) {
@@ -32,7 +32,7 @@ func TestAllowedModesDoesNotRestrictWhatItDoesNotKnow(t *testing.T) {
 	got := AllowedModes(model.MergeRules{})
 	want := []MergeMode{Rebase, MergeCommit, Squash}
 	if !slices.Equal(got, want) {
-		t.Errorf("AllowedModes(sin conocer) = %v, want %v", got, want)
+		t.Errorf("AllowedModes(unknown) = %v, want %v", got, want)
 	}
 }
 
@@ -40,16 +40,16 @@ func TestAllowedModesDoesNotRestrictWhatItDoesNotKnow(t *testing.T) {
 func TestAllowedModesPutsRebaseFirst(t *testing.T) {
 	got := AllowedModes(model.MergeRulesAll())
 	if len(got) == 0 || got[0] != Rebase {
-		t.Errorf("AllowedModes = %v, want rebase el primero", got)
+		t.Errorf("AllowedModes = %v, want rebase first", got)
 	}
 }
 
 func TestAllowsModeIsConsistentWithAllowedModes(t *testing.T) {
 	rules := model.MergeRules{Known: true, Rebase: true, MergeCommit: true}
 	if !AllowsMode(rules, Rebase) {
-		t.Error("rebase está permitido por las reglas y AllowsMode lo niega")
+		t.Error("rebase is allowed by the rules and AllowsMode denies it")
 	}
 	if AllowsMode(rules, Squash) {
-		t.Error("squash no está permitido por las reglas y AllowsMode lo admite")
+		t.Error("squash is not allowed by the rules and AllowsMode allows it")
 	}
 }

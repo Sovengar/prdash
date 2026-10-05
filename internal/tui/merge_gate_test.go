@@ -22,10 +22,10 @@ func TestMergeBlockedOnADraftNoArms(t *testing.T) {
 
 	m := press(t, f.m, "m")
 	if m.mergeArmed {
-		t.Error("un ítem en borrador no debería armar el merge")
+		t.Error("a draft item should not arm the merge")
 	}
 	if !strings.Contains(toasts(m), "draft") {
-		t.Errorf("el aviso no explica el bloqueo: %q", toasts(m))
+		t.Errorf("the notice does not explain the block: %q", toasts(m))
 	}
 }
 
@@ -36,7 +36,7 @@ func TestMergeBlockedOnAMergedItemNoArms(t *testing.T) {
 
 	m := press(t, f.m, "m")
 	if m.mergeArmed {
-		t.Error("un ítem ya mergeado no debería armar el merge")
+		t.Error("an already merged item should not arm the merge")
 	}
 }
 
@@ -48,14 +48,14 @@ func TestMergeOnFailingCIStillArmsButSays(t *testing.T) {
 
 	m := press(t, f.m, "m")
 	if !m.mergeArmed {
-		t.Fatal("con el CI en rojo el merge debería armar: el bloqueo es blando")
+		t.Fatal("with red CI the merge should arm: the block is soft")
 	}
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "CI is failing") {
-		t.Errorf("la confirmación no menciona el CI en rojo:\n%s", view)
+		t.Errorf("the confirmation does not mention the red CI:\n%s", view)
 	}
 	if !strings.Contains(view, "anyway") {
-		t.Errorf("la confirmación no dice que elegir el modo es seguir adelante:\n%s", view)
+		t.Errorf("the confirmation does not say that choosing the mode goes ahead:\n%s", view)
 	}
 }
 
@@ -68,14 +68,14 @@ func TestMergeOnConflictingBranchesStillArmsButSays(t *testing.T) {
 
 	m := press(t, f.m, "m")
 	if !m.mergeArmed {
-		t.Fatal("con las ramas en conflicto el merge debería armar: un rebase lo arregla")
+		t.Fatal("with conflicting branches the merge should arm: a rebase fixes it")
 	}
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "conflicts with main") {
-		t.Errorf("la confirmación no dice contra qué choca:\n%s", view)
+		t.Errorf("the confirmation does not say what it clashes with:\n%s", view)
 	}
 	if !strings.Contains(view, "anyway") {
-		t.Errorf("la confirmación no dice que elegir el modo es seguir adelante:\n%s", view)
+		t.Errorf("the confirmation does not say that choosing the mode goes ahead:\n%s", view)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
 		name string
 		m    model.Mergeability
 	}{
-		{"sin dato", model.Mergeability{}},
+		{"no data", model.Mergeability{}},
 		{"integrable", model.Mergeability{Known: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -96,10 +96,10 @@ func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
 
 			m := press(t, f.m, "m")
 			if !m.mergeArmed {
-				t.Fatal("el merge debería armar")
+				t.Fatal("the merge should arm")
 			}
 			if view := stripANSI(m.View().Content); strings.Contains(view, "conflicts") {
-				t.Errorf("sin dato no debe anunciarse un conflicto:\n%s", view)
+				t.Errorf("with no data a conflict must not be announced:\n%s", view)
 			}
 		})
 	}
@@ -121,17 +121,17 @@ func TestMergeRefusedForConflictingBranchesSaysRebase(t *testing.T) {
 
 	notice := lastToast(m)
 	if !strings.Contains(notice, "refused") {
-		t.Errorf("el aviso debería decir que el forge lo rechazó, no que hubo un conflicto: %q", notice)
+		t.Errorf("the notice should say the forge rejected it, not that there was a conflict: %q", notice)
 	}
 	if strings.Contains(notice, "forge conflict") {
-		t.Errorf("un refresco no arregla un rebase: %q", notice)
+		t.Errorf("a refresh does not fix a rebase: %q", notice)
 	}
 	if !strings.Contains(notice, "rebase") {
-		t.Errorf("el aviso debería decir qué hacer: %q", notice)
+		t.Errorf("the notice should say what to do: %q", notice)
 	}
 	// And it must not stay recorded as denied: a rebase makes it integrable again.
 	if len(m.denied) != 0 {
-		t.Errorf("el ítem no debería quedar denegado para siempre: %+v", m.denied)
+		t.Errorf("the item should not stay denied forever: %+v", m.denied)
 	}
 }
 
@@ -141,10 +141,10 @@ func TestMergeConfirmationOnlyOffersAllowedModes(t *testing.T) {
 	m := press(t, f.m, "m")
 	view := stripANSI(m.View().Content)
 	if strings.Contains(view, "s squash") {
-		t.Errorf("la confirmación ofrece squash y el repositorio lo tiene desactivado:\n%s", view)
+		t.Errorf("the confirmation offers squash and the repository has it disabled:\n%s", view)
 	}
 	if !strings.Contains(view, "r rebase") {
-		t.Errorf("la confirmación no ofrece rebase, que sí está permitido:\n%s", view)
+		t.Errorf("the confirmation does not offer rebase, which is allowed:\n%s", view)
 	}
 }
 
@@ -154,10 +154,10 @@ func TestMergeRefusesADisallowedMode(t *testing.T) {
 	m := press(t, f.m, "m")
 	m = press(t, m, "s")
 	if m.actionBusy {
-		t.Error("un modo no permitido no debería lanzar el merge")
+		t.Error("a mode that is not allowed should not fire the merge")
 	}
 	if !strings.Contains(toasts(m), "does not allow") {
-		t.Errorf("el aviso no explica el rechazo: %q", toasts(m))
+		t.Errorf("the notice does not explain the rejection: %q", toasts(m))
 	}
 }
 
@@ -168,7 +168,7 @@ func TestMergeOnUnknownRulesOffersEveryMode(t *testing.T) {
 	view := stripANSI(m.View().Content)
 	for _, want := range []string{"r rebase", "m merge commit", "s squash"} {
 		if !strings.Contains(view, want) {
-			t.Errorf("sin reglas conocidas la confirmación debería ofrecer %q:\n%s", want, view)
+			t.Errorf("with no known rules the confirmation should offer %q:\n%s", want, view)
 		}
 	}
 }
@@ -197,9 +197,9 @@ func TestMergeWithoutAHeadSHARefuses(t *testing.T) {
 	out := waitOutcome(t, m)
 
 	if out.OK {
-		t.Error("un merge sin pin no debería salir como ok")
+		t.Error("a merge with no pin should not come out as ok")
 	}
 	if n := f.adp.MergeModeCount(forge.Rebase); n != 0 {
-		t.Errorf("hubo %d llamada(s) a Merge, want 0: no hay pin posible", n)
+		t.Errorf("there were %d call(s) to Merge, want 0: no pin is possible", n)
 	}
 }

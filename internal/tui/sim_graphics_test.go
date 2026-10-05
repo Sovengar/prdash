@@ -63,14 +63,14 @@ func waitClear(t *testing.T, f *fakeGraphics) {
 	t.Helper()
 	if f.cleared == nil {
 		if f.clears == 0 {
-			t.Fatal("cerrar el popup no pidió quitar la capa: la imagen se quedaría encima de la TUI")
+			t.Fatal("closing the popup did not ask to remove the layer: the image would stay over the TUI")
 		}
 		return
 	}
 	select {
 	case <-f.cleared:
 	case <-time.After(2 * time.Second):
-		t.Fatal("la capa no se quitó")
+		t.Fatal("the layer was not removed")
 	}
 }
 
@@ -93,31 +93,31 @@ func TestTheImageGoesToThePaneLayer(t *testing.T) {
 	m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: f.res})
 
 	if !m.sim.viaGraphics {
-		t.Fatal("la imagen no se publicó en la capa del pane")
+		t.Fatal("the image was not published on the pane layer")
 	}
 	if len(g.sets) != 1 {
-		t.Fatalf("SetImage se llamó %d veces, want 1", len(g.sets))
+		t.Fatalf("SetImage was called %d times, want 1", len(g.sets))
 	}
 	if len(m.sim.cells) != 0 {
-		t.Errorf("la caja pintó %d líneas de celdas con la imagen en la capa", len(m.sim.cells))
+		t.Errorf("the box painted %d lines of cells with the image on the layer", len(m.sim.cells))
 	}
 	set := g.sets[0]
 	if set.cols <= 0 || set.rows <= 0 {
-		t.Errorf("rectángulo vacío: %+v", set)
+		t.Errorf("empty rectangle: %+v", set)
 	}
 	if set.col < 1 || set.row < 1 {
-		t.Errorf("la imagen empieza en (%d,%d): se saldría del marco", set.col, set.row)
+		t.Errorf("the image starts at (%d,%d): it would leave the frame", set.col, set.row)
 	}
 	b := set.img.Bounds()
-	const cellPx = 9 // el ancho de celda que reporta Herdr en kitty
+	const cellPx = 9 // the cell width Herdr reports in kitty
 	if want := set.cols * cellPx; b.Dx() > want {
-		t.Errorf("imagen de %d px para un rectángulo de %d: se manda más resolución de la que se ve", b.Dx(), want)
+		t.Errorf("image of %d px for a rectangle of %d: more resolution is sent than is seen", b.Dx(), want)
 	}
 	if b.Dx() < set.cols*4 {
-		t.Errorf("imagen de %d px, demasiado poca para %d columnas", b.Dx(), set.cols)
+		t.Errorf("image of %d px, too little for %d columns", b.Dx(), set.cols)
 	}
 	if text := viewText(m); !strings.Contains(text, "simulate: merge") {
-		t.Errorf("el popup perdió su título:\n%s", text)
+		t.Errorf("the popup lost its title:\n%s", text)
 	}
 }
 
@@ -126,9 +126,9 @@ func TestWithoutTheLayerTheCellsTakeOver(t *testing.T) {
 	f := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: path}}
 
 	for name, g := range map[string]Graphics{
-		"sin capa":       nil,
-		"capa ausente":   &fakeGraphics{available: false},
-		"capa que falla": &fakeGraphics{available: true, err: errors.New("pane graphics are disabled")},
+		"no layer":      nil,
+		"missing layer": &fakeGraphics{available: false},
+		"failing layer": &fakeGraphics{available: true, err: errors.New("pane graphics are disabled")},
 	} {
 		m := simModel(t, f)
 		if g != nil {
@@ -139,10 +139,10 @@ func TestWithoutTheLayerTheCellsTakeOver(t *testing.T) {
 		m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: f.res})
 
 		if m.sim.viaGraphics {
-			t.Errorf("%s: se usó la capa sin poder", name)
+			t.Errorf("%s: the layer was used without power", name)
 		}
 		if len(m.sim.cells) == 0 {
-			t.Errorf("%s: no se pintó ninguna celda", name)
+			t.Errorf("%s: no cell was painted", name)
 		}
 	}
 }
@@ -164,10 +164,10 @@ func TestTheRealCellRatioMakesTheImageBigger(t *testing.T) {
 	measured = send(t, measured, simMsg{seq: measured.simSeq, kind: sim.KindMerge, res: f.res})
 
 	if measured.sim.cellW_px != 9 || measured.sim.cellH_px != 19 {
-		t.Fatalf("no se guardó la celda medida: %dx%d", measured.sim.cellW_px, measured.sim.cellH_px)
+		t.Fatalf("the measured cell was not stored: %dx%d", measured.sim.cellW_px, measured.sim.cellH_px)
 	}
 	if got, _ := measured.simBox(); got <= assumedW {
-		t.Errorf("con la celda medida (9x19) la caja mide %d columnas, no más que las %d del supuesto 1x2",
+		t.Errorf("with the measured cell (9x19) the box measures %d columns, no more than the %d of the assumed 1x2",
 			got, assumedW)
 	}
 }
@@ -185,13 +185,13 @@ func TestClosingThePopupClearsTheLayer(t *testing.T) {
 	m = press(t, m, "enter")
 	m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: f.res})
 	if g.clears != 0 {
-		t.Fatalf("se limpió la capa %d veces con el popup abierto", g.clears)
+		t.Fatalf("the layer was cleared %d times with the popup open", g.clears)
 	}
 
 	m = press(t, m, "esc")
 	waitClear(t, g)
 	if g.layer != simLayer {
-		t.Errorf("se quitó la capa %q, want %q", g.layer, simLayer)
+		t.Errorf("the layer %q was removed, want %q", g.layer, simLayer)
 	}
 }
 
@@ -208,14 +208,14 @@ func TestResizeRepositionsTheLayer(t *testing.T) {
 
 	m = send(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
 	if len(g.sets) < 2 {
-		t.Fatalf("el resize no recolocó la imagen (%d publicaciones)", len(g.sets))
+		t.Fatalf("the resize did not relocate the image (%d publications)", len(g.sets))
 	}
 	after := g.sets[len(g.sets)-1]
 	if after == before {
-		t.Error("la colocación no cambió con el resize: la imagen quedó en el rectángulo viejo")
+		t.Error("the placement did not change with the resize: the image stayed in the old rectangle")
 	}
 	if after.col > 100 || after.col+after.cols > 100 {
-		t.Errorf("la imagen se sale de la terminal: %+v", after)
+		t.Errorf("the image leaves the terminal: %+v", after)
 	}
 }
 
@@ -233,10 +233,10 @@ func TestResizeFallsBackWhenTheLayerGoesAway(t *testing.T) {
 	m = send(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	if m.sim.viaGraphics {
-		t.Error("siguió creyendo que la imagen está en la capa")
+		t.Error("it kept believing the image is on the layer")
 	}
 	if len(m.sim.cells) == 0 {
-		t.Error("no cayó a half-blocks: el popup quedó con un hueco donde iba la imagen")
+		t.Error("it did not fall back to half-blocks: the popup was left with a gap where the image went")
 	}
 }
 

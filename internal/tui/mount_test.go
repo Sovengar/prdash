@@ -40,7 +40,7 @@ func waitMount(t *testing.T, m Model) tea.Msg {
 	case ev := <-m.events:
 		return ev
 	case <-time.After(2 * time.Second):
-		t.Fatal("no llegó el resultado del montaje")
+		t.Fatal("the mount result never arrived")
 		return nil
 	}
 }
@@ -53,7 +53,7 @@ func TestMountReviewWithoutMounterInformsHerdrRequired(t *testing.T) {
 		t.Fatalf("toast = %q, wants it to mention Herdr", lastToast(m))
 	}
 	if m.mountBusy {
-		t.Fatal("sin montador no debería quedar un montaje en curso")
+		t.Fatal("with no mounter there should be no mount in flight")
 	}
 }
 
@@ -67,7 +67,7 @@ func TestMountReviewOutsideHerdrReportsLayoutUnavailable(t *testing.T) {
 
 	m = press(t, m, "r")
 	if !m.mountBusy {
-		t.Fatal("el montaje debería quedar marcado en curso")
+		t.Fatal("the mount should be marked as in flight")
 	}
 
 	m = send(t, m, waitMount(t, m))
@@ -75,16 +75,16 @@ func TestMountReviewOutsideHerdrReportsLayoutUnavailable(t *testing.T) {
 		t.Fatalf("toast = %q, wants the layout-unavailable toast", lastToast(m))
 	}
 	if m.mountBusy {
-		t.Fatal("el montaje terminado no debería seguir marcado en curso")
+		t.Fatal("the finished mount should not stay marked as in flight")
 	}
 	if fm.got.ID() != it.ID() {
-		t.Fatalf("se montó %+v, quiero %+v", fm.got.ID(), it.ID())
+		t.Fatalf("mounted %+v, want %+v", fm.got.ID(), it.ID())
 	}
 }
 
 func TestMountReviewErrorSurfacesNotice(t *testing.T) {
 	m, _ := mountModel(t)
-	m.SetMounter(&fakeMounter{err: errors.New("sin permisos de fetch")})
+	m.SetMounter(&fakeMounter{err: errors.New("no fetch permissions")})
 
 	m = press(t, m, "r")
 	m = send(t, m, waitMount(t, m))
@@ -92,7 +92,7 @@ func TestMountReviewErrorSurfacesNotice(t *testing.T) {
 	if !strings.Contains(lastToast(m), "could not mount review") {
 		t.Fatalf("toast = %q, wants the mount error", lastToast(m))
 	}
-	if !strings.Contains(lastToast(m), "sin permisos") {
+	if !strings.Contains(lastToast(m), "no fetch permissions") {
 		t.Fatalf("toast = %q, wants the cause", lastToast(m))
 	}
 }

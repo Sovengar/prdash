@@ -28,16 +28,16 @@ func TestSectionPrefix(t *testing.T) {
 		items []model.Item
 		want  string
 	}{
-		{"subgrupo largo", mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app"), "APPCITTI/vsocial/backend"},
-		{"corta en el grupo comun", mkItems("APPCITTI/vsocial/a/x", "APPCITTI/vsocial/b/y"), "APPCITTI/vsocial"},
-		{"sin nada en comun", mkItems("a/one", "b/two"), ""},
-		{"owner/repo de github", mkItems("acme/widget", "acme/lib"), "acme"},
+		{"subgrupo long", mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app"), "APPCITTI/vsocial/backend"},
+		{"short in the common group", mkItems("APPCITTI/vsocial/a/x", "APPCITTI/vsocial/b/y"), "APPCITTI/vsocial"},
+		{"nothing in common", mkItems("a/one", "b/two"), ""},
+		{"github owner/repo", mkItems("acme/widget", "acme/lib"), "acme"},
 		{"proyectos identicos", mkItems("g/p", "g/p"), "g"},
-		{"un solo item", mkItems("APPCITTI/vsocial/backend/api"), ""},
-		{"sin subgrupos", mkItems("a", "b"), ""},
+		{"a single item", mkItems("APPCITTI/vsocial/backend/api"), ""},
+		{"no subgroups", mkItems("a", "b"), ""},
 		{"prefijos parciales", mkItems("APPCITTI/vs/x", "APPCITTI/vsocial/y"), "APPCITTI"},
-		{"proyecto vacio", mkItems("", "g/p"), ""},
-		{"misma ruta, distinto host", mkItems("g/p", "g/p"), "g"},
+		{"project empty", mkItems("", "g/p"), ""},
+		{"same path, different host", mkItems("g/p", "g/p"), "g"},
 	} {
 		if got := sectionPrefix(tc.items); got != tc.want {
 			t.Errorf("%s: sectionPrefix = %q, want %q", tc.name, got, tc.want)
@@ -45,7 +45,7 @@ func TestSectionPrefix(t *testing.T) {
 	}
 }
 
-func TestRefSuffixQuitaElPrefijoDeLaCabecera(t *testing.T) {
+func TestRefSuffixRemovesThePrefixFromTheHeader(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 	prefix := sectionPrefix(items)
 
@@ -57,9 +57,9 @@ func TestRefSuffixQuitaElPrefijoDeLaCabecera(t *testing.T) {
 		t.Errorf("%q + %q = %q, want %q", prefix, got, full, refLabel(items[0]))
 	}
 	if got := refSuffix(items[0], ""); got != refLabel(items[0]) {
-		t.Errorf("sin prefijo: refSuffix = %q, want %q", got, refLabel(items[0]))
+		t.Errorf("without prefix: refSuffix = %q, want %q", got, refLabel(items[0]))
 	}
-	if got := refSuffix(items[0], "otro/grupo"); got != refLabel(items[0]) {
+	if got := refSuffix(items[0], "other/group"); got != refLabel(items[0]) {
 		t.Errorf("prefijo ajeno: refSuffix = %q, want %q", got, refLabel(items[0]))
 	}
 }
@@ -83,61 +83,61 @@ func TestTruncateTail(t *testing.T) {
 	}
 }
 
-func TestNewRefLayoutDimensionaITEMPorContenido(t *testing.T) {
+func TestNewRefLayoutSizesITEMByContent(t *testing.T) {
 	lay := newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems("g/one", "g/two")...),
 	}, prefixCommon)
 	if got, want := lay.cols[colRefIdx].width, len("one#100")+1; got != want {
-		t.Errorf("ancho de ITEM = %d, want %d (el sufijo más largo + hueco)", got, want)
+		t.Errorf("width of ITEM = %d, want %d (the longest suffix + gap)", got, want)
 	}
 	if got := lay.prefixOf(model.SectionReview); got != "g" {
-		t.Errorf("prefijo de review = %q, want %q", got, "g")
+		t.Errorf("review prefix = %q, want %q", got, "g")
 	}
 	if got := lay.prefixOf(model.SectionAuthored); got != "" {
-		t.Errorf("prefijo de una sección ausente = %q, want vacío", got)
+		t.Errorf("prefix of a missing section = %q, want empty", got)
 	}
 
 	lay = newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems(
-			"g/un-servicio-con-nombre-larguísimo",
-			"g/otro-servicio-con-nombre-larguísimo",
+			"g/un-servicio-con-name-larguísimo",
+			"g/other-servicio-con-name-larguísimo",
 		)...),
 	}, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthCap {
-		t.Errorf("ancho de ITEM = %d, want el tope %d", got, itemWidthCap)
+		t.Errorf("width of ITEM = %d, want the cap %d", got, itemWidthCap)
 	}
 
 	lay = newRefLayout(nil, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthMin {
-		t.Errorf("ancho de ITEM sin ítems = %d, want %d", got, itemWidthMin)
+		t.Errorf("width of ITEM with no items = %d, want %d", got, itemWidthMin)
 	}
 }
 
-func TestItemCellsConservanElNumeroAlRecortar(t *testing.T) {
+func TestItemCellsKeepTheNumberWhenClipped(t *testing.T) {
 	items := mkItems(
-		"APPCITTI/vsocial/backend/un-servicio-con-nombre-larguísimo",
-		"APPCITTI/vsocial/backend/otro-servicio-con-nombre-larguísimo",
+		"APPCITTI/vsocial/backend/un-servicio-con-name-larguísimo",
+		"APPCITTI/vsocial/backend/other-servicio-con-name-larguísimo",
 	)
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixCommon)
-	ref := itemCells(items[0], model.SectionReview, "yo", lay)[colRefIdx].text
+	ref := itemCells(items[0], model.SectionReview, "me", lay)[colRefIdx].text
 
 	if !strings.HasSuffix(ref, "#100") {
-		t.Errorf("celda ITEM = %q, want el sufijo %q", ref, "#100")
+		t.Errorf("cell ITEM = %q, want the suffix %q", ref, "#100")
 	}
 	if got := utf8.RuneCountInString(ref); got > itemWidthCap {
-		t.Errorf("celda ITEM = %q (%d runes), excede el tope %d", ref, got, itemWidthCap)
+		t.Errorf("cell ITEM = %q (%d runes), exceeds the cap %d", ref, got, itemWidthCap)
 	}
 	if !strings.HasPrefix(ref, "…") {
-		t.Errorf("celda ITEM = %q, want el recorte por la cola (prefijo %q)", ref, "…")
+		t.Errorf("cell ITEM = %q, want the tail clipping (prefix %q)", ref, "…")
 	}
 	// What is lost from the front is the group, which the header already declares.
 	if got := lay.prefixOf(model.SectionReview); got != "APPCITTI/vsocial/backend" {
-		t.Errorf("prefijo = %q, want el grupo que compensó el recorte", got)
+		t.Errorf("prefix = %q, want the group that paid for the clipping", got)
 	}
 }
 
 // The integration test: with one section there is no common prefix.
-func TestListLinesMuestranElPrefijoEnUnaLineaFija(t *testing.T) {
+func TestListLinesShowThePrefixOnAFixedLine(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, mkItems(
 		"APPCITTI/vsocial/backend/api-gateway",
@@ -157,25 +157,25 @@ func TestListLinesMuestranElPrefijoEnUnaLineaFija(t *testing.T) {
 		}
 	}
 	if prefixLine == "" {
-		t.Errorf("falta la línea del prefijo común:\n%s", strings.Join(all, "\n"))
+		t.Errorf("the common prefix line is missing:\n%s", strings.Join(all, "\n"))
 	}
 	if got := strings.Count(strings.Join(all, "\n"), "APPCITTI/vsocial/backend/"); got != 1 {
-		t.Errorf("el prefijo aparece %d veces, want 1 (solo su línea):\n%s", got, strings.Join(all, "\n"))
+		t.Errorf("the prefix appears %d times, want 1 (only its line):\n%s", got, strings.Join(all, "\n"))
 	}
 	if strings.Contains(row, "APPCITTI") {
-		t.Errorf("fila = %q, want solo el sufijo", row)
+		t.Errorf("row = %q, want only the suffix", row)
 	}
 	if !strings.Contains(row, "api-gateway#100") {
-		t.Errorf("fila = %q, want %q sin truncar", row, "api-gateway#100")
+		t.Errorf("row = %q, want %q untruncated", row, "api-gateway#100")
 	}
 	// No inner section header with the title and the count: the legend lives elsewhere.
 	if joined := strings.Join(all, "\n"); strings.Contains(joined, "Assigned (2)") {
-		t.Errorf("la lista no debería llevar cabecera de sección:\n%s", joined)
+		t.Errorf("the list should not carry a section header:\n%s", joined)
 	}
 }
 
 // A section with a single item cannot declare a common prefix.
-func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
+func TestListLinesWithNoPrefixKeepThePath(t *testing.T) {
 	render := func(project string) []string {
 		m := newTestModel(t, ghAdapter())
 		m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, mkItems(project), false))
@@ -186,9 +186,9 @@ func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 		return lines
 	}
 
-	// Ruta corta: entra entera y sin recortes.
+	// A short path: it enters whole and uncut.
 	if !containsSubstring(render("g/p"), "g/p#100") {
-		t.Fatal("una ruta corta en sección de un ítem no se pintó entera")
+		t.Fatal("a short path in an items section was not painted whole")
 	}
 
 	// A long path: with no prefix to compensate it is clipped at the tail and the "#number"
@@ -196,17 +196,17 @@ func TestListLinesSinPrefijoConservanLaRuta(t *testing.T) {
 	var cell string
 	for _, line := range render("APPCITTI/vsocial/backend/api-gateway") {
 		if strings.Contains(line, "APPCITTI") {
-			t.Errorf("sin prefijo común no debe haber línea de prefijo: %q", line)
+			t.Errorf("with no common prefix there must be no prefix line: %q", line)
 		}
 		if strings.Contains(line, "api-gateway#100") {
 			cell = line
 		}
 	}
 	if cell == "" {
-		t.Fatal("ninguna línea pintó el sufijo del ítem")
+		t.Fatal("no line painted the items suffix")
 	}
 	if !strings.Contains(cell, "…") {
-		t.Errorf("celda = %q, want el recorte por la cola", cell)
+		t.Errorf("cell = %q, want the tail clipping", cell)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestRefColInvariantes(t *testing.T) {
 	kinds := []model.Section{model.SectionAuthored, model.SectionReview, model.SectionMentions}
 	for round := range 300 {
 		sections := make([]inbox.Section, 1+rng.Intn(3))
-		for si := range sections {
+		for secIdx := range sections {
 			group := seg()
 			if rng.Intn(4) == 0 {
 				group = seg()
@@ -237,8 +237,8 @@ func TestRefColInvariantes(t *testing.T) {
 				for range 1 + rng.Intn(4) {
 					parts = append(parts, seg())
 				}
-				sections[si].Kind = kinds[si]
-				sections[si].Items = append(sections[si].Items,
+				sections[secIdx].Kind = kinds[secIdx]
+				sections[secIdx].Items = append(sections[secIdx].Items,
 					mkItem("gitlab", "gitlab.com", strings.Join(parts, "/"), "T", 1+rng.Intn(9999), ""))
 			}
 		}
@@ -249,12 +249,12 @@ func TestRefColInvariantes(t *testing.T) {
 			lay := newRefLayout(sections, mode)
 			w := lay.cols[colRefIdx].width
 			if w < itemWidthMin || w > itemWidthCap {
-				t.Fatalf("round %d en %v: ancho de ITEM = %d, fuera de [%d, %d]", round, mode, w, itemWidthMin, itemWidthCap)
+				t.Fatalf("round %d in %v: width of ITEM = %d, outside [%d, %d]", round, mode, w, itemWidthMin, itemWidthCap)
 			}
 			if mode != prefixCommon {
 				for _, sec := range sections {
 					if p := lay.prefixOf(sec.Kind); p != "" {
-						t.Fatalf("round %d en %v: la sección %v declara prefijo %q, want vacío", round, mode, sec.Kind, p)
+						t.Fatalf("round %d in %v: section %v declares prefix %q, want empty", round, mode, sec.Kind, p)
 					}
 				}
 			}
@@ -264,32 +264,32 @@ func TestRefColInvariantes(t *testing.T) {
 					full := refLabel(it)
 					want := refCellText(it, mode, prefix)
 					if want == "" {
-						t.Fatalf("round %d en %v: etiqueta vacía para %q", round, mode, full)
+						t.Fatalf("round %d in %v: empty label for %q", round, mode, full)
 					}
 					if prefix != "" {
 						if recon := strings.TrimPrefix(full, prefix+"/"); recon == full {
-							t.Fatalf("round %d en %v: el prefijo %q no aplica a %q", round, mode, prefix, full)
+							t.Fatalf("round %d in %v: the prefix %q does not apply to %q", round, mode, prefix, full)
 						} else if recon != want {
-							t.Fatalf("round %d en %v: celda %q, want el sufijo %q de %q", round, mode, want, recon, full)
+							t.Fatalf("round %d in %v: cell %q, want the suffix %q of %q", round, mode, want, recon, full)
 						}
 					}
-					cell := itemCells(it, sec.Kind, "yo", lay)[colRefIdx].text
+					cell := itemCells(it, sec.Kind, "me", lay)[colRefIdx].text
 					if cell == "" {
-						t.Fatalf("round %d en %v: celda vacía para %q", round, mode, full)
+						t.Fatalf("round %d in %v: empty cell for %q", round, mode, full)
 					}
 					cut := truncateTail(want, textWidth(w))
 					if want == cut {
 						if cell != want {
-							t.Fatalf("round %d en %v: celda %q, want %q", round, mode, cell, want)
+							t.Fatalf("round %d en %v: cell %q, want %q", round, mode, cell, want)
 						}
 						continue
 					}
 					if !strings.HasPrefix(cell, "…") {
-						t.Fatalf("round %d en %v: celda recortada %q, want el prefijo %q", round, mode, cell, "…")
+						t.Fatalf("round %d in %v: cell clipped %q, want the prefix %q", round, mode, cell, "…")
 					}
 					tail := want[max(0, len(want)-(textWidth(w)-1)):]
 					if !strings.HasSuffix(cell, tail) {
-						t.Fatalf("round %d en %v: celda %q pierde la cola %q de %q", round, mode, cell, tail, want)
+						t.Fatalf("round %d in %v: cell %q loses the tail %q of %q", round, mode, cell, tail, want)
 					}
 				}
 			}

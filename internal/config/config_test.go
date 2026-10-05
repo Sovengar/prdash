@@ -11,7 +11,7 @@ import (
 func TestLoadFromMissingFileReturnsDefaultsSilently(t *testing.T) {
 	cfg, warn := LoadFrom(filepath.Join(t.TempDir(), "nope.toml"))
 	if warn != "" {
-		t.Fatalf("warning = %q, want vacío", warn)
+		t.Fatalf("warning = %q, want empty", warn)
 	}
 	if cfg.RefreshInterval != 60*time.Second {
 		t.Errorf("refresh = %v", cfg.RefreshInterval)
@@ -23,14 +23,14 @@ func TestLoadFromMissingFileReturnsDefaultsSilently(t *testing.T) {
 		t.Errorf("api_base = %q", cfg.Forges.GitLab.APIBase)
 	}
 	if cfg.Forges.Bitbucket.Enabled {
-		t.Error("bitbucket debería venir deshabilitado")
+		t.Error("bitbucket should come disabled")
 	}
 	if len(cfg.Roots) != 1 || !strings.HasSuffix(cfg.Roots[0], "dev") {
 		t.Errorf("roots = %v", cfg.Roots)
 	}
 }
 
-func escribirConfig(t *testing.T, path, content string) {
+func writeConfig(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
@@ -44,10 +44,10 @@ func TestLoadFromBrokenFileReturnsDefaultsWithWarning(t *testing.T) {
 	}
 	cfg, warn := LoadFrom(path)
 	if warn == "" {
-		t.Fatal("se esperaba warning por TOML roto")
+		t.Fatal("a warning was expected for broken TOML")
 	}
 	if cfg.RefreshInterval != 60*time.Second {
-		t.Errorf("debería caer a defaults, refresh = %v", cfg.RefreshInterval)
+		t.Errorf("it should fall back to defaults, refresh = %v", cfg.RefreshInterval)
 	}
 }
 
@@ -90,7 +90,7 @@ gh = "gh --hostname github.enterprise.com"
 		t.Errorf("roots = %v", cfg.Roots)
 	}
 	if cfg.Forges.GitHub.Enabled {
-		t.Error("github debería quedar deshabilitado")
+		t.Error("github should end up disabled")
 	}
 	if cfg.Forges.GitHub.Host != "github.enterprise.com" {
 		t.Errorf("github host = %q", cfg.Forges.GitHub.Host)
@@ -105,7 +105,7 @@ gh = "gh --hostname github.enterprise.com"
 		t.Errorf("agent = %q", cfg.Tools.Agent)
 	}
 	if cfg.Tools.Hunk != "hunk" {
-		t.Errorf("hunk debería conservar su default, got %q", cfg.Tools.Hunk)
+		t.Errorf("hunk should keep its default, got %q", cfg.Tools.Hunk)
 	}
 	if cfg.KeyFor("refresh") != "R" {
 		t.Errorf("keybinding refresh = %q", cfg.KeyFor("refresh"))
@@ -125,10 +125,10 @@ func TestLoadFromPartialKeepsOtherDefaults(t *testing.T) {
 		t.Fatalf("warning = %q", warn)
 	}
 	if cfg.RefreshInterval != 0 {
-		t.Errorf("refresh = %v, want 0 (solo manual)", cfg.RefreshInterval)
+		t.Errorf("refresh = %v, want 0 (manual only)", cfg.RefreshInterval)
 	}
 	if !cfg.Forges.GitHub.Enabled {
-		t.Error("github debería seguir habilitado por default")
+		t.Error("github should stay enabled by default")
 	}
 }
 
@@ -139,19 +139,19 @@ func TestGitLabClonePrefixDerivesFromAPIBase(t *testing.T) {
 		cloneBase string
 		want      string
 	}{
-		{"subcarpeta", "/git/api/v4/", "", "git"},
-		{"raíz", "/api/v4/", "", ""},
-		{"sin barra inicial", "git/api/v4/", "", "git"},
-		{"vacío", "", "", ""},
-		{"sin forma REST", "/custom/", "", ""},
-		{"override gana", "/git/api/v4/", "/custom/", "custom"},
-		{"override limpia a raíz", "/git/api/v4/", "/", ""},
+		{"subfolder", "/git/api/v4/", "", "git"},
+		{"root", "/api/v4/", "", ""},
+		{"no leading slash", "git/api/v4/", "", "git"},
+		{"empty", "", "", ""},
+		{"not REST shaped", "/custom/", "", ""},
+		{"override wins", "/git/api/v4/", "/custom/", "custom"},
+		{"override cleans to root", "/git/api/v4/", "/", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			g := GitLabConfig{APIBase: tc.apiBase, CloneBase: tc.cloneBase}
 			if got := g.ClonePrefix(); got != tc.want {
-				t.Fatalf("ClonePrefix = %q, quiero %q", got, tc.want)
+				t.Fatalf("ClonePrefix = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -159,7 +159,7 @@ func TestGitLabClonePrefixDerivesFromAPIBase(t *testing.T) {
 
 func TestGitHubClonePrefix(t *testing.T) {
 	if got := (GitHubConfig{}).ClonePrefix(); got != "" {
-		t.Fatalf("github raíz = %q", got)
+		t.Fatalf("github root = %q", got)
 	}
 	if got := (GitHubConfig{CloneBase: "/ent/"}).ClonePrefix(); got != "ent" {
 		t.Fatalf("github enterprise = %q", got)
@@ -195,7 +195,7 @@ clone_base = "repo"
 func TestDefaultsClonePrefix(t *testing.T) {
 	// APIBase's default is "/api/v4/", with the trailing slash: no prefix must be derived.
 	if got := Defaults().Forges.GitLab.ClonePrefix(); got != "" {
-		t.Fatalf("gitlab default ClonePrefix = %q, quiero vacío (raíz)", got)
+		t.Fatalf("gitlab default ClonePrefix = %q, want empty (root)", got)
 	}
 	if got := Defaults().Forges.GitHub.ClonePrefix(); got != "" {
 		t.Fatalf("github default ClonePrefix = %q", got)
@@ -232,15 +232,15 @@ func TestExpandAll(t *testing.T) {
 		t.Errorf("got[0] = %q", got[0])
 	}
 	if got[1] != "/abs" || got[2] != "~" {
-		t.Errorf("entradas sin ~/ no deben cambiar: %v", got)
+		t.Errorf("entries without ~/ must not change: %v", got)
 	}
 }
 
 // The merge treats "not set" and "set to empty" as different things on purpose.
-func TestLasRutasVaciasNoBorranLosDefaults(t *testing.T) {
+func TestTheEmptyPathsDoNotWipeTheDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	escribirConfig(t, path, `
+	writeConfig(t, path, `
 data_dir = ""
 clone_dir = ""
 worktree_dir = ""
@@ -248,113 +248,113 @@ roots = [""]
 `)
 	cfg, warn := LoadFrom(path)
 	if warn != "" {
-		t.Fatalf("un config con rutas vacías no es un error: %s", warn)
+		t.Fatalf("a config with empty paths is not an error: %s", warn)
 	}
 	def := Defaults()
 	if cfg.DataDir != def.DataDir {
-		t.Errorf("data_dir vacío no debería pisar el default: %q vs %q", cfg.DataDir, def.DataDir)
+		t.Errorf("an empty data_dir should not clobber the default: %q vs %q", cfg.DataDir, def.DataDir)
 	}
 	if cfg.CloneDir != def.CloneDir {
-		t.Errorf("clone_dir vacío no debería pisar el default: %q vs %q", cfg.CloneDir, def.CloneDir)
+		t.Errorf("an empty clone_dir should not clobber the default: %q vs %q", cfg.CloneDir, def.CloneDir)
 	}
 	if cfg.WorktreeDir != def.WorktreeDir {
-		t.Errorf("worktree_dir vacío no debería pisar el default: %q vs %q", cfg.WorktreeDir, def.WorktreeDir)
+		t.Errorf("an empty worktree_dir should not clobber the default: %q vs %q", cfg.WorktreeDir, def.WorktreeDir)
 	}
-	otro := t.TempDir()
-	path2 := filepath.Join(dir, "otro.toml")
-	escribirConfig(t, path2, "data_dir = \""+otro+"\"\n")
+	other := t.TempDir()
+	path2 := filepath.Join(dir, "other.toml")
+	writeConfig(t, path2, "data_dir = \""+other+"\"\n")
 	cfg2, _ := LoadFrom(path2)
-	if cfg2.DataDir != otro {
-		t.Errorf("data_dir con valor = %q, want %q", cfg2.DataDir, otro)
+	if cfg2.DataDir != other {
+		t.Errorf("data_dir with a value = %q, want %q", cfg2.DataDir, other)
 	}
 }
 
 // The three forges do not merge alike: GitHub and GitLab have their own block.
-func TestBitbucketEnabledSeAplicaSiendoElUnicoForgeDelBloque(t *testing.T) {
+func TestBitbucketEnabledAppliesAsTheOnlyForgeOfTheBlock(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "off.toml")
-	escribirConfig(t, path, "[forge.bitbucket]\nenabled = false\n")
+	writeConfig(t, path, "[forge.bitbucket]\nenabled = false\n")
 	cfg, _ := LoadFrom(path)
 	if cfg.Forges.Bitbucket.Enabled {
-		t.Error("enabled = false debería apagar bitbucket")
+		t.Error("enabled = false should turn bitbucket off")
 	}
 
 	path = filepath.Join(dir, "on.toml")
-	escribirConfig(t, path, "[forge.bitbucket]\nenabled = true\n")
+	writeConfig(t, path, "[forge.bitbucket]\nenabled = true\n")
 	cfg, _ = LoadFrom(path)
 	if !cfg.Forges.Bitbucket.Enabled {
-		t.Error("enabled = true debería encender bitbucket")
+		t.Error("enabled = true should turn bitbucket on")
 	}
 
 	// The block without `enabled`: the default stays false, which is what the second `&&` is for.
 	path = filepath.Join(dir, "bare.toml")
-	escribirConfig(t, path, "[forge.bitbucket]\n")
+	writeConfig(t, path, "[forge.bitbucket]\n")
 	cfg, _ = LoadFrom(path)
 	if cfg.Forges.Bitbucket.Enabled {
-		t.Error("un bloque sin enabled no debería encender el forge")
+		t.Error("a block without enabled should not turn the forge on")
 	}
 	// A block with other fields neither: the condition is about `enabled`, not about the block existing.
-	path = filepath.Join(dir, "vacio.toml")
-	escribirConfig(t, path, "[forge.bitbucket]\nclone_base = \"https://bitbucket.example.com\"\n")
+	path = filepath.Join(dir, "empty.toml")
+	writeConfig(t, path, "[forge.bitbucket]\nclone_base = \"https://bitbucket.example.com\"\n")
 	cfg, warn := LoadFrom(path)
 	if warn != "" {
-		t.Errorf("un bloque sin enabled no es un config roto: %s", warn)
+		t.Errorf("a block without enabled is not a broken config: %s", warn)
 	}
 	if cfg.Forges.Bitbucket.Enabled {
-		t.Error("un bloque con otros campos no debería encender el forge")
+		t.Error("a block with other fields should not turn the forge on")
 	}
 }
 
 // The keybindings merge ignores an empty value on purpose: a keys map is written per action, and
 // an empty one would delete the shortcut.
-func TestLosKeybindingsVaciosNoDesactivanAtajos(t *testing.T) {
+func TestTheEmptyKeybindingsDoNotDisableShortcuts(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kb.toml")
-	escribirConfig(t, path, `
+	writeConfig(t, path, `
 [keybindings]
 "quit" = ""
 "merge" = "x"
 `)
 	cfg, warn := LoadFrom(path)
 	if warn != "" {
-		t.Fatalf("config roto: %s", warn)
+		t.Fatalf("broken config: %s", warn)
 	}
 	def := DefaultKeybindings()
 	if cfg.Keybindings["quit"] != def["quit"] {
-		t.Errorf("quit = %q, want el default %q: un valor vacío no desactiva el atajo", cfg.Keybindings["quit"], def["quit"])
+		t.Errorf("quit = %q, want the default %q: an empty value does not disable the shortcut", cfg.Keybindings["quit"], def["quit"])
 	}
-	// El valor de verdad sobreescribe.
+	// A real value DOES overwrite.
 	if cfg.Keybindings["merge"] != "x" {
 		t.Errorf("merge = %q, want \"x\"", cfg.Keybindings["merge"])
 	}
-	for accion, tecla := range cfg.Keybindings {
-		if tecla == "" {
-			t.Errorf("la acción %q quedó sin tecla: %v", accion, cfg.Keybindings)
+	for action, key := range cfg.Keybindings {
+		if key == "" {
+			t.Errorf("the action %q ended up without a key: %v", action, cfg.Keybindings)
 		}
 	}
 }
 
 // expand must only convert a real `~/`. The cases it does NOT touch are half the contract.
-func TestExpandSoloTocaElTilDEInicial(t *testing.T) {
+func TestExpandOnlyTouchesATildeAtTheStart(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		t.Skipf("sin home: %v", err)
+		t.Skipf("no home: %v", err)
 	}
 	cases := map[string]string{
 		"~/dev":     filepath.Join(home, "dev"),
 		"~/":        filepath.Join(home),
-		"~":         "~",         // a secas no se convierte
-		"~user/dev": "~user/dev", // es el home de otro usuario: no se sabe
-		"~x":        "~x",        // la segunda letra no es separador
-		"a~b":       "a~b",       // la ~ no está al principio
-		"/a~/b":     "/a~/b",     // idem, dentro de una ruta absoluta
-		"~a/b":      "~a/b",      // segunda letra no separador
-		"~a":        "~a",        // idem sin barra
-		"":          "",          // vacío se deja
-		"/abs":      "/abs",      // sin tilde
-		"relative":  "relative",  // sin tilde
-		"dev/":      "dev/",      // sin tilde
-		"~~/dev":    "~~/dev",    // doble tilde: la segunda no es separador
+		"~":         "~",         // a bare ~ is not converted
+		"~user/dev": "~user/dev", // another user's home: unknown
+		"~x":        "~x",        // the second letter is not a separator
+		"a~b":       "a~b",       // the ~ is not at the start
+		"/a~/b":     "/a~/b",     // same, inside an absolute path
+		"~a/b":      "~a/b",      // second letter not a separator
+		"~a":        "~a",        // same, without a slash
+		"":          "",          // empty is left alone
+		"/abs":      "/abs",      // no tilde
+		"relative":  "relative",  // no tilde
+		"dev/":      "dev/",      // no tilde
+		"~~/dev":    "~~/dev",    // double tilde: the second is not a separator
 	}
 	for in, want := range cases {
 		if got := expand(in); got != want {
@@ -377,7 +377,7 @@ func TestToolArgs(t *testing.T) {
 	if got := cfg.ToolArgs("tuicr"); len(got) != 1 || got[0] != "tuicr" {
 		t.Fatalf("tuicr default = %v", got)
 	}
-	// `tools.<name>` define el binario; `commands.<name>` el argv completo.
+	// `tools.<name>` defines the binary; `commands.<name>` the full argv.
 	cfg.Tools.Agent = "claude"
 	if got := cfg.ToolArgs("agent"); len(got) != 1 || got[0] != "claude" {
 		t.Fatalf("agent tools = %v", got)
@@ -386,28 +386,28 @@ func TestToolArgs(t *testing.T) {
 	if got := cfg.ToolArgs("agent"); len(got) != 3 || got[0] != "claude" || got[2] != "opus" {
 		t.Fatalf("agent commands = %v", got)
 	}
-	if got := cfg.ToolArgs("desconocido"); got != nil {
-		t.Fatalf("herramienta desconocida = %v", got)
+	if got := cfg.ToolArgs("unknown"); got != nil {
+		t.Fatalf("unknown tool = %v", got)
 	}
 }
 
 func TestPaneOverride(t *testing.T) {
 	cfg := Defaults()
 	if _, ok := cfg.PaneOverride("hunk"); ok {
-		t.Fatal("hunk no debería traer override por defecto")
+		t.Fatal("hunk should not come with an override by default")
 	}
 	cfg.Commands["hunk"] = "hunk diff develop...HEAD --watch"
 	got, ok := cfg.PaneOverride("hunk")
 	if !ok {
-		t.Fatal("hunk debería tener override")
+		t.Fatal("hunk should have an override")
 	}
 	want := []string{"hunk", "diff", "develop...HEAD", "--watch"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Fatalf("override = %v, quiero %v", got, want)
+		t.Fatalf("override = %v, want %v", got, want)
 	}
 	cfg.Commands["agent"] = "   "
 	if _, ok := cfg.PaneOverride("agent"); ok {
-		t.Fatal("un valor en blanco no es override")
+		t.Fatal("a blank value is not an override")
 	}
 }
 
@@ -428,10 +428,10 @@ func TestLoadFromReadsPaneCommands(t *testing.T) {
 	} {
 		got, ok := cfg.PaneOverride(key)
 		if !ok {
-			t.Fatalf("%s debería tener override", key)
+			t.Fatalf("%s should have an override", key)
 		}
 		if strings.Join(got, " ") != want {
-			t.Fatalf("%s = %q, quiero %q", key, strings.Join(got, " "), want)
+			t.Fatalf("%s = %q, want %q", key, strings.Join(got, " "), want)
 		}
 	}
 }
@@ -439,7 +439,7 @@ func TestLoadFromReadsPaneCommands(t *testing.T) {
 // `[tools].editor` sets the editor's ORDER; `[commands].editor` replaces it entirely.
 func TestEditorToolAndOverride(t *testing.T) {
 	if got := strings.Join(Defaults().ToolArgs("editor"), " "); got != "vi" {
-		t.Fatalf("editor por defecto = %q, quiero %q", got, "vi")
+		t.Fatalf("default editor = %q, want %q", got, "vi")
 	}
 
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -468,53 +468,53 @@ func TestHints(t *testing.T) {
 		"p prefix", "e edit base", "j/k move", "pgup/dn page",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Fatalf("Hints() = %v, quiero %v", got, want)
+		t.Fatalf("Hints() = %v, want %v", got, want)
 	}
 }
 
-func TestHintsConEstadoDinamico(t *testing.T) {
+func TestHintsWithDynamicState(t *testing.T) {
 	cfg := Defaults()
 	bar := strings.Join(cfg.Hints(HintState{"prefix-mode": "full"}), " ")
 	if !strings.Contains(bar, "p prefix: full") {
-		t.Errorf("la barra no nombra el modo actual: %v", cfg.Hints(HintState{"prefix-mode": "full"}))
+		t.Errorf("the bar does not name the current mode: %v", cfg.Hints(HintState{"prefix-mode": "full"}))
 	}
 
-	bar = strings.Join(cfg.Hints(HintState{"no-existe": "algo"}), " ")
-	if strings.Contains(bar, "algo") {
-		t.Errorf("un estado de una acción ausente añadió una entrada: %v", cfg.Hints(HintState{"no-existe": "algo"}))
+	bar = strings.Join(cfg.Hints(HintState{"does-not-exist": "something"}), " ")
+	if strings.Contains(bar, "something") {
+		t.Errorf("a state for an absent action added an entry: %v", cfg.Hints(HintState{"does-not-exist": "something"}))
 	}
 
 	cfg.Keybindings["prefix-mode"] = "P"
 	bar = strings.Join(cfg.Hints(HintState{"prefix-mode": "leaf"}), " ")
 	if !strings.Contains(bar, "P prefix: leaf") {
-		t.Errorf("el rebind no se combinó con el estado: %v", cfg.Hints(HintState{"prefix-mode": "leaf"}))
+		t.Errorf("the rebind was not combined with the state: %v", cfg.Hints(HintState{"prefix-mode": "leaf"}))
 	}
 	if strings.Contains(bar, "p prefix") {
-		t.Errorf("la barra sigue mostrando la tecla anterior: %v", cfg.Hints(HintState{"prefix-mode": "leaf"}))
+		t.Errorf("the bar still shows the previous key: %v", cfg.Hints(HintState{"prefix-mode": "leaf"}))
 	}
 }
 
 // The anti-drift guard: an action added to DefaultKeybindings and not to hintOrder makes the bar
 // lie.
-func TestHintsCubrenTodosLosKeybindings(t *testing.T) {
+func TestHintsCoverAllKeybindings(t *testing.T) {
 	bar := strings.Join(Defaults().Hints(nil), " ")
 	for action, key := range DefaultKeybindings() {
 		if !strings.Contains(bar, key+" ") {
-			t.Errorf("la acción %q (tecla %q) no sale en la barra de hints", action, key)
+			t.Errorf("action %q (key %q) does not show up in the hints bar", action, key)
 		}
 	}
 }
 
-func TestHintsSiguenElRebind(t *testing.T) {
+func TestHintsFollowTheRebind(t *testing.T) {
 	cfg := Defaults()
 	cfg.Keybindings["open-browser"] = "b"
 	cfg.Keybindings["mount-review"] = "v"
 	bar := strings.Join(cfg.Hints(nil), " ")
 	if !strings.Contains(bar, "b open") || !strings.Contains(bar, "v mount review") {
-		t.Errorf("el rebind no llegó a la barra: %v", cfg.Hints(nil))
+		t.Errorf("the rebind did not reach the bar: %v", cfg.Hints(nil))
 	}
 	if strings.Contains(bar, "o open") || strings.Contains(bar, "m mount review") {
-		t.Errorf("la barra sigue mostrando la tecla anterior: %v", cfg.Hints(nil))
+		t.Errorf("the bar still shows the previous key: %v", cfg.Hints(nil))
 	}
 }
 
@@ -522,21 +522,21 @@ func TestDefaultKeybindingsCoverActions(t *testing.T) {
 	kb := DefaultKeybindings()
 	for _, action := range []string{"quit", "refresh", "mount-review", "approve", "merge", "section-next", "open-browser", "prefix-mode", "retarget"} {
 		if kb[action] == "" {
-			t.Errorf("falta keybinding %q", action)
+			t.Errorf("missing keybinding %q", action)
 		}
 	}
 }
 
 // Two actions sharing a key is a silent failure: ActionForKey resolves alphabetically by
 // action, so which one wins is arbitrary.
-func TestDefaultKeybindingsNoSeRepiten(t *testing.T) {
+func TestDefaultKeybindingsAreNotRepeated(t *testing.T) {
 	owner := map[string]string{}
 	for action, key := range DefaultKeybindings() {
 		if key == "" {
 			continue
 		}
-		if otra, ok := owner[key]; ok {
-			t.Errorf("las acciones %q y %q comparten la tecla %q", otra, action, key)
+		if other, ok := owner[key]; ok {
+			t.Errorf("actions %q and %q share the key %q", other, action, key)
 		}
 		owner[key] = action
 	}
@@ -557,16 +557,16 @@ func TestActionForKey(t *testing.T) {
 		t.Errorf("ActionForKey(m) = %q", got)
 	}
 	if got := cfg.ActionForKey("z"); got != "" {
-		t.Errorf("ActionForKey(z) = %q, want vacío", got)
+		t.Errorf("ActionForKey(z) = %q, want empty", got)
 	}
 }
 
-func TestDefaultKeybindingsNoColisionan(t *testing.T) {
+func TestDefaultKeybindingsDoNotCollide(t *testing.T) {
 	kb := DefaultKeybindings()
 	owner := map[string]string{}
 	for action, key := range kb {
 		if other, dup := owner[key]; dup {
-			t.Errorf("tecla %q compartida por %q y %q", key, other, action)
+			t.Errorf("key %q shared by %q and %q", key, other, action)
 		}
 		owner[key] = action
 	}
@@ -579,6 +579,6 @@ func TestActionForKeyHonorsOverride(t *testing.T) {
 		t.Errorf("ActionForKey(R) = %q", got)
 	}
 	if got := cfg.ActionForKey("r"); got == "refresh" {
-		t.Error("la tecla vieja no debería seguir mapeada tras el override")
+		t.Error("the old key should not stay mapped after the override")
 	}
 }

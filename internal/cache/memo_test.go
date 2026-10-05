@@ -19,31 +19,31 @@ func TestMemoRoundTrip(t *testing.T) {
 
 	reopened := OpenStore(path)
 	if got, ok := reopened.Route("github/github.com/acme/widget"); !ok || got != "/home/u/dev/widget" {
-		t.Fatalf("ruta recordada = %q, %v", got, ok)
+		t.Fatalf("remembered route = %q, %v", got, ok)
 	}
 	rec, ok := reopened.Review("github/github.com/acme/widget#7")
 	if !ok || rec.Branch != "prdash/pr-7" || rec.Worktree == "" {
-		t.Fatalf("review recordado = %+v, %v", rec, ok)
+		t.Fatalf("remembered review = %+v, %v", rec, ok)
 	}
 }
 
 func TestMemoMissingIsSilent(t *testing.T) {
 	s := OpenStore(filepath.Join(t.TempDir(), "nope.json"))
 	if _, ok := s.Route("x"); ok {
-		t.Fatal("memoria ausente debería ser silenciosa")
+		t.Fatal("a missing memo should be silent")
 	}
 	if _, ok := s.Review("x"); ok {
-		t.Fatal("memoria ausente debería ser silenciosa")
+		t.Fatal("a missing memo should be silent")
 	}
 }
 
 func TestMemoCorruptIsSilent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "memo.json")
-	if err := os.WriteFile(path, []byte("{ roto"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("{ broken"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := LoadMemo(path); ok {
-		t.Fatal("memoria corrupta debería ignorarse")
+		t.Fatal("a corrupt memo should be ignored")
 	}
 }
 
@@ -53,6 +53,6 @@ func TestMemoWrongVersionIsSilent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := LoadMemo(path); ok {
-		t.Fatal("versión desconocida debería ignorarse")
+		t.Fatal("an unknown version should be ignored")
 	}
 }

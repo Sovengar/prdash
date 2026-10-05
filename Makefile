@@ -1,12 +1,12 @@
-# prdash — tareas de desarrollo, instalación y prueba.
-# Requiere Go 1.26+ y, para datos reales, `gh`/`glab` autenticados.
+# prdash — development, install and test tasks.
+# Requires Go 1.26+ and, for real data, authenticated `gh`/`glab`.
 
 BINARY  := prdash
 PKG     := ./cmd/prdash
 BINDIR  ?= $(HOME)/.local/bin
 CONFDIR ?= $(HOME)/.config/prdash
-# Misma versión que usan dbx/gitdash/tsk/vroom; se ejecuta con `go run`, sin
-# binario global. Sin .golangci.yml, golangci-lint aplica su set por defecto.
+# Same version dbx/gitdash/tsk/vroom use; it runs via `go run`, with no global
+# binary. With no .golangci.yml, golangci-lint applies its default set.
 GOLANGCI_LINT_VERSION := v2.13.2
 MUTATE_BASE ?= main
 
@@ -14,55 +14,55 @@ MUTATE_BASE ?= main
 
 .PHONY: help build install uninstall run print test fmt fmt-check vet lint check tidy clean config config-path mutate mutate-diff
 
-help: ## Muestra las tareas disponibles
+help: ## Shows the available tasks
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-build: ## Compila el binario en ./bin/prdash
+build: ## Builds the binary in ./bin/prdash
 	@mkdir -p bin
 	go build -o bin/$(BINARY) $(PKG)
 
-install: build ## Instala el binario en $(BINDIR)/prdash
+install: build ## Installs the binary in $(BINDIR)/prdash
 	@mkdir -p "$(BINDIR)"
 	install -m 0755 bin/$(BINARY) "$(BINDIR)/$(BINARY)"
-	@echo "instalado: $(BINDIR)/$(BINARY)"
+	@echo "installed: $(BINDIR)/$(BINARY)"
 
-uninstall: ## Elimina el binario instalado
+uninstall: ## Removes the installed binary
 	rm -f "$(BINDIR)/$(BINARY)"
 
-run: ## Abre la TUI
+run: ## Opens the TUI
 	go run $(PKG)
 
-print: ## Ejecuta el modo --print (sin TUI, para comprobar el pipeline)
+print: ## Runs --print mode (no TUI, to check the pipeline)
 	go run $(PKG) --print
 
-test: ## Runner completo: build + vet + gofmt + test con -race
+test: ## Full runner: build + vet + gofmt + test with -race
 	go build ./...
 	go vet ./...
 	@fmt_out=$$(gofmt -l $$(git ls-files '*.go')); if [ -n "$$fmt_out" ]; then \
-		echo "gofmt pendiente en:"; echo "$$fmt_out"; exit 1; \
+		echo "gofmt pending in:"; echo "$$fmt_out"; exit 1; \
 	fi
 	go test -race -count=1 ./...
 
-fmt: ## Formatea el código
+fmt: ## Formats the code
 	gofmt -w .
 
-fmt-check: ## Verifica formato gofmt sin modificar (falla si hay pendientes)
+fmt-check: ## Checks gofmt formatting without writing (fails if anything is pending)
 	@out="$$(gofmt -l $$(git ls-files '*.go'))"; \
-	if [ -n "$$out" ]; then echo "gofmt pendiente en:"; echo "$$out"; exit 1; fi
+	if [ -n "$$out" ]; then echo "gofmt pending in:"; echo "$$out"; exit 1; fi
 
-vet: ## Analiza el código
+vet: ## Analyses the code
 	go vet ./...
 
-lint: vet fmt-check ## go vet + gofmt + golangci-lint (versión pineada, siempre vía go run)
+lint: vet fmt-check ## go vet + gofmt + golangci-lint (pinned version, always via go run)
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
-# Gate local equivalente a CI: build + lint + test. `install` (que copia a
-# ~/.local/bin) queda fuera a propósito; `make install` es un paso aparte.
+# Local gate equivalent to CI: build + lint + test. `install` (which copies to
+# ~/.local/bin) is left out on purpose; `make install` is a separate step.
 check: build lint test
 	@echo "check OK"
 
-tidy: ## Sincroniza go.mod/go.sum
+tidy: ## Syncs go.mod/go.sum
 	go mod tidy
 
 mutate: ## Mutation testing (gremlins) on the whole module — advisory, never blocks CI
@@ -77,22 +77,22 @@ mutate-diff: ## Mutation testing (gremlins) restricted to the diff vs main — a
 		echo "no .go changes vs $(MUTATE_BASE) - nothing to mutate"; \
 	fi
 
-clean: ## Borra los artefactos de compilación
+clean: ## Removes the build artifacts
 	rm -rf bin
 
-config-path: ## Imprime la ruta esperada del config XDG
+config-path: ## Prints the expected XDG config path
 	@echo "$(CONFDIR)/config.toml"
 
-config: ## Crea config.toml si no existe (requiere GITLAB_HOST=host.del.selfmanaged)
+config: ## Creates config.toml if missing (requires GITLAB_HOST=self-managed-host)
 	@mkdir -p "$(CONFDIR)"
 	@if [ -f "$(CONFDIR)/config.toml" ]; then \
-		echo "ya existe: $(CONFDIR)/config.toml"; exit 0; \
+		echo "already there: $(CONFDIR)/config.toml"; exit 0; \
 	fi; \
 	if [ -z "$(GITLAB_HOST)" ]; then \
-		echo "falta GITLAB_HOST — ejemplo: make config GITLAB_HOST=gitlab.miempresa.com"; exit 1; \
+		echo "GITLAB_HOST missing — example: make config GITLAB_HOST=gitlab.mycompany.com"; exit 1; \
 	fi; \
 	{ \
-		echo '# prdash — config XDG (defaults si falta el fichero).'; \
+		echo '# prdash — XDG config (defaults if the file is missing).'; \
 		echo 'roots = ["~/dev"]'; \
 		echo 'refresh_interval = "60s"'; \
 		echo; \
@@ -103,22 +103,23 @@ config: ## Crea config.toml si no existe (requiere GITLAB_HOST=host.del.selfmana
 		echo '[forge.gitlab]'; \
 		echo 'enabled = true'; \
 		echo "host = \"$(GITLAB_HOST)\""; \
-		echo '# base REST de la instancia (glab resuelve host y base solo);'; \
-		echo '# default de raíz. Si la instancia vive en subcarpeta, usa'; \
-		echo '# api_base = "/git/api/v4/" o clone_base = "git" (relative URL'; \
-		echo '# root del clon/web; clone_base = "/" fuerza raíz).'; \
+		echo '# REST base of the instance (glab resolves host and base on its own);'; \
+		echo '# root by default. If the instance lives in a subfolder, use'; \
+		echo '# api_base = "/git/api/v4/" or clone_base = "git" (relative URL'; \
+		echo '# at the root of the clone/web; clone_base = "/" forces the root).'; \
 		echo 'api_base = "/api/v4/"'; \
 		echo; \
 		echo '[forge.bitbucket]'; \
 		echo 'enabled = false'; \
 		echo; \
-		echo '# Comandos de los panes del review. Si defines una clave, su valor es'; \
-		echo '# el argv COMPLETO y verbatim del pane: no se le añade la URL ni el'; \
-		echo '# target. Sin clave se usa el default (tuicr, hunk, opencode).'; \
-		echo '# La base del diff debe ser ref LOCAL (el clon es bare: main, no origin/main).'; \
+		echo '# Commands of the review panes. If you define a key, its value is'; \
+		echo '# the COMPLETE, verbatim argv of the pane: the URL and the'; \
+		echo '# target are not appended to it. Without a key the default is used'; \
+		echo '# (tuicr, hunk, opencode).'; \
+		echo '# The diff base must be a LOCAL ref (the clone is bare: main, not origin/main).'; \
 		echo '[commands]'; \
 		echo '# hunk = "hunk diff main...HEAD --watch"'; \
 		echo '# tuicr = "tuicr pr"'; \
 		echo '# agent = "opencode"'; \
 	} > "$(CONFDIR)/config.toml"; \
-	echo "creado: $(CONFDIR)/config.toml"
+	echo "created: $(CONFDIR)/config.toml"

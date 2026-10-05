@@ -11,69 +11,69 @@ import (
 // The two adapters look alike and are not interchangeable. One of the three differences is SILENT.
 
 // The argv-vs-variable split is what is checked, because they are two different strategies.
-func TestNewCaenLosDefaultsYElHostVaEnElArgvNoEnElEntorno(t *testing.T) {
+func TestNewFallsBackToDefaultsAndTheHostGoesInTheArgvNotTheEnvironment(t *testing.T) {
 	a := New("", "")
 	if a.Host() != "github.com" {
-		t.Errorf("sin host dio %q, want github.com", a.Host())
+		t.Errorf("no host gave %q, want github.com", a.Host())
 	}
 	if a.Forge() != ForgeName {
-		t.Errorf("Forge dio %q, want %q", a.Forge(), ForgeName)
+		t.Errorf("Forge gave %q, want %q", a.Forge(), ForgeName)
 	}
 	if a.runner == nil {
-		t.Fatal("New dejó el runner a nil")
+		t.Fatal("New left the runner nil")
 	}
 	// The prompt disabled, which is what stops gh from opening a browser to authenticate.
 	if !has(a.runner.Extra, "GH_PROMPT_DISABLED=1") {
-		t.Errorf("el runner no lleva GH_PROMPT_DISABLED: %v", a.runner.Extra)
+		t.Errorf("the runner does not carry GH_PROMPT_DISABLED: %v", a.runner.Extra)
 	}
 	// And NO host variable: on GitHub the host goes in the argv.
 	for _, v := range a.runner.Extra {
 		if strings.Contains(v, "HOST") {
-			t.Errorf("el runner de GitHub lleva %q: el host va en el argv, que es lo unico "+
-				"que `gh` acepta en todos los comandos", v)
+			t.Errorf("the GitHub runner carries %q: the host goes in the argv, which is the only "+
+				"thing `gh` accepts in every command", v)
 		}
 	}
-	// Y el binario.
+	// And the binary.
 	if a.runner.Bin != "gh" {
-		t.Errorf("sin binario dio %q, want gh", a.runner.Bin)
+		t.Errorf("no binary gave %q, want gh", a.runner.Bin)
 	}
 
-	empresa := New("git.umane.example", "")
-	if empresa.Host() != "git.umane.example" {
-		t.Errorf("con host dio %q", empresa.Host())
+	corporate := New("git.umane.example", "")
+	if corporate.Host() != "git.umane.example" {
+		t.Errorf("with a host gave %q", corporate.Host())
 	}
 	// The exact argv is read from the script itself, which writes what it receives; inspecting the
 	//adapter is not enough because gh accepts --hostname too.
-	eco := filepath.Join(t.TempDir(), "gh-eco")
+	echo := filepath.Join(t.TempDir(), "gh-echo")
 	log := filepath.Join(t.TempDir(), "argv")
-	if err := os.WriteFile(eco, []byte("#!/bin/sh\necho \"$@\" > "+log+"\necho ok\n"), 0o755); err != nil {
+	if err := os.WriteFile(echo, []byte("#!/bin/sh\necho \"$@\" > "+log+"\necho ok\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if auth := New("git.umane.example", eco).Auth(context.Background()); !auth.OK {
-		t.Fatalf("sesion buena dio OK=false: %s", auth.Reason)
+	if auth := New("git.umane.example", echo).Auth(context.Background()); !auth.OK {
+		t.Fatalf("a good session gave OK=false: %s", auth.Reason)
 	}
-	recibido, err := os.ReadFile(log)
+	received, err := os.ReadFile(log)
 	if err != nil {
-		t.Fatalf("el script no llegó a ejecutarse: %v", err)
+		t.Fatalf("the script never got to run: %v", err)
 	}
-	argv := strings.TrimSpace(string(recibido))
+	argv := strings.TrimSpace(string(received))
 	if !strings.Contains(argv, "--hostname git.umane.example") {
-		t.Errorf("la llamada no lleva el host en el argv: %q", argv)
+		t.Errorf("the call does not carry the host in the argv: %q", argv)
 	}
 	if !strings.HasPrefix(argv, "auth status") {
-		t.Errorf("la llamada no es `auth status`: %q", argv)
+		t.Errorf("the call is not `auth status`: %q", argv)
 	}
-	if cuenta(strings.Fields(argv), "git.umane.example") != 1 {
-		t.Errorf("el host aparece %d veces en %q", cuenta(strings.Fields(argv), "git.umane.example"), argv)
+	if count(strings.Fields(argv), "git.umane.example") != 1 {
+		t.Errorf("the host appears %d times in %q", count(strings.Fields(argv), "git.umane.example"), argv)
 	}
 
 	if New("", "/opt/gh").runner.Bin != "/opt/gh" {
-		t.Error("con binario propio no se usó")
+		t.Error("a custom binary was not used")
 	}
 }
 
 // The failure's reason is the CLI's text verbatim: it is the only thing that says why.
-func TestAuthDistingueSesionYTokenMalo(t *testing.T) {
+func TestAuthDistinguishesSessionAndBadToken(t *testing.T) {
 	dir := t.TempDir()
 
 	good := script(t, dir, "gh-ok", `#!/bin/sh
@@ -83,13 +83,13 @@ exit 0
 `)
 	auth := New("github.com", good).Auth(context.Background())
 	if !auth.OK {
-		t.Fatalf("sesion buena dio OK=false: %s", auth.Reason)
+		t.Fatalf("a good session gave OK=false: %s", auth.Reason)
 	}
 	if auth.Login != "user" {
 		t.Errorf("login %q, want user", auth.Login)
 	}
 	if auth.Forge != ForgeName {
-		t.Errorf("el estado no trae el nombre del forge: %+v", auth)
+		t.Errorf("the state does not bring the forge name: %+v", auth)
 	}
 
 	bad := script(t, dir, "gh-ko", `#!/bin/sh
@@ -98,81 +98,81 @@ exit 4
 `)
 	auth = New("github.com", bad).Auth(context.Background())
 	if auth.OK {
-		t.Error("sesion mala dio OK=true")
+		t.Error("a bad session gave OK=true")
 	}
 	if !strings.Contains(auth.Reason, "GH_TOKEN") {
-		t.Errorf("el motivo %q no trae lo que dijo la CLI", auth.Reason)
+		t.Errorf("the reason %q does not bring what the CLI said", auth.Reason)
 	}
 	if auth.Login != "" {
-		t.Errorf("sesion mala trae login %q", auth.Login)
+		t.Errorf("a bad session brings login %q", auth.Login)
 	}
 
 	// A missing binary: OK=false with an error, not a panic.
-	auth = New("github.com", filepath.Join(dir, "no-existe")).Auth(context.Background())
+	auth = New("github.com", filepath.Join(dir, "does-not-exist")).Auth(context.Background())
 	if auth.OK {
-		t.Error("un binario inexistente dio OK=true")
+		t.Error("a nonexistent binary gave OK=true")
 	}
 	if strings.TrimSpace(auth.Reason) == "" {
-		t.Error("un binario inexistente dio Reason vacío")
+		t.Error("a nonexistent binary gave an empty Reason")
 	}
 
 	// Unexpected output with a zero exit: the session is valid and the login is empty; treating it
 	// otherwise would invent a failure.
-	raro := script(t, dir, "gh-raro", "#!/bin/sh\necho 'algo distinto'\nexit 0\n")
-	auth = New("github.com", raro).Auth(context.Background())
+	strange := script(t, dir, "gh-strange", "#!/bin/sh\necho 'something else'\nexit 0\n")
+	auth = New("github.com", strange).Auth(context.Background())
 	if !auth.OK {
-		t.Errorf("una salida inesperada dio OK=false: %s", auth.Reason)
+		t.Errorf("unexpected output gave OK=false: %s", auth.Reason)
 	}
 	if auth.Login != "" {
-		t.Errorf("una salida inesperada dio login %q", auth.Login)
+		t.Errorf("unexpected output gave login %q", auth.Login)
 	}
 }
 
 // The regex demands a space after "account": `gh auth status` has an "Active account: true" line
 // with the same word.
-func TestElLoginNoSeConfundeConLaLineaDeActiveAccount(t *testing.T) {
-	casos := []struct {
-		nombre string
-		salida string
+func TestTheLoginIsNotConfusedWithTheActiveAccountLine(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
 		want   string
 	}{
-		{"formato completo", "  ✓ Logged in to github.com account user (GH_TOKEN)", "user"},
-		{"con puntos en el login", "account j.perez (GH_TOKEN)", "j.perez"},
-		{"active account delante del login",
+		{"full format", "  ✓ Logged in to github.com account user (GH_TOKEN)", "user"},
+		{"dots in the login", "account j.perez (GH_TOKEN)", "j.perez"},
+		{"active account before the login",
 			"  Active account: true\n  ✓ Logged in to github.com account user (GH_TOKEN)", "user"},
-		{"solo active account", "  Active account: true", ""},
-		{"sin la palabra", "algo distinto", ""},
-		{"vacio", "", ""},
-		{"solo espacios", "   \n  ", ""},
+		{"only active account", "  Active account: true", ""},
+		{"without the word", "something else", ""},
+		{"empty", "", ""},
+		{"only spaces", "   \n  ", ""},
 		// A token glued with no space gives "user", not "user(GH_TOKEN)": the regex's character class
 		//stops at the parenthesis.
-		{"token pegado", "account user(GH_TOKEN)", "user"},
+		{"token glued", "account user(GH_TOKEN)", "user"},
 	}
-	for _, c := range casos {
-		got := loginFromAuthStatus(c.salida)
+	for _, c := range cases {
+		got := loginFromAuthStatus(c.output)
 		if got != c.want {
-			t.Errorf("%s: dio %q, want %q", c.nombre, got, c.want)
+			t.Errorf("%s: gave %q, want %q", c.name, got, c.want)
 		}
 		// It never returns "true", which is the value that would turn the viewer into a concrete
 		// account.
 		if got == "true" {
-			t.Errorf("%s: devolvió \"true\" como login", c.nombre)
+			t.Errorf("%s: returned \"true\" as the login", c.name)
 		}
 	}
 }
 
-func script(t *testing.T, dir, nombre, cuerpo string) string {
+func script(t *testing.T, dir, name, body string) string {
 	t.Helper()
-	ruta := filepath.Join(dir, nombre)
-	if err := os.WriteFile(ruta, []byte(cuerpo), 0o755); err != nil {
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return ruta
+	return path
 }
 
-func has(xs []string, want string) bool { return cuenta(xs, want) > 0 }
+func has(xs []string, want string) bool { return count(xs, want) > 0 }
 
-func cuenta(xs []string, want string) int {
+func count(xs []string, want string) int {
 	n := 0
 	for _, x := range xs {
 		if x == want {

@@ -164,7 +164,7 @@ func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 	items := make([]model.Item, 0, len(nodes))
 	for _, n := range nodes {
 		if n.Number == 0 {
-			continue // nodos de otro tipo en la unión SearchResultItem
+			continue // nodes of another kind in the SearchResultItem union
 		}
 		items = append(items, itemFromGHNode(n))
 	}
@@ -498,7 +498,7 @@ func glItems(conn *glConn, section model.Section, kind model.ReviewKind) []model
 	out := make([]model.Item, 0, len(conn.Nodes))
 	for _, mr := range conn.Nodes {
 		if mr.IID == 0 {
-			continue // nodo sin iid utilizable
+			continue // node without a usable iid
 		}
 		out = append(out, itemFromGLMR(mr, section, kind))
 	}
@@ -666,7 +666,7 @@ func ParseGLTodos(raw string) ([]model.Item, int, error) {
 			continue
 		}
 		if td.Target.IID == 0 {
-			continue // sin iid utilizable
+			continue // no usable iid
 		}
 		project := projectFromRef(td.Target.References.Full)
 		owner, name := splitProject(project)

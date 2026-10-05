@@ -14,10 +14,10 @@ import (
 
 func TestSimulateEndToEndThroughThePaneLayer(t *testing.T) {
 	if os.Getenv("HERDR_ENV") != "1" {
-		t.Skip("fuera de Herdr no hay capa de gráficos")
+		t.Skip("outside Herdr there is no graphics layer")
 	}
 	if !sim.NewRunner().Available() {
-		t.Skip("git-sim no está instalado")
+		t.Skip("git-sim is not installed")
 	}
 
 	place, it := simFixture(t)
@@ -26,7 +26,7 @@ func TestSimulateEndToEndThroughThePaneLayer(t *testing.T) {
 
 	g := herdr.NewGraphics()
 	if !g.Available() {
-		t.Skip("Herdr responde pero sin capa de gráficos (terminal.kitty_graphics?)")
+		t.Skip("Herdr answers but with no graphics layer (terminal.kitty_graphics?)")
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -48,23 +48,23 @@ func TestSimulateEndToEndThroughThePaneLayer(t *testing.T) {
 
 	m, msg := waitSim(t, m)
 	if msg.err != nil {
-		t.Fatalf("la simulación real falló: %v", msg.err)
+		t.Fatalf("the real simulation failed: %v", msg.err)
 	}
 	if !m.sim.viaGraphics {
-		t.Fatalf("la imagen no llegó a la capa del pane: el popup usaría half-blocks.\n"+
-			"celdas pintadas: %d", len(m.sim.cells))
+		t.Fatalf("the image never reached the pane layer: the popup would use half-blocks.\n"+
+			"cells pintadas: %d", len(m.sim.cells))
 	}
 
 	if m.sim.cellW_px <= 1 || m.sim.cellH_px <= 2 {
-		t.Errorf("celda = %dx%d, want la medida del pane (9x19 en kitty)", m.sim.cellW_px, m.sim.cellH_px)
+		t.Errorf("cell = %dx%d, want the panes measure (9x19 in kitty)", m.sim.cellW_px, m.sim.cellH_px)
 	}
 
 	view := viewText(m)
 	if !strings.Contains(view, "simulate: merge") {
-		t.Errorf("el popup perdió el título:\n%s", view)
+		t.Errorf("the popup lost its title:\n%s", view)
 	}
 	if !strings.Contains(view, "o open image") {
-		t.Errorf("el popup perdió la ayuda:\n%s", view)
+		t.Errorf("the popup lost its help:\n%s", view)
 	}
 
 	m = press(t, m, "esc")

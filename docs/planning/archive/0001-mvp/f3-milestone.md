@@ -1,77 +1,81 @@
-# F3 — Auto-review con gate y allowlist (milestone, NO implementado)
+# F3 — Auto-review with gate and allowlist (milestone, NOT implemented)
 
-- **Estado**: milestone post-MVP. Diseño aprobado en `behavior.feature`; **no se
-  implementa** en la feature 0001.
-- **Padre**: `docs/planning/archive/0001-mvp/plan.md` (fase F3) y `behavior.feature`
-  (bloque `@F3`, que es el comportamiento esperado y sirve de criterio futuro).
-- **Decisión**: la release actual termina al abrir los panes de review con su
-  cwd, env y argv correctos. Aprobar o comentar es responsabilidad del usuario
-  y de las herramientas/agente del loop, no de prdash.
+- **Status**: post-MVP milestone. Design approved in `behavior.feature`; **not
+  implemented** in feature 0001.
+- **Parent**: `docs/planning/archive/0001-mvp/plan.md` (phase F3) and
+  `behavior.feature` (`@F3` block, which is the expected behavior and serves as
+  a future criterion).
+- **Decision**: the current release ends when opening the review panes with
+  their right cwd, env and argv. Approving or commenting is the responsibility
+  of the user and of the loop's tools/agent, not of prdash.
 
-## Objetivo
+## Goal
 
-Que prdash pueda, opcionalmente, dejar que un agente complete el bucle de
-review y **apruebe** un PR/MR sin intervención, pero solo cuando se cumplan
-todas las condiciones de seguridad. La aprobación automática es una capacidad
-de alto riesgo: el diseño la trata como opt-in, auditable y conservadora ante
-cualquier duda.
+That prdash can, optionally, let an agent complete the review loop and
+**approve** a PR/MR without intervention, but only when all the safety
+conditions hold. Automatic approval is a high-risk capability: the design
+treats it as opt-in, auditable and conservative in the face of any doubt.
 
-## Flujo previsto (alto nivel)
+## Expected flow (high level)
 
-1. El usuario habilita el modo auto-review en la config y declara qué repos son
-   elegibles.
-2. El ítem del inbox se monta como review normal (F2): worktree + panes.
-3. El agente (opencode) analiza el diff en el worktree y produce un resultado
-   con un veredicto y sus findings.
-4. El **gate** decide si el resultado es concluyente y sin hallazgos críticos.
-5. Solo si el gate pasa **y** el repo está en la **allowlist**, prdash ejecuta la
-   aprobación vía el forge correspondiente (`gh`/`glab`).
-6. prdash notifica el resultado por Herdr; sin Herdr, registra el evento
-   localmente y sigue.
+1. The user enables the auto-review mode in the config and declares which repos
+   are eligible.
+2. The inbox item is mounted as a normal review (F2): worktree + panes.
+3. The agent (opencode) analyzes the diff in the worktree and produces a result
+   with a verdict and its findings.
+4. The **gate** decides whether the result is conclusive and free of critical
+   findings.
+5. Only if the gate passes **and** the repo is on the **allowlist**, prdash runs
+   the approval via the corresponding forge (`gh`/`glab`).
+6. prdash notifies the result via Herdr; without Herdr, it logs the event
+   locally and continues.
 
-## Reglas duras (no negociables)
+## Hard rules (non-negotiable)
 
-- **Allowlist por repo.** Un repo que no esté en la allowlist **nunca** se
-  auto-aprueba, aunque el análisis sea limpio. Se deja constancia del motivo.
-- **Gate explícito.** La auto-aprobación requiere `autoreview.enabled` y el gate
-  habilitado, además de 0 findings críticos.
-- **Dry-run por defecto.** Con el modo activado pero sin el gate, prdash
-  registra qué *habría* aprobado y no ejecuta la acción. Ninguna ruta de código
-  aprueba por defecto.
-- **Nunca aprobar con análisis fallido o parcial.** Un análisis que falla, se
-  interrumpe o queda incompleto se reporta como no concluyente y jamás se
-  traduce en aprobación.
-- **Degradación limpia.** Sin Herdr disponible, un evento que debía notificarse
-  no rompe el proceso: se registra localmente.
-- **Reversibilidad y trazas.** Toda decisión (aprobada, omitida por allowlist,
-  omitida por análisis no concluyente) debe quedar en un registro consultable.
-  La aprobación no borra evidencia: el resultado del análisis se conserva.
+- **Allowlist per repo.** A repo not on the allowlist **never** self-approves,
+  even if the analysis is clean. The reason is recorded.
+- **Explicit gate.** Self-approval requires `autoreview.enabled` and the gate
+  enabled, plus 0 critical findings.
+- **Dry-run by default.** With the mode enabled but without the gate, prdash
+  logs what it *would* have approved and does not run the action. No code path
+  approves by default.
+- **Never approve with a failed or partial analysis.** An analysis that fails,
+  is interrupted or stays incomplete is reported as not conclusive and is never
+  turned into an approval.
+- **Clean degradation.** Without Herdr available, an event that should have
+  been notified does not break the process: it is logged locally.
+- **Reversibility and traces.** Every decision (approved, skipped by
+  allowlist, skipped by inconclusive analysis) must end up in a queryable log.
+  Approval does not erase evidence: the analysis result is kept.
 
-## Configuración reservada
+## Reserved configuration
 
-Estas claves ya se parsean en `internal/config` (sin consumidor todavía); F3 las
-usaría tal cual:
+These keys are already parsed in `internal/config` (no consumer yet); F3 would
+use them as they are:
 
-| Clave | Tipo | Default | Uso |
+| Key | Type | Default | Use |
 |---|---|---|---|
-| `autoreview.enabled` | bool | `false` | Activa el modo. Por sí solo no aprueba: hace falta el gate. |
-| `autoreview.allowlist` | `[]string` | `[]` | Repos (`host/owner/repo`) elegibles para auto-aprobar. |
+| `autoreview.enabled` | bool | `false` | Enables the mode. By itself it does not approve: the gate is needed. |
+| `autoreview.allowlist` | `[]string` | `[]` | Repos (`host/owner/repo`) eligible for self-approval. |
 
-## Criterios de aceptación futuros
+## Future acceptance criteria
 
-Los escenarios del bloque `@F3` de `behavior.feature` son la fuente de verdad
-para cuando se implemente. Se resumen aquí para trazabilidad:
+The scenarios of the `@F3` block of `behavior.feature` are the source of truth
+for when it is implemented. They are summarized here for traceability:
 
-1. Repo no allowlisted no se auto-aprueba y se deja constancia del motivo.
-2. Con el gate satisfecho y el repo allowlisted, el análisis con 0 findings
-   críticos aprueba vía el forge y notifica por Herdr.
-3. Un análisis fallido o parcial nunca aprueba y reporta que no fue concluyente.
-4. Sin Herdr, la notificación degrada sin romper el proceso y se registra.
+1. A repo not on the allowlist does not self-approve and the reason is
+   recorded.
+2. With the gate satisfied and the repo allowlisted, an analysis with 0 critical
+   findings approves via the forge and notifies via Herdr.
+3. A failed or partial analysis never approves and reports that it was not
+   conclusive.
+4. Without Herdr, the notification degrades without breaking the process and is
+   logged.
 
-## Fuera de alcance de este milestone documentado
+## Out of scope of this documented milestone
 
-- Implementación de código, tests o adapters de forge para la aprobación.
-- Políticas de gate más ricas (pesos por severidad, excepciones por autor,
-  ventanas de tiempo). Se decidirán al implementar, sobre el gate mínimo.
-- Ejecución del agente o gestión de sus credenciales: prdash no es dueño del
-  loop de comentarios (`plan.md`, decisión clave 3).
+- Code implementation, tests or forge adapters for the approval.
+- Richer gate policies (weights per severity, exceptions per author, time
+  windows). They will be decided when implementing, on top of the minimal gate.
+- Running the agent or managing its credentials: prdash does not own the
+  comment loop (`plan.md`, key decision 3).

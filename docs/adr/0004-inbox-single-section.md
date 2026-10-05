@@ -1,128 +1,137 @@
-# ADR 0004 — Inbox de una sola sección con leyenda de conteos
+# ADR 0004 — Single-section inbox with a counts legend
 
-- **Estado**: Accepted
-- **Fecha**: 2026-09-26
-- **Decisor**: usuario (buble)
-- **Alcance**: inbox de la TUI, sección activa, leyenda del borde, columna ITEM
-- **Patrón de nombres**: `docs/adr/NNNN-slug.md`
-- **Sustituye a**: **ADR 0002**, en dos cláusulas:
-  1. La que ancla el prefijo de ruta común **en la cabecera de cada sección**
-     (§Decisión punto 1 y el punto 4 «el frente perdido es el grupo, que la
-     cabecera ya declara»).
-  2. El alcance **«todas las secciones»** de su punto 2: el ancho de ITEM ya no
-     sale del sufijo más largo de todas las secciones sino **solo del de la
-     sección activa** (decisión 5 de este ADR). La fórmula —contenido acotado a
-     `[6, 34]`— y el recorte por la cola siguen vigentes.
-  El resto del ADR 0002 —el cálculo del prefijo y la regla de la sección de un
-  solo ítem— sigue vigente tal cual.
+- **Status**: Accepted
+- **Date**: 2026-09-26
+- **Decider**: user (buble)
+- **Scope**: the TUI inbox, active section, border legend, ITEM column
+- **Naming pattern**: `docs/adr/NNNN-slug.md`
+- **Supersedes**: **ADR 0002**, in two clauses:
+  1. The one that anchors the common path prefix **in the header of each
+     section** (§Decision point 1 and point 4 "the part lost at the front is
+     the group, which the header already declares").
+  2. The **"all the sections"** scope of its point 2: the ITEM width no longer
+     comes from the longest suffix of all the sections but **only from that of
+     the active section** (decision 5 of this ADR). The formula —content
+     bounded to `[6, 34]`— and the tail truncation remain in force.
+  The rest of ADR 0002 —the prefix computation and the single-item section
+  rule— stays in force as is.
 
-## Contexto
+## Context
 
-El inbox apilaba las tres secciones (`Mine`/`Assigned`/`Mentioned`) y cada una
-declaraba su prefijo de ruta común en una cabecera interna con título y conteo.
-Hasta aquí, ADR 0002.
+The inbox stacked the three sections (`Mine`/`Assigned`/`Mentioned`) and each
+one declared its common path prefix in an internal header with a title and a
+count. So far, ADR 0002.
 
-El problema es que el inbox real no es una lista plana: es **una lista de
-trabajo**. Con las tres secciones siempre visibles, el ojo tiene que separar tres
-órdenes distintos en una sola pantalla, y el cursor navega cross-sección,
-saltando entre elementos que no se comparan entre sí. Además, el prefijo común
-(ADR 0002) pierde su razón de ser cuando el conjunto pintado mezcla secciones:
-el ancho de ITEM se dimensionaba por el sufijo más largo de **todas**, gastando
-espacio en secciones que quizá no interesan ahora.
+The problem is that the real inbox is not a flat list: it is **a work list**.
+With the three sections always visible, the eye has to separate three distinct
+orders on a single screen, and the cursor navigates cross-section, jumping
+between elements that are not comparable with each other. Besides, the common
+prefix (ADR 0002) loses its reason to exist when the painted set mixes
+sections: the ITEM width was dimensioned by the longest suffix of **all of
+them**, spending space on sections that may not be of interest right now.
 
-El objetivo es mostrar **una sola sección a la vez** y, con ella, el prefijo de
-ruta de esa sección. Al pintarse una sola, todas las filas comparten sección, el
-prefijo se calcula sobre el conjunto visible y el ancho de ITEM es el suyo.
+The goal is to show **a single section at a time** and, with it, the path
+prefix of that section. Since only one is painted, all rows share the section,
+the prefix is computed over the visible set and the ITEM width is its own.
 
-## Decisión
+## Decision
 
-1. **Una sección activa, con posición propia.** El inbox pinta una sola sección.
-   Al abrir, la activa es **`Assigned`** (`review`). Cada sección recuerda su
-   cursor y su scroll; al cambiarla se guarda la posición de la que sale y se
-   restaura la de la destino, acotada al contenido nuevo.
-2. **`section-next` (por defecto `tab`) cicla la sección activa** en el orden
-   `Assigned → Mentioned → Mine → Assigned`. Cicla siempre, aunque la destino
-   esté vacía: su estado y su conteo son justo lo que se quiere ver. La acción y
-   su tecla siguen saliendo de `[keybindings]`; la barra de hints no cambia.
-3. **La leyenda de conteos sustituye al título `Inbox`** en el borde superior
-   del inbox, con el formato exacto `Mine (9) · Assigned (4) · Mentioned (0)`:
-   la etiqueta corta de cada sección (`Section.Legend()`) y su número de ítems.
-   La activa va resaltada y las demás atenuadas. En un terminal estrecho el borde
-   la trunca ANSI-aware por la derecha, así que la caja nunca se descuadra.
-4. **El prefijo de ruta común pasa a una línea fija al inicio del cuerpo de la
-   lista**, atenuada y con **solo el prefijo** (`  · APPCITTI/vsocial/backend/`),
-   sin título ni conteo. Sustituye exactamente lo que antes hacía la cabecera de
-   sección, pero sin duplicar la leyenda. Si la sección activa no tiene prefijo
-   común (un solo ítem, o nada en común), la línea no se pinta y las celdas ITEM
-   llevan la ruta completa recortada por la cola (regla de ADR 0002 intacta).
-5. **El ancho de ITEM se calcula sobre la sección activa.** `newRefLayout` recibe
-   solo la sección que se pinta, de modo que el prefijo y el ancho son los de
-   ella y no se gasta ancho en sufijos de secciones que no se ven. La firma no
-   cambia; cambia el llamador.
-6. **`(empty)`, `loading more…` y los avisos son de la sección activa.** Una
-   sección no activa solo aporta su conteo a la leyenda; al tabular a ella
-   aparecen su estado vacío, su indicador de paginación y sus avisos.
-7. **El modo `--print`, el formato de cache y la API de config no cambian.**
-   `Section.String()` se conserva para `--print`; la leyenda usa `Section.Legend()`.
+1. **One active section, with its own position.** The inbox paints a single
+   section. On opening, the active one is **`Assigned`** (`review`). Each
+   section remembers its cursor and its scroll; when switching, the position
+   of the one being left is stored and the one of the target is restored,
+   bounded to the new content.
+2. **`section-next` (default `tab`) cycles the active section** in the order
+   `Assigned → Mentioned → Mine → Assigned`. It always cycles, even if the
+   target is empty: its state and its count are exactly what you want to see.
+   The action and its key still come from `[keybindings]`; the hints bar does
+   not change.
+3. **The counts legend replaces the `Inbox` title** on the top border of the
+   inbox, with the exact format `Mine (9) · Assigned (4) · Mentioned (0)`: the
+   short label of each section (`Section.Legend()`) and its item count. The
+   active one is highlighted and the others dimmed. On a narrow terminal the
+   border ANSI-aware truncates it to the right, so the box never goes out of
+   alignment.
+4. **The common path prefix moves to a fixed line at the start of the list
+   body**, dimmed and with **only the prefix**
+   (`  · APPCITTI/vsocial/backend/`), with no title nor count. It replaces
+   exactly what the section header used to do, but without duplicating the
+   legend. If the active section has no common prefix (a single item, or
+   nothing in common), the line is not painted and the ITEM cells carry the
+   full path tail-truncated (ADR 0002's rule intact).
+5. **The ITEM width is computed on the active section.** `newRefLayout`
+   receives only the section being painted, so the prefix and the width are
+   its own and no width is spent on suffixes of sections that are not seen.
+   The signature does not change; the caller does.
+6. **`(empty)`, `loading more…` and the notices belong to the active
+   section.** A non-active section only contributes its count to the legend;
+   when tabbing to it, its empty state, its pagination indicator and its
+   notices appear.
+7. **The `--print` mode, the cache format and the config API do not change.**
+   `Section.String()` is kept for `--print`; the legend uses
+   `Section.Legend()`.
 
-## Alternativas consideradas y descartadas
+## Rejected alternatives
 
-- **Prefijo en la leyenda del borde.** Rompe el formato exacto de la leyenda
-  (que es de conteos), mezcla los conteos de las tres secciones con la ruta de
-  una sola y hace la línea más larga de lo que el borde puede truncar con
-  elegancia.
-- **Prefijo en la cabecera `PRDash`.** Está lejos de las filas, describe el
-  estado de forges y del refresco, y el prefijo cambia con la sección activa:
-  leerlo junto al estado de refresco confunde dos cosas sin relación.
-- **Ruta completa en cada celda ITEM (abandonar el prefijo).** Pierde justo la
-  legibilidad que motivó el ADR 0002: cada fila repite el grupo y el ancho de la
-  tabla se come el título.
-- **Reintroducir una cabecera de sección solo con el prefijo.** Es la opción
-  elegida con otro nombre: conserva la semántica de «header» y el conteo
-  duplicado respecto a la leyenda. Se descarta por nomenclatura y duplicación.
-- **Saltar las secciones vacías al ciclar.** Obligaría a no poder ver el estado
-  vacío de una sección ni su conteo. Se cicla siempre.
+- **Prefix in the border legend.** It breaks the exact format of the legend
+  (which is about counts), mixes the counts of the three sections with the
+  path of a single one, and makes the line longer than what the border can
+  truncate elegantly.
+- **Prefix in the `PRDash` header.** It is far from the rows, it describes the
+  state of the forges and of the refresh, and the prefix changes with the
+  active section: reading it next to the refresh state confuses two unrelated
+  things.
+- **Full path in every ITEM cell (dropping the prefix).** Loses exactly the
+  legibility that motivated ADR 0002: every row repeats the group and the
+  table width eats the title.
+- **Reintroducing a section header with only the prefix.** It is the chosen
+  option under another name: it keeps the "header" semantics and the count
+  duplicated with respect to the legend. It is rejected on grounds of
+  nomenclature and duplication.
+- **Skipping the empty sections when cycling.** It would force not being able
+  to see the empty state of a section nor its count. It always cycles.
 
-## Consecuencias
+## Consequences
 
-**Positivas**
+**Positive**
 
-- Una sola lista y un solo orden: el cursor navega dentro de la sección que se
-  está mirando, sin saltos entre conjuntos que no se comparan.
-- El prefijo de ruta común (ADR 0002) se conserva y se aprovecha mejor: al
-  calcularse sobre la única sección visible, libera ancho de ITEM sin competir
-  con secciones ausentes.
-- La leyenda da de un vistazo el reparto de trabajo —`Mine (9) · Assigned (4) ·
-  Mentioned (0)`— donde antes hacía falta leer tres cabeceras apiladas.
-- Deja abierta la **costura para el prefijo seleccionable/toggleable** (feature
-  posterior): el prefijo se compone como una unidad discreta desde una única
-  fuente, así que una feature posterior puede ocultarlo, alternarlo o hacerlo
-  interactivo sin tocar la leyenda, el ancho de la tabla ni el cambio de sección.
-  Este ADR **no** implementa config ni teclas nuevas.
+- A single list and a single order: the cursor navigates within the section
+  being looked at, with no jumps between sets that are not comparable.
+- The common path prefix (ADR 0002) is kept and put to better use: by being
+  computed on the only visible section, it frees ITEM width without competing
+  with absent sections.
+- The legend gives at a glance the distribution of the work —`Mine (9) ·
+  Assigned (4) · Mentioned (0)`— where before it took reading three stacked
+  headers.
+- It leaves open the **seam for the selectable/toggleable prefix** (a later
+  feature): the prefix is composed as a discrete unit from a single source, so
+  a later feature can hide it, toggle it or make it interactive without
+  touching the legend, the table width or the section change. This ADR
+  **does not** implement config nor new keys.
 
-**Negativas / costes**
+**Negative / costs**
 
-- **Los avisos de secciones no activas dejan de verse.** Una sección con un
-  fallo solo muestra su conteo en la leyenda; el aviso aparece al tabular a ella.
-  Coste asumido a cambio de la vista de una sola sección.
-- **El prefijo puede encogerse al llegar más páginas** y ensanchar ITEM una vez:
-  es el mismo reflow único que ya aceptaba el ADR 0002, ahora acotado a la
-  sección activa.
-- **El borde superior lleva ANSI** en el tramo resaltado. Cada tramo de la
-  leyenda se compone con un estilo completo, sin caracteres «desnudos», porque
-  el borde reenvuelve cada segmento con su color y un reset interior no restaura
-  el color del borde. Verificado a varios anchos.
+- **The notices of non-active sections stop being seen.** A section with a
+  failure only shows its count in the legend; the notice appears when tabbing
+  to it. Cost accepted in exchange for the single-section view.
+- **The prefix can shrink when more pages arrive** and widen ITEM once: it is
+  the same single reflow ADR 0002 already accepted, now bounded to the active
+  section.
+- **The top border carries ANSI** in the highlighted stretch. Each stretch of
+  the legend is composed with a full style, with no "bare" characters,
+  because the border re-wraps each segment with its colour and an inner reset
+  does not restore the border's colour. Verified at several widths.
 
-**Verificación**
+**Verification**
 
-- `internal/tui/section_test.go`: default `Assigned`; ciclo de `tab` (incluida la
-  sección vacía); leyenda con formato exacto, resaltado y conteos deduplicados;
-  prefijo de la activa, ausencia de prefijo común y ancho de tabla a varios
-  anchos; cursor/scroll recordados por sección; refresco que conserva la
-  posición; `(empty)`, `loading more…` y avisos solo de la activa; leyenda
-  truncada en terminal estrecho.
-- `internal/tui/refcol_test.go`: el prefijo aparece una sola vez (su línea) y las
-  filas solo pintan el sufijo.
-- `internal/forge/model/model_test.go`: `Legend()` con `String()` intacto.
-- `cmd/prdash/print_test.go`: el modo `--print` sigue imprimiendo las tres
-  secciones con sus nombres largos.
+- `internal/tui/section_test.go`: default `Assigned`; the `tab` cycle
+  (including the empty section); legend with exact format, highlighting and
+  deduplicated counts; prefix of the active one, absence of common prefix and
+  table width at several widths; cursor/scroll remembered per section; refresh
+  that keeps the position; `(empty)`, `loading more…` and notices only from
+  the active one; legend truncated on a narrow terminal.
+- `internal/tui/refcol_test.go`: the prefix appears only once (its line) and
+  the rows only paint the suffix.
+- `internal/forge/model/model_test.go`: `Legend()` with `String()` intact.
+- `cmd/prdash/print_test.go`: the `--print` mode still prints the three
+  sections with their long names.

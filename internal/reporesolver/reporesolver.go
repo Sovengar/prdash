@@ -122,7 +122,7 @@ func (r *Resolver) EnsureBare(ctx context.Context, ref model.RepoRef) (string, e
 	tmp := dest + ".tmp-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	if _, err := r.git.Run(ctx, "", "clone", "--bare", "--quiet", "--", url, tmp); err != nil {
 		_ = os.RemoveAll(tmp)
-		return "", fmt.Errorf("clonar %s: %w", url, err)
+		return "", fmt.Errorf("clone %s: %w", url, err)
 	}
 	if err := os.Rename(tmp, dest); err != nil {
 		_ = os.RemoveAll(tmp)

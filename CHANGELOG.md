@@ -1,739 +1,772 @@
 # Changelog
 
-Todos los cambios notables de prdash se documentan en este fichero.
+All notable changes to prdash are documented in this file.
 
-El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el
-versionado sigue [Semantic Versioning](https://semver.org/lang/es/).
+The format follows [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) and
+versioning follows [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
 ### Added
 
-- **`prdash worktrees remove --orphans` limpia en lote los worktrees huérfanos.**
-  Borra **solo** lo que `prdash worktrees list` marca como `orphaned` (su repo de
-  origen ya no es accesible) y es excluyente con las rutas explícitas. Cero
-  huérfanos es el caso feliz (exit 0). `--orphans --dry-run` imprime el lote
-  exacto que se borraría, por el mismo camino de código, sin tocar nada. Un
-  huérfano cuyo enlace `.git` ni siquiera declare un gitdir también se limpia, por
-  ruta o en lote, sin tumbar el resto.
+- **`prdash worktrees remove --orphans` cleans orphaned worktrees in batch.**
+  It deletes **only** what `prdash worktrees list` marks as `orphaned` (its source
+  repo is no longer accessible) and it is mutually exclusive with explicit paths.
+  Zero orphans is the happy path (exit 0). `--orphans --dry-run` prints the exact
+  batch that would be deleted, through the same code path, without touching
+  anything. An orphan whose `.git` link does not even declare a gitdir is also
+  cleaned, by path or in batch, without taking the rest down.
 
-- **El worktree de un PR mergeado desde prdash se borra solo si está limpio.** Si
-  el checkout tiene cambios sin commitear —incluidos archivos nuevos sin
-  trackear— se conserva y el aviso lo dice (`merged, but the worktree has
-  uncommitted changes — kept`). Si su estado de git no se puede comprobar, también
-  se conserva, con otro aviso (`worktree kept: could not read the worktree
-  status`): ante la duda nunca se borra. Es la única limpieza implícita de prdash;
-  aprobar, cambiar la base, un merge que no sale bien y cerrar la app siguen sin
-  borrar nada. El razonamiento completo, y por qué cambia la cláusula de
-  conservación total, en [ADR 0007](docs/adr/0007-worktree-cleanup-on-merge.md).
+- **The worktree of a PR merged from prdash is deleted only if it is clean.** If
+  the checkout has uncommitted changes —including new untracked files— it is kept
+  and the notice says so (`merged, but the worktree has uncommitted changes —
+  kept`). If its git status cannot be checked, it is kept too, with a different
+  notice (`worktree kept: could not read the worktree status`): when in doubt it
+  is never deleted. It is the only implicit cleanup in prdash; approving,
+  changing the base, a merge that goes wrong and closing the app still delete
+  nothing. The full reasoning, and why the keep-always clause changes, in
+  [ADR 0007](docs/adr/0007-worktree-cleanup-on-merge.md).
 
-- **`e` cambia la rama destino del PR/MR, con un buscador de las ramas del
-  repositorio.** `e` abre un popup con las ramas que pide al forge, escribibles
-  para filtrarlas, y la elección pasa por una confirmación que dice las dos ramas
-  (`main → release/2.0`).
+- **`e` changes the target branch of the PR/MR, with a searcher of the
+  repository branches.** `e` opens a popup with the branches it asks the forge
+  for, typeable to filter them, and the choice goes through a confirmation that
+  names the two branches (`main → release/2.0`).
 
-  Las ramas se listan en vez de teclearse porque cambiar la base a una rama que se
-  le parece pero no es (`main` por `main-2`) lo acepta el forge sin quejarse y no
-  se ve hasta que el PR apunta a la rama equivocada: una errata que no marca ni el
-  compilador ni el forge es justo la que un buscador hace imposible. El listado se
-  pide al forge al abrir y se cachea 5 minutos por repositorio, así que abrir y
-  cerrar el popup no cuesta una llamada cada vez; `↑`/`↓` mueven y, con el filtro
-  vacío, también `j`/`k`, que en cuanto hay texto escrito son dos letras más del
-  filtro. `esc` en la confirmación vuelve a la lista en vez de cerrar, porque
-  señalar la fila equivocada es el error más probable.
+  Branches are listed instead of typed because changing the base to a branch
+  that looks like it but is not (`main` for `main-2`) is accepted by the forge
+  without complaining and goes unnoticed until the PR points at the wrong
+  branch: a typo that neither the compiler nor the forge flags is exactly the
+  one a searcher makes impossible. The listing is requested from the forge on
+  open and cached 5 minutes per repository, so opening and closing the popup
+  does not cost a call each time; `↑`/`↓` move and, with the filter empty, so do
+  `j`/`k`, which as soon as there is typed text are two more letters of the
+  filter. `esc` in the confirmation goes back to the list instead of closing,
+  because pointing at the wrong row is the most likely mistake.
 
-  La acción entra por el mismo camino que approve y merge —relee el ítem, pasa los
-  guards, ejecuta y relee—, así que un PR mergeado o cerrado no se toca y no se
-  gasta la llamada. Elegir la base que el ítem ya tiene es un no-op que no llega al
-  forge. Los avisos nombran las dos ramas (`retarget (main → release/2.0) ok`) y,
-  si había un review montado, avisan de que **su worktree sigue con la base
-  anterior**: no se rebasea ni se rehace, porque el worktree es del usuario y puede
-  tener cambios sin commitear.
+  The action enters through the same path as approve and merge —it re-reads the
+  item, passes the guards, executes and re-reads—, so a merged or closed PR is
+  not touched and the call is not wasted. Choosing the base the item already
+  has is a no-op that never reaches the forge. The notices name the two branches
+  (`retarget (main → release/2.0) ok`) and, if there was a review mounted, warn
+  that **its worktree is still on the previous base**: it is neither rebased nor
+  redone, because the worktree belongs to the user and may have uncommitted
+  changes.
 
-  No se usa `gh pr edit --base` aunque es lo que documenta `gh`: hoy falla antes de
-  tocar nada con `GraphQL: Projects (classic) is being deprecated…`, la query con la
-  que `gh` mira si el PR está en un proyecto. Se usa `gh api -X PATCH …/pulls/N -f
-  base=`. En GitLab, `glab api -X PUT …/merge_requests/N -f target_branch=` y no
-  `glab mr update --target-branch`, que es un comando de edición y su razón de ser
-  es abrir el editor. Y el listado de ramas de GitLab va con `--output ndjson`
-  porque `glab api` no tiene `--jq`. Todo esto, y por qué, en
-  [ADR 0006](docs/adr/0006-retarget-por-la-api.md).
+  `gh pr edit --base` is not used even though it is what `gh` documents: today
+  it fails before touching anything with `GraphQL: Projects (classic) is being
+  deprecated…`, the query with which `gh` checks whether the PR is in a project.
+  Instead `gh api -X PATCH …/pulls/N -f base=` is used. In GitLab,
+  `glab api -X PUT …/merge_requests/N -f target_branch=` and not
+  `glab mr update --target-branch`, which is an editing command and whose whole
+  reason for being is to open the editor. And the GitLab branch listing goes
+  with `--output ndjson` because `glab api` has no `--jq`. All of this, and
+  why, in [ADR 0006](docs/adr/0006-retarget-through-the-api.md).
 
-- **Un rechazo con 422 ya no sale como "forge conflict", y dice por qué.** Cuando
-  una llamada a la API falla, las CLIs ponen a stderr **una línea con el argv
-  entero** y el motivo de verdad va en el cuerpo JSON. `tool.Run` cortaba stderr y
-  se quedaba con lo primero, así que el motivo que veía el usuario era el comando
-  que falló —`gh api -X PATCH …: gh: Validation Failed (HTTP 422)`— y no por qué
-  falló. Se añade `tool.APIMessage`, que prefiere `errors[].message` sobre
-  `message` porque GitHub escribe el genérico en el primero y el detalle en el
-  segundo, así que ahora se lee `Proposed base branch 'x' was not found`.
+- **A 422 rejection no longer comes out as "forge conflict", and it says why.**
+  When an API call fails, the CLIs put on stderr **one line with the whole
+  argv** and the real reason goes in the JSON body. `tool.Run` cut stderr and
+  kept the first, so the reason the user saw was the command that failed
+  —`gh api -X PATCH …: gh: Validation Failed (HTTP 422)`— and not why it
+  failed. `tool.APIMessage` is added, which prefers `errors[].message` over
+  `message` because GitHub writes the generic one in the former and the detail
+  in the latter, so now it reads `Proposed base branch 'x' was not found`.
 
-  El 422 tampoco tenía clase propia: como el texto de stderr no tiene ni
-  "conflict" ni "not found", caía en `network`, que el inbox traduce a "forge
-  conflict" —que promete un refresco que no puede arreglar un nombre de rama que no
-  existe—. Ahora es `validation`, que no es conflicto ni permiso ni "no existe el
-  ítem": es un error de la llamada. Afecta a **todas** las acciones, porque
-  `kindForHTTP` es compartido.
+  The 422 also had no class of its own: since the stderr text contains neither
+  "conflict" nor "not found", it fell into `network`, which the inbox translates
+  to "forge conflict" —which promises a refresh that cannot fix a branch name
+  that does not exist—. Now it is `validation`, which is neither conflict nor
+  permission nor "the item does not exist": it is an error of the call. It
+  affects **all** actions, because `kindForHTTP` is shared.
 
-- **La Confirmación de merge avisa de que las ramas se pisan, y el rechazo dice
-  rebase.** `mergeable` (GitHub) y `detailedMergeStatus` (GitLab) viajan en la
-  consulta que ya se hacía del ítem, así que **no cuestan llamada**: el aviso de
-  "choca con `main`" aparece en la caja antes de elegir la estrategia, en vez de
-  aparecer después como un rechazo de la CLI. Es un bloqueo **blando**, como el
-  CI rojo: arma igual y nombra la rama contra la que hay que rehacer, porque un
-  rebase lo arregla en un comando y vetar dejaría al PR sin salida desde aquí.
-  Donde el forge no dice nada (el `UNKNOWN` de GitHub mientras calcula, el
-  respaldo REST de GitHub, la API de Todos de GitLab) no se anuncia nada: un
-  aviso de conflicto sin dato es un aviso falso, y uno que se repite entrena a
-  ignorar la caja.
+- **The merge Confirmation warns that the branches clash, and the rejection
+  says rebase.** `mergeable` (GitHub) and `detailedMergeStatus` (GitLab) travel
+  in the query that was already made for the item, so they **cost no call**: the
+  "clashes with `main`" warning appears in the box before choosing the
+  strategy, instead of appearing later as a CLI rejection. It is a **soft**
+  block, like a red CI: it arms all the same and names the branch that has to be
+  redone, because a rebase fixes it in one command and vetoing would leave the
+  PR with no way out from here. Where the forge says nothing (GitHub's `UNKNOWN`
+  while it computes, GitHub's REST fallback, GitLab's Todos API) nothing is
+  announced: a conflict warning with no data is a false warning, and one that
+  repeats trains you to ignore the box.
 
-  El rechazo cambia además de clasificación, y esto era un bug: el texto de un
-  rechazo de merge por ramas y el de "el ítem ya no está como estaba" comparten
-  la palabra *conflict* y son **opuestos**. Con el cubo único, `forge conflict`
-  prometía un refresco que no arregla un rebase —un aviso que no dice qué hacer,
-  que es la peor forma de equivocarse porque parece accionable—. Ahora el rechazo
-  por ramas se clasifica aparte, trae el motivo canónico (`rebase the branch onto
-  the target and push`) en vez del inglés de la CLI, **no** se registra como
-  denegación (un rebase lo deja integrable, y marcado como denegado el PR no
-  volvería a armar nunca) y sale como `merge refused: …`.
+  The rejection also changes classification, and this was a bug: the text of a
+  merge rejection over branches and the one for "the item is no longer as it
+  was" share the word *conflict* and are **opposites**. With the single bucket,
+  `forge conflict` promised a refresh that does not fix a rebase —a warning that
+  does not say what to do, which is the worst way to be wrong because it looks
+  actionable—. Now the branch rejection is classified separately, carries the
+  canonical reason (`rebase the branch onto the target and push`) instead of the
+  CLI's English, is **not** logged as a denial (a rebase makes it integrable,
+  and once marked as denied the PR would never arm again) and comes out as
+  `merge refused: …`.
 
-  En GitLab se pide el `detailedMergeStatus` y no el `mergeStatus` porque el
-  simple no distingue un conflicto de un pipeline en rojo, y un CI en rojo ya lo
-  avisa el gate por su cuenta. El coste es que GitLab lo calcula por MR en cada
-  petición —su API REST de lista también lo devuelve—, así que es un cálculo por
-  ítem y no una llamada extra.
+  In GitLab `detailedMergeStatus` is requested and not `mergeStatus` because the
+  simple one does not tell a conflict from a red pipeline, and a red CI is
+  already announced by the gate on its own. The cost is that GitLab computes it
+  per MR on every request —its REST list API returns it too—, so it is a
+  computation per item and not an extra call.
 
-- **El merge nombra si borra la rama, y `tab` lo decide.** La Confirmación de
-  merge —la caja que sustituye a la barra de atajos con `m`— muestra ahora
-  `delete branch: yes (tab)`, y `tab` conmuta el valor antes de la tecla que
-  dispara. Fuera del merge armado no aparece: no es una decisión que se pueda
-  tomar en otro sitio. El default es **borrar** (`--delete-branch` en `gh`,
-  `--remove-source-branch` en `glab`), que es lo que los forges hacen por su
-  cuenta; `tab` lo apaga para el resto de la sesión y `tab` otra vez lo
-  devuelve. El valor es de sesión, no de ítem: la housekeeping no depende del PR
-  que tengas delante.
+- **The merge names whether it deletes the branch, and `tab` decides it.** The
+  merge Confirmation —the box that replaces the shortcut bar with `m`— now
+  shows `delete branch: yes (tab)`, and `tab` toggles the value before the key
+  that fires it. Outside an armed merge it does not appear: it is not a decision
+  that can be taken elsewhere. The default is **delete** (`--delete-branch` in
+  `gh`, `--remove-source-branch` in `glab`), which is what the forges do on
+  their own; `tab` turns it off for the rest of the session and `tab` again
+  turns it back on. The value is per session, not per item: the housekeeping
+  does not depend on which PR you have in front of you.
 
-  El borrado va en el **mismo comando** que el merge, así que su fallo sale como
-  fallo del comando entero aunque la integración ya esté hecha: sin push, con la
-  rama protegida, o contra un repo con merge queue —que rechaza `-d` antes de
-  mergear—. Por eso el resultado ya no se reporta como "merge falló" en ese
-  caso: la relectura que el merge ya hacía distingue "no se pudo mergear" de "se
-  mergeó y la rama no se borró", y el aviso queda
-  `merge (squash) ok · branch not deleted: <motivo>`. Un PR de fork tampoco
-  puede reportarse como rama borrada (`isCrossRepository`, que ya venía en la
-  misma consulta del ítem): no hay rama que borrar en el repo destino y el forge
-  no protesta. Lo que la llamada **no** toca es el repositorio local: con
-  `--repo`/`-R` la CLI solo borra la rama remota, así que los clones bare y los
-  worktrees de prdash quedan intactos.
+  The deletion goes in the **same command** as the merge, so its failure comes
+  out as a failure of the whole command even though the integration is already
+  done: without push, with a protected branch, or against a repo with a merge
+  queue —which rejects `-d` before merging—. That is why the result is no
+  longer reported as "merge failed" in that case: the re-read that the merge
+  already did distinguishes "could not merge" from "it merged and the branch was
+  not deleted", and the notice ends up `merge (squash) ok · branch not deleted:
+  <reason>`. A fork PR either cannot be reported as branch deleted
+  (`isCrossRepository`, which already came in the same item query): there is no
+  branch to delete in the target repo and the forge does not complain. What the
+  call does **not** touch is the local repository: with `--repo`/`-R` the CLI
+  only deletes the remote branch, so bare clones and prdash's worktrees stay
+  intact.
 
-- **El prefijo de ruta de la columna ITEM se puede elegir con `p`.** La ruta de
-  un ítem se pintaba siempre con el mismo reparto —el prefijo común de la sección
-  en su línea, el sufijo en la celda (ADR 0002/0004)— y no había manera de
-  elegir. Ahora `p` cicla tres modos, y la barra nombra el actual (`p prefix:
-  full`) para no contar pulsaciones:
+- **The path prefix of the ITEM column can be chosen with `p`.** An item's path
+  was always painted with the same split —the section's common prefix on its
+  line, the suffix in the cell (ADR 0002/0004)— and there was no way to choose.
+  Now `p` cycles three modes, and the bar names the current one (`p prefix:
+  full`) so you do not have to count keystrokes:
 
-  - `common` (el de antes): línea de prefijo con el grupo común, celda con el
-    sufijo. Es el default, así que quien no pulse la tecla no ve nada nuevo.
-  - `full`: sin línea de prefijo y la referencia en la celda, para quien lee la
-    tabla fila a fila y quiere la referencia en la fila. **Recortada por la cola**
-    cuando no cabe —en un subgrupo largo se ve `…kend/api-gateway#1016`— porque
-    la columna tiene el mismo tope de siempre.
-  - `leaf`: sin línea de prefijo y solo la hoja del proyecto más el número, la
-    máxima densidad.
+  - `common` (the one from before): prefix line with the common group, cell with
+    the suffix. It is the default, so whoever does not press the key sees
+    nothing new.
+  - `full`: no prefix line and the reference in the cell, for whoever reads the
+    table row by row and wants the reference on the row. **Truncated at the
+    tail** when it does not fit —in a long subgroup you see
+    `…kend/api-gateway#1016`— because the column has the same cap as always.
+  - `leaf`: no prefix line and only the project's leaf plus the number, the
+    maximum density.
 
-  El modo es **global** (no por sección) y **no se persiste**: al reabrir vuelve
-  a `common`. La tecla `p` sí queda configurable por `[keybindings]`, por el
-  mecanismo genérico que ya existía para el resto de acciones — con el coste de
-  que, si tenías otra acción en `p`, ahora la ejecuta el ciclo de prefijo—. La
-  columna ITEM se vuelve a medir en cada modo con el mismo acotado, y en
-  `full`/`leaf` la lista recupera la línea que ocupaba el prefijo. Si la sección
-  no tiene prefijo común, `common` se ve exactamente como `full` (ADR 0005).
+  The mode is **global** (not per section) and **not persisted**: on reopening
+  it goes back to `common`. The `p` key does become configurable through
+  `[keybindings]`, through the generic mechanism that already existed for the
+  rest of the actions — with the cost that, if you had another action on `p`,
+  it now runs the prefix cycle—. The ITEM column is re-measured in every mode
+  with the same bounding, and in `full`/`leaf` the list reclaims the line the
+  prefix used. If the section has no common prefix, `common` looks exactly like
+  `full` (ADR 0005).
 
-  Dos límites, porque son reales: `leaf` **no desambigua** dos repos de grupos
-  distintos con la misma hoja (`acme/one#7` y `other/one#8` salen como `one#7` y
-  `one#8`) —su valor es la densidad, no la certeza— y el modo no sobrevive a la
-  ejecución siguiente. La ruta completa sigue en la ficha del ítem y en
-  `--print`, que **no cambia**.
+  Two limits, because they are real: `leaf` **does not disambiguate** two repos
+  from different groups with the same leaf (`acme/one#7` and `other/one#8` come
+  out as `one#7` and `one#8`) —its value is density, not certainty— and the
+  mode does not survive the next run. The full path is still in the item card
+  and in `--print`, which **does not change**.
 ### Changed
 
-- **El Inbox pinta una sola sección a la vez, con leyenda de conteos en el borde.**
-  Al abrir, la sección activa es **Assigned**, y `tab` cicla
-  `Assigned → Mentioned → Mine → Assigned` (siempre, aunque la destino esté
-  vacía). El título `Inbox` se sustituye por la leyenda `Mine (n) · Assigned (n) ·
-  Mentioned (n)`, con la activa resaltada; en terminal estrecho el borde la trunca
-  sin descuadrar la caja. Cada sección recuerda su cursor y su scroll, el prefijo
-  de ruta común (ADR 0002) se muestra en una línea fija de la activa —hoy ese es
-  solo el modo por defecto, conmutable con `p`, ver más arriba—, y `(empty)`,
-  `loading more…` y los avisos son los de la sección activa. `--print`, el formato
-  de cache y la API de `[keybindings]` no cambian (ADR 0004).
+- **The Inbox paints one section at a time, with a count legend on the edge.**
+  On open, the active section is **Assigned**, and `tab` cycles
+  `Assigned → Mentioned → Mine → Assigned` (always, even if the destination is
+  empty). The `Inbox` title is replaced by the legend `Mine (n) · Assigned (n) ·
+  Mentioned (n)`, with the active one highlighted; in a narrow terminal the edge
+  truncates it without breaking the box. Each section remembers its cursor and
+  its scroll, the common path prefix (ADR 0002) is shown on a fixed line of the
+  active one —today that is only the default mode, toggleable with `p`, see
+  above—, and `(empty)`, `loading more…` and the notices are those of the
+  active section. `--print`, the cache format and the `[keybindings]` API do
+  not change (ADR 0004).
 
 ### Fixed
 
-- **El gate de merge no veía los PR/MR en borrador.** `isDraft`/`draft` se pedía
-  en la consulta del ítem desde el principio y se descartaba sin mirar, así que
-  ningún ítem llegaba marcado como borrador. `MergeBlock` solo comparaba
-  `State == "draft"`, un valor que ningún forge emite —GitHub devuelve `OPEN` y
-  GitLab `opened`—, de modo que el bloqueo que el README prometía para los
-  borradores no ocurría nunca: prdash armaba el merge, gastaba la llamada
-  completa y devolvía el rechazo del forge. Lo que lo sostenía era una suite que
-  se inyectaba `State="draft"` a mano, es decir, probaba un valor que el producto
-  real nunca producía, y por eso la suite entera pasaba con la funcionalidad
-  rota.
+- **The merge gate did not see draft PR/MRs.** `isDraft`/`draft` was requested
+  in the item query from the start and discarded without looking, so no item
+  ever arrived marked as draft. `MergeBlock` only compared `State == "draft"`,
+  a value no forge emits —GitHub returns `OPEN` and GitLab `opened`—, so the
+  blocking the README promised for drafts never happened: prdash armed the
+  merge, spent the whole call and got the forge's rejection back. What held it
+  up was a suite that injected `State="draft"` by hand, that is, it tested a
+  value the real product never produced, and that is why the whole suite passed
+  with the functionality broken.
 
-  Ahora el borrador es una propiedad del ítem (`Item.IsDraft`) y llega por los
-  cuatro caminos de parseo —GraphQL y REST de GitHub, GraphQL y lista REST de
-  GitLab—, con tests que usan JSON con la forma que devuelve cada forge de verdad.
-  El gate la consulta sin importar la decisión de review: un borrador aprobado
-  salía como `approved` y el borrador se perdía de vista justo en el ítem que más
-  se vigila. La ficha enseña `Draft: yes/no` al lado de `State`, porque son
-  preguntas distintas —`State` es prioridad de atención, el borrador es un dato
-  del forge— y ese hueco lo ocupa la fila `Number`, que solo repetía el número
-  que `refLabel` ya enseña tres columnas más allá. En GitLab, `draft` viene en la
-  misma consulta que el resto y no cuesta llamada.
+  Now the draft is a property of the item (`Item.IsDraft`) and arrives through
+  the four parsing paths —GitHub GraphQL and REST, GitLab GraphQL and REST
+  list—, with tests that use JSON with the shape each forge really returns. The
+  gate queries it regardless of the review decision: an approved draft came out
+  as `approved` and the draft went unnoticed exactly on the item that gets
+  watched the most. The card shows `Draft: yes/no` next to `State`, because they
+  are different questions —`State` is attention priority, the draft is forge
+  data— and that slot is taken by the `Number` row, which only repeated the
+  number `refLabel` already shows three columns further on. In GitLab, `draft`
+  comes in the same query as the rest and costs no call.
 
-- **La simulación ocupaba un rincón del popup y salía deformada.** El ancho de las
-  celdas y el de la caja los decidía cada uno por su cuenta: las celdas se
-  calculaban para 96 columnas y la caja se dibujaba al ancho de la vista, así que
-  la imagen ocupaba el tercio izquierdo y el resto quedaba vacío —con un borde
-  vacío que parecía parte del render—. Ahora `simBox` es la única fuente de la
-  geometría: la caja se ajusta a lo que la imagen necesita, no al revés
-  (`TestTheImageFillsTheBox`).
+- **The simulation took up a corner of the popup and came out deformed.** The
+  width of the cells and that of the box were decided by each on its own: the
+  cells were computed for 96 columns and the box was drawn at the viewport
+  width, so the image occupied the left third and the rest was left empty —with
+  an empty edge that looked like part of the render—. Now `simBox` is the
+  single source of the geometry: the box fits what the image needs, not the
+  other way around (`TestTheImageFillsTheBox`).
 
-  Además, una celda de terminal es el doble de alta que de ancha, así que el alto
-  se paga a doble: una imagen 16:9 —la que produce git-sim— necesita 3,56 columnas
-  por línea, no 1,78. Sin ese factor el grafo se estiraba a lo ancho y los dos
-  commits de una fila parecían una tira de elipses. `sim.Fit` calcula el mayor
-  tamaño que cabe manteniendo el ratio.
+  Besides, a terminal cell is twice as tall as it is wide, so height is paid
+  double: a 16:9 image —the one git-sim produces— needs 3.56 columns per line,
+  not 1.78. Without that factor the graph was stretched wide and the two
+  commits in a row looked like a strip of ellipses. `sim.Fit` computes the
+  largest size that fits keeping the ratio.
 
-  Y el popup se dimensiona con la terminal en vez de con topes fijos: en una
-  pantalla de 240×70 pasa de 94×23 a 174×49 celdas —el triple de detalle—, que es
-  la diferencia entre un grafo ilegible y uno legible, sin dejar de ser un overlay:
-  se queda con el 75% del alto y deja fondo alrededor
+  And the popup is sized from the terminal instead of fixed caps: on a 240×70
+  screen it goes from 94×23 to 174×49 cells —three times the detail—, which is
+  the difference between an unreadable graph and a readable one, while still
+  being an overlay: it keeps 75% of the height and leaves background around
   (`TestThePopupGrowsWithTheTerminal`).
 
-  Un tercer bug en la misma línea: `simHeightShare = 3 / 4` como constante de Go
-  vale **0** (división entera en tiempo de compilación), así que el popup se
-  quedaba con su suelo de 6 filas por mucho espacio que hubiera. Ahora son
-  numerador y denominador.
-- **La flecha izquierda arrancaba el render.** Navegaba en un menú horizontal que
-  no existe —el popup ofrece una estrategia—, así que pulsarla después de `v`
-  lanzaba el render sin confirmar nada. Con una sola estrategia no hay nada que
-  recorrer: las flechas caen en el default y cierran el popup, como cualquier tecla
-  que no sea una elección. La navegación vuelve sola cuando haya una segunda
-  estrategia (`TestTheChooserNavigatesWhenThereIsSomethingToNavigate`).
+  A third bug in the same vein: `simHeightShare = 3 / 4` as a Go constant is
+  **0** (integer division at compile time), so the popup stayed stuck at its
+  floor of 6 rows no matter how much space there was. Now they are numerator
+  and denominator.
+- **The left arrow started the render.** It navigated in a horizontal menu that
+  does not exist —the popup offers one strategy—, so pressing it after `v`
+  launched the render without confirming anything. With a single strategy there
+  is nothing to traverse: the arrows fall to the default and close the popup,
+  like any key that is not a choice. Navigation comes back on its own when there
+  is a second strategy (`TestTheChooserNavigatesWhenThereIsSomethingToNavigate`).
 
-- **Un merge ya no se dispara por una tecla que no era el modo.** La segunda
-  pulsación del merge, al no ser un modo, se re-despachaba como si nada. Eso
-  convertía `m` seguido de `a` en un **approve** del PR —la tecla de al lado en
-  el teclado, y sin ninguna confirmación—, y `m` seguido de `m` en un merge
-  commit al instante. Ahora la tecla **cancela y se consume**. La intención
-  original del comportamiento viejo —que un `m` a destiempo no dejara la vista
-  esperando una segunda pulsación— se cumple igual: la vista deja de esperar,
-  pero sin disparar OTRA acción. El test que blindaba el comportamiento viejo
-  (`TestMergeArmedCancelsOnOtherKey`) afirmaba la navegación, así que se cambió
-  por `TestMergeArmedConsumesOtherKey` y se añadió
-  `TestMergeArmedApproveKeyDoesNotApprove` para el agujero concreto.
-- **El merge va pineado al commit que se leyó del ítem.** Con `--match-head-commit`
-  en GitHub y `--sha` en GitLab. Antes la orden integraba el HEAD del momento, y
-  entre el refresco del inbox (60 s) y la pulsación la rama puede haber avanzado:
-  se integraban commits que nadie había revisado, que es el peor resultado
-  posible de una acción irreversible. El SHA sale de la **relectura** que
-  `RunAction` hace inmediatamente antes de mergear, no de la copia en memoria de
-  la TUI, para que la ventana sea la menor posible. Cuando el forge no reporta el
-  commit —`diffHeadSha` puede venir a null en GitLab— el merge **se niega**
-  (`ErrMissingHeadSHA`) en vez de salir sin pin: un merge sin pin es
-  exactamente el fallo que el pin arregla.
-- **El CI rojo y los cambios pedidos se anuncian antes de la confirmación.**
-  `state.Derive` ya distinguía `StateError` (checks fallidos),
-  `StateChangesRequested` y `StateDraft`, y la ficha los enseña, pero
-  `Actionable` solo denegaba `merged` y `closed`: `merge` salía igual en los tres
-  casos. Ahora `state.MergeBlock` decide en dos niveles:
-  - **Bloqueo duro** (borrador, ya mergeado, ya cerrado): no arma, y avisa. Son
-    propiedades del forge —GitHub rechaza el merge de un PR en borrador antes de
-    mirar nada más— así que ofrecerlo solo gastaba una llamada para recibir un
-    error.
-  - **Bloqueo blando** (CI en rojo, CI corriendo, cambios pedidos): arma, y la
-    confirmación lo dice: `merge acme/widget#7 with CI is failing (2 of 5) ·
-    press the mode anyway…`. Prohibirlos del todo convertiría la herramienta en
-    un muro —un check inestable dejaría el PR sin salida—, y no hacer nada los
-    haría invisibles.
-  Elegir el modo **es** la confirmación, así que no hace falta una tercera tecla.
-  En un ítem sano no sale ningún aviso: un gate que avisa siempre entrena a
-  ignorar el aviso.
-- **El motivo de autenticación llega a la pantalla.** `AuthState.Reason` lo
-  escribía el adapter y no se pintaba en ningún sitio: solo la etiqueta genérica
-  `not authenticated`. Con `bitbucket` (adapter inerte) eso mandaba a la persona
-  a la autenticación a buscar un token que ya funcionaba. Ahora el aviso y la
-  ficha llevan el motivo del adapter, y el de bitbucket dice `not implemented in
-  this version` en vez de `not supported in this version`, porque "no soportado"
-  y "no implementado" piden lo mismo y solo uno de los dos es exacto.
-- **La relectura de `ReviewDecision` se normaliza en el gate.** Se comparaba en
-  crudo contra `changes_requested`, y el forge manda `CHANGES_REQUESTED`: el gate
-  no veía los cambios pedidos en ningún caso. Se compara con el mismo
-  `normalize` que ya usa `Derive`.
-- **`MergeBlock` mira el estado crudo, no el derivado.** `Derive` ordena por
-  atención al operador, así que un ítem en borrador que además está aprobado
-  devuelve `StateApproved` y el borrador se perdía. La pregunta del gate es otra
-  —¿puede este forge integrar esto?— y no depende de la decisión de review.
+- **A merge is no longer triggered by a key that was not the mode.** The second
+  keystroke of the merge, not being a mode, was re-dispatched as if nothing had
+  happened. That turned `m` followed by `a` into an **approve** of the PR —the
+  key next to it on the keyboard, and with no confirmation at all—, and `m`
+  followed by `m` into an instant merge commit. Now the key **cancels and is
+  consumed**. The original intent of the old behavior —that a mistimed `m` would
+  not leave the view waiting for a second keystroke— is still met: the view
+  stops waiting, but without firing ANOTHER action. The test that armored the
+  old behavior (`TestMergeArmedCancelsOnOtherKey`) asserted the navigation, so
+  it was replaced by `TestMergeArmedConsumesOtherKey` and
+  `TestMergeArmedApproveKeyDoesNotApprove` was added for the specific hole.
+- **The merge goes pinned to the commit read from the item.** With
+  `--match-head-commit` on GitHub and `--sha` on GitLab. Before, the command
+  integrated the HEAD of the moment, and between the inbox refresh (60 s) and
+  the keystroke the branch may have advanced: commits that nobody had reviewed
+  were integrated, which is the worst possible outcome of an irreversible
+  action. The SHA comes from the **re-read** that `RunAction` does immediately
+  before merging, not from the TUI's in-memory copy, so the window is as small
+  as possible. When the forge does not report the commit —`diffHeadSha` can
+  come back null on GitLab— the merge **refuses** (`ErrMissingHeadSHA`) instead
+  of going out unpinned: an unpinned merge is exactly the failure the pin
+  fixes.
+- **A red CI and requested changes are announced before the confirmation.**
+  `state.Derive` already distinguished `StateError` (failed checks),
+  `StateChangesRequested` and `StateDraft`, and the card shows them, but
+  `Actionable` only denied `merged` and `closed`: `merge` came out the same in
+  all three cases. Now `state.MergeBlock` decides at two levels:
+  - **Hard block** (draft, already merged, already closed): it does not arm, and
+    warns. They are forge properties —GitHub rejects merging a draft PR before
+    looking at anything else— so offering it only spent a call to get an error
+    back.
+  - **Soft block** (red CI, running CI, requested changes): it arms, and the
+    confirmation says so: `merge acme/widget#7 with CI is failing (2 of 5) ·
+    press the mode anyway…`. Banning them outright would turn the tool into a
+    wall —a flaky check would leave the PR with no way out—, and doing nothing
+    would make them invisible.
+  Choosing the mode **is** the confirmation, so a third key is not needed. On a
+  healthy item no warning comes out: a gate that always warns trains you to
+  ignore the warning.
+- **The authentication reason reaches the screen.** `AuthState.Reason` was
+  written by the adapter and was not painted anywhere: only the generic label
+  `not authenticated`. With `bitbucket` (an inert adapter) that sent the person
+  to authentication to look for a token that already worked. Now the notice and
+  the card carry the adapter's reason, and bitbucket's says `not implemented in
+  this version` instead of `not supported in this version`, because "not
+  supported" and "not implemented" ask for the same thing and only one of the
+  two is exact.
+- **The re-read of `ReviewDecision` is normalized in the gate.** It was
+  compared raw against `changes_requested`, and the forge sends
+  `CHANGES_REQUESTED`: the gate never saw the requested changes in any case. It
+  is compared with the same `normalize` that `Derive` already uses.
+- **`MergeBlock` looks at the raw state, not the derived one.** `Derive` orders
+  by attention to the operator, so a draft item that is also approved returns
+  `StateApproved` and the draft was lost. The gate's question is another
+  —can this forge integrate this?— and does not depend on the review decision.
 
 ### Changed
 
-- **La confirmación de merge solo ofrece los modos que el repositorio admite.**
-  GitHub publica `mergeCommitAllowed` / `rebaseMergeAllowed` / `squashMergeAllowed`
-  dentro de la consulta del ítem, así que la lista es exacta y **no cuesta una
-  llamada**: un repositorio con el squash desactivado no muestra `s` y no gasta
-  un rechazo en descubrirlo. El modo se revalida al confirmar, así que el filtro
-  no es solo de menú.
-  - En **GitLab no se puede** y no se finge: `Project.mergeMethod` **no existe**
-    en el schema GraphQL de la instancia (comprobado con introspección), y
-    leerlo por REST costaría una llamada por repositorio. Las reglas llegan con
-    `Known=false` y eso no restringe nada, porque no saber no es lo mismo que no
-    permitir: un filtro inventado dejaría fuera el único modo que el repositorio
-    quizá sí admite, y el usuario se quedaría sin salida legítima.
-  - El orden de la lista pasa a ser `r` rebase, `m` merge commit, `s` squash.
-    Rebase primero porque es la única estrategia que no reescribe la historia
-    publicada; no es un default —no hay default— pero inclina el menú.
-  - `Adapter.Merge` recibe el head SHA como parámetro nuevo. Que el pin sea
-    explícito en la firma es lo que evita que un adapter nuevo lo olvide.
-- **`FakeAdapter` se niega a mergear sin pin**, igual que los dos adapters reales,
-  y antes de registrar nada. Un fake que acepta lo que producción rechaza hace
-  que todos los tests de merge de la TUI cubran un camino que no existe, y el
-  fallo real aparece en el adapter, donde ningún test llega. `mkItem` ahora
-  pone un `HeadSHA` y unas `MergeRules` por defecto, que es lo que devuelve un
-  forge real.
+- **The merge confirmation only offers the modes the repository accepts.**
+  GitHub publishes `mergeCommitAllowed` / `rebaseMergeAllowed` /
+  `squashMergeAllowed` inside the item query, so the list is exact and **costs
+  no call**: a repository with squash disabled does not show `s` and does not
+  spend a rejection finding out. The mode is revalidated on confirm, so the
+  filter is not just menu-deep.
+  - In **GitLab it cannot be done** and it is not faked: `Project.mergeMethod`
+    **does not exist** in the instance's GraphQL schema (checked with
+    introspection), and reading it over REST would cost a call per repository.
+    The rules arrive with `Known=false` and that restricts nothing, because not
+    knowing is not the same as not allowing: an invented filter would leave out
+    the only mode the repository perhaps does allow, and the user would be left
+    with no legitimate way out.
+  - The order of the list becomes `r` rebase, `m` merge commit, `s` squash.
+    Rebase first because it is the only strategy that does not rewrite
+    published history; it is not a default —there is no default— but it tilts
+    the menu.
+  - `Adapter.Merge` receives the head SHA as a new parameter. The pin being
+    explicit in the signature is what prevents a new adapter from forgetting it.
+- **`FakeAdapter` refuses to merge without a pin**, just like the two real
+  adapters, and before recording anything. A fake that accepts what production
+  rejects makes every TUI merge test cover a path that does not exist, and the
+  real failure shows up in the adapter, where no test reaches. `mkItem` now
+  sets a default `HeadSHA` and `MergeRules`, which is what a real forge
+  returns.
 
 ### Added
 
-- **`v` simula el merge del PR y lo enseña en un popup sobre el inbox.** Renderiza
-  con [git-sim](https://github.com/initialcommit/git-sim) cómo quedaría el
-  historial al integrar el PR y pinta la imagen resultante **encima** de la vista,
-  de modo que el fondo se sigue leyendo salvo donde tapa la caja. `enter`
-  renderiza, `esc` cierra, `o` abre la imagen en el visor.
+- **`v` simulates the merge of the PR and shows it in a popup over the inbox.**
+  It renders with [git-sim](https://github.com/initialcommit/git-sim) how the
+  history would end up after integrating the PR and paints the resulting image
+  **on top of** the view, so the background is still readable except where the
+  box covers it. `enter` renders, `esc` closes, `o` opens the image in the
+  viewer.
 
-  No es un gate y conviene decirlo: git-sim **dibuja**, no ejecuta, y su veredicto
-  solo existe dentro de la imagen, así que no sirve para decidir si un merge
-  choca. Es un visualizador, y lo que aporta es entender *por qué* el historial
-  queda como queda.
+  It is not a gate and it is worth saying so: git-sim **draws**, it does not
+  execute, and its verdict only exists inside the image, so it is no use to
+  decide whether a merge clashes. It is a visualizer, and what it brings is
+  understanding *why* the history ends up the way it ends up.
 
-  Decisiones que no son obvias:
+  Decisions that are not obvious:
 
-  - **Todo el render ocurre en un clon temporal** de los refs del review
-    (`--shared`, con la rama base activa), no en el worktree del review. La razón
-    es dura: git-sim necesita un `HEAD` enganchado a una rama de verdad, y la única
-    forma de tener la base activa sin cambiar de rama el worktree que tiene
-    abierta la review es otro directorio. El clon se borra al terminar, así que no
-    deja refs, worktrees, ramas ni cambios sin commitear en el repo del usuario
-    (`TestSimulateLeavesNoTraceInTheLocalRepo`).
-  - **`git_sim_auto_open=false` en el entorno, no un flag.** git-sim termina
-    entregando la imagen al visor del escritorio y, sin display, esa llamada no
-    vuelve nunca: son 2 s con la variable puesta y un cuelgue sin ella. El flag no
-    tiene forma negativa en el CLI, pero su `Settings` lee las variables
-    `git_sim_*`, así que es ahí donde se apaga.
-  - **Nada de `--quiet`.** Imprescindible y contraintuitivo: git-sim imprime la
-    ruta de la imagen *solo* cuando no está en silencio, así que pedir las dos
-    cosas —que es lo razonable— deja la salida vacía y la simulación falla sin
-    explicación. Hay un test que lo fija (`TestArgsNeverAskForQuietAndThePath`).
-  - **La imagen se decodifica en Go** (`image/jpeg`) y se pinta con half-blocks
-    `▀` en truecolor, dos píxeles por celda, en vez de depender de `chafa` o del
-    `img2txt` del sistema: cero dependencias nuevas y el doble de resolución
-    vertical, que es lo que hace legible un grafo de commits.
-  - **Solo se ofrece `merge`.** git-sim 0.3.5 no sabe dibujar un `rebase`: con la
-    rama del PR ya basada en la base —el caso normal de una PR— responde
-    "Branch 'main' is already based on active branch 'feat'" con el mensaje
-    invertido, y con las ramas divergidas revienta con un `IndexError` de Python.
-    Verificado en las tres formas. Ofrecerlo sería una opción que solo puede
-    fallar; cuando upstream lo arregle, `simKinds` es lo único que hay que tocar.
-  - **Con el merge armado, `v` no abre nada**: desarma y se consume, igual que
-    cualquier otra tecla. Abrir un modal desde una pulsación a destiempo es la
-    misma trampa que el merge armado ya evita.
-  - Requiere `git-sim` en el PATH y el review montado (`r`); sin cualquiera de
-    los dos, la acción avisa y no hace nada.
-  - **La imagen va a la capa de gráficos del pane cuando Herdr la tiene.** Los
-    half-blocks tienen un techo que no se puede subir: un terminal es una rejilla de
-    celdas, así que una imagen de 1920 px en 84 columnas es una reducción de 23× y
-    cada píxel se convierte en un bloque de 23×23 celdas — los escalones que se veían
-    en las curvas de los commits—. No es un bug de tamaño: es la rejilla. La salida
-    es no usar la rejilla, y Herdr tiene una capa de gráficos por pane
-    (`terminal.kitty_graphics`, que el terminal exterior tiene que soportar —kitty y
-    sus derivados sí—). La imagen se publica en ella, ya ajustada a los píxeles del
-    rectángulo, y la pinta el terminal con su propio escalado. Los half-blocks se
-    quedan como camino de degradación: fuera de Herdr, con la capa apagada, o si
-    el pane no responde —y en ese caso vuelve a half-blocks en vez de dejar un
-    hueco—.
+  - **The whole render happens in a temporary clone** of the review's refs
+    (`--shared`, with the active base branch), not in the review's worktree. The
+    reason is hard: git-sim needs a `HEAD` hooked to a real branch, and the
+    only way to have the active base without switching the branch of the
+    worktree the review has open is another directory. The clone is deleted
+    when finished, so it leaves no refs, worktrees, branches or uncommitted
+    changes in the user's repo (`TestSimulateLeavesNoTraceInTheLocalRepo`).
+  - **`git_sim_auto_open=false` in the environment, not a flag.** git-sim ends
+    up handing the image to the desktop viewer and, without a display, that
+    call never returns: it is 2 s with the variable set and a hang without it.
+    The flag has no negative form in the CLI, but its `Settings` reads the
+    `git_sim_*` variables, so that is where it is turned off.
+  - **No `--quiet`.** Essential and counterintuitive: git-sim prints the image
+    path *only* when it is not silent, so asking for both things —which is the
+    reasonable thing— leaves the output empty and the simulation fails with no
+    explanation. There is a test that pins it (`TestArgsNeverAskForQuietAndThePath`).
+  - **The image is decoded in Go** (`image/jpeg`) and painted with half-blocks
+    `▀` in truecolor, two pixels per cell, instead of depending on `chafa` or
+    the system's `img2txt`: zero new dependencies and twice the vertical
+    resolution, which is what makes a commit graph readable.
+  - **Only `merge` is offered.** git-sim 0.3.5 does not know how to draw a
+    `rebase`: with the PR's branch already based on the base —the normal case
+    of a PR— it answers "Branch 'main' is already based on active branch 'feat'"
+    with the message inverted, and with diverged branches it blows up with a
+    Python `IndexError`. Verified in all three shapes. Offering it would be an
+    option that can only fail; when upstream fixes it, `simKinds` is the only
+    thing to touch.
+  - **With the merge armed, `v` opens nothing**: it disarms and is consumed,
+    just like any other key. Opening a modal from a mistimed keystroke is the
+    same trap the armed merge already avoids.
+  - Requires `git-sim` in the PATH and the review mounted (`r`); without
+    either, the action warns and does nothing.
+  - **The image goes to the pane's graphics layer when Herdr has one.**
+    Half-blocks have a ceiling that cannot be raised: a terminal is a grid of
+    cells, so a 1920 px image in 84 columns is a 23× reduction and every pixel
+    becomes a 23×23 cell block — the steps you saw on the commit curves—. It is
+    not a size bug: it is the grid. The way out is not to use the grid, and
+    Herdr has a graphics layer per pane (`terminal.kitty_graphics`, which the
+    outer terminal has to support —kitty and its derivatives do—). The image is
+    published on it, already fitted to the pixels of the rectangle, and the
+    terminal paints it with its own scaling. The half-blocks stay as the
+    degradation path: outside Herdr, with the layer off, or if the pane does not
+    answer —and in that case it falls back to half-blocks instead of leaving a
+    hole—.
 
-  Lo que costó saber, y está en el código:
-  - La API de gráficos **solo existe por socket**: `herdr pane graphics` no es un
-    subcomando, así que el cliente de Herdr de prdash (que habla por CLI) no sirve;
-    hay un cliente JSON-RPC nuevo en `internal/herdr/graphics.go` con una conexión
-    por petición, porque el servidor la cierra tras cada respuesta.
-  - **La colocación va en celdas**, no en píxeles, y la comparte con el overlay. Por
-    eso el origen de la caja vive en `centeredOrigin`: si el marco y la imagen
-    calcularan su sitio por su cuenta, caerían en rectángulos distintos.
-  - **La celda no es 1×2.** Herdr la mide y en kitty con la fuente por defecto son
-    9×19 px. Suponerlo deformaba la imagen un 5% y, peor, hacía mandar casi el doble
-    de resolución de la que se ve. Ahora el tamaño en píxeles sale de la celda
-    medida.
-  - **La capa hay que quitarla al cerrar el popup**, y en un contexto propio: vive
-    por encima del contenido del pane, así que si se queda, tapa la TUI entera; y
-    si el popup se cierra al salir, el contexto de la app ya está cancelado.
-  - Cada resize recoloca la imagen, porque la colocación es en celdas.
-- **Los últimos 5 comentarios del PR/MR se ven en el detalle.** En una caja propia
-  con su "Comments" en el borde, debajo de la ficha y con su autor. Se piden al
-  forge al llegar el cursor al ítem y se cachean, así que navegar no vuelve a
-  preguntar y el refresco del inbox no los tira; solo una acción sobre el ítem los
-  invalida, que es lo único que puede escribir en la conversación. No hay tecla
-  nueva: son parte de la ficha, no una vista aparte, y si el forge no responde el
-  panel lo dice (`loading…` / `not read: …` / `none`) en vez de dejar un hueco que
-  no se distingue de "este PR no tiene comentarios".
-  - Se enseña el **final** de la conversación: los últimos 5, en orden
-    cronológico y del más antiguo de esos al más nuevo, que es como se lee una
-    discusión. Es donde está lo último que se dijo del PR. El recuento va en el
-    borde de abajo de la caja y dice siempre los dos números (`3 of 3`, `5 of 23`):
-    el segundo es lo que indica que conviene abrir el PR, y el primero también
-    informa con todo a la vista, porque el tamaño de la conversación es parte del
-    estado del PR —3 comentarios o 30 no es el mismo PR—. Antes solo salía cuando
-    faltaba algo, y ese filtro venía justificado por su coste de una fila, que se
-    fue con el recuento al borde.
-  - Van en una **caja redondeada con "Comments" en el borde**, no como campos más de
-    la ficha: la conversación no es un dato del PR sino lo que la gente dijo de él, y
-    un borde lo dice sin tener que explicarlo. La caja va **sangrada una columna a
-    cada lado** y con **el mismo gris de borde que el resto** de las cajas. El
-    sangrado es lo que hace legible el anidamiento: pegada al borde del panel, sus
-    verticales se solapan con las de fuera y cada fila sale `││`, y con el mismo color
-    los dos bordes se leerían como un trazo gordo. Para separarlos hubo un tiempo un
-    gris un tono más claro, pero en las paletas cálidas ese tono sale amarillento, y
-    era un problema de color tapando uno de forma.
-  - **Sin comentarios no hay caja.** Una caja alrededor de la palabra "none" no
-    separa nada, y como es el estado de todos los PRs sin conversación, un borde
-    apareciendo y desapareciendo en cada movimiento del cursor sería ruido. Se queda
-    la línea de campo de siempre. Lo mismo con `loading…` y `not read: …`: son
-    mensajes de una línea, no conversación.
-  - La caja es **todo o nada**: si el presupuesto no da para sus dos bordes más una
-    fila por comentario, no se pinta. En un terminal de 30 filas con tres comentarios
-    y tres filas libres, la caja cabría para un comentario y perdería los otros dos;
-    ver uno y perder dos es peor que no ver ninguno, porque un recorte de la caja no
-    parece un recorte: parece que el PR solo tiene ese comentario.
-  - El recuento va **embebido en el borde de abajo, a la derecha**, y no
-    como una fila suelta del cuerpo. El cuerpo de la caja son las filas que dijo la
-    gente, y una de recuento es una que no es de nadie; en el borde, además, es
-    gratis, así que ya no es lo primero que se cae cuando el panel va justo, que era
-    su destino. El borde llega hasta la esquina y no se apoya en ella, o la línea de
-    abajo se leería como partida. La coletilla (`· open the PR to read the rest`) solo
-    sale si hay comentarios fuera y si cabe entera: recortada a media frase diría
-    menos que la corta.
-  - Las **notas de sistema de GitLab se descartan** ("assigned to @x", "added 3
-    commits"): no son conversación sino historial de acciones del MR, y llenaban las
-    cinco filas con ruido que ya está en otra parte de la ficha. Por eso se piden
-    3× el tope y se recorta por la cola después.
-  - Para que cupieran, los campos de la ficha pasan a **rejilla de dos columnas
-    siempre**, no solo en terminales bajos. En una columna ocupaban 16 de las ~18
-    líneas que da el 40% de un terminal normal y no cabía ni un comentario; en
-    rejilla ocupan 6. El comentario del README que describía la rejilla como
-    fallback de emergencia era ya falso.
-  - El **URL sale de la rejilla a una fila a ancho completo**. En media columna se
-    leían 40 caracteres de una URL de 80 y quedaba un resto inútil, y una URL que
-    no se puede copiar entera no sirve para nada, que es para lo que está. No
-    cuesta alto: los 13 campos ocupaban 7 filas y los 12 que quedan más el URL a
-    ancho completo siguen siendo 7.
-  - `Review` y `Role` se ordenan **al final** de los campos de estado, para que caigan
-    en la última fila de la rejilla, que es lo único que sobrevive al recorte. Sacar
-    el URL los desplazó una posición y `Review` empujó fuera de la ventana: una
-    ficha recortada sin ellos deja de responder a la pregunta para la que está.
-  - El cuerpo se lee **entero y por párrafos**, no solo la primera línea, y las filas
-    se reparten **según lo que cada comentario necesita**: si caben enteros, cada
-    uno toma lo suyo; si no, todos reciben una fila —para que los cinco estén, que
-    es lo pedido— y el sobrante va a quien menos tiene, una fila cada vez. El
-    reparto a ciegas que hubo antes daba la misma cuota a todos y cortaba un
-    comentario de seis párrafos a su primera frase mientras sobraba una fila.
-  - Los párrafos no se pegan entre sí, lo que no cabe se marca con `…` (una fila
-    que para en mitad de una frase se lee como si el comentario se acabara ahí) y se
-    saltan los comentarios HTML de markdown con los que abren los bots de GitHub,
-    que en un panel de ancho fijo se comerían la fila.
-  - Cuando el panel es pequeño los comentarios son lo **primero que se cae**,
-    antes que un campo de la ficha: son lo único que se puede volver a pedir en un
-    instante, y un campo que se va no vuelve.
+  What it took to know, and it is in the code:
+  - The graphics API **only exists over socket**: `herdr pane graphics` is not
+    a subcommand, so prdash's Herdr client (which talks over CLI) is no good;
+    there is a new JSON-RPC client in `internal/herdr/graphics.go` with one
+    connection per request, because the server closes it after each response.
+  - **Placement is in cells**, not pixels, and it is shared with the overlay.
+    That is why the box's origin lives in `centeredOrigin`: if the frame and
+    the image each computed their place on their own, they would land on
+    different rectangles.
+  - **The cell is not 1×2.** Herdr measures it and in kitty with the default
+    font it is 9×19 px. Assuming it deformed the image by 5% and, worse, made
+    it send almost double the resolution that is seen. Now the pixel size comes
+    from the measured cell.
+  - **The layer has to be removed when the popup closes**, and in its own
+    context: it lives above the pane's content, so if it stays it covers the
+    whole TUI; and if the popup closes on exit, the app's context is already
+    cancelled.
+  - Every resize repositions the image, because the placement is in cells.
+- **The last 5 comments of the PR/MR are visible in the detail.** In a box of
+  its own with its "Comments" on the edge, below the card and with their
+  author. They are requested from the forge when the cursor reaches the item
+  and cached, so navigating does not ask again and the inbox refresh does not
+  throw them away; only an action on the item invalidates them, which is the
+  only thing that can write to the conversation. There is no new key: they are
+  part of the card, not a separate view, and if the forge does not answer the
+  panel says so (`loading…` / `not read: …` / `none`) instead of leaving a hole
+  that cannot be told apart from "this PR has no comments".
+  - It shows the **end** of the conversation: the last 5, in chronological
+    order and from the oldest of those to the newest, which is how a
+    discussion is read. That is where the last thing said about the PR is. The
+    count goes on the bottom edge of the box and always says both numbers
+    (`3 of 3`, `5 of 23`): the second is what tells you it is worth opening
+    the PR, and the first also informs with everything in view, because the
+    size of the conversation is part of the state of the PR —3 comments or 30
+    is not the same PR—. Before it only came out when something was missing,
+    and that filter was justified by its cost of one row, which went away with
+    the count on the edge.
+  - They go in a **rounded box with "Comments" on the edge**, not as more
+    fields of the card: the conversation is not a datum of the PR but what
+    people said about it, and a border says so without having to explain it.
+    The box goes **indented one column on each side** and with **the same
+    border gray as the rest** of the boxes. The indent is what makes the
+    nesting readable: flush against the panel's edge, its verticals overlap
+    with the outer ones and every row comes out `││`, and with the same color
+    the two borders would read as one fat stroke. To separate them there was
+    once a gray one shade lighter, but in warm palettes that shade comes out
+    yellowish, and it was a color problem covering up one of form.
+  - **No comments, no box.** A box around the word "none" separates nothing,
+    and since it is the state of every PR without a conversation, a border
+    appearing and disappearing on every cursor move would be noise. The usual
+    field line stays. Same with `loading…` and `not read: …`: they are
+    one-line messages, not conversation.
+  - The box is **all or nothing**: if the budget does not allow for its two
+    borders plus one row per comment, it is not painted. On a 30-row terminal
+    with three comments and three free rows, the box would fit one comment and
+    lose the other two; seeing one and losing two is worse than seeing none,
+    because a cut of the box does not look like a cut: it looks like the PR
+    only has that comment.
+  - The count goes **embedded in the bottom edge, on the right**, and not
+    as a loose row of the body. The body of the box is the rows people said,
+    and a count row is one that belongs to nobody; on the edge, besides, it is
+    free, so it is no longer the first thing to fall when the panel is tight,
+    which was its fate. The border reaches the corner and does not rest on it,
+    or the bottom line would read as broken. The footer (`· open the PR to
+    read the rest`) only comes out if there are comments outside and if it
+    fits whole: cut to half a phrase it would say less than the short one.
+  - The **GitLab system notes are discarded** ("assigned to @x", "added 3
+    commits"): they are not conversation but the MR's action history, and they
+    filled the five rows with noise that is already elsewhere in the card.
+    That is why 3× the cap is requested and the tail is truncated afterwards.
+  - To make them fit, the card's fields move to a **two-column grid always**,
+    not only in short terminals. In one column they took 16 of the ~18 lines
+    that 40% of a normal terminal gives and not even one comment fit; in grid
+    they take 6. The README comment that described the grid as an emergency
+    fallback was already false.
+  - The **URL leaves the grid onto a full-width row**. In half a column you
+    read 40 characters of an 80-character URL and a useless remainder was
+    left, and a URL you cannot copy whole is no use at all, which is what it
+    is for. It does not cost much: the 13 fields took 7 rows and the 12 that
+    remain plus the full-width URL are still 7.
+  - `Review` and `Role` are ordered **at the end** of the status fields, so
+    they fall on the last row of the grid, which is the only thing that
+    survives the truncation. Pulling the URL out shifted them one position and
+    `Review` was pushed out of the window: a truncated card without them stops
+    answering the question it exists for.
+  - The body is read **whole and by paragraphs**, not just the first line, and
+    the rows are split **according to what each comment needs**: if they all
+    fit, each takes its own; if not, everyone gets one row —so that all five
+    are there, which is what is asked— and the leftover goes to whoever has
+    the least, one row at a time. The blind split that existed before gave
+    everyone the same quota and cut a six-paragraph comment to its first
+    sentence while a row went spare.
+  - Paragraphs are not glued to each other, what does not fit is marked with
+    `…` (a row that stops mid-phrase reads as if the comment ended there) and
+    the markdown HTML comments with which GitHub's bots open are skipped,
+    which on a fixed-width panel would eat the row.
+  - When the panel is small the comments are the **first thing to fall**,
+    before a card field: they are the only thing that can be requested again
+    in an instant, and a field that goes does not come back.
 
 ### Removed
 
-- El veto de aprobar un PR/MR propio **ya no ocupa una línea de la ficha** ("approve
-  unavailable: … · merge still applies"). Se queda solo en el aviso, que salta al pulsar
-  la tecla, que es cuando se puede actuar sobre él. La ficha lo pintaba en todos los
-  renders de todos tus PRs —casi todos los de "Created by me"— repitiendo lo que el
-  campo `Role` ya dice, y le quitaba dos filas a los comentarios en justo los ítems
-  donde más se echa de menos. El veto en sí no cambia: `approve` sigue sin salir y la
-  razón se sigue explicando entera. La denegación del forge (`action disabled: …`),
-  que es pegajosa y su aviso caduca, sigue en la ficha.
+- The veto on approving your own PR/MR **no longer takes a row of the card**
+  ("approve unavailable: … · merge still applies"). It stays only in the
+  notice, which fires on pressing the key, which is when you can act on it. The
+  card painted it on every render of all your PRs —almost all of the "Created
+  by me"— repeating what the `Role` field already says, and it took two rows
+  away from the comments on exactly the items where they are missed most. The
+  veto itself does not change: `approve` still does not come out and the
+  reason is still explained in full. The forge's denial (`action disabled: …`),
+  which is sticky and whose notice expires, stays on the card.
 
 ### Fixed
 
-- Reutilizar un worktree cuyo workspace de Herdr estaba cerrado ya no produce un
-  review en un workspace suelto. `worktree list` puede devolver un
-  `open_workspace_id` **obsoleto**: Herdr lo guarda en su sesión persistida, así
-  que un workspace cerrado deja el id apuntando a nada y `pane list` responde
-  `workspace_not_found` (verificado en 0.9.1). prdash lo aceptaba sin
-  comprobarlo, se quedaba sin pane base, y el layout abría un `workspace create`
-  de repuesto: el review aparecía como un workspace independiente del worktree
-  que lo contiene, y uno nuevo en cada montaje. Por eso el montaje de un PR
-  **nuevo** salía bien y el de uno ya existente no. Ahora el id se valida con
-  `pane list` —que de paso da el pane base, y ahorra un viaje— y si no responde
-  se cae a la adopción de siempre.
-- Un `pane list` que falla ya no degrada en silencio a abrir un workspace
-  distinto. Si el contenedor dice que el worktree vive en un workspace y ese
-  workspace no responde, el montaje falla nombrando el id en vez de montar el
-  review en un sitio que no es el suyo. Es la diferencia entre un error legible y
-  un workspace fantasma.
-- El review ya no aparece como un workspace suelto de Herdr. `herdr worktree
-  create` se niega a abrir un path que ya existe (`fatal: '…' already exists`,
-  verificado en 0.9.1), así que al reutilizar un checkout de una sesión anterior
-  prdash no tenía forma de crear el workspace nativo: `worktree list` no
-  devolvía `open_workspace_id`, el worktree volvía sin contenedor y el layout se
-  fabricaba un `workspace create` propio. El resultado era un workspace
-  desligado del worktree que lo contiene, y uno nuevo en cada montaje. Ahora la
-  reutilización **adopta** el checkout: si no hay workspace abierto, se abre uno
-  con cwd en el propio worktree, que es lo que Herdr registra como su workspace
-  (comprobado contra 0.9.1: `open_workspace_id` aparece). Si ni eso se puede, el
-  montaje falla nombrando la ruta a limpiar en vez de fingir que salió bien.
-- El pane de Hunk revisa el **working tree** (`hunk diff` sin revspec) en vez del
-  diff del PR contra la rama destino. El pane comparte tab con el editor y el
-  agente, así que lo que interesa es lo que se está tocando: el diff del PR es un
-  objetivo fijo que no se mueve mientras editas y esconde los cambios en curso.
-  El diff del PR sigue disponible por `[commands].hunk` (`hunk diff main...HEAD`).
-  La rama destino no se pierde: sigue llegando al pane por `PRDASH_BASE`.
+- Reusing a worktree whose Herdr workspace was closed no longer produces a
+  review in a detached workspace. `worktree list` can return a **stale**
+  `open_workspace_id`: Herdr stores it in its persisted session, so a closed
+  workspace leaves the id pointing at nothing and `pane list` answers
+  `workspace_not_found` (verified in 0.9.1). prdash accepted it without
+  checking, was left with no base pane, and the layout opened a fallback
+  `workspace create`: the review appeared as a workspace detached from the
+  worktree that contains it, and a new one on every mount. That is why
+  mounting a **new** PR went fine and one already existing did not. Now the id
+  is validated with `pane list` —which by the way gives the base pane and saves
+  a trip— and if it does not answer it falls back to the usual adoption.
+- A failing `pane list` no longer silently degrades into opening a different
+  workspace. If the container says the worktree lives in a workspace and that
+  workspace does not answer, the mount fails naming the id instead of mounting
+  the review somewhere that is not its home. It is the difference between a
+  readable error and a ghost workspace.
+- The review no longer shows up as a detached Herdr workspace. `herdr worktree
+  create` refuses to open a path that already exists (`fatal: '…' already
+  exists`, verified in 0.9.1), so when reusing a checkout from a previous
+  session prdash had no way to create the native workspace: `worktree list` did
+  not return `open_workspace_id`, the worktree came back without a container
+  and the layout fabricated its own `workspace create`. The result was a
+  workspace detached from the worktree that contains it, and a new one on every
+  mount. Now reuse **adopts** the checkout: if there is no open workspace, one
+  is opened with cwd on the worktree itself, which is what Herdr records as its
+  workspace (checked against 0.9.1: `open_workspace_id` appears). If not even
+  that is possible, the mount fails naming the path to clean instead of faking
+  success.
+- The Hunk pane reviews the **working tree** (`hunk diff` without revspec)
+  instead of the PR diff against the target branch. The pane shares its tab
+  with the editor and the agent, so what matters is what is being touched: the
+  PR diff is a fixed target that does not move while you edit and hides work in
+  progress. The PR diff remains available through `[commands].hunk`
+  (`hunk diff main...HEAD`). The target branch is not lost: it still reaches
+  the pane through `PRDASH_BASE`.
 
 ### Changed
 
-- El montaje de `r` abre **dos tabs** en vez de un layout de tres panes: `Review`
-  (TUICR + editor) y `Edit` (Hunk + agente), con los dos panes de cada tab al 50 %.
-  Leer y editar son dos modos de atención distintos y meterlos en un mismo grid
-  hacía que el diff, la review y el agente peleasen por el mismo espacio. El
-  primer tab **renombra** el tab que ya trae el worktree en vez de crear uno
-  nuevo, precisamente para no dejar una pestaña huérfana de la que el usuario
-  tendría que acordarse de cerrar; el segundo lo crea Herdr con `tab create
-  --no-focus`. Un tab que se queda sin panes no se abre: una pestaña en blanco es
-  ruido, no un layout.
-- El pane del editor es nuevo y su orden sale de `[tools].editor` (default `vi`),
-  con override verbatim por `[commands].editor`. A diferencia de tuicr, hunk y el
-  agente, **nunca se omite**: su orden es un comando de shell y el caso normal es
-  justo el que un chequeo de binarios no puede ver — el `vi` que expande a `nvim .`
-  en tu rc no existe en el `PATH`, así que buscarlo lo declararía ausente y el tab
-  de review se quedaría con un solo pane sin explicación. Una orden mal escrita se
-  ve en el propio pane, que es cuando el usuario la está mirando.
+- The mount of `r` opens **two tabs** instead of a three-pane layout: `Review`
+  (TUICR + editor) and `Edit` (Hunk + agent), with the two panes of each tab at
+  50%. Reading and editing are two different modes of attention and putting
+  them in the same grid made the diff, the review and the agent fight for the
+  same space. The first tab **renames** the tab the worktree already brings
+  instead of creating a new one, precisely so as not to leave an orphan tab the
+  user would have to remember to close; Herdr creates the second one with
+  `tab create --no-focus`. A tab left with no panes is not opened: a blank tab
+  is noise, not a layout.
+- The editor pane is new and its command comes from `[tools].editor` (default
+  `vi`), with verbatim override through `[commands].editor`. Unlike tuicr,
+  hunk and the agent, it is **never omitted**: its command is a shell command
+  and the normal case is exactly the one a binary check cannot see — the `vi`
+  that expands to `nvim .` in your rc does not exist in `PATH`, so looking for
+  it would declare it absent and the review tab would be left with a single
+  pane with no explanation. A badly written command is visible in the pane
+  itself, which is when the user is looking at it.
 
 ### Removed
 
-- **Fuera el plugin de Herdr.** No era necesario para nada de lo que prdash
-  promete: el worktree y los panes los abre el propio binario llamando a la CLI
-  de Herdr por subproceso (`herdr worktree create`, `herdr pane split`, `herdr
-  pane run`). El plugin era solo el punto de entrada que Herdr usaba para llamar
-  a prdash. Se van el manifiesto, los subcomandos `prdash herdr <inbox|mount|link>`
-  y su dispatch.
-  - Con ello cae también la persistencia de la selección
-    (`internal/selection`, `SetSelectionPath`, `trackSelection`): existía únicamente
-    para que la tecla global del plugin montara lo último seleccionado desde otro
-    pane, y sin plugin nadie la lee.
-  - **Se pierde** el Ctrl+click sobre una URL de PR/MR para montarla, y la tecla
-    de Herdr que montaba lo seleccionado desde fuera de prdash. Para lo segundo
-    se salta al pane de prdash y se pulsa `r`. No hay alternativa para lo primero:
-    los link handlers son exclusivamente de plugin.
-  - **No cambia** cómo se abre el inbox. Sigue siendo `prdash`, y sigue montando
-    worktree y panes igual. Lo único que hace falta es lanzarlo desde un pane de
-    Herdr (el cliente exige `HERDR_ENV=1`, que Herdr solo inyecta a sus hijos);
-    un atajo en `config.toml` es una comodidad, no un requisito.
-  - `internal/herdr/` **se queda**: lo sigue usando el orquestador para el layout
-    de panes y la provisión nativa de worktrees.
+- **Out with the Herdr plugin.** It was not needed for anything prdash
+  promises: the worktree and the panes are opened by the binary itself by
+  calling Herdr's CLI as a subprocess (`herdr worktree create`,
+  `herdr pane split`, `herdr pane run`). The plugin was only the entry point
+  Herdr used to call prdash. Gone go the manifest, the
+  `prdash herdr <inbox|mount|link>` subcommands and their dispatch.
+  - With that also falls the selection persistence
+    (`internal/selection`, `SetSelectionPath`, `trackSelection`): it existed
+    solely so the plugin's global key could mount the last selection from
+    another pane, and without the plugin nobody reads it.
+  - **Lost** is Ctrl+click on a PR/MR URL to mount it, and the Herdr key
+    that mounted the selection from outside prdash. For the second, jump to
+    the prdash pane and press `r`. There is no alternative for the first:
+    link handlers are exclusively plugin.
+  - **Unchanged** is how the inbox opens. It is still `prdash`, and it still
+    mounts worktrees and panes the same way. All that is needed is to launch
+    it from a Herdr pane (the client requires `HERDR_ENV=1`, which Herdr only
+    injects into its children); a shortcut in `config.toml` is a convenience,
+    not a requirement.
+  - `internal/herdr/` **stays**: the orchestrator still uses it for the pane
+    layout and native worktree provisioning.
 
 ### Added
 
-- Merge con modo elegible y doble confirmación. `m` ya no mergea a la primera: la
-  primera pulsación solo arma, la caja de Keybinds se sustituye por la
-  confirmación, y la segunda tecla **es** la elección del modo — `m` merge commit,
-  `r` rebase, `s` squash, `esc` cancelar. No hay modo por defecto: un merge
-  reescribe historia y no se deshace con un comando, así que no debe existir
-  ningún camino que lo dispare con una estrategia que el usuario no ha nombrado.
-  Cualquier otra tecla desarma y hace lo que haría normalmente, para que un `m` a
-  destiempo no deje la vista esperando la segunda pulsación; `q` y `ctrl+c`
-  siguen cerrando. Los guards se comprueban al armar y no al confirmar, y el
-  armado fija el ítem: si un refresco recoloca el cursor entre medias, el merge
-  sale sobre lo que se confirmó o no sale. Los avisos nombran el modo al empezar y
-  al terminar, porque un "merge ok" a secas no dice si se aplicó el rebase que
-  nadie pidió. Cada forge traduce el modo a su flag: `gh pr merge --merge /
-  --rebase / --squash` y `glab mr merge` con `--rebase` / `--squash` o sin
-  estrategia (merge commit es ahí la ausencia de flag). Un modo desconocido es un
-  warning y no lanza la CLI, porque `gh pr merge` sin flag de estrategia abre un
-  prompt que en un subproceso no interactivo se queda colgado.
-- Esquema de teclas reorganizado: `r` monta el review, `R` refresca, `m` mergea y
-  `a` aprueba. Antes `m` era el review y `M` el merge, así que la tecla de la
-  acción destructiva y la de la de montar vivían en el mismo dedo. Un test
-  comprueba que los defaults no comparten tecla: `ActionForKey` resuelve por
-  orden alfabético, así que una colisión deja una acción muerta sin avisar.
+- Merge with choosable mode and double confirmation. `m` no longer merges on
+  the first press: the first keystroke only arms, the Keybinds box is replaced
+  by the confirmation, and the second key **is** the mode choice — `m` merge
+  commit, `r` rebase, `s` squash, `esc` cancel. There is no default mode: a
+  merge rewrites history and cannot be undone with a command, so no path
+  should exist that fires it with a strategy the user did not name. Any other
+  key disarms and does what it normally would, so that a mistimed `m` does not
+  leave the view waiting for the second keystroke; `q` and `ctrl+c` keep
+  closing. The guards are checked on arming and not on confirming, and the
+  arming pins the item: if a refresh repositions the cursor in between, the
+  merge comes out over whatever was confirmed or does not come out at all. The
+  notices name the mode at the start and at the end, because a bare "merge ok"
+  does not say whether the rebase nobody asked for was applied. Each forge
+  translates the mode to its flag: `gh pr merge --merge /
+  --rebase / --squash` and `glab mr merge` with `--rebase` / `--squash` or
+  with no strategy (merge commit is there the absence of a flag). An unknown
+  mode is a warning and does not launch the CLI, because `gh pr merge` with no
+  strategy flag opens a prompt that hangs in a non-interactive subprocess.
+- Key scheme reorganized: `r` mounts the review, `R` refreshes, `m` merges and
+  `a` approves. Before `m` was the review and `M` the merge, so the key of the
+  destructive action and that of mounting lived on the same finger. A test
+  checks that the defaults do not share a key: `ActionForKey` resolves in
+  alphabetical order, so a collision leaves a dead action with no warning.
 
 ### Fixed
 
-- GitLab ya no reporta "merge ok" sin haber mergeado. `glab mr merge` tiene
-  `--auto-merge` en **true** por defecto, así que con un pipeline en marcha la
-  orden no mergeaba: solo dejaba el MR en cola de auto-merge y salía con exit 0.
-  prdash ahora pasa `--auto-merge=false` siempre. Era un bug silencioso en la
-  dirección más incómoda posible: la UI confirmaba algo que no había ocurrido.
+- GitLab no longer reports "merge ok" without having merged. `glab mr merge`
+  has `--auto-merge` **true** by default, so with a pipeline in flight the
+  command did not merge: it only queued the MR for auto-merge and exited with
+  0. prdash now always passes `--auto-merge=false`. It was a silent bug in the
+  most awkward direction possible: the UI confirmed something that had not
+  happened.
 
-- La caja de atajos ya no esconde dos teclas que sí funcionaban. `m` (montar
-  review) y `o` (abrir en el navegador) estaban bound y operativas, pero no se
-  pintaban nunca: la barra se componía con una lista a mano de seis acciones que
-  se había quedado desfasada, mientras la config sí sabía de las ocho. Ahora hay
-  una sola fuente —`config.Hints()`, una lista ordenada de la que salen tanto las
-  acciones configurables como las teclas fijas—, y un test vigila que ninguna
-  acción de `[keybindings]` se quede fuera, así que el desfase no puede volver a
-  colarse en silencio.
-- `section-next` ya responde a su propio atajo. Estaba cableada a `tab` por
-  encima del dispatcher, así que rebindearla en `[keybindings]` anunciaba una tecla
-  en la barra de atajos que no hacía nada. Sale ya del mapa configurado.
-- La tecla de salir sobrevive al recorte de la barra. Con terminal estrecho las
-  líneas de atajos se acotan a tres y se perdía la cola, que era justo donde
-  estaba `quit` —el propio comentario del código decía que no podía faltar,
-  mientras lo colocaba donde más fácil se perdía. `quit` abre ahora la lista, y
-  como el recorte tira por el final es lo último que se cae.
+- The shortcut box no longer hides two keys that did work. `m` (mount review)
+  and `o` (open in the browser) were bound and operational, but they were
+  never painted: the bar was composed with a hand-written list of six actions
+  that had fallen out of sync, while the config did know about all eight. Now
+  there is a single source —`config.Hints()`, an ordered list out of which
+  come both the configurable actions and the fixed keys—, and a test watches
+  that no `[keybindings]` action is left out, so the skew cannot sneak back in
+  silently.
+- `section-next` now answers its own shortcut. It was wired to `tab` above
+  the dispatcher, so rebinding it in `[keybindings]` announced a key in the
+  shortcut bar that did nothing. It now comes from the configured map.
+- The quit key survives the truncation of the bar. With a narrow terminal the
+  shortcut lines are capped at three and the tail was lost, which was exactly
+  where `quit` was —the code's own comment said it could not be missing, while
+  placing it where it is easiest to lose—. `quit` now opens the list, and
+  since the truncation throws away from the end it is the last thing to fall.
 
-- Fuera la vista de detalle a pantalla completa y su tecla `enter`. El panel
-  inferior del 40% ya está siempre visible y se mueve con el cursor, así que la
-  ficha no tenía nada que aportar y solo costaba un estado `abierto/cerrado` que
-  había que mantener, sincronizar con el refresco y cerrar con `esc`. El detalle
-  se lee ahora siempre en el panel, que cuando no cabe entero pasa a rejilla de
-  dos columnas antes que recortar campos. Se va con ella la acción `detail` de
-  `[keybindings]`.
+- Out with the full-screen detail view and its `enter` key. The bottom 40%
+  panel is now always visible and moves with the cursor, so the card had
+  nothing to add and only cost an `open/closed` state that had to be
+  maintained, synced with the refresh and closed with `esc`. The detail is now
+  always read in the panel, which when it does not fit whole switches to a
+  two-column grid before truncating fields. Gone with it is the `detail`
+  action of `[keybindings]`.
 
 ### Added
 
-- Diffstat en el detalle y en la lista: cuántas líneas añade y borra un PR/MR, y
-  sobre cuántos ficheros. Salen de los datos que el inbox ya traía, así que no
-  cuestan ninguna llamada extra: en GitHub son los escalares `additions`,
-  `deletions` y `changedFiles` del PR, y en GitLab el `diffStats` del MR. El
-  detalle los enseña sin compactar (`+381 -36 (11 files)`); la columna DIFF de la
-  lista los abrevia para que el ancho no dependa del tamaño del cambio
-  (`+381 -36`, `+1.2k -6.7k`). Lo añadido va en verde y lo quitado en rojo, tanto
-  en la columna como en el detalle: es notación de diff y nada más — no dice si
-  el cambio es bueno, solo qué líneas son nuevas y cuáles desaparecieron, y por
-  eso el recuento de ficheros se queda sin colorear. Un diffstat que el forge no
-  reportó no se colorea: es una ausencia, no una cifra.
-- Avisos transitorios (toasts) superpuestos abajo a la derecha de la vista, con
-  caducidad propia (4 s) y tick de 500 ms. El texto se envuelve por palabras y
-  la caja se acota al ancho útil, así que un aviso largo nunca desborda ni
-  desalinea la vista. El reloj es inyectable: la caducidad se testea sin dormir.
-- Panel de detalle siempre visible: la lista queda arriba con scroll y el detalle
-  del ítem seleccionado ocupa el 40 % inferior, separado por una regla. La vista
-  se rellena hasta su alto reservado, así que ni la tabla ni la barra de atajos
-  se mueven al añadir o quitar un ítem.
+- Diffstat in the detail and in the list: how many lines a PR/MR adds and
+  deletes, and across how many files. They come from the data the inbox
+  already brought, so they cost no extra call: on GitHub they are the PR's
+  `additions`, `deletions` and `changedFiles` scalars, and on GitLab the MR's
+  `diffStats`. The detail shows them uncompact (`+381 -36 (11 files)`); the
+  DIFF column of the list abbreviates them so the width does not depend on the
+  size of the change (`+381 -36`, `+1.2k -6.7k`). What is added goes in green
+  and what is removed in red, both in the column and in the detail: it is diff
+  notation and nothing more — it does not say whether the change is good, only
+  which lines are new and which disappeared, and that is why the file count
+  stays uncolored. A diffstat the forge did not report is not colored: it is
+  an absence, not a figure.
+- Transient notices (toasts) overlaid at the bottom right of the view, with
+  their own expiry (4 s) and a 500 ms tick. The text wraps by words and the
+  box is bounded to the usable width, so a long notice never overflows or
+  misaligns the view. The clock is injectable: the expiry is tested without
+  sleeping.
+- Always-visible detail panel: the list stays on top with scroll and the
+  detail of the selected item takes the bottom 40%, separated by a rule. The
+  view fills up to its reserved height, so neither the table nor the shortcut
+  bar moves when an item is added or removed.
 
 ### Changed
 
-- La columna DIFF va la última y es lo primero que se omite cuando no cabe: a 124
-  de terminal con rutas de proyecto largas no hay sitio para las siete columnas,
-  y antes que recortar un título se pierde un dato que el detalle trae siempre.
-  Aparece con terminal ancha (~133). En el detalle el criterio es el mismo: si el
-  panel no cabe, el diffstat se omite en vez de empujar el título fuera.
-- Un diffstat que el forge no reportó se distingue de uno de cero líneas. La API
-  de Todos de GitLab y el respaldo REST de GitHub no lo traen, así que esos ítems
-  muestran `-` en la lista y `unknown` en el detalle en lugar de un `+0 -0` que
-  parecería un PR vacío. El número de ficheros de GitLab sale de la longitud de
-  `diffStats`, y como el forge colapsa los diffs que superan su límite, en un MR
-  enorme las cifras son un mínimo.
-- La columna ITEM ya no recorta la ruta de proyecto por la cabeza. Cada sección
-  declara en su cabecera el prefijo de ruta que comparten sus ítems y las filas
-  solo pintan el sufijo (`mobile-frontend#1198` en vez de
-  `APPCITTI/vsocial/backend/mobile-…`). El prefijo se alinea en fronteras `/` y
-  nunca se come el segmento final, así que la celda siempre conserva el nombre
-  del proyecto y su número. El ancho de la columna sale del contenido —el sufijo
-  más largo del inbox más su hueco de separación, acotado a 34 runes de
-  ranura— y lo que aun así no cabe se recorta por la cola, nunca por el frente.
-  El detalle (`enter`) y `--print` siguen mostrando la ruta completa. Decisión y
-  alternativas en [ADR 0002](docs/adr/0002-item-column-common-prefix.md).
-- Las columnas de la tabla ya no se pegan entre sí. El ancho de una columna
-  incluye su hueco de separación, así que el texto se recorta un rune antes de
-  llenarla: antes, cualquier texto que midiera el ancho exacto —ROLE con
-  `review req`, o ITEM con su ancho dinámico— quedaba pegado a la columna
-  siguiente.
-- La celda de la tabla admite ahora varios tramos con estilo propio, que es lo
-  que permite los dos colores de la columna DIFF. El ancho se sigue midiendo en
-  texto plano —el relleno va al final del último tramo— así que los códigos ANSI
-  no descuadran la tabla. El detalle colorea después de medir y recortar, por el
-  mismo motivo.
+- The DIFF column goes last and is the first thing omitted when it does not
+  fit: at 124 columns of terminal with long project paths there is no room for
+  the seven columns, and rather than truncating a title, a datum that the
+  detail always brings is dropped. It appears with a wide terminal (~133). In
+  the detail the criterion is the same: if the panel does not fit, the
+  diffstat is omitted instead of pushing the title out.
+- A diffstat the forge did not report is told apart from one of zero lines.
+  GitLab's Todos API and GitHub's REST fallback do not bring it, so those items
+  show `-` in the list and `unknown` in the detail instead of a `+0 -0` that
+  would look like an empty PR. GitLab's file count comes from the length of
+  `diffStats`, and since the forge collapses diffs that exceed its limit, on a
+  huge MR the figures are a minimum.
+- The ITEM column no longer truncates the project path at the head. Each
+  section declares in its header the path prefix its items share and the rows
+  only paint the suffix (`mobile-frontend#1198` instead of
+  `APPCITTI/vsocial/backend/mobile-…`). The prefix is aligned on `/` boundaries
+  and never eats the final segment, so the cell always keeps the project name
+  and its number. The column width comes from the content —the longest suffix
+  in the inbox plus its separator slot, capped at 34 runes of slot— and
+  whatever still does not fit is truncated at the tail, never at the front.
+  The detail (`enter`) and `--print` keep showing the full path. Decision and
+  alternatives in [ADR 0002](docs/adr/0002-item-column-common-prefix.md).
+- The table columns no longer stick to each other. A column's width includes
+  its separator slot, so the text is truncated one rune before filling it:
+  before, any text that measured exactly the width —ROLE with `review req`,
+  or ITEM with its dynamic width— ended up glued to the next column.
+- The table cell now accepts several spans with their own style, which is what
+  allows the two colors of the DIFF column. The width is still measured in
+  plain text —the padding goes at the end of the last span— so the ANSI codes
+  do not break the table's alignment. The detail colors after measuring and
+  truncating, for the same reason.
 
 ### Fixed
 
-- La query de un MR concreto ya no falla siempre en GitLab. `mergeRequest(iid: 7)`
-  pasaba el iid como literal entero, pero el schema lo declara `String!` y GraphQL
-  no coacciona Int a String, así que la respuesta era un
-  `argumentLiteralsIncompatible` y nada más. Como `ItemState` es el refresco que
-  se hace tras `approve` y `merge`, actuar sobre un MR dejaba el ítem sin
-  actualizar y con un aviso de parseo. Los tests no lo cazaban porque el runner
-  falso devuelve JSON sin validar la query; ahora hay un test que fija el tipo
-  del literal. No confundir con el `flexInt` del `iid` en la respuesta.
-- Aprobar un PR/MR propio ya no se intenta: la TUI lo corta antes de llamar a la
-  CLI, con lo que se ahorran las tres llamadas por pulsación. La identidad del
-  usuario sale del probe de sesión que ya se hacía (`gh auth status` /
-  `glab auth status`), sin llamadas nuevas; si no se puede leer, se decide por
-  sección. `merge` no cambia: sigue valiendo sobre PR/MR propios.
-- El rechazo de auto-aprobación ya no se confunde con un conflicto ni con un
-  fallo de red: `conflicto en el forge: gh pr review … (exit 1)` era en realidad
-  `GraphQL: Review Can not approve your own pull request`. Se clasifica como
-  denegación permanente y muestra el motivo, no el stderr de la CLI.
+- The query for a specific MR no longer always fails on GitLab.
+  `mergeRequest(iid: 7)` passed the iid as an integer literal, but the schema
+  declares it `String!` and GraphQL does not coerce Int to String, so the
+  response was an `argumentLiteralsIncompatible` and nothing else. Since
+  `ItemState` is the refresh done after `approve` and `merge`, acting on an MR
+  left the item unrefreshed and with a parse notice. The tests did not catch it
+  because the fake runner returns JSON without validating the query; now there
+  is a test that pins the literal's type. Do not confuse it with the response's
+  `flexInt` of the `iid`.
+- Approving your own PR/MR is no longer attempted: the TUI cuts it before
+  calling the CLI, saving the three calls per keystroke. The user's identity
+  comes from the session probe that was already done (`gh auth status` /
+  `glab auth status`), with no new calls; if it cannot be read, it decides by
+  section. `merge` does not change: it still applies to your own PR/MRs.
+- The self-approval rejection is no longer confused with a conflict or a
+  network failure: `forge conflict: gh pr review … (exit 1)` was in reality
+  `GraphQL: Review Can not approve your own pull request`. It is classified as
+  a permanent denial and shows the reason, not the CLI's stderr.
 
 ## [0.1.0] - 2026-09-25
 
-Primera versión: inbox cross-forge (F1) y orquestador de review (F2). Coincide
-con la versión del manifiesto del plugin (`plugin/herdr/herdr-plugin.toml`).
+First version: cross-forge inbox (F1) and review orchestrator (F2). It matches
+the plugin manifest version (`plugin/herdr/herdr-plugin.toml`).
 
 ### Added
 
-**F1 — Inbox cross-forge** ([#1](https://github.com/Sovengar/prdash/pull/1)):
+**F1 — Cross-forge inbox** ([#1](https://github.com/Sovengar/prdash/pull/1)):
 
-- TUI (bubbletea v2) con tres secciones —creados por mí, review pedido/asignados
-  y menciones— con dedupe por identidad y precedencia de sección.
-- Forges GitHub (vía `gh`, GraphQL con `reviewDecision` y checks) y GitLab
-  self-managed (vía `glab`, GraphQL + Todos API, REST bajo `/git/api/v4/`).
-- Detalle del ítem (título, autor, ramas, número, URL, review y checks) sin
-  salir de la TUI.
-- Refresco manual (`r`) y automático (60s configurable) con indicador de última
-  actualización por forge, backoff ante rate limit/timeout y guard para no pisar
-  una acción en curso.
-- Paginación sin tope con carga progresiva, snapshot en `cache` y refresco
-  incremental por cursor.
-- Acciones approve/merge vía `gh`/`glab` (o delegando en `tuicr`), con manejo de
-  conflicto y relectura del ítem.
-- Degradación honesta: estado explícito por forge/sección (nunca "vacío" si hubo
-  error); Bitbucket presente como adapter no operativo, sin red.
-- Modo `prdash --print` (texto plano, mismo orden que la TUI).
+- TUI (bubbletea v2) with three sections —created by me, requested/assigned
+  review and mentions— with identity dedupe and section precedence.
+- Forges GitHub (via `gh`, GraphQL with `reviewDecision` and checks) and
+  self-managed GitLab (via `glab`, GraphQL + Todos API, REST under
+  `/git/api/v4/`).
+- Item detail (title, author, branches, number, URL, review and checks)
+  without leaving the TUI.
+- Manual (`r`) and automatic (60s configurable) refresh with last-update
+  indicator per forge, backoff on rate limit/timeout and a guard not to
+  clobber an action in progress.
+- Unbounded pagination with progressive loading, snapshot in `cache` and
+  incremental refresh by cursor.
+- approve/merge actions via `gh`/`glab` (or delegating to `tuicr`), with
+  conflict handling and item re-read.
+- Honest degradation: explicit state per forge/section (never "empty" if
+  there was an error); Bitbucket present as a non-operational adapter, no
+  network.
+- `prdash --print` mode (plain text, same order as the TUI).
 
-**F2 — Orquestador de review** ([#2](https://github.com/Sovengar/prdash/pull/2)):
+**F2 — Review orchestrator** ([#2](https://github.com/Sovengar/prdash/pull/2)):
 
-- Resolución del repo local, clon bare configurable, fetch del ref de review
-  (`refs/pull/N/head`, `refs/merge-requests/N/head`, incluidos forks) y rama
-  local de trabajo.
-- Provisión de worktree con dos implementaciones intercambiables: git directo
-  (fuera de Herdr) y nativa de Herdr (dentro), con reuso del worktree existente y
-  varios worktrees por repo.
-- Layout de 3 panes sobre el worktree (TUICR, Hunk, agente opencode), con
-  omisión avisada de las herramientas ausentes.
-- Plugin de Herdr (`plugin/herdr/herdr-plugin.toml`): pane del inbox, acción
-  `mount-review`, link handler de URLs de PR/MR y subcomandos
-  `prdash herdr inbox|mount|link`.
-- Atajo `m` para montar el review del ítem seleccionado; `prdash.mount-review`
-  sin URL resuelve la selección persistida en
+- Resolution of the local repo, configurable bare clone, fetch of the review
+  ref (`refs/pull/N/head`, `refs/merge-requests/N/head`, including forks) and
+  local working branch.
+- Worktree provisioning with two interchangeable implementations: direct git
+  (outside Herdr) and Herdr-native (inside), with reuse of the existing
+  worktree and several worktrees per repo.
+- 3-pane layout over the worktree (TUICR, Hunk, opencode agent), with a
+  warned omission of missing tools.
+- Herdr plugin (`plugin/herdr/herdr-plugin.toml`): inbox pane, `mount-review`
+  action, PR/MR URL link handler and `prdash herdr inbox|mount|link`
+  subcommands.
+- `m` shortcut to mount the review of the selected item; `prdash.mount-review`
+  with no URL resolves the selection persisted in
   `$XDG_STATE_HOME/prdash/selection.json`.
-- Degradación fuera de Herdr: F1 sigue operativo y el layout se informa como no
-  disponible.
-- Comando `prdash worktrees [list|remove]`: lista los worktrees con ownership
-  `prdash-…`, marca huérfanos y borra solo a petición explícita (nunca los
-  ajenos); los worktrees se conservan al cerrar la app.
+- Degradation outside Herdr: F1 stays operational and the layout is reported
+  as unavailable.
+- `prdash worktrees [list|remove]` command: lists the worktrees with
+  `prdash-…` ownership, marks orphans and deletes only on explicit request
+  (never other people's); the worktrees are kept when the app closes.
 
 ### Known limitations
 
-- **F3 (auto-review con gate y allowlist) no incluido**: solo diseño/milestone
-  documentado en `docs/planning/archive/0001-mvp/f3-milestone.md`.
-- Readiness de panes con `herdr pane wait-output` pendiente: los panes se lanzan
+- **F3 (auto-review with gate and allowlist) not included**: only
+  design/milestone documented in `docs/planning/archive/0001-mvp/f3-milestone.md`.
+- Pane readiness with `herdr pane wait-output` pending: panes are launched
   fire-and-forget.
-- `herdr worktree create` abre también el workspace del repo fuente; su
-  cierre/gestión queda pendiente.
-- LOWs residuales no bloqueantes de las reviews adversariales de F1 (PR #1) y
+- `herdr worktree create` also opens the source repo's workspace; its
+  close/management is pending.
+- Residual non-blocking LOWs from the adversarial reviews of F1 (PR #1) and
   F2 (PR #2).
-- Fuera de alcance: Bitbucket funcional, gitlab.com funcional, vista de "todos
-  los abiertos", webhooks/daemon, gestión de repos locales más allá del worktree
-  y multi-usuario.
+- Out of scope: functional Bitbucket, functional gitlab.com, the "all open"
+  view, webhooks/daemon, local repo management beyond the worktree and
+  multi-user.

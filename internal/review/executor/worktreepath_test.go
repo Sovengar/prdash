@@ -8,11 +8,11 @@ import (
 	"prdash/internal/reporesolver"
 )
 
-func reviewCon(worktree string) cache.ReviewRecord {
+func reviewWith(worktree string) cache.ReviewRecord {
 	return cache.ReviewRecord{Worktree: worktree}
 }
 
-func TestElWorktreeActivoMandaSobreLaRutaCanonica(t *testing.T) {
+func TestTheActiveWorktreeWinsOverTheCanonicalPath(t *testing.T) {
 	// The resolver's memo has a default path that does NOT depend on WorktreeDir; without this Setenv
 	//the test reads the user's memo.
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
@@ -20,57 +20,57 @@ func TestElWorktreeActivoMandaSobreLaRutaCanonica(t *testing.T) {
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget",
 		Owner: "acme", Name: "widget"}
 	it := model.NewItem(ref, 7)
-	it.Title = "uno"
+	it.Title = "one"
 
 	resolver := reporesolver.New(reporesolver.Options{WorktreeDir: wtDir})
 	ex := &Executor{Resolver: resolver}
 
-	canonica := resolver.WorktreePath(ref, 7)
-	if canonica == "" {
-		t.Fatal("la ruta canónica salió vacía, y sin ella el test no tiene contra qué " +
-			"comparar el worktree activo")
+	canonical := resolver.WorktreePath(ref, 7)
+	if canonical == "" {
+		t.Fatal("the canonical path came back empty, and without it the test has nothing to " +
+			"compare the active worktree against")
 	}
-	if got := ex.worktreePath(it); got != canonica {
-		t.Errorf("sin review activo dio %q, want la ruta canónica %q", got, canonica)
+	if got := ex.worktreePath(it); got != canonical {
+		t.Errorf("with no active review it gave %q, want the canonical path %q", got, canonical)
 	}
 
 	// An active review WITH a worktree wins, even when it is not the canonical path.
-	activo := wtDir + "/movido-a-mano"
-	if err := resolver.RecordReview(it, reviewCon(activo)); err != nil {
+	active := wtDir + "/movido-a-mano"
+	if err := resolver.RecordReview(it, reviewWith(active)); err != nil {
 		t.Fatalf("RecordReview: %v", err)
 	}
-	if got := ex.worktreePath(it); got != activo {
-		t.Errorf("con review activo dio %q, want el worktree del registro %q. Con la ruta "+
-			"canónica el review se montaría en un sitio que no es donde está el trabajo, "+
-			"y el primero se queda ocupando sitio sin revisar",
-			got, activo)
+	if got := ex.worktreePath(it); got != active {
+		t.Errorf("with an active review it gave %q, want the record's worktree %q. With the canonical "+
+			"path the review would mount somewhere that is not where the work is, and the first "+
+			"one stays there taking up space unreviewed",
+			got, active)
 	}
 
 	// An active review WITHOUT a worktree falls back to the canonical path, which is all there is.
-	if err := resolver.RecordReview(it, reviewCon("")); err != nil {
-		t.Fatalf("RecordReview sin worktree: %v", err)
+	if err := resolver.RecordReview(it, reviewWith("")); err != nil {
+		t.Fatalf("RecordReview without a worktree: %v", err)
 	}
-	if got := ex.worktreePath(it); got != canonica {
-		t.Errorf("con un review activo sin worktree dio %q, want la ruta canónica %q: un "+
-			"registro a medio rellenar no tiene un worktree que usar, y con la condición "+
-			"al revés esto devolvía la cadena vacía", got, canonica)
+	if got := ex.worktreePath(it); got != canonical {
+		t.Errorf("with an active review without a worktree it gave %q, want the canonical path %q: a "+
+			"half-filled record has no worktree to use, and with the condition the other way "+
+			"this returned the empty string", got, canonical)
 	}
 
 	// An active review of ANOTHER item: this one falls back to its canonical path, because the record
 	// is per item.
-	otro := model.NewItem(ref, 8)
-	otro.Title = "otro"
-	canonica8 := resolver.WorktreePath(ref, 8)
-	if canonica8 == canonica {
-		t.Fatalf("los dos ítems comparten ruta canónica (%q), y con eso la comparación "+
-			"no distinguiría nada", canonica8)
+	other := model.NewItem(ref, 8)
+	other.Title = "other"
+	canonical8 := resolver.WorktreePath(ref, 8)
+	if canonical8 == canonical {
+		t.Fatalf("the two items share a canonical path (%q), and with that the comparison "+
+			"would not distinguish anything", canonical8)
 	}
-	if got := ex.worktreePath(otro); got != canonica8 {
-		t.Errorf("con review activo del 7, el ítem 8 dio %q, want su ruta canónica %q: el "+
-			"registro es por ítem y no se mezcla", got, canonica8)
+	if got := ex.worktreePath(other); got != canonical8 {
+		t.Errorf("with an active review for the 7, item 8 gave %q, want its canonical path %q: the "+
+			"record is per item and does not mix", got, canonical8)
 	}
-	if canonica8 == activo {
-		t.Errorf("el review activo del 7 es %q y la ruta canónica del 8 también: la "+
-			"comparación no distinguiría nada", activo)
+	if canonical8 == active {
+		t.Errorf("the active review of the 7 is %q and the canonical path of the 8 is the same: the "+
+			"comparison would not distinguish anything", active)
 	}
 }

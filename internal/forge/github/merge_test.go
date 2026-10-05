@@ -47,14 +47,14 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 
 			warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: tc.mode, HeadSHA: headSHA})
 			if len(warns) != 0 {
-				t.Fatalf("Merge = %+v, want sin warnings", warns)
+				t.Fatalf("Merge = %+v, want no warnings", warns)
 			}
 			args := strings.Join(readArgs(t, argsFile), " ")
 			if !strings.Contains(args, "pr merge 7") {
-				t.Errorf("argv = %q, want la forma de pr merge", args)
+				t.Errorf("argv = %q, want the pr merge shape", args)
 			}
 			if !strings.Contains(args, tc.want) {
-				t.Errorf("argv = %q, want el flag %q", args, tc.want)
+				t.Errorf("argv = %q, want the flag %q", args, tc.want)
 			}
 		})
 	}
@@ -67,12 +67,12 @@ func TestMergeRefusesUnknownMode(t *testing.T) {
 
 	warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.MergeMode("cherry-pick"), HeadSHA: headSHA})
 	if len(warns) == 0 {
-		t.Fatal("un modo desconocido debería reportar warning")
+		t.Fatal("an unknown mode should report a warning")
 	}
 	if warns[0].Kind != "unsupported" {
 		t.Errorf("Kind = %q, want unsupported", warns[0].Kind)
 	}
 	if _, err := os.Stat(argsFile); err == nil {
-		t.Error("no debería haber lanzado la CLI con un modo desconocido")
+		t.Error("it should not have launched the CLI with an unknown mode")
 	}
 }

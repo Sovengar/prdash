@@ -3,7 +3,7 @@
 package tui
 
 const (
-	detailShare   = 2 // 2/5 = 40% de la altura
+	detailShare   = 2 // 2/5 = 40% of the height
 	minListRows   = 3
 	minDetailRows = 6
 	// The bar wraps to the inner width, so it is several lines in a narrow terminal, but never more than
@@ -20,7 +20,7 @@ type layout struct {
 }
 
 const (
-	headerContentLines = 1 // spinner y estado de los forges
+	headerContentLines = 1 // spinner and forge status
 	headerLines        = headerContentLines + 2
 	listChrome         = 2
 	detailChrome       = 2

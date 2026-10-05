@@ -47,11 +47,11 @@ func TestDefaultSectionIsAssigned(t *testing.T) {
 	}
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "Assigned item") {
-		t.Errorf("la lista debería mostrar los ítems de Assigned:\n%s", view)
+		t.Errorf("the list should show the Assigned items:\n%s", view)
 	}
 	for _, hidden := range []string{"Mine item", "Mentioned item"} {
 		if strings.Contains(view, hidden) {
-			t.Errorf("la lista muestra %q, que es de otra sección:\n%s", hidden, view)
+			t.Errorf("the list shows %q, which belongs to another section:\n%s", hidden, view)
 		}
 	}
 }
@@ -68,10 +68,10 @@ func TestCycleThroughEmptySection(t *testing.T) {
 	}
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "(empty)") {
-		t.Errorf("la sección vacía debería marcar (empty):\n%s", view)
+		t.Errorf("the empty section should mark (empty):\n%s", view)
 	}
 	if !strings.Contains(view, "Mentioned (0)") {
-		t.Errorf("la leyenda debería mostrar 0 para la vacía:\n%s", view)
+		t.Errorf("the legend should show 0 for the empty one:\n%s", view)
 	}
 
 	m = press(t, m, "tab")
@@ -87,10 +87,10 @@ func TestLegendExactFormatReplacesInbox(t *testing.T) {
 
 	lines := visibleLines(m.View().Content)
 	if !hasBoxTitle(lines, "Mine (9) · Assigned (4) · Mentioned (0)") {
-		t.Errorf("la leyenda no tiene el formato exacto:\n%s", strings.Join(lines, "\n"))
+		t.Errorf("the legend does not have the exact format:\n%s", strings.Join(lines, "\n"))
 	}
 	if hasBoxTitle(lines, "Inbox") {
-		t.Errorf("el título Inbox ya no debería existir:\n%s", strings.Join(lines, "\n"))
+		t.Errorf("the Inbox title should no longer exist:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
@@ -102,11 +102,11 @@ func TestLegendHighlightsActiveSection(t *testing.T) {
 
 	raw := m.View().Content
 	if !strings.Contains(raw, styleLegendActive.Render("Assigned (1)")) {
-		t.Errorf("la sección activa debería ir resaltada en la leyenda")
+		t.Errorf("the active section should be highlighted in the legend")
 	}
 	for _, dim := range []string{"Mine (0)", "Mentioned (0)"} {
 		if !strings.Contains(raw, styleDim.Render(dim)) {
-			t.Errorf("%q debería ir atenuada en la leyenda", dim)
+			t.Errorf("%q should be dimmed in the legend", dim)
 		}
 	}
 }
@@ -119,7 +119,7 @@ func TestLegendCountsDedupedSection(t *testing.T) {
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "Mine (1) · Assigned (0) · Mentioned (0)") {
-		t.Errorf("la leyenda no refleja la deduplicación por autoridad:\n%s", view)
+		t.Errorf("the legend does not reflect the deduplication by authority:\n%s", view)
 	}
 }
 
@@ -129,7 +129,7 @@ func TestPrefixFollowsActiveSection(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, ghItems("app/vsocial/backend/api-gateway", "app/vsocial/backend/web-app"), false))
 
 	if got := listText(m); !strings.Contains(got, "app/vsocial/backend/") || strings.Contains(got, "mine/group/") {
-		t.Errorf("con Assigned activa la lista debería mostrar su prefijo, no el de Mine:\n%s", got)
+		t.Errorf("with Assigned active the list should show its prefix, not Mine:\n%s", got)
 	}
 
 	m = press(t, m, "tab")
@@ -138,7 +138,7 @@ func TestPrefixFollowsActiveSection(t *testing.T) {
 		t.Fatalf("activeSection = %q, want %q", m.activeSection, model.SectionAuthored)
 	}
 	if got := listText(m); !strings.Contains(got, "mine/group/") || strings.Contains(got, "app/vsocial/backend/") {
-		t.Errorf("con Mine activa la lista debería mostrar su prefijo:\n%s", got)
+		t.Errorf("with Mine active the list should show its prefix:\n%s", got)
 	}
 }
 
@@ -154,11 +154,11 @@ func TestPrefixKeepsTableWidth(t *testing.T) {
 		view := m.View().Content
 		for i, l := range visibleLines(view) {
 			if w := ansi.StringWidth(l); w != m.width {
-				t.Errorf("ancho %d: línea %d mide %d columnas:\n%q", width, i, w, l)
+				t.Errorf("width %d: line %d measures %d columns:\n%q", width, i, w, l)
 			}
 		}
 		if !strings.Contains(stripANSI(view), "api-gateway#100") {
-			t.Errorf("ancho %d: la celda ITEM perdió la hoja y el número:\n%s", width, stripANSI(view))
+			t.Errorf("width %d: the ITEM cell lost the sheet and the number:\n%s", width, stripANSI(view))
 		}
 	}
 }
@@ -175,7 +175,7 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 	m = press(t, m, "end")
 	assigned := sectionPos{cursor: m.cursor, scroll: m.scroll}
 	if assigned.cursor == 0 || assigned.scroll == 0 {
-		t.Fatalf("el caso necesita cursor y scroll movidos en Assigned: %+v", assigned)
+		t.Fatalf("the case needs cursor and scroll moved in Assigned: %+v", assigned)
 	}
 
 	m = press(t, m, "tab")
@@ -184,7 +184,7 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 		t.Fatalf("activeSection = %q, want %q", m.activeSection, model.SectionAuthored)
 	}
 	if m.cursor != 0 || m.scroll != 0 {
-		t.Fatalf("Mine debe abrirse en su posición por defecto: cursor=%d scroll=%d", m.cursor, m.scroll)
+		t.Fatalf("Mine must open at its default position: cursor=%d scroll=%d", m.cursor, m.scroll)
 	}
 	m = press(t, m, "down")
 	mine := sectionPos{cursor: m.cursor, scroll: m.scroll}
@@ -194,12 +194,12 @@ func TestRememberCursorAndScrollPerSection(t *testing.T) {
 		t.Fatalf("activeSection = %q, want %q", m.activeSection, model.SectionReview)
 	}
 	if m.cursor != assigned.cursor || m.scroll != assigned.scroll {
-		t.Errorf("Assigned no recuperó su posición: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, assigned)
+		t.Errorf("Assigned did not recover its position: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, assigned)
 	}
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if m.cursor != mine.cursor || m.scroll != mine.scroll {
-		t.Errorf("Mine no recuperó su posición: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, mine)
+		t.Errorf("Mine did not recover its position: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, mine)
 	}
 }
 
@@ -212,15 +212,15 @@ func TestRefreshKeepsSectionPosition(t *testing.T) {
 
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionReview, model.ReviewRequested, manyItems(60), false))
 	if m.cursor != before.cursor || m.scroll != before.scroll {
-		t.Errorf("el refresco movió la posición: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, before)
+		t.Errorf("the refresh moved the position: cursor=%d scroll=%d, want %+v", m.cursor, m.scroll, before)
 	}
 
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionReview, model.ReviewRequested, manyItems(3), false))
 	if m.cursor > len(m.rows())-1 || m.cursor < 0 {
-		t.Errorf("cursor = %d fuera de las %d filas nuevas", m.cursor, len(m.rows()))
+		t.Errorf("cursor = %d outside the %d new rows", m.cursor, len(m.rows()))
 	}
 	if m.scroll != 0 {
-		t.Errorf("scroll = %d, want 0: el contenido nuevo cabe entero", m.scroll)
+		t.Errorf("scroll = %d, want 0: the new content fits whole", m.scroll)
 	}
 }
 
@@ -228,10 +228,10 @@ func TestActiveEmptyShowsEmptyAndZero(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "(empty)") {
-		t.Errorf("la activa vacía debería marcar (empty):\n%s", view)
+		t.Errorf("the active empty one should mark (empty):\n%s", view)
 	}
 	if !strings.Contains(view, "Assigned (0)") {
-		t.Errorf("la leyenda debería mostrar 0 en la activa:\n%s", view)
+		t.Errorf("the legend should show 0 on the active one:\n%s", view)
 	}
 }
 
@@ -245,7 +245,7 @@ func TestLoadingMoreOnlyOnActiveSection(t *testing.T) {
 	}, false))
 
 	if view := stripANSI(m.View().Content); strings.Contains(view, "loading more…") {
-		t.Errorf("el indicador de una sección no activa no debe pintarse:\n%s", view)
+		t.Errorf("the indicator of a non-active section must not be painted:\n%s", view)
 	}
 
 	m = press(t, m, "tab")
@@ -254,7 +254,7 @@ func TestLoadingMoreOnlyOnActiveSection(t *testing.T) {
 		t.Fatalf("activeSection = %q, want %q", m.activeSection, model.SectionAuthored)
 	}
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "loading more…") {
-		t.Errorf("al volver a la sección que pagina, el indicador reaparece:\n%s", view)
+		t.Errorf("back at the paginating section, the indicator reappears:\n%s", view)
 	}
 }
 
@@ -269,16 +269,16 @@ func TestWarningsOnlyOnActiveSection(t *testing.T) {
 
 	view := stripANSI(m.View().Content)
 	if strings.Contains(view, "could not be queried") {
-		t.Errorf("el aviso de una sección no activa no debe pintarse:\n%s", view)
+		t.Errorf("the notice of a non-active section must not be painted:\n%s", view)
 	}
 	if !strings.Contains(view, "Mine (0)") {
-		t.Errorf("la leyenda debería seguir contando la sección con aviso:\n%s", view)
+		t.Errorf("the legend should keep counting the section with a notice:\n%s", view)
 	}
 
 	m = press(t, m, "tab")
 	m = press(t, m, "tab")
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "could not be queried") {
-		t.Errorf("al tabular a la sección con aviso, debería pintarse:\n%s", view)
+		t.Errorf("on tabbing to the section with the notice, it should be painted:\n%s", view)
 	}
 }
 
@@ -291,7 +291,7 @@ func TestNarrowTerminalTruncatesLegendKeepsBorderWidth(t *testing.T) {
 	lines := visibleLines(m.View().Content)
 	for i, l := range lines {
 		if w := ansi.StringWidth(l); w != m.width {
-			t.Errorf("línea %d mide %d columnas, want %d:\n%q", i, w, m.width, l)
+			t.Errorf("line %d measures %d columns, want %d:\n%q", i, w, m.width, l)
 		}
 	}
 	top := ""
@@ -301,9 +301,9 @@ func TestNarrowTerminalTruncatesLegendKeepsBorderWidth(t *testing.T) {
 		}
 	}
 	if top == "" {
-		t.Fatalf("no se encontró la línea de la leyenda:\n%s", strings.Join(lines, "\n"))
+		t.Fatalf("the legend line was not found:\n%s", strings.Join(lines, "\n"))
 	}
 	if strings.Contains(top, "Mentioned (0)") {
-		t.Errorf("a 34 columnas la leyenda debería recortarse:\n%q", top)
+		t.Errorf("at 34 columns the legend should be clipped:\n%q", top)
 	}
 }

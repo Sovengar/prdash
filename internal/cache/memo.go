@@ -49,7 +49,7 @@ func LoadMemo(path string) (Memo, bool) {
 func SaveMemo(path string, m Memo) error {
 	m.Version = memoVersion
 	m = normalize(m)
-	return guardaJSON(path, m)
+	return saveJSON(path, m)
 }
 
 // The resolver and the executor share this file, so every read-modify-write goes through the mutex.

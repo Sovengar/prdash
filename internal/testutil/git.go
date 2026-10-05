@@ -52,7 +52,7 @@ type testReport interface {
 
 // The only place a helper here calls t.Fatal, and one on purpose: with six, "what does a helper
 // do when its fixture does not fit?" has six answers. The prefix lives here for the same reason.
-func aborta(t testReport, err error) {
+func abort(t testReport, err error) {
 	t.Helper()
 	if err == nil {
 		return
@@ -60,9 +60,9 @@ func aborta(t testReport, err error) {
 	t.Fatalf("testutil: %v", err)
 }
 
-func abortaCon(t testReport, fn func() error) {
+func abortWith(t testReport, fn func() error) {
 	t.Helper()
-	aborta(t, fn())
+	abort(t, fn())
 }
 
 // An empty dir would make git run in the test process's directory, INSIDE the repo, and a
@@ -70,7 +70,7 @@ func abortaCon(t testReport, fn func() error) {
 func RunGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := runGit(dir, args...)
-	aborta(t, err)
+	abort(t, err)
 	return out
 }
 
@@ -85,49 +85,49 @@ func runGit(dir string, args ...string) (string, error) {
 	cmd.Env = gitEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git %v en %s: %w\n%s", args, dir, err, out)
+		return "", fmt.Errorf("git %v in %s: %w\n%s", args, dir, err, out)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
 func checkDir(dir string) error {
 	if dir == "" {
-		return errors.New("dir vacío: git correría en el repo real y escribiría en su config")
+		return errors.New("empty dir: git would run in the real repo and write to its config")
 	}
 	fi, err := os.Stat(dir)
 	if err != nil {
-		return fmt.Errorf("%q no existe: %w", dir, err)
+		return fmt.Errorf("%q does not exist: %w", dir, err)
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("%q no es un directorio", dir)
+		return fmt.Errorf("%q is not a directory", dir)
 	}
 	return nil
 }
 
 func InitRepo(t *testing.T, dir string) {
 	t.Helper()
-	abortaCon(t, func() error { return creaRepoDir(dir) })
+	abortWith(t, func() error { return createRepoDir(dir) })
 	RunGit(t, dir, "init", "-b", "main")
 	RunGit(t, dir, "config", "user.email", "test@prdash.local")
 	RunGit(t, dir, "config", "user.name", "prdash tests")
 	RunGit(t, dir, "config", "commit.gpgsign", "false")
-	desactivaAutoGC(t, dir)
+	disableAutoGC(t, dir)
 }
 
-func creaRepoDir(dir string) error {
+func createRepoDir(dir string) error {
 	return os.MkdirAll(dir, 0o755)
 }
 
 // Measured: a reporesolver test doing two pushes and two fetches triggers it about one run in
 // several.
-func desactivaAutoGC(t *testing.T, dir string) {
+func disableAutoGC(t *testing.T, dir string) {
 	t.Helper()
 	RunGit(t, dir, "config", "gc.auto", "0")
 }
 
 func CommitFile(t *testing.T, dir, name, content, msg string) {
 	t.Helper()
-	abortaCon(t, func() error { return commitFile(dir, name, content) })
+	abortWith(t, func() error { return commitFile(dir, name, content) })
 	RunGit(t, dir, "add", "-A")
 	RunGit(t, dir, "commit", "-m", msg)
 }
@@ -137,44 +137,44 @@ func CommitFile(t *testing.T, dir, name, content, msg string) {
 func commitFile(dir, name, content string) error {
 	path := filepath.Join(dir, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("preparar el directorio de %s: %w", name, err)
+		return fmt.Errorf("preparing the %s directory: %w", name, err)
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("escribir %s: %w", path, err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return nil
 }
 
 func InitBare(t *testing.T, dir string) {
 	t.Helper()
-	abortaCon(t, func() error { return initBare(dir) })
+	abortWith(t, func() error { return initBare(dir) })
 	RunGit(t, dir, "init", "--bare", "-b", "main")
-	desactivaAutoGC(t, dir)
+	disableAutoGC(t, dir)
 }
 
 // The `dir == ""` guard cost the most: without it `git init --bare` runs in the process's own
 // directory, INSIDE the repo, and sets core.bare=true on the real one. It happened for real.
 func initBare(dir string) error {
 	if dir == "" {
-		return errors.New("dir vacío: `git init --bare` caería en el repo real y le pondría core.bare")
+		return errors.New("empty dir: `git init --bare` would land in the real repo and set core.bare on it")
 	}
 	return os.MkdirAll(dir, 0o755)
 }
 
 func SetRemote(t *testing.T, dir, name, url string) {
 	t.Helper()
-	quitaRemote(dir, name)
+	removeRemote(dir, name)
 	_, err := runGit(dir, "remote", "add", name, url)
-	aborta(t, err)
+	abort(t, err)
 }
 
 // The error is ignored on purpose: a remote that did not exist is the normal case on the first call,
 // and aborting would force every test to check before setting.
-func quitaRemote(dir, name string) {
+func removeRemote(dir, name string) {
 	rm := exec.Command("git", "remote", "remove", name)
 	rm.Dir = dir
 	rm.Env = gitEnv()
-	_ = rm.Run() // no existía: no es un fallo
+	_ = rm.Run() // it did not exist: not a failure
 }
 
 func Push(t *testing.T, dir string, args ...string) {
@@ -185,7 +185,7 @@ func Push(t *testing.T, dir string, args ...string) {
 
 func RefExists(t *testing.T, dir, ref string) bool {
 	t.Helper()
-	aborta(t, checkDir(dir))
+	abort(t, checkDir(dir))
 	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", ref)
 	cmd.Dir = dir
 	cmd.Env = gitEnv()

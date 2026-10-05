@@ -10,195 +10,195 @@ import (
 // Without it, merging a PR would leave it looking unmerged until the next refresh.
 
 // The failure mergeItem exists for.
-func TestUnItemQueNoEstaSeAnadeYNoSePierdeLaSeccion(t *testing.T) {
+func TestAnItemThatIsNotThereIsAddedAndTheSectionIsNotLost(t *testing.T) {
 	m := newTestModel(t)
 	original := model.Item{
 		Section: model.SectionReview, ReviewKind: model.ReviewRequested,
 		Forge: "github", Host: "github.com", Number: 7,
-		Ref: model.RepoRef{Project: "o/r"}, Title: "antes", UpdatedAt: time.Now(),
+		Ref: model.RepoRef{Project: "o/r"}, Title: "before", UpdatedAt: time.Now(),
 	}
-	conItems(t, &m, original)
+	withItems(t, &m, original)
 	m.rebuild()
 
 	// The re-read: the forge answers the state but does not know which section the item came from.
-	releida := original
-	releida.Section = ""
-	releida.ReviewKind = ""
-	releida.Title = "después"
-	m.applyItemUpdate(releida)
+	reread := original
+	reread.Section = ""
+	reread.ReviewKind = ""
+	reread.Title = "after"
+	m.applyItemUpdate(reread)
 
-	it, ok := findItem(todosLosItems(m), original.ID())
+	it, ok := findItem(allTheItems(m), original.ID())
 	if !ok {
-		t.Fatalf("el item desaparecio tras actualizarlo: %v", todosLosItems(m))
+		t.Fatalf("the item disappeared after updating it: %v", allTheItems(m))
 	}
-	if it.Title != "después" {
-		t.Errorf("el titulo no se actualizó: %q", it.Title)
+	if it.Title != "after" {
+		t.Errorf("the title was not updated: %q", it.Title)
 	}
 	if it.Section != model.SectionReview {
-		t.Errorf("la seccion se perdio: %q", it.Section)
+		t.Errorf("the section was lost: %q", it.Section)
 	}
 	if it.ReviewKind != model.ReviewRequested {
-		t.Errorf("el tipo de review se perdio: %q", it.ReviewKind)
+		t.Errorf("the review kind was lost: %q", it.ReviewKind)
 	}
 	// And it stays in the stream it was in, because the user had it in front of them.
-	conItems := 0
+	withItems := 0
 	for _, s := range m.streams {
-		conItems += len(s.items)
+		withItems += len(s.items)
 	}
-	if conItems != 1 {
-		t.Errorf("hay %d items en los streams tras actualizar, want 1", conItems)
+	if withItems != 1 {
+		t.Errorf("there are %d items in the streams after updating, want 1", withItems)
 	}
 }
 
 // The other side of that.
-func TestUnItemQueNoEstaSeAnadeAlStreamQueToca(t *testing.T) {
+func TestAnItemThatIsNotThereIsAddedToTheRightStream(t *testing.T) {
 	m := newTestModel(t)
 	m.rebuild()
 
-	nuevo := model.Item{
+	new := model.Item{
 		Section: model.SectionMentions, ReviewKind: "",
 		Forge: "gitlab", Host: "gitlab.com", Number: 3,
-		Ref: model.RepoRef{Project: "o/r"}, Title: "nuevo",
+		Ref: model.RepoRef{Project: "o/r"}, Title: "new",
 	}
-	m.applyItemUpdate(nuevo)
+	m.applyItemUpdate(new)
 
-	it, ok := findItem(todosLosItems(m), nuevo.ID())
+	it, ok := findItem(allTheItems(m), new.ID())
 	if !ok {
-		t.Fatalf("el item anadido no aparece: %v", todosLosItems(m))
+		t.Fatalf("the added item does not appear: %v", allTheItems(m))
 	}
-	if it.Title != "nuevo" || it.Forge != "gitlab" {
-		t.Errorf("el item anadido no llego entero: %+v", it)
+	if it.Title != "new" || it.Forge != "gitlab" {
+		t.Errorf("the added item did not arrive whole: %+v", it)
 	}
 	enReview := false
 	for k, s := range m.streams {
-		for _, si := range s.items {
-			if si.ID() == nuevo.ID() && k.section != model.SectionMentions {
+		for _, streamed := range s.items {
+			if streamed.ID() == new.ID() && k.section != model.SectionMentions {
 				enReview = true
 			}
 		}
 	}
 	if enReview {
-		t.Error("el item se metio en un stream que no es el suyo")
+		t.Error("the item went into a stream that is not its own")
 	}
 
-	otro := nuevo
-	otro.Forge = "github"
-	otro.Host = "github.com"
-	m.applyItemUpdate(otro)
+	other := new
+	other.Forge = "github"
+	other.Host = "github.com"
+	m.applyItemUpdate(other)
 	total := 0
 	for _, s := range m.streams {
 		total += len(s.items)
 	}
 	if total != 2 {
-		t.Errorf("dos forges con el mismo numero acabaron con %d items, want 2", total)
+		t.Errorf("two forges with the same number ended with %d items, want 2", total)
 	}
 }
 
 // The three things an update must not do.
-func TestActualizarNoDuplicaNiBorraLoDemas(t *testing.T) {
+func TestUpdateNeitherDuplicatesNorDeletesTheRest(t *testing.T) {
 	m := newTestModel(t)
 	base := model.Item{
 		Section: model.SectionReview, ReviewKind: model.ReviewRequested,
 		Forge: "github", Host: "github.com", Number: 1,
-		Ref: model.RepoRef{Project: "o/r"}, Title: "uno",
+		Ref: model.RepoRef{Project: "o/r"}, Title: "one",
 	}
-	dos := base
-	dos.Number = 2
-	dos.Title = "dos"
-	tres := base
-	tres.Number = 3
-	tres.Title = "tres"
-	conItems(t, &m, base, dos, tres)
+	two := base
+	two.Number = 2
+	two.Title = "two"
+	three := base
+	three.Number = 3
+	three.Title = "three"
+	withItems(t, &m, base, two, three)
 	m.rebuild()
-	antes := len(todosLosItems(m))
+	before := len(allTheItems(m))
 
-	actualizada := base
-	actualizada.Title = "uno cambiado"
-	actualizada.State = "MERGED"
-	m.applyItemUpdate(actualizada)
+	updated := base
+	updated.Title = "one changed"
+	updated.State = "MERGED"
+	m.applyItemUpdate(updated)
 
-	if len(todosLosItems(m)) != antes {
-		t.Errorf("tras actualizar hay %d items y habia %d", len(todosLosItems(m)), antes)
+	if len(allTheItems(m)) != before {
+		t.Errorf("after updating there are %d items and there were %d", len(allTheItems(m)), before)
 	}
 	vistos := 0
-	for _, it := range todosLosItems(m) {
+	for _, it := range allTheItems(m) {
 		if it.ID() == base.ID() {
 			vistos++
-			if it.Title != "uno cambiado" || it.State != "MERGED" {
-				t.Errorf("el item no quedo actualizado: %+v", it)
+			if it.Title != "one changed" || it.State != "MERGED" {
+				t.Errorf("the item was not left updated: %+v", it)
 			}
 		}
 	}
 	if vistos != 1 {
-		t.Errorf("el item aparece %d veces tras actualizarlo", vistos)
+		t.Errorf("the item appears %d times after updating it", vistos)
 	}
-	titulos := map[string]bool{}
-	for _, it := range todosLosItems(m) {
-		titulos[it.Title] = true
+	titles := map[string]bool{}
+	for _, it := range allTheItems(m) {
+		titles[it.Title] = true
 	}
-	for _, quiere := range []string{"uno cambiado", "dos", "tres"} {
-		if !titulos[quiere] {
-			t.Errorf("tras actualizar falta %q; quedan %v", quiere, titulos)
+	for _, wantTitle := range []string{"one changed", "two", "three"} {
+		if !titles[wantTitle] {
+			t.Errorf("after updating %q is missing; left %v", wantTitle, titles)
 		}
 	}
 }
 
 // Both halves, and the default matters as much as the cases.
-func TestMergeItemConservaLoQueElForgeNoSabeYCambiaLoQueSi(t *testing.T) {
-	viejo := model.Item{Section: model.SectionReview, ReviewKind: model.ReviewRequested, Title: "viejo"}
+func TestMergeItemKeepsWhatTheForgeDoesNotKnowAndChangesWhatItDoes(t *testing.T) {
+	old := model.Item{Section: model.SectionReview, ReviewKind: model.ReviewRequested, Title: "old"}
 
-	fresco := model.Item{Title: "fresco"}
-	merged := mergeItem(viejo, fresco)
+	fresh := model.Item{Title: "fresh"}
+	merged := mergeItem(old, fresh)
 	if merged.Section != model.SectionReview || merged.ReviewKind != model.ReviewRequested {
-		t.Errorf("no conservo lo que el releido no traia: %+v", merged)
+		t.Errorf("it did not keep what the reread item did not bring: %+v", merged)
 	}
-	if merged.Title != "fresco" {
-		t.Errorf("el titulo no es el del releido: %q", merged.Title)
+	if merged.Title != "fresh" {
+		t.Errorf("the title is not the reread one: %q", merged.Title)
 	}
 
 	// With a section set: the re-read's wins, and that is the retarget.
-	fresco = model.Item{Title: "fresco", Section: model.SectionAuthored, ReviewKind: ""}
-	merged = mergeItem(viejo, fresco)
+	fresh = model.Item{Title: "fresh", Section: model.SectionAuthored, ReviewKind: ""}
+	merged = mergeItem(old, fresh)
 	if merged.Section != model.SectionAuthored {
-		t.Errorf("con seccion propia se puso la vieja: %q", merged.Section)
+		t.Errorf("with its own section the old one was put: %q", merged.Section)
 	}
 	if merged.ReviewKind != model.ReviewRequested {
-		t.Errorf("conservar la seccion impidio conservar el kind: %q", merged.ReviewKind)
+		t.Errorf("keeping the section prevented keeping the kind: %q", merged.ReviewKind)
 	}
 
-	fresco = model.Item{Title: "fresco", ReviewKind: model.ReviewAssigned}
-	merged = mergeItem(viejo, fresco)
+	fresh = model.Item{Title: "fresh", ReviewKind: model.ReviewAssigned}
+	merged = mergeItem(old, fresh)
 	if merged.Section != model.SectionReview || merged.ReviewKind != model.ReviewAssigned {
 		t.Errorf("no mezclo bien: %+v", merged)
 	}
 
-	merged = mergeItem(model.Item{}, model.Item{Title: "fresco"})
+	merged = mergeItem(model.Item{}, model.Item{Title: "fresh"})
 	if merged.Section != "" || merged.ReviewKind != "" {
-		t.Errorf("con un viejo vacio se invento algo: %+v", merged)
+		t.Errorf("with an empty old item it invented something: %+v", merged)
 	}
 }
 
 // The difference between "no" and "not known".
-func TestSiNoEnElDetalleNoEsUnGuion(t *testing.T) {
+func TestOtherwiseTheDetailDoesNotShowADash(t *testing.T) {
 	if got := yesNo(true); got != "yes" {
 		t.Errorf("yesNo(true) dio %q", got)
 	}
 	if got := yesNo(false); got != "no" {
-		t.Errorf("yesNo(false) dio %q, want \"no\": un false es respuesta, no ausencia", got)
+		t.Errorf("yesNo(false) gave %q, want \"no\": a false is an answer, not an absence", got)
 	}
 	// The difference with orDash is real: a false does NOT print as a dash.
 	if yesNo(false) == orDash("") {
-		t.Error("yesNo(false) sale igual que orDash de una cadena vacia: son cosas distintas")
+		t.Error("yesNo(false) comes out the same as orDash of an empty string: they are different things")
 	}
 	if got := orDash(""); got != "-" {
-		t.Errorf("orDash(\"\") dio %q", got)
+		t.Errorf("orDash(\"\") gave %q", got)
 	}
-	if got := orDash("algo"); got != "algo" {
-		t.Errorf("orDash con texto dio %q", got)
+	if got := orDash("something"); got != "something" {
+		t.Errorf("orDash with text gave %q", got)
 	}
 }
 
-func conItems(t *testing.T, m *Model, items ...model.Item) {
+func withItems(t *testing.T, m *Model, items ...model.Item) {
 	t.Helper()
 	for _, it := range items {
 		k := streamKey{forge: it.Forge, section: it.Section, kind: it.ReviewKind}
@@ -211,7 +211,7 @@ func conItems(t *testing.T, m *Model, items ...model.Item) {
 	}
 }
 
-func todosLosItems(m Model) []model.Item {
+func allTheItems(m Model) []model.Item {
 	var out []model.Item
 	for _, s := range m.streams {
 		out = append(out, s.items...)

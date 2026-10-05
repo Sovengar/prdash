@@ -32,7 +32,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	f, ok := Load(path)
 	if !ok {
-		t.Fatal("Load debería encontrar el snapshot")
+		t.Fatal("Load should find the snapshot")
 	}
 	if len(f.Streams) != 1 || f.Streams[0].Items[0].Title != "Add widget" || f.Streams[0].Cursor != "c1" {
 		t.Fatalf("snapshot = %+v", f)
@@ -41,7 +41,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 
 func TestLoadMissingIsSilent(t *testing.T) {
 	if _, ok := Load(filepath.Join(t.TempDir(), "nope.json")); ok {
-		t.Fatal("cache ausente debería ser silencioso")
+		t.Fatal("a missing cache should be silent")
 	}
 }
 
@@ -51,7 +51,7 @@ func TestLoadCorruptIsSilent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := Load(path); ok {
-		t.Fatal("cache corrupto debería ignorarse")
+		t.Fatal("a corrupt cache should be ignored")
 	}
 }
 
@@ -61,57 +61,57 @@ func TestLoadWrongVersionIsSilent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := Load(path); ok {
-		t.Fatal("versión desconocida debería ignorarse")
+		t.Fatal("an unknown version should be ignored")
 	}
 }
 
 // json.Marshal's error is the only non-disk one in the sequence, and it is what makes the helper
 // take `any`. A truncated leftover would read as "no cache" and cost a full refetch.
-func TestGuardarJSONFallaConUnValorQueNoSePuedeSerializarYNoDejaFichero(t *testing.T) {
-	destino := filepath.Join(t.TempDir(), "sub", "cache.json")
+func TestSavingJSONFailsWithAValueThatCannotBeSerializedAndLeavesNoFile(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "sub", "cache.json")
 
-	err := guardaJSON(destino, map[string]any{
+	err := saveJSON(target, map[string]any{
 		// A channel cannot be serialised, and no File or Memo contains one.
-		"canal": make(chan int),
+		"channel": make(chan int),
 	})
 
 	if err == nil {
-		t.Fatal("un valor que no se puede serializar dio nil: el fichero se escribiría con " +
-			"el campo vacío y el lector no sabría que se perdió")
+		t.Fatal("a value that cannot be serialised gave nil: the file would be written with " +
+			"the field empty and the reader would not know anything was lost")
 	}
 	if !strings.Contains(err.Error(), "chan") && !strings.Contains(err.Error(), "json") &&
 		!strings.Contains(err.Error(), "unsupported") {
-		t.Errorf("el error %q no dice que el valor no se puede serializar", err)
+		t.Errorf("the error %q does not say the value cannot be serialised", err)
 	}
 	// No half-written file: Load treats unreadable JSON as "no cache", so a leftover would cost a
 	// full refetch.
-	if _, err := os.Stat(destino); !os.IsNotExist(err) {
-		t.Errorf("quedó %s tras un fallo de serialización: el lector lo trataría como caché "+
-			"vacía en vez de como un error", destino)
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("%s was left behind after a serialisation failure: the reader would treat it as "+
+			"an empty cache instead of an error", target)
 	}
 	// The parent directory IS created, because MkdirAll goes before the marshalling: the order is
 	// "prepare first".
-	if _, err := os.Stat(filepath.Dir(destino)); err != nil {
-		t.Errorf("el directorio padre no se creó: %v. El MkdirAll va antes del marshalling y "+
-			"no se deshace", err)
+	if _, err := os.Stat(filepath.Dir(target)); err != nil {
+		t.Errorf("the parent directory was not created: %v. MkdirAll runs before the marshalling "+
+			"and is not undone", err)
 	}
 
 	snapshot := File{
 		SavedAt: time.Unix(1700000000, 0).UTC(),
 		Streams: []Stream{{Forge: "github", Host: "github.com", Cursor: "CUR2"}},
 	}
-	if err := Save(destino, snapshot); err != nil {
-		t.Fatalf("Save de un valor válido: %v", err)
+	if err := Save(target, snapshot); err != nil {
+		t.Fatalf("Save of a valid value: %v", err)
 	}
-	leido, ok := Load(destino)
+	readBack, ok := Load(target)
 	if !ok {
-		t.Fatal("el fichero guardado no se pudo releer")
+		t.Fatal("the saved file could not be read back")
 	}
-	if len(leido.Streams) != 1 || leido.Streams[0].Cursor != "CUR2" {
-		t.Errorf("lo releído no es lo guardado: %+v", leido)
+	if len(readBack.Streams) != 1 || readBack.Streams[0].Cursor != "CUR2" {
+		t.Errorf("what was read back is not what was saved: %+v", readBack)
 	}
-	if leido.Version != version {
-		t.Errorf("Version = %d tras guardar, want %d: el propio Save la pone", leido.Version, version)
+	if readBack.Version != version {
+		t.Errorf("Version = %d after saving, want %d: Save itself sets it", readBack.Version, version)
 	}
 
 	memo := filepath.Join(t.TempDir(), "memo.json")
@@ -120,13 +120,13 @@ func TestGuardarJSONFallaConUnValorQueNoSePuedeSerializarYNoDejaFichero(t *testi
 			"github/github.com/acme/widget#7": {Repo: "/c", Worktree: "/w", Branch: "b"},
 		},
 	}); err != nil {
-		t.Fatalf("SaveMemo de un valor válido: %v", err)
+		t.Fatalf("SaveMemo of a valid value: %v", err)
 	}
-	leida, ok := LoadMemo(memo)
-	if !ok || len(leida.Reviews) != 1 {
-		t.Errorf("la memoria no se relejo: %+v ok=%v", leida, ok)
+	memoBack, ok := LoadMemo(memo)
+	if !ok || len(memoBack.Reviews) != 1 {
+		t.Errorf("the memo was not read back: %+v ok=%v", memoBack, ok)
 	}
-	if leida.Version != memoVersion {
-		t.Errorf("Version = %d tras guardar la memoria, want %d", leida.Version, memoVersion)
+	if memoBack.Version != memoVersion {
+		t.Errorf("Version = %d after saving the memo, want %d", memoBack.Version, memoVersion)
 	}
 }

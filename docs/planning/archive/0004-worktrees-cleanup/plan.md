@@ -1,237 +1,256 @@
-# 0004 — Limpieza de worktrees: `--orphans` en lote y auto-borrado al mergear — Plan
+# 0004 — Worktree cleanup: batch `--orphans` and self-deletion on merge — Plan
 
 adr_required: true
-adr_reason: B introduce la **primera eliminación implícita** de prdash que no nace de una ruta escrita por el usuario. Sustituye de forma estrecha la postura documentada "al cerrar la app los worktrees se conservan: no hay borrado implícito" (`cmd/prdash/worktrees.go:3-5`, README §Gestión de worktrees) por una excepción justificada en un hecho observable ("el PR se mergeó desde prdash") **más** una política duradera para el caso sucio (borrar solo si limpio; conservar y avisar si hay cambios). Es una decisión con alternativas reales (borrar con `--force` vs solo si limpio vs reportar la ruta) y con riesgo de pérdida de datos, no un refactor.
+adr_reason: B introduces the **first implicit deletion** of prdash that is not born from a path written by the user. It narrowly supersedes the documented stance "on closing the app the worktrees are kept: there is no implicit deletion" (`cmd/prdash/worktrees.go:3-5`, README §Worktree management) with an exception justified by an observable fact ("the PR was merged from prdash") **plus** a lasting policy for the dirty case (delete only if clean; keep and warn if there are changes). It is a decision with real alternatives (delete with `--force` vs only if clean vs report the path) and with risk of data loss, not a refactor.
 adr_title: adr-0007-worktree-cleanup-on-merge
 adr_path: docs/adr/0007-worktree-cleanup-on-merge.md
-adr_note: el ADR 0007 acota la excepción implícita (disparador `ActionMerge` + `OK`, solo desde prdash), fija el candado "solo si limpio" y la separación `Remove` (rutas explícitas, `--force`, sin candado) vs `RemoveIfClean` (B). No reescribe el ADR 0001 (provisión): lo complementa con la política de borrado. Se redacta en el planning y el executor lo mantiene coherente.
+adr_note: ADR 0007 bounds the implicit exception (trigger `ActionMerge` + `OK`, only from prdash), fixes the "only if clean" lock and the separation `Remove` (explicit paths, `--force`, no lock) vs `RemoveIfClean` (B). It does not rewrite ADR 0001 (provisioning): it complements it with the deletion policy. It is written in the plan and the executor keeps it coherent.
 
-## Resultado esperado
+## Expected outcome
 
-Dos caminos de limpieza, y solo dos, para worktrees de review que ya son basura
-con certeza:
+Two cleanup paths, and only two, for review worktrees that are already certain
+trash:
 
-1. **`prdash worktrees remove --orphans`** borra **en lote** todos los worktrees
-   que el propio `Audit` marca como huérfanos, y **solo** esos. `--orphans` es
-   **excluyente** con las rutas explícitas. Con cero huérfanos informa y sale con
-   **0**. Un `--dry-run` opcional imprime el lote exacto que se borraría y no
-   borra nada.
-2. **Al mergear desde prdash**: cuando una acción `merge` lanzada por prdash
-   termina bien, se borra el worktree de ese ítem **solo si está limpio**. Si hay
-   cambios sin commitear (incluidos archivos sin trackear) o **no se puede
-   comprobar** el estado, se **conserva** y el aviso lo dice:
+1. **`prdash worktrees remove --orphans`** deletes **in batch** all the
+   worktrees that `Audit` itself marks as orphans, and **only** those.
+   `--orphans` is **exclusive** with explicit paths. With zero orphans it
+   reports and exits with **0**. An optional `--dry-run` prints the exact batch
+   that would be deleted and deletes nothing.
+2. **On merge from prdash**: when a `merge` action launched by prdash finishes
+   well, the worktree of that item is deleted **only if it is clean**. If
+   there are uncommitted changes (including untracked files) or the state
+   **cannot be checked**, it is **kept** and the notice says so:
    `merged, but the worktree has uncommitted changes — kept`.
 
-Nada más cambia: **cerrar la app no borra nada**, sigue sin haber acción de
-cierre, y los guardas de ownership (`worktree.Owned`) y de raíz gestionada
-(`removablePath`) siguen siendo intocables para toda vía de limpieza.
+Nothing else changes: **closing the app deletes nothing**, there is still no
+close action, and the ownership (`worktree.Owned`) and managed-root
+(`removablePath`) guards stay untouchable for every cleanup path.
 
-## Alcance
+## Scope
 
-- **In**: flag `--orphans` y `--dry-run` en `remove`; candado "solo si limpio" y
-  su fail-safe; puerto de borrado del review para la TUI; limpieza del registro
-  del review activo al borrar; ADR 0007; README y CHANGELOG.
-- **Out**: borrado al cerrar la app (restricción dura); acción "close" nueva;
-  cambios en la definición de huérfano de `Audit` y en la semántica de `Remove`
-  (rutas explícitas); cambios en los guardas de ownership; estado nuevo en el
-  schema TOML (el `DeleteReview` del cache **no** es schema de config); el script
-  del orquestador y el artefacto no versionado `.codegraph/` (fuera de prdash).
-- **Out (explícito)**: no se borra el worktree de un PR que sale mergeado
-  **fuera** de prdash (el refresco que lo ve mergeado **no** dispara limpieza).
+- **In**: `--orphans` and `--dry-run` flags in `remove`; "only if clean" lock
+  and its fail-safe; review deletion port for the TUI; cleanup of the active
+  review record when deleting; ADR 0007; README and CHANGELOG.
+- **Out**: deletion on closing the app (hard restriction); a new "close"
+  action; changes to the orphan definition of `Audit` and to the semantics of
+  `Remove` (explicit paths); changes to the ownership guards; new state in the
+  TOML schema (the cache `DeleteReview` is **not** config schema); the
+  orchestrator's script and the untracked artifact `.codegraph/` (outside
+  prdash).
+- **Out (explicit)**: the worktree of a PR merged **outside** prdash is not
+  deleted (the refresh that sees it merged does **not** trigger cleanup).
 
-## Enfoque (alto nivel)
+## Approach (high level)
 
-### A — el flag vive en el subcomando, no en el parser global
+### A — the flag lives in the subcommand, not in the global parser
 
-`main.go` intercepta `worktrees` **antes** del `flag.Parse` global, así que
-`--orphans`/`--dry-run` se parsean **dentro** de `remove`, con un helper puro
-`parseRemoveArgs(args)` que no toca `os.Args` y es testeable aislado. El lote sale
-de la **misma** fuente de verdad que ya alimenta `list`: `pr.Audit(ctx)` filtrado
-por `Entry.Orphan`. `Remove` ya sabe borrar un huérfano (repo de origen
-desaparecido → borra el checkout), así que A **no abre una vía de borrado nueva**:
-reusa la existente, solo automatiza la selección.
+`main.go` intercepts `worktrees` **before** the global `flag.Parse`, so
+`--orphans`/`--dry-run` are parsed **inside** `remove`, with a pure helper
+`parseRemoveArgs(args)` that does not touch `os.Args` and is testable in
+isolation. The batch comes from the **same** source of truth that already
+feeds `list`: `pr.Audit(ctx)` filtered by `Entry.Orphan`. `Remove` already
+knows how to delete an orphan (source repo gone → it deletes the checkout), so
+A **does not open a new deletion path**: it reuses the existing one, it only
+automates the selection.
 
-**Mitigación del falso huérfano (sin tocar `Audit`)**: `Audit` marca huérfano ante
-**cualquier** error de `os.Stat` sobre el gitdir, no solo "no existe"; un gitdir
-temporalmente inaccesible (montaje de red, permisos, otro usuario) marcaría sano a
-huérfano. No se cambia esa semántica. El valle es un **`--dry-run` opcional** que
-imprime el lote **desde el mismo camino de código** y no borra nada, de modo que la
-operación irreversible se puede ver antes de ejecutarla. La clase de fallo queda
-documentada en el ADR/README.
+**Mitigation of the false orphan (without touching `Audit`)**: `Audit` marks
+an orphan on **any** `os.Stat` error on the gitdir, not only "does not exist";
+a temporarily inaccessible gitdir (network mount, permissions, another user)
+would mark a healthy one as orphan. That semantics is not changed. The valve
+is an optional **`--dry-run`** that prints the batch **from the same code
+path** and deletes nothing, so the irreversible operation can be seen before
+running it. The failure class is documented in the ADR/README.
 
-### B — el disparador ya existe; falta el puerto y el candado
+### B — the trigger already exists; the port and the lock are missing
 
-El merge de prdash pasa por un embudo único: `applyAction(out forge.Outcome, cycle)`
-(`internal/tui/update.go`), llamado desde `case actionMsg:`. El `Outcome` **ya**
-trae todo lo necesario: `Kind == forge.ActionMerge` y `OK` (más el `Item` releído
-post-acción). **B no necesita plumbing nuevo en el forge**: engancha ese embudo.
-Lo que falta es:
+The prdash merge goes through a single funnel: `applyAction(out forge.Outcome,
+cycle)` (`internal/tui/update.go`), called from `case actionMsg:`. The
+`Outcome` **already** brings everything needed: `Kind == forge.ActionMerge`
+and `OK` (plus the re-read post-action `Item`). **B needs no new plumbing in
+the forge**: it hooks that funnel. What is missing is:
 
-- una **capacidad de borrado** que la TUI no tiene hoy (`ReviewLookup` es solo
-  lectura): un puerto opcional **`ReviewRemover`** implementado por el `Executor`,
-  que ya tiene el `Provisioner` inyectado;
-- un **candado "solo si limpio"** en el nivel que conoce git (el provisioner),
-  porque `Remove` es `--force` a propósito para las rutas explícitas de A y **no**
-  debe cambiar de semántica;
-- limpiar el **registro del review activo** cuando de verdad se borra, para que
-  `ActiveReview` deje de reportar un review montado.
+- a **deletion capability** that the TUI does not have today (`ReviewLookup`
+  is read-only): an optional **`ReviewRemover`** port implemented by the
+  `Executor`, which already has the `Provisioner` injected;
+- an **"only if clean" lock** at the level that knows git (the provisioner),
+  because `Remove` is `--force` on purpose for A's explicit paths and **must
+  not** change semantics;
+- clearing the **active review record** when it really is deleted, so that
+  `ActiveReview` stops reporting a mounted review.
 
-El borrado de B corre **en segundo plano** (subproceso de git; el handler de
-`Update` no puede bloquear) y su resultado vuelve como su propio mensaje, que
-compone el aviso final sin pisar los hechos que ya traía el merge.
+B's deletion runs **in the background** (git subprocess; the `Update`
+handler cannot block) and its result comes back as its own message, which
+composes the final notice without overwriting the facts the merge already
+brought.
 
-## Decisiones clave
+## Key decisions
 
-1. **Dos modos de borrado, dos métodos, un solo juego de guardas.**
-   `Provisioner` gana `RemoveIfClean(ctx, id) (removed bool, reason string, err error)`.
-   - `Remove` (rutas explícitas, A) se queda **exactamente** como está: borra
-     aunque haya cambios; un huérfano ni siquiera tiene repo para preguntar.
-   - `RemoveIfClean` (B) aplica el candado: primero `removablePath` (los mismos
-     guardas), luego decide. **No** se mete el candado dentro de `Remove` ni una
-     bandera booleana que cambie su significado.
-   - **Dónde NO va**: no va en `executor` (su contrato es orquestar sin conocer
-     git) ni en la TUI. El hecho de git vive en el paquete `worktree`.
-2. **El candado pregunta por el árbol, no por el índice.**
-   `git status --porcelain` (vía `internal/gitcmd`), no `git diff --quiet`: un
-   archivo **nuevo sin trackear** es trabajo sin commitear y `diff` lo ignora.
-   `strings.TrimSpace(salida) != ""` ⇒ sucio ⇒ conservar.
-3. **Fail-safe en B: la duda conserva.** Si la comprobación de estado **falla**
-   (index.lock, EACCES, gitdir que se movió entre `stat` y `status`), el resultado
-   es `(removed=false, reason="could not read the worktree status")` y **no** un
-   borrado. `err` se reserva para lo que sí es un fallo de infraestructura
-   reportable; "no se pudo comprobar" es un motivo de conservación, no un error de
-   la acción.
-4. **B es idempotente y no inventa errores.** Si el ítem no tiene review montado,
-   o la ruta del registro ya no existe en disco, el resultado es
-   `(false, "", nil)`: el merge termina igual y **no** se reporta un error de
-   limpieza. `Remove` no es idempotente hoy (una ruta ausente da error), así que
-   `RemoveIfClean` comprueba antes de intentar.
-5. **Puerto `ReviewRemover` nuevo, no extender `ReviewLookup`.**
-   `ReviewLookup` está documentado como **solo lectura y degradable** ("sin él…
-   lo único que se pierde es ese aviso", `internal/tui/retarget.go`). Una capacidad
-   que **borra** no puede heredar ese contrato: necesita ausencia explícita ("sin
-   remover no hay auto-borrado, y el merge sigue igual"). Firma:
-   `RemoveReview(ctx, it) (removed bool, reason string, err error)`, implementada
-   por `*Executor`: mapea ítem→worktree con `ActiveReview`, llama a
-   `Worktrees.RemoveIfClean`, y **solo si borró** olvida el registro.
-   Se inyecta con `SetReviewRemover(ex)` junto al `SetReviewLookup(ex)` existente
-   en `main.go`. Sin remover inyectado, B se degrada a "no auto-borra".
-6. **El registro del review activo se limpia al borrar de verdad.**
-   `cache.ReviewRecord` es persistente; dejarlo apuntando a un checkout que ya no
-   existe haría que `ActiveReview` mintiera para siempre (avisos de "base
-   desfasada", `--print`, remontajes). Se añade `Resolver.ForgetReview(it)` +
-   `cache.Store.DeleteReview(key)`, llamados **solo** cuando `removed==true`. Es un
-   borrado de un registro, **no** estado nuevo de config (nada toca el schema TOML).
-   Residual aceptado: el camino A (`--orphans`) no tiene el store a mano y deja el
-   registro que hubiera; se documenta, no se ensancha el wiring del CLI.
-7. **Aviso compuesto, nunca sobrescrito.** `applyAction` ya hace `return` temprano
-   en el caso `DeleteMsg` (rama no borrada) y en el caso de retarget desfasado.
-   B no puede ser un `setNotice` aparte que pise esos hechos: el borrado arranca
-   como `tea.Cmd` en segundo plano y su resultado llega como mensaje propio
-   (`reviewCleanupMsg`) que **compone** el aviso base del merge con el desenlace
-   de la limpieza. Reglas:
-   - borrado → `… ok · worktree removed` (nivel OK);
-   - conservado por sucio/ilegible → `… ok · worktree kept: <motivo>` (nivel warn);
-     el texto de sucio es literalmente `merged, but the worktree has uncommitted
-     changes — kept`;
-   - fallo de infraestructura → `… ok · could not remove the worktree: <err>` (warn,
-     **no** error: el merge sí salió).
-   Con `DeleteMsg` presente, los tres hechos conviven en el mismo aviso.
-8. **`--orphans` excluyente y `--dry-run` solo con `--orphans`.**
+1. **Two deletion modes, two methods, a single set of guards.**
+   `Provisioner` gains `RemoveIfClean(ctx, id) (removed bool, reason string, err error)`.
+   - `Remove` (explicit paths, A) stays **exactly** as is: it deletes even if
+     there are changes; an orphan does not even have a repo to ask.
+   - `RemoveIfClean` (B) applies the lock: first `removablePath` (the same
+     guards), then it decides. The lock is **not** put inside `Remove` nor a
+     boolean flag that changes its meaning.
+   - **Where it does NOT go**: not in `executor` (its contract is to orchestrate
+     without knowing git) nor in the TUI. The git fact lives in the `worktree`
+     package.
+2. **The lock asks the tree, not the index.**
+   `git status --porcelain` (via `internal/gitcmd`), not `git diff --quiet`: a
+   **new untracked file** is uncommitted work and `diff` ignores it.
+   `strings.TrimSpace(output) != ""` ⇒ dirty ⇒ keep.
+3. **Fail-safe in B: doubt keeps.** If the state check **fails** (index.lock,
+   EACCES, gitdir that moved between `stat` and `status`), the result is
+   `(removed=false, reason="could not read the worktree status")` and **not** a
+   deletion. `err` is reserved for what really is a reportable infrastructure
+   failure; "could not be checked" is a keep reason, not an action error.
+4. **B is idempotent and invents no errors.** If the item has no mounted
+   review, or the record's path no longer exists on disk, the result is
+   `(false, "", nil)`: the merge finishes the same way and **no** cleanup
+   error is reported. `Remove` is not idempotent today (an absent path
+   errors), so `RemoveIfClean` checks before trying.
+5. **New `ReviewRemover` port, not extending `ReviewLookup`.**
+   `ReviewLookup` is documented as **read-only and degradable** ("without it…
+   the only thing lost is that notice", `internal/tui/retarget.go`). A
+   capability that **deletes** cannot inherit that contract: it needs an
+   explicit absence ("without a remover there is no self-deletion, and the
+   merge stays the same"). Signature:
+   `RemoveReview(ctx, it) (removed bool, reason string, err error)`, implemented
+   by `*Executor`: it maps item→worktree with `ActiveReview`, calls
+   `Worktrees.RemoveIfClean`, and **only if it deleted** forgets the record.
+   It is injected with `SetReviewRemover(ex)` next to the existing
+   `SetReviewLookup(ex)` in `main.go`. With no remover injected, B degrades to
+   "it does not self-delete".
+6. **The active review record is cleared when deleting for real.**
+   `cache.ReviewRecord` is persistent; leaving it pointing at a checkout that no
+   longer exists would make `ActiveReview` lie forever ("stale base" notices,
+   `--print`, remounts). `Resolver.ForgetReview(it)` +
+   `cache.Store.DeleteReview(key)` are added, called **only** when
+   `removed==true`. It is a record deletion, **not** new config state (nothing
+   touches the TOML schema). Accepted residual: path A (`--orphans`) does not
+   have the store at hand and leaves whatever record there is; it is
+   documented, the CLI wiring is not widened.
+7. **Composed notice, never overwritten.** `applyAction` already does an early
+   `return` on the `DeleteMsg` case (branch not deleted) and on the stale
+   retarget case. B cannot be a separate `setNotice` that overwrites those
+   facts: the deletion starts as a background `tea.Cmd` and its result arrives
+   as its own message (`reviewCleanupMsg`) that **composes** the merge's base
+   notice with the outcome of the cleanup. Rules:
+   - deleted → `… ok · worktree removed` (OK level);
+   - kept due to dirty/unreadable → `… ok · worktree kept: <motivo>` (warn
+     level); the dirty text is literally `merged, but the worktree has
+     uncommitted changes — kept`;
+   - infrastructure failure → `… ok · could not remove the worktree: <err>`
+     (warn, **not** error: the merge did go through).
+   With `DeleteMsg` present, the three facts coexist in the same notice.
+8. **`--orphans` exclusive and `--dry-run` only with `--orphans`.**
    `parseRemoveArgs(args) (orphans, dryRun bool, paths []string, err error)`:
-   `--orphans` + rutas ⇒ error de uso; `--dry-run` sin `--orphans` ⇒ error de uso;
-   token que empieza por `-` y no se reconoce ⇒ error de uso; sin `--orphans` ni
-   rutas ⇒ error de uso (comportamiento actual). Todo error de uso: mensaje por
-   **stderr**, **exit 2**, y **cero** borrados. Éxito (incluido "cero huérfanos")
-   por **stdout**, **exit 0**. Fallo de borrado: **exit 1**.
-9. **Sin `os.Exit` dentro de `runWorktrees`/`removeWorktrees`.** Devuelven `int` y
-   `main.go` sale; los tests los conducen en proceso. Meter un exit mataría la
-   suite. Se conserva esa costura.
-10. **ADR 0007, sin editar ADRs aceptados.** El 0007 acota la excepción implícita,
-    declara qué decisión de conservación sustituye y la política del caso sucio.
-    Encadena con el 0001 (provisión) sin reescribirlo. Se redacta en el planning.
+   `--orphans` + paths ⇒ usage error; `--dry-run` without `--orphans` ⇒ usage
+   error; a token starting with `-` that is not recognized ⇒ usage error;
+   neither `--orphans` nor paths ⇒ usage error (current behavior). Every usage
+   error: message on **stderr**, **exit 2**, and **zero** deletions. Success
+   (including "zero orphans") on **stdout**, **exit 0**. Deletion failure:
+   **exit 1**.
+9. **No `os.Exit` inside `runWorktrees`/`removeWorktrees`.** They return `int`
+   and `main.go` exits; the tests run them in process. Putting an exit there
+   would kill the suite. That seam is kept.
+10. **ADR 0007, no editing accepted ADRs.** The 0007 bounds the implicit
+    exception, declares which keep decision it supersedes and the policy for
+    the dirty case. It chains with the 0001 (provisioning) without rewriting
+    it. It is written in the plan.
 
-## Ficheros afectados (alto nivel)
+## Affected files (high level)
 
-**Producción**
+**Production**
 
-- `internal/worktree/worktree.go`: `RemoveIfClean` en la interfaz `Provisioner` y en
-  `GitDirect`; helper `dirty` (`status --porcelain`); `Remove` **sin cambios**.
-- `internal/worktree/herdr.go`: `HerdrNative.RemoveIfClean` (mismo candado sobre
-  `h.scan` y delegando en su `Remove` nativo, para no dejar el workspace huérfano).
-- `internal/review/executor/executor.go`: `RemoveReview` en el `Executor`;
-  `ForgetReview` en la interfaz `Resolver`.
+- `internal/worktree/worktree.go`: `RemoveIfClean` in the `Provisioner`
+  interface and in `GitDirect`; `dirty` helper (`status --porcelain`);
+  `Remove` **unchanged**.
+- `internal/worktree/herdr.go`: `HerdrNative.RemoveIfClean` (same lock over
+  `h.scan` and delegating to its native `Remove`, so the workspace is not left
+  orphan).
+- `internal/review/executor/executor.go`: `RemoveReview` in the `Executor`;
+  `ForgetReview` in the `Resolver` interface.
 - `internal/reporesolver/reporesolver.go` + `internal/cache/memo.go`:
-  `ForgetReview` / `DeleteReview` (borrado del registro persistido).
-- `internal/tui/retarget.go` (o `review_remover.go`): puerto `ReviewRemover` +
-  `SetReviewRemover`; campo en el `Model` (`app.go`).
-- `internal/tui/app.go`: campo `reviewRemover`; tipo `reviewCleanupMsg`.
-- `internal/tui/update.go`: en `applyAction`, si `merge` + `OK` lanzar el borrado en
-  segundo plano; nuevo `case reviewCleanupMsg` que compone el aviso.
-- `cmd/prdash/worktrees.go`: `parseRemoveArgs`; `removeWorktrees` con `--orphans`
-  (y `--dry-run`) además de las rutas explícitas.
+  `ForgetReview` / `DeleteReview` (deletion of the persisted record).
+- `internal/tui/retarget.go` (or `review_remover.go`): `ReviewRemover` port +
+  `SetReviewRemover`; field on the `Model` (`app.go`).
+- `internal/tui/app.go`: `reviewRemover` field; `reviewCleanupMsg` type.
+- `internal/tui/update.go`: in `applyAction`, if `merge` + `OK` launch the
+  deletion in the background; new `case reviewCleanupMsg` that composes the
+  notice.
+- `cmd/prdash/worktrees.go`: `parseRemoveArgs`; `removeWorktrees` with
+  `--orphans` (and `--dry-run`) besides the explicit paths.
 - `cmd/prdash/main.go`: `model.SetReviewRemover(ex)`.
-- `docs/adr/0007-worktree-cleanup-on-merge.md`: nuevo (redactado en el planning).
-- `README.md`: `remove <ruta>` → `remove <ruta>…`, documentar `--orphans`,
-  `--dry-run`, y **cuándo** borra B (merge desde prdash, solo si limpio, con aviso)
-  sin contradecir la regla de conservación al cerrar.
+- `docs/adr/0007-worktree-cleanup-on-merge.md`: new (written in the plan).
+- `README.md`: `remove <path>` → `remove <path>…`, document `--orphans`,
+  `--dry-run`, and **when** B deletes (merge from prdash, only if clean, with
+  a warning) without contradicting the keep-on-close rule.
 - `CHANGELOG.md`: `## [Unreleased] → ### Added`.
 
 **Tests**
 
-- `internal/worktree/worktree_test.go`: `RemoveIfClean` limpio borra; sucio conserva
-  (con la razón); **untracked** conserva; `status` en error conserva (fail-safe);
-  ruta ausente ⇒ no-op sin error; guardas (ajeno / fuera de `Base`) siguen
-  rechazando.
-- `internal/review/executor/executor_test.go`: `RemoveReview` con review activo →
-  `RemoveIfClean` + `ForgetReview`; conservado ⇒ **no** olvida; sin review ⇒
-  `(false,"",nil)`; actualizar `fakeProvisioner`/fakes de `Resolver`.
-- `internal/tui/section_test.go` / `app_test.go`: merge OK borra (remover fake
-  invocado con el ítem correcto); sucio conserva y avisa con el texto exacto; no
-  dispara con approve/retarget/fallo/conflicto/permiso/no-mergeable; sin review
-  ⇒ sin error; aviso compuesto con `DeleteMsg`; **cerrar la app no invoca el
-  remover**.
-- `cmd/prdash/worktrees_test.go`: `--orphans` borra todos y solo huérfanos; sanos y
-  ajenos intactos; cero huérfanos ⇒ exit 0 y stdout sin stderr; **`--dry-run`
-  imprime el lote y no borra**; `--orphans <ruta>` y `--dry-run` sin `--orphans` y
-  flag desconocido ⇒ exit 2 sin tocar nada; rutas explícitas siguen igual (se
-  conservan los tests actuales). Puede requerir un helper `captureStderr`.
+- `internal/worktree/worktree_test.go`: `RemoveIfClean` clean deletes; dirty
+  keeps (with the reason); **untracked** keeps; `status` error keeps
+  (fail-safe); absent path ⇒ no-op without error; guards (foreign / outside
+  `Base`) keep rejecting.
+- `internal/review/executor/executor_test.go`: `RemoveReview` with an active
+  review → `RemoveIfClean` + `ForgetReview`; kept ⇒ does **not** forget; no
+  review ⇒ `(false,"",nil)`; update `fakeProvisioner`/`Resolver` fakes.
+- `internal/tui/section_test.go` / `app_test.go`: OK merge deletes (fake
+  remover invoked with the right item); dirty keeps and warns with the exact
+  text; does not trigger with approve/retarget/failure/conflict/permission/
+  no-mergeable; no review ⇒ no error; composed notice with `DeleteMsg`;
+  **closing the app does not invoke the remover**.
+- `cmd/prdash/worktrees_test.go`: `--orphans` deletes all and only orphans;
+  healthy and foreign intact; zero orphans ⇒ exit 0 and stdout with no stderr;
+  **`--dry-run` prints the batch and does not delete**; `--orphans <path>` and
+  `--dry-run` without `--orphans` and an unknown flag ⇒ exit 2 without touching
+  anything; explicit paths keep behaving the same (current tests are kept). It
+  may require a `captureStderr` helper.
 
-## Orden de trabajo (TDD, grueso)
+## Work order (TDD, rough)
 
-1. **Tests primero, por bloques**: `worktree` (`RemoveIfClean`) → `cmd/prdash`
-   (`parseRemoveArgs` + `removeWorktrees`) → `executor` (`RemoveReview`) → `tui`
-   (disparador y aviso).
-2. **Wiring**: interfaz `Provisioner` (+`HerdrNative`, +fakes); `Resolver.ForgetReview`
-   (+cache, +fakes); `Executor.RemoveReview`; puerto `ReviewRemover` + `SetReviewRemover`
-   + `main.go`; `applyAction` + `reviewCleanupMsg`.
+1. **Tests first, in blocks**: `worktree` (`RemoveIfClean`) → `cmd/prdash`
+   (`parseRemoveArgs` + `removeWorktrees`) → `executor` (`RemoveReview`) →
+   `tui` (trigger and notice).
+2. **Wiring**: `Provisioner` interface (+`HerdrNative`, +fakes);
+   `Resolver.ForgetReview` (+cache, +fakes); `Executor.RemoveReview`;
+   `ReviewRemover` port + `SetReviewRemover` + `main.go`; `applyAction` +
+   `reviewCleanupMsg`.
 3. **Docs**: ADR 0007, README, CHANGELOG.
-4. `make test` y smoke manual.
+4. `make test` and manual smoke.
 
-## Verificaciones
+## Verifications
 
-- `make test` (build + vet + gofmt + `go test -race ./...`) **en verde**. Es la única
-  garantía: el repo no tiene CI.
-- Smoke CLI: `worktrees list` marca huérfanos; `remove --orphans --dry-run` imprime
-  el lote y no borra; `remove --orphans` borra solo esos; un sano y un ajeno siguen;
-  `remove --orphans <ruta>` y `--bogus` salen con 2.
-- Smoke TUI: montar un review limpio y mergear → worktree fuera y aviso "removed";
-  montar con un archivo sin commitear y mergear → worktree conservado y aviso
-  "merged, but the worktree has uncommitted changes — kept"; `q` no borra nada.
-- Coherencia de ADRs: el 0007 declara qué cláusula sustituye; 0001 intacto.
+- `make test` (build + vet + gofmt + `go test -race ./...`) **green**. It is
+  the only guarantee: the repo has no CI.
+  _Correction (2026-10-04): CI does exist now — `.github/workflows/ci.yml`
+  and `mutation.yml`; `make check` is its local equivalent._
+- CLI smoke: `worktrees list` marks orphans; `remove --orphans --dry-run`
+  prints the batch and does not delete; `remove --orphans` deletes only those;
+  a healthy and a foreign one survive; `remove --orphans <path>` and `--bogus`
+  exit with 2.
+- TUI smoke: mount a clean review and merge → worktree gone and "removed"
+  notice; mount with an uncommitted file and merge → worktree kept and
+  "merged, but the worktree has uncommitted changes — kept" notice; `q`
+  deletes nothing.
+- ADR coherence: the 0007 declares which clause it supersedes; 0001 intact.
 
-## Riesgos
+## Risks
 
-- **Falso huérfano** (mitigado, no eliminado): la definición de `Audit` no distingue
-  "gitdir ausente" de "inaccesible". `--dry-run` da el lote antes de borrar y
-  documenta la clase; cambiar `Audit` queda fuera de alcance.
-- **Ventana TOCTOU** entre `status` y `remove` dentro del mismo goroutine: el
-  candado no es atómico a nivel de git. Aceptable: reduce el borrado a "limpio en el
-  momento de comprobar" y el fail-safe conserva ante la duda.
-- **Registro residual en A**: `--orphans` no limpia `cache.ReviewRecord`; se
-  documenta y no se ensancha el CLI.
-- **Aviso compuesto**: si el resultado de la limpieza llega después de otro aviso,
-  debe re-componer sobre el **base del merge**, no pisar el aviso vigente; lo fija
-  el mensaje propio con el `base` capturado al disparar.
-- **Fakes acoplados**: añadir un método a `Provisioner` y otro a `Resolver` obliga a
-  actualizar los fakes de `executor`/`tui`; es trabajo mecánico, no riesgo.
+- **False orphan** (mitigated, not eliminated): the definition of `Audit` does
+  not distinguish "missing gitdir" from "inaccessible". `--dry-run` gives the
+  batch before deleting and documents the class; changing `Audit` stays out of
+  scope.
+- **TOCTOU window** between `status` and `remove` inside the same goroutine:
+  the lock is not atomic at git level. Acceptable: it reduces deletion to
+  "clean at the moment of checking" and the fail-safe keeps when in doubt.
+- **Residual record in A**: `--orphans` does not clear `cache.ReviewRecord`;
+  it is documented and the CLI is not widened.
+- **Composed notice**: if the cleanup result arrives after another notice, it
+  must re-compose over the merge's **base**, not overwrite the current notice;
+  the own message with the `base` captured on trigger fixes that.
+- **Coupled fakes**: adding a method to `Provisioner` and another to
+  `Resolver` forces updating the `executor`/`tui` fakes; it is mechanical work,
+  not risk.

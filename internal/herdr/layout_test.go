@@ -48,7 +48,7 @@ func testPlan() plan.Plan {
 		}},
 		{Label: plan.LabelEdit, Panes: []plan.Pane{
 			{Kind: plan.KindHunk, Label: "Hunk", Cwd: "/wt/prdash-pr-7", Argv: []string{"hunk", "diff", "main...HEAD"}, Env: []string{"PRDASH_NUMBER=7"}},
-			{Kind: plan.KindAgent, Label: "Agente", Dir: plan.DirRight, Cwd: "/wt/prdash-pr-7", Argv: []string{"opencode"}, Env: []string{"PRDASH_NUMBER=7"}},
+			{Kind: plan.KindAgent, Label: "Agent", Dir: plan.DirRight, Cwd: "/wt/prdash-pr-7", Argv: []string{"opencode"}, Env: []string{"PRDASH_NUMBER=7"}},
 		}},
 	}}
 }
@@ -65,17 +65,17 @@ func TestMountLayoutRenamesRootTabAndCreatesTheRest(t *testing.T) {
 		t.Fatalf("warnings = %v", warns)
 	}
 	if f.called("workspace", "create") {
-		t.Fatal("con root pane no debería crear otro workspace")
+		t.Fatal("with a root pane it should not create another workspace")
 	}
 
 	if !f.called("tab", "rename", "w18:t1", plan.LabelReview) {
-		t.Fatalf("el tab raíz debería renombrarse a %q: %v", plan.LabelReview, f.calls)
+		t.Fatalf("the root tab should be renamed to %q: %v", plan.LabelReview, f.calls)
 	}
 	if f.tabs != 1 {
-		t.Fatalf("tabs creados = %d, quiero 1 (el primero reutiliza el del contenedor)", f.tabs)
+		t.Fatalf("tabs created = %d, want 1 (the first reuses the container's)", f.tabs)
 	}
 	if !hasCall(f.calls, "tab", "create", "--workspace", "w18", "--label", plan.LabelEdit, "--no-focus") {
-		t.Fatalf("el segundo tab debería crearse en el workspace: %v", f.calls)
+		t.Fatalf("the second tab should be created in the workspace: %v", f.calls)
 	}
 }
 
@@ -88,18 +88,18 @@ func TestMountLayoutFillsEachTabIndependently(t *testing.T) {
 	}
 
 	if !f.called("pane", "run", "w18:p1") || !f.called("pane", "rename", "w18:p1", "TUICR") {
-		t.Fatalf("el primer pane debería lanzarse sobre el root pane: %v", f.calls)
+		t.Fatalf("the first pane should run on the root pane: %v", f.calls)
 	}
 	if !f.called("pane", "run", "w18:p2") || !f.called("pane", "rename", "w18:p2", "Hunk") {
-		t.Fatalf("el segundo tab debería poblarse desde su propio root pane: %v", f.calls)
+		t.Fatalf("the second tab should be populated from its own root pane: %v", f.calls)
 	}
-	if !f.called("pane", "rename", "w18:p3", "Agente") {
-		t.Fatalf("el agente debería ocupar el pane dividido: %v", f.calls)
+	if !f.called("pane", "rename", "w18:p3", "Agent") {
+		t.Fatalf("the agent should take the split pane: %v", f.calls)
 	}
 	if hasSplit(f.calls, "w18:p1", "right") && hasSplit(f.calls, "w18:p2", "right") {
 		return
 	}
-	t.Fatalf("cada tab debería dividir a la derecha desde su base: %v", f.calls)
+	t.Fatalf("each tab should split to the right from its base: %v", f.calls)
 }
 
 func TestMountLayoutSendsCwdAndEnvToEverySplit(t *testing.T) {
@@ -112,13 +112,13 @@ func TestMountLayoutSendsCwdAndEnvToEverySplit(t *testing.T) {
 	for _, call := range f.calls {
 		if len(call) >= 2 && call[0] == "pane" && call[1] == "split" {
 			if !contains(call, "--no-focus") {
-				t.Fatalf("split sin --no-focus: %v", call)
+				t.Fatalf("split without --no-focus: %v", call)
 			}
 			if !contains(call, "--cwd") || !contains(call, "/wt/prdash-pr-7") {
-				t.Fatalf("split sin cwd del worktree: %v", call)
+				t.Fatalf("split without the worktree cwd: %v", call)
 			}
 			if !contains(call, "--env") || !contains(call, "PRDASH_NUMBER=7") {
-				t.Fatalf("split sin env del plan: %v", call)
+				t.Fatalf("split without the plan's env: %v", call)
 			}
 		}
 	}
@@ -137,13 +137,13 @@ func TestMountLayoutFailsOnDeadWorkspace(t *testing.T) {
 
 	warns, err := f.client().MountLayout(context.Background(), Container{WorkspaceID: "w1B"}, testPlan())
 	if err == nil {
-		t.Fatalf("un workspace muerto no debería montar en silencio (warnings=%v)", warns)
+		t.Fatalf("a dead workspace should not mount silently (warnings=%v)", warns)
 	}
 	if !strings.Contains(err.Error(), "w1B") {
-		t.Fatalf("el error debería nombrar el workspace: %v", err)
+		t.Fatalf("the error should name the workspace: %v", err)
 	}
 	if f.called("workspace", "create") {
-		t.Fatal("no debería crear un workspace de repuesto")
+		t.Fatal("it should not create a replacement workspace")
 	}
 }
 
@@ -156,21 +156,21 @@ func TestMountLayoutCreatesWorkspaceWithoutContainer(t *testing.T) {
 		t.Fatalf("MountLayout: %v", err)
 	}
 	if !f.called("workspace", "create") {
-		t.Fatal("sin pane base debería crear un workspace")
+		t.Fatal("without a base pane it should create a workspace")
 	}
 	if !f.called("pane", "run", "w20:p1") {
-		t.Fatal("debería lanzar el pane en el root del workspace creado")
+		t.Fatal("it should run the pane on the created workspace's root")
 	}
 }
 
 func TestMountLayoutEmptyPlanIsNoop(t *testing.T) {
 	f := newFakeLayout()
 	if warns, err := f.client().MountLayout(context.Background(), Container{PaneID: "w18:p1"}, plan.Plan{}); err != nil || warns != nil {
-		t.Fatalf("plan vacío: warns=%v err=%v", warns, err)
+		t.Fatalf("empty plan: warns=%v err=%v", warns, err)
 	}
 	for _, call := range f.calls {
 		if call[0] == "pane" || call[0] == "tab" {
-			t.Fatalf("no debería tocar panes ni tabs con plan vacío: %v", call)
+			t.Fatalf("it should not touch panes or tabs with an empty plan: %v", call)
 		}
 	}
 }
@@ -186,13 +186,13 @@ func TestMountLayoutTabFailureIsWarning(t *testing.T) {
 	}
 	warns, err := f.client().MountLayout(context.Background(), Container{WorkspaceID: "w18", PaneID: "w18:p1"}, testPlan())
 	if err != nil {
-		t.Fatalf("un tab fallido no debería abortar: %v", err)
+		t.Fatalf("a failed tab should not abort: %v", err)
 	}
 	if len(warns) == 0 || !strings.Contains(strings.Join(warns, " "), plan.LabelEdit) {
 		t.Fatalf("warnings = %v", warns)
 	}
 	if !f.called("pane", "rename", "w18:p1", "TUICR") {
-		t.Fatalf("el primer tab debería quedarse montado: %v", f.calls)
+		t.Fatalf("the first tab should stay mounted: %v", f.calls)
 	}
 }
 
@@ -208,7 +208,7 @@ func TestMountLayoutPaneFailureIsWarning(t *testing.T) {
 	pl := testPlan()
 	warns, err := f.client().MountLayout(context.Background(), Container{WorkspaceID: "w18", PaneID: "w18:p1"}, pl)
 	if err != nil {
-		t.Fatalf("un split fallido no debería abortar: %v", err)
+		t.Fatalf("a failed split should not abort: %v", err)
 	}
 	if len(warns) == 0 || !strings.Contains(strings.Join(warns, " "), "Editor") {
 		t.Fatalf("warnings = %v", warns)

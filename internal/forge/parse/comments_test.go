@@ -24,13 +24,13 @@ func TestParseGHComments(t *testing.T) {
 		t.Fatalf("len = %d, want 2", len(comments))
 	}
 	if comments[0].Author != "alice" || comments[1].Author != "bob" {
-		t.Errorf("autores = %q/%q, want alice/bob", comments[0].Author, comments[1].Author)
+		t.Errorf("authors = %q/%q, want alice/bob", comments[0].Author, comments[1].Author)
 	}
 	if comments[0].Body != "please add a test" {
-		t.Errorf("cuerpo = %q", comments[0].Body)
+		t.Errorf("body = %q", comments[0].Body)
 	}
 	if got := comments[1].CreatedAt.Format("2006-01-02"); got != "2026-09-21" {
-		t.Errorf("fecha = %q, want 2026-09-21", got)
+		t.Errorf("date = %q, want 2026-09-21", got)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestParseGHCommentsDeletedAuthor(t *testing.T) {
 		t.Fatalf("ParseGHComments: %v", err)
 	}
 	if comments[0].Author != "unknown" {
-		t.Errorf("autor = %q, want %q", comments[0].Author, unknownAuthor)
+		t.Errorf("author = %q, want %q", comments[0].Author, unknownAuthor)
 	}
 }
 
@@ -55,23 +55,23 @@ func TestParseGHCommentsErrors(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{"json inválido", `{"data":`, "invalid JSON"},
-		{"error del forge", `{"errors":[{"message":"Field 'comments' doesn't exist"}]}`, "doesn't exist"},
-		{"sin pull request", `{"data":{"repository":{}}}`, "without comments"},
-		{"sin comments", `{"data":{"repository":{"pullRequest":{}}}}`, "without comments"},
-		{"respuesta vacía", `{}`, "without comments"},
+		{"invalid json", `{"data":`, "invalid JSON"},
+		{"forge error", `{"errors":[{"message":"Field 'comments' doesn't exist"}]}`, "doesn't exist"},
+		{"no pull request", `{"data":{"repository":{}}}`, "without comments"},
+		{"no comments", `{"data":{"repository":{"pullRequest":{}}}}`, "without comments"},
+		{"empty response", `{}`, "without comments"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			comments, total, err := ParseGHComments(tc.raw)
 			if err == nil {
-				t.Fatalf("debería fallar, devolvió %d comentarios", len(comments))
+				t.Fatalf("it should fail, it returned %d comments", len(comments))
 			}
 			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("error = %q, want que contenga %q", err, tc.want)
+				t.Errorf("error = %q, want it to contain %q", err, tc.want)
 			}
 			if total != 0 {
-				t.Errorf("un fallo no debe inventar un total: %d", total)
+				t.Errorf("a failure must not invent a total: %d", total)
 			}
 		})
 	}
@@ -88,10 +88,10 @@ func TestParseGLComments(t *testing.T) {
 		t.Fatalf("ParseGLComments: %v", err)
 	}
 	if len(comments) != 1 || comments[0].Author != "alice" {
-		t.Fatalf("notas = %+v, want solo la de alice", comments)
+		t.Fatalf("notes = %+v, want only alice's", comments)
 	}
 	if total != 1 {
-		t.Errorf("total = %d, want 1 (el de las leídas, GitLab no expone recuento)", total)
+		t.Errorf("total = %d, want 1 (the ones read, GitLab exposes no count)", total)
 	}
 }
 
@@ -109,16 +109,16 @@ func TestParseGLCommentsDropsSystemNotes(t *testing.T) {
 		t.Fatalf("ParseGLComments: %v", err)
 	}
 	if len(comments) != 2 {
-		t.Fatalf("len = %d, want 2 (las dos escritas por personas)", len(comments))
+		t.Fatalf("len = %d, want 2 (the two written by people)", len(comments))
 	}
 	if comments[0].Body != "first" || comments[1].Body != "second" {
-		t.Errorf("se colaron notas de sistema: %+v", comments)
+		t.Errorf("system notes slipped in: %+v", comments)
 	}
 }
 
 func TestParseGLCommentsKeepsEmptySystemFlag(t *testing.T) {
 	raw := `{"data":{"project":{"mergeRequest":{"notes":{"nodes":[
-		{"author":{"username":"alice"},"body":"sin el campo system","createdAt":"2026-09-20T10:00:00Z"}
+		{"author":{"username":"alice"},"body":"without the system field","createdAt":"2026-09-20T10:00:00Z"}
 	]}}}}}`
 
 	comments, _, err := ParseGLComments(raw)
@@ -126,7 +126,7 @@ func TestParseGLCommentsKeepsEmptySystemFlag(t *testing.T) {
 		t.Fatalf("ParseGLComments: %v", err)
 	}
 	if len(comments) != 1 {
-		t.Fatalf("len = %d, want 1: `system` ausente es false, no system", len(comments))
+		t.Fatalf("len = %d, want 1: an absent `system` is false, not system", len(comments))
 	}
 }
 
@@ -136,15 +136,15 @@ func TestParseGLCommentsErrors(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{"json inválido", `nope`, "invalid JSON"},
-		{"error del forge", `{"errors":[{"message":"Field 'notes' doesn't exist on type"}]}`, "doesn't exist"},
-		{"sin merge request", `{"data":{"project":{}}}`, "without notes"},
-		{"sin notes", `{"data":{"project":{"mergeRequest":{}}}}`, "without notes"},
+		{"invalid json", `nope`, "invalid JSON"},
+		{"forge error", `{"errors":[{"message":"Field 'notes' doesn't exist on type"}]}`, "doesn't exist"},
+		{"no merge request", `{"data":{"project":{}}}`, "without notes"},
+		{"no notes", `{"data":{"project":{"mergeRequest":{}}}}`, "without notes"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, _, err := ParseGLComments(tc.raw); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("error = %v, want que contenga %q", err, tc.want)
+				t.Errorf("error = %v, want it to contain %q", err, tc.want)
 			}
 		})
 	}
@@ -157,33 +157,33 @@ func TestCommentLines(t *testing.T) {
 		body string
 		want []string
 	}{
-		{"una línea", "please add a test", []string{"please add a test"}},
+		{"one line", "please add a test", []string{"please add a test"}},
 		{
-			"con comentario HTML delante",
+			"with an HTML comment in front",
 			"<!-- ssf: origin=o/r#553 -->\n\nssf attaching agent",
 			[]string{"ssf attaching agent"},
 		},
-		{"con blancos", "\n\n   \nfirst\n\nsecond\n", []string{"first", "second"}},
+		{"with blanks", "\n\n   \nfirst\n\nsecond\n", []string{"first", "second"}},
 		{
-			"párrafos separados",
+			"paragraphs separated",
 			"line one\n\nline two",
 			[]string{"line one", "line two"},
 		},
 		{
-			"lista conserva los guiones",
+			"list keeps the dashes",
 			"- fix the timeout\n- fix the backoff",
 			[]string{"- fix the timeout", "- fix the backoff"},
 		},
 		{
-			"el heading conserva su marcado",
-			"### Fixes aplicados\n\n**HIGH** doble prefijo",
-			[]string{"### Fixes aplicados", "**HIGH** doble prefijo"},
+			"the heading keeps its markup",
+			"### Applied fixes\n\n**HIGH** double prefix",
+			[]string{"### Applied fixes", "**HIGH** double prefix"},
 		},
-		{"espacios y tabs dentro de la línea", "a\t\tb   c", []string{"a b c"}},
-		{"solo boilerplate", "<!-- x -->\n\n<!-- y -->", nil},
-		{"vacío", "", nil},
-		{"solo espacios", "   \n\t", nil},
-		{"unicode", "el timeout son 30× más alto 🚀", []string{"el timeout son 30× más alto 🚀"}},
+		{"spaces and tabs inside the line", "a\t\tb   c", []string{"a b c"}},
+		{"only boilerplate", "<!-- x -->\n\n<!-- y -->", nil},
+		{"empty", "", nil},
+		{"only spaces", "   \n\t", nil},
+		{"unicode", "the timeout is 30× higher 🚀", []string{"the timeout is 30× higher 🚀"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -193,7 +193,7 @@ func TestCommentLines(t *testing.T) {
 			}
 			for i := range got {
 				if got[i] != tc.want[i] {
-					t.Errorf("línea %d = %q, want %q", i, got[i], tc.want[i])
+					t.Errorf("line %d = %q, want %q", i, got[i], tc.want[i])
 				}
 			}
 		})

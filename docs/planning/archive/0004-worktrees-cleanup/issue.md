@@ -1,205 +1,214 @@
-# 0004 — Limpieza de worktrees: `--orphans` en lote y auto-borrado al mergear desde prdash (feature)
+# 0004 — Worktree cleanup: batch `--orphans` and self-deletion on merge from prdash (feature)
 
-## Problema
+## Problem
 
-Los worktrees de review son **del usuario**: existen para editar el PR dentro de
-ellos, así que prdash los conserva a propósito y **no borra nada de forma
-implícita al cerrar la app** (`cmd/prdash/worktrees.go:3-5`). Esa decisión es
-correcta y no se toca. Pero deja dos huecos de **higiene**, ambos acotados a
-worktrees que ya son **basura con certeza** (huérfanos, o su PR ya no existe):
+The review worktrees **belong to the user**: they exist to edit the PR inside
+them, so prdash keeps them on purpose and **deletes nothing implicitly on
+closing the app** (`cmd/prdash/worktrees.go:3-5`). That decision is correct and
+is not touched. But it leaves two **hygiene** gaps, both bounded to worktrees
+that are already **certain trash** (orphans, or whose PR no longer exists):
 
-1. **Limpiar huérfanos de a uno.** Cuando el repo de origen desaparece, el
-   worktree queda huérfano y `prdash worktrees list` ya lo reporta
-   (`prdash: <ruta> is orphaned: …`, `audit.go:62-65`). Borrarlo hoy exige
-   **enumerar rutas a mano**, una por una. Limpiar varios exige un script o
-   recordar cada ruta. Falta un gesto: **"borrá todos los huérfanos"**.
-2. **El worktree de un PR mergeado desde prdash.** Si el PR se mergea **a través
-   de prdash**, su worktree es basura **con certeza**: el review terminó. Hoy se
-   queda en disco, ocupando espacio y ensuciando el listado, hasta que alguien
-   lo borre a mano. Como el disparador es "el PR ya no existe", borrarlo en ese
-   instante **no viola** la regla de conservar al cerrar: no es un borrado
-   implícito por salir, es un borrado justificado por un hecho observable.
+1. **Cleaning orphans one by one.** When the source repo disappears, the
+   worktree becomes an orphan and `prdash worktrees list` already reports it
+   (`prdash: <path> is orphaned: …`, `audit.go:62-65`). Deleting it today
+   requires **enumerating paths by hand**, one at a time. Cleaning several
+   requires a script or remembering every path. A gesture is missing:
+   **"delete all the orphans"**.
+2. **The worktree of a PR merged from prdash.** If the PR is merged **through
+   prdash**, its worktree is **certainly** trash: the review is over. Today it
+   stays on disk, taking space and dirtying the listing, until someone deletes
+   it by hand. Since the trigger is "the PR no longer exists", deleting it at
+   that moment **does not violate** the keep-on-close rule: it is not an
+   implicit deletion by exiting, it is a deletion justified by an observable
+   fact.
 
-El riesgo de A es **nulo** por construcción: los huérfanos no pueden volver. El
-riesgo de B es **bajo** pero no nulo, y su forma concreta (trabajo sin commitear)
-es la decisión abierta de esta issue.
+The risk of A is **nil** by construction: the orphans cannot come back. The
+risk of B is **low** but not nil, and its concrete shape (uncommitted work) is
+the open decision of this issue.
 
-## Alcance (in)
+## Scope (in)
 
 ### A — `prdash worktrees remove --orphans`
 
-Nuevo flag en el subcomando `remove` (`cmd/prdash/worktrees.go`). Cuando está
-presente, borra **únicamente** las entradas que el propio `Audit` marca como
-huérfanas:
+New flag in the `remove` subcommand (`cmd/prdash/worktrees.go`). When present,
+it deletes **only** the entries that `Audit` itself marks as orphaned:
 
-- Fuente de verdad: `pr.Audit(ctx)` filtrando `Entry.Orphan` (`audit.go:23-31`,
-  `audit.go:62-65`). No se reimplementa la detección: la misma que ya alimenta el
-  reporte de `list`.
-- Un huérfano se borra por la vía ya existente `pr.Remove(ctx, path)`, que para
-  el caso huérfano ya sabe borrar el checkout directamente
+- Source of truth: `pr.Audit(ctx)` filtering `Entry.Orphan` (`audit.go:23-31`,
+  `audit.go:62-65`). The detection is not reimplemented: it is the same one
+  that already feeds the `list` report.
+- An orphan is deleted through the already existing `pr.Remove(ctx, path)`,
+  which for the orphan case already knows how to delete the checkout directly
   (`worktree.go:105-127`).
-- **Solo huérfanos.** Un worktree propio y sano **nunca** se toca con
+- **Orphans only.** An owned and healthy worktree is **never** touched with
   `--orphans`.
-- Con **cero huérfanos** termina con **exit 0** y un mensaje claro (no es un
-  error: es el caso feliz).
-- El borrado por **rutas explícitas** (`remove <ruta1> <ruta2> …`) sigue
-  funcionando exactamente igual que hoy.
+- With **zero orphans** it finishes with **exit 0** and a clear message (it is
+  not an error: it is the happy path).
+- Deletion by **explicit paths** (`remove <ruta1> <ruta2> …`) keeps working
+  exactly as today.
 
-### B — auto-borrado al mergear desde prdash
+### B — self-deletion on merge from prdash
 
-Cuando una acción de merge lanzada **desde prdash** termina bien, se borra el
-worktree de ese ítem. El punto único de observación es `applyAction` en
-`internal/tui/update.go:154`, que ya recibe el `forge.Outcome` post-acción:
+When a merge action launched **from prdash** finishes well, the worktree of
+that item is deleted. The single observation point is `applyAction` in
+`internal/tui/update.go:154`, which already receives the post-action
+`forge.Outcome`:
 
-- Señal: `out.Kind == forge.ActionMerge && out.OK` (`forge.go:271-275`). Cualquier
-  otra combinación (approve, retarget, fallo, conflicto, permiso denegado,
-  `Unmergeable`) **no dispara** nada.
-- Mapeo ítem → worktree: `Executor.ActiveReview(it)` ya existe
-  (`executor.go:128`) y está expuesto a la TUI por el puerto `ReviewLookup`
-  (`retarget.go:133`, inyectado con `SetReviewLookup`). El `Executor` ya tiene
-  `Worktrees worktree.Provisioner` (`executor.go:50`), así que el borrado usa la
-  misma vía que el comando CLI.
-- Si el ítem **no tiene** worktree montado, no hay nada que borrar y no se
-  reporta error: mergea y listo.
-- El aviso de la acción (`actionDoneNotice`) sigue saliendo; si además se borra
-  el worktree, se informa en el mismo notice.
+- Signal: `out.Kind == forge.ActionMerge && out.OK` (`forge.go:271-275`). Any
+  other combination (approve, retarget, failure, conflict, denied permission,
+  `Unmergeable`) **triggers** nothing.
+- Item → worktree mapping: `Executor.ActiveReview(it)` already exists
+  (`executor.go:128`) and is exposed to the TUI through the `ReviewLookup`
+  port (`retarget.go:133`, injected with `SetReviewLookup`). The `Executor`
+  already has `Worktrees worktree.Provisioner` (`executor.go:50`), so the
+  deletion uses the same path as the CLI command.
+- If the item **has no** mounted worktree, there is nothing to delete and no
+  error is reported: it merges and that's it.
+- The action notice (`actionDoneNotice`) keeps coming out; if the worktree is
+  also deleted, it is reported in the same notice.
 
-## No-alcance (out)
+## Out of scope (out)
 
-- **NO borrar al cerrar la app.** Es la restricción dura (`worktrees.go:3-5`,
-  README:493-494). Ningún camino de esta feature toca `quit`/teardown. El único
-  borrado implícito admitido es el de un worktree **probadamente muerto**
-  (huérfano, o PR mergeado **desde prdash**).
-- **NO crear una acción "close".** `forge.go:270-275` solo define
-  `ActionApprove`, `ActionMerge` y `ActionRetarget`: prdash **no puede cerrar**
-  un PR. "Cerrado desde prdash" es hoy **inalcanzable** (ver Corrección al
-  enunciado); B se reduce a "mergeado desde prdash".
-- **NO tocar los guardas de ownership/seguridad.** Se mantienen tal cual:
-  `worktree.Owned` (`audit.go:19-21`) y la exigencia de que la ruta viva bajo la
-  raíz gestionada `Base` (`removablePath`, `worktree.go:130-143`). Ningún
-  worktree ajeno se lista ni se borra.
-- **NO borrar con `--force` un worktree sucio como default incuestionado.** El
-  `git worktree remove --force` (`worktree.go:116`) destruye cambios sin
-  commitear; si eso aplica a B lo decide la **Decisión ABIERTA**, no esta
-  sección.
-- **NO cambiar la semántica de `remove <ruta>`** ni el contrato de
+- **Do NOT delete on closing the app.** It is the hard restriction
+  (`worktrees.go:3-5`, README:504-506). No path of this feature touches
+  `quit`/teardown. The only implicit deletion allowed is that of a worktree
+  **provably dead** (orphan, or PR merged **from prdash**).
+- **Do NOT create a "close" action.** `forge.go:270-275` only defines
+  `ActionApprove`, `ActionMerge` and `ActionRetarget`: prdash **cannot close**
+  a PR. "Closed from prdash" is today **unreachable** (see Correction to the
+  statement); B reduces to "merged from prdash".
+- **Do NOT touch the ownership/security guards.** They stay as they are:
+  `worktree.Owned` (`audit.go:19-21`) and the requirement that the path lives
+  under the managed root `Base` (`removablePath`, `worktree.go:130-143`). No
+  foreign worktree is listed nor deleted.
+- **Do NOT delete a dirty worktree with `--force` as an unquestioned
+  default.** The `git worktree remove --force` (`worktree.go:116`) destroys
+  uncommitted changes; whether that applies to B is decided by the **OPEN
+  decision**, not by this section.
+- **Do NOT change the semantics of `remove <path>`** nor the contract of
   `Provisioner.Audit`/`Remove`.
-- **NO persistir** ningún estado nuevo ni tocar el schema TOML.
-- **NO tocar `list`** más allá de convivir con el nuevo flag.
+- **Do NOT persist** any new state nor touch the TOML schema.
+- **Do NOT touch `list`** beyond coexisting with the new flag.
 
-## Criterios de aceptación
+## Acceptance criteria
 
-- [ ] `prdash worktrees remove --orphans` borra **todos** los huérfanos que
-      `Audit` reporta y **solo** huérfanos.
-- [ ] Con `--orphans`, todo worktree propio **sano** (no huérfano) sigue en disco
-      y `Audit` lo sigue listando tras el comando.
-- [ ] Con `--orphans`, todo worktree **ajeno** (label/ruta que no empieza por
-      `prdash-`, o fuera de `Base`) sigue intacto.
-- [ ] `--orphans` con **cero huérfanos** termina con **exit 0** y un mensaje
-      claro; no imprime error ni código distinto de 0.
-- [ ] `prdash worktrees remove <ruta1> <ruta2>` (rutas explícitas) sigue
-      funcionando igual que hoy, incluidos los rechazos actuales (ajeno/inexistente
-      → no se toca, exit 1).
-- [ ] Tras un **merge exitoso desde prdash**, el worktree del ítem desaparece y
-      la TUI lo refleja (el ítem ya no tiene review montado).
-- [ ] El auto-borrado de B **no dispara** con: `approve`, `retarget`, merge
-      **fallido**, merge **bloqueado por permiso**, merge con **conflicto**, ni
-      `Unmergeable`.
-- [ ] El auto-borrado de B **no dispara** al **cerrar la app** (se puede
-      verificar que quitar todos los caminos de teardown no borra nada).
-- [ ] Si el ítem mergeado **no tenía** worktree montado, el merge termina igual y
-      **sin error**.
-- [ ] Los guardas se preservan: un `Remove` sobre un worktree **ajeno** o **fuera
-      de `Base`** sigue siendo imposible (los tests de `removeRefusesForeign`
-      siguen valiendo).
-- [ ] `make test` en verde (build + vet + gofmt + `go test -race`).
-- [ ] README (`490-500`) y CHANGELOG sin contradicciones: se documenta
-      `remove --orphans`, se corrige `remove <ruta>` → `remove <ruta>…` y se
-      explica cuándo B borra y cuándo no.
+- [ ] `prdash worktrees remove --orphans` deletes **all** the orphans that
+      `Audit` reports and **only** orphans.
+- [ ] With `--orphans`, every **healthy** owned worktree (not orphan) stays on
+      disk and `Audit` keeps listing it after the command.
+- [ ] With `--orphans`, every **foreign** worktree (label/path not starting
+      with `prdash-`, or outside `Base`) stays intact.
+- [ ] `--orphans` with **zero orphans** finishes with **exit 0** and a clear
+      message; it does not print an error nor a code other than 0.
+- [ ] `prdash worktrees remove <ruta1> <ruta2>` (explicit paths) keeps working
+      as today, including the current rejections (foreign/nonexistent → not
+      touched, exit 1).
+- [ ] After a **successful merge from prdash**, the worktree of the item
+      disappears and the TUI reflects it (the item no longer has a mounted
+      review).
+- [ ] B's self-deletion **does not trigger** with: `approve`, `retarget`,
+      **failed** merge, merge **blocked by permission**, merge with
+      **conflict**, nor `Unmergeable`.
+- [ ] B's self-deletion **does not trigger** on **closing the app** (it can be
+      verified that removing all teardown paths deletes nothing).
+- [ ] If the merged item **had no** mounted worktree, the merge finishes the
+      same way and **without error**.
+- [ ] The guards are preserved: a `Remove` on a **foreign** worktree or one
+      **outside `Base`** keeps being impossible (the `removeRefusesForeign`
+      tests still hold).
+- [ ] `make test` green (build + vet + gofmt + `go test -race`).
+- [ ] README (`502-545`) and CHANGELOG without contradictions:
+      `remove --orphans` is documented, `remove <path>` → `remove <path>…` is
+      corrected, and when B deletes and when it does not is explained.
 
-## Decisión ABIERTA (bloquea el plan) — el borrado de B vs trabajo sin commitear
+## OPEN decision (blocks the plan) — B's deletion vs uncommitted work
 
-`GitDirect.Remove` llama a `git worktree remove --force` (`worktree.go:116`): si
-el worktree tiene **cambios sin commitear**, borrarlo los **destruye**. La postura
-del propio código es que el worktree es **del usuario** y puede alojar trabajo sin
-commitear (aviso `staleReviewNotice` en `update.go:187-194` y README:129). Un merge
-exitoso desde prdash dice que **el PR terminó**, no que el checkout esté limpio.
-Hay que elegir qué hace B cuando el worktree está sucio:
+`GitDirect.Remove` runs `git worktree remove --force` (`worktree.go:116`): if
+the worktree has **uncommitted changes**, deleting it **destroys** them. The
+code's own stance is that the worktree **belongs to the user** and can host
+uncommitted work (`staleReviewNotice` warning in `update.go:187-194` and
+README:129). A successful merge from prdash says that **the PR is over**, not
+that the checkout is clean. What B does when the worktree is dirty has to be
+chosen:
 
-- **A — borrar igual con `--force`.** Simple y determinista: "mergeado desde
-  prdash ⇒ worktree fuera". Coste: **puede destruir cambios no commiteados sin
-  avisar**; es exactamente el escenario que la regla de conservar al cerrar
-  intenta evitar.
-- **B (recomendada) — borrar solo si está limpio; si hay cambios, avisar y
-  conservar.** B respeta la regla de conservar ante la duda y solo automatiza el
-  caso sin pérdida. Coste: hay que **detectar el estado sucio** (p. ej.
-  `git status --porcelain`/`git diff --quiet`) antes de borrar, y el worktree sucio
-  queda en disco con un aviso ("merged, but the worktree has uncommitted changes —
-  kept"), lo que el usuario tiene que limpiar a mano.
-- **C — borrar igual, pero reportar la ruta para poder recuperar.** Mantiene la
-  automatización y da una pista. Coste: `--force` borra el **checkout**; reportar
-  la ruta **no recupera** lo no commiteado (el mensaje promete una recuperación que
-  puede no existir), así que es la peor de las tres en confianza.
+- **A — delete anyway with `--force`.** Simple and deterministic: "merged from
+  prdash ⇒ worktree gone". Cost: **it can destroy uncommitted changes without
+  warning**; it is exactly the scenario that the keep-on-close rule tries to
+  avoid.
+- **B (recommended) — delete only if clean; if there are changes, warn and
+  keep.** B respects the keep-when-in-doubt rule and only automates the
+  no-loss case. Cost: the dirty state has to be **detected** (e.g.
+  `git status --porcelain`/`git diff --quiet`) before deleting, and the dirty
+  worktree stays on disk with a warning ("merged, but the worktree has
+  uncommitted changes — kept"), which the user has to clean up by hand.
+- **C — delete anyway, but report the path so it can be recovered.** It keeps
+  the automation and gives a clue. Cost: `--force` deletes the **checkout**;
+  reporting the path **does not recover** the uncommitted work (the message
+  promises a recovery that may not exist), so it is the worst of the three in
+  terms of trust.
 
-**Recomendación: B.** Es la única que cumple el invariante documentado ("el
-worktree es del usuario") sin renunciar al automatismo en el caso frecuente (PR
-mergeado, checkout limpio). El tradeoff es un caso residual sucio que queda en
-disco con aviso; es preferible un worktree de más que trabajo perdido.
+**Recommendation: B.** It is the only one that fulfils the documented
+invariant ("the worktree belongs to the user") without giving up automation in
+the frequent case (PR merged, clean checkout). The tradeoff is a residual dirty
+case that stays on disk with a warning; one extra worktree is preferable to
+lost work.
 
-**Pregunta para el usuario**: cuando mergeás un PR desde prdash y su worktree tiene
-**cambios sin commitear**, ¿qué hacemos con el worktree? **(A)** borrarlo igual
-aunque se pierdan esos cambios, **(B)** borrarlo solo si está limpio y, si hay
-cambios, avisar y conservarlo (recomendada), o **(C)** borrarlo igual y mostrar la
-ruta para que intentes recuperar lo que quieras.
+**Question for the user**: when you merge a PR from prdash and its worktree
+has **uncommitted changes**, what do we do with the worktree? **(A)** delete it
+anyway even if those changes are lost, **(B)** delete it only if it is clean
+and, if there are changes, warn and keep it (recommended), or **(C)** delete it
+anyway and show the path so you can try to recover whatever you want.
 
-## Corrección al enunciado (no bloquea, pero no se documenta falso)
+## Correction to the statement (non-blocking, but falsehoods are not documented)
 
-1. **A no arregla "acepta una sola ruta".** `removeWorktrees(pr, args[1:])` **ya
-   itera sobre todas las rutas** (`worktrees.go:74-98`): `prdash worktrees remove
-   <ruta1> <ruta2> …` **funciona hoy**. Lo único que miente es el README
-   (`499: remove <ruta>`, singular). Lo genuinamente ausente es el flag
-   `--orphans`: tal cual, un token `--orphans` se trataría como una ruta y se
-   rechazaría (`worktrees.go:85-90`). Y la cobertura ya existe: `TestRunWorktreesRemoveOwned`,
-   `TestRunWorktreesRemoveOrphan` y `TestRunWorktreesRemoveRefusesForeign`
+1. **A does not fix "accepts a single path".** `removeWorktrees(pr, args[1:])`
+   **already iterates over all the paths** (`worktrees.go:74-98`):
+   `prdash worktrees remove <ruta1> <ruta2> …` **works today**. The only thing
+   lying is the README (`511: remove <path>`, singular). What is genuinely
+   missing is the `--orphans` flag: as is, a `--orphans` token would be
+   treated as a path and rejected (`worktrees.go:85-90`). And the coverage
+   already exists: `TestRunWorktreesRemoveOwned`,
+   `TestRunWorktreesRemoveOrphan` and `TestRunWorktreesRemoveRefusesForeign`
    (`cmd/prdash/worktrees_test.go`).
-2. **B no es "cerrado o mergeado desde prdash": es solo "mergeado".** prdash **no
-   tiene acción de cierre** (`forge.go:270-275`: `ActionApprove`, `ActionMerge`,
-   `ActionRetarget`), así que "cerrado desde prdash" es **inalcanzable** hoy.
-   `state.Derive` sí mapea a `StateMerged`/`StateClosed` (`state.go:86-91`), pero
-   `StateClosed` describe un PR cerrado **en el forge**, no una acción de prdash.
-   La señal observable de B es `out.Kind == forge.ActionMerge && out.OK`. Añadir un
-   close action queda **fuera de alcance**.
+2. **B is not "closed or merged from prdash": it is only "merged".** prdash
+   **has no close action** (`forge.go:270-275`: `ActionApprove`,
+   `ActionMerge`, `ActionRetarget`), so "closed from prdash" is
+   **unreachable** today. `state.Derive` does map to
+   `StateMerged`/`StateClosed` (`state.go:86-91`), but `StateClosed` describes
+   a PR closed **on the forge**, not a prdash action. The observable signal of
+   B is `out.Kind == forge.ActionMerge && out.OK`. Adding a close action stays
+   **out of scope**.
 
-## Riesgos / verificaciones pendientes
+## Risks / pending verifications
 
-- **Pérdida de trabajo sin commitear (B).** Es el riesgo central; lo resuelve la
-  Decisión ABIERTA. Cualquiera de las opciones debe quedar **documentada** en el
-  README junto al aviso de conservación.
-- **Falso positivo de "mergeado"**: el notice de B se apoya en `out.OK` +
-  `ActionMerge`. Verificar que un merge que **devuelve OK pero deja la rama sin
-  borrar** (`out.DeleteMsg`, `update.go:182-186`) no se confunda: borrar el
-  worktree sigue siendo correcto, pero el aviso debe decir las dos cosas.
-- **`out.Item` re-leído**: `applyAction` recibe el ítem post-acción
-  (`update.go:156-164`); hay que mapear el worktree con el mismo `Item` que
-  `ActiveReview` espera para no borrar el worktree equivocado.
-- **Puerto `ReviewLookup` es solo-lectura hoy** (`retarget.go:133`): exponer el
-  borrado a la TUI requiere añadir un método (o un puerto nuevo) sobre el
-  `Executor`, que ya tiene `Worktrees` (`executor.go:50`). No se inventa una vía
-  nueva de borrado: se reusa `Provisioner.Remove`.
-- **Huérfano vs sano en `--orphans`**: la detección depende de
-  `sourceReachable` (`audit.go:94-103`). Un gitdir temporalmente inaccesible
-  marcaría huérfano un worktree sano. `--orphans` borraría ese checkout. Verificar
-  que la definición de huérfano (gitdir inexistente tras `os.Stat`) es lo bastante
-  estable, o acotar el riesgo en el plan (p. ej. `--dry-run`/confirmación), sin
-  cambiar la semántica de `Audit`.
-- **`HerdrNative`**: su `Audit` delega en el escaneo `GitDirect`, así que un
-  huérfano se detecta igual dentro y fuera de Herdr; confirmar que `Remove` se
-  comporta igual en ambos entornos.
-- **Exclusividad de flags (micro-decisión, no bloquea)**: si `--orphans` convive con
-  rutas explícitas o es excluyente. Propuesta: `--orphans` es **excluyente** (o
-  ignora rutas) para que "solo huérfanos" sea una garantía legible; se fija en el
-  plan.
-- **Tests a añadir**: `--orphans` borra todos y solo huérfanos; cero huérfanos →
-  exit 0 con mensaje; `--orphans` no toca sanos ni ajenos; B dispara con
-  merge OK y no con approve/retarget/fallo/conflicto; B no dispara en teardown;
-  B con worktree sucio según la decisión elegida.
+- **Loss of uncommitted work (B).** It is the central risk; the OPEN decision
+  resolves it. Whatever option is chosen must be **documented** in the README
+  next to the keep warning.
+- **False positive of "merged"**: B's notice relies on `out.OK` +
+  `ActionMerge`. Verify that a merge that **returns OK but leaves the branch
+  undeleted** (`out.DeleteMsg`, `update.go:182-186`) is not confused: deleting
+  the worktree is still correct, but the notice must say both things.
+- **`out.Item` re-read**: `applyAction` receives the post-action item
+  (`update.go:156-164`); the worktree must be mapped with the same `Item`
+  that `ActiveReview` expects so the wrong worktree is not deleted.
+- **The `ReviewLookup` port is read-only today** (`retarget.go:133`): exposing
+  deletion to the TUI requires adding a method (or a new port) on the
+  `Executor`, which already has `Worktrees` (`executor.go:50`). No new
+  deletion path is invented: `Provisioner.Remove` is reused.
+- **Orphan vs healthy in `--orphans`**: the detection depends on
+  `sourceReachable` (`audit.go:94-103`). A temporarily inaccessible gitdir
+  would mark a healthy worktree as orphan. `--orphans` would delete that
+  checkout. Verify that the definition of orphan (nonexistent gitdir after
+  `os.Stat`) is stable enough, or bound the risk in the plan (e.g.
+  `--dry-run`/confirmation), without changing the semantics of `Audit`.
+- **`HerdrNative`**: its `Audit` delegates to the `GitDirect` scan, so an
+  orphan is detected the same inside and outside Herdr; confirm that `Remove`
+  behaves the same in both environments.
+- **Flag exclusivity (micro-decision, non-blocking)**: whether `--orphans`
+  coexists with explicit paths or is exclusive. Proposal: `--orphans` is
+  **exclusive** (or ignores paths) so that "orphans only" is a readable
+  guarantee; it is settled in the plan.
+- **Tests to add**: `--orphans` deletes all and only orphans; zero orphans →
+  exit 0 with message; `--orphans` touches neither healthy nor foreign ones; B
+  triggers with a OK merge and not with approve/retarget/failure/conflict; B
+  does not trigger on teardown; B with a dirty worktree according to the
+  chosen decision.

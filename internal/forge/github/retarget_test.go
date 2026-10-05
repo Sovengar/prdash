@@ -17,7 +17,7 @@ func TestRetargetUsesTheAPINotPrEdit(t *testing.T) {
 
 	warns := New("github.com", bin).Retarget(context.Background(), mergeRef, 7, "release/2.0")
 	if len(warns) != 0 {
-		t.Fatalf("Retarget = %+v, want sin warnings", warns)
+		t.Fatalf("Retarget = %+v, want no warnings", warns)
 	}
 
 	args := readArgs(t, argsFile)
@@ -26,10 +26,10 @@ func TestRetargetUsesTheAPINotPrEdit(t *testing.T) {
 		t.Errorf("argv = %q, want %q", got, want)
 	}
 	if want := "-f base=release/2.0"; !strings.Contains(got, want) {
-		t.Errorf("argv = %q, want el campo base con la rama", got)
+		t.Errorf("argv = %q, want the base field with the branch", got)
 	}
 	if strings.Contains(got, "pr edit") {
-		t.Errorf("argv = %q, no debe usar `gh pr edit`: hoy falla con Projects (classic) being deprecated", got)
+		t.Errorf("argv = %q, must not use `gh pr edit`: today it fails with Projects (classic) being deprecated", got)
 	}
 }
 
@@ -41,15 +41,15 @@ func TestRetargetRefusesEmptyBranch(t *testing.T) {
 
 		warns := New("github.com", bin).Retarget(context.Background(), mergeRef, 7, branch)
 		if !hasKind(warns, "unsupported") || !strings.Contains(firstMsgOf(warns), "nothing to retarget to") {
-			t.Errorf("Retarget(%q) = %+v, want un motivo explícito", branch, warns)
+			t.Errorf("Retarget(%q) = %+v, want an explicit reason", branch, warns)
 		}
 		if _, err := os.Stat(argsFile); err == nil {
-			t.Errorf("Retarget(%q) llamó a la CLI: %q", branch, readArgs(t, argsFile))
+			t.Errorf("Retarget(%q) called the CLI: %q", branch, readArgs(t, argsFile))
 		}
 	}
 }
 
-func TestBranchesPaginatesAndProjectsElNombre(t *testing.T) {
+func TestBranchesPaginatesAndProjectsTheName(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := dir + "/gh.args"
 	bin := writeScript(t, dir, "gh",
@@ -57,17 +57,17 @@ func TestBranchesPaginatesAndProjectsElNombre(t *testing.T) {
 
 	names, warns := New("github.com", bin).Branches(context.Background(), mergeRef)
 	if len(warns) != 0 {
-		t.Fatalf("Branches = %+v, want sin warnings", warns)
+		t.Fatalf("Branches = %+v, want no warnings", warns)
 	}
 	if strings.Join(names, ",") != "main,release/2.0" {
-		t.Errorf("Branches = %v, want las dos ramas en orden", names)
+		t.Errorf("Branches = %v, want the two branches in order", names)
 	}
 
 	got := strings.Join(readArgs(t, argsFile), " ")
 	for _, want := range []string{
 		"repos/acme/widget/branches",
-		"per_page=100", // sin esto, la API pagina de 30 en 30
-		"--paginate",   // y sin esto, solo sale la primera página
+		"per_page=100", // without this the API pages 30 at a time
+		"--paginate",   // and without this only the first page comes out
 		"--jq",
 	} {
 		if !strings.Contains(got, want) {
@@ -76,13 +76,13 @@ func TestBranchesPaginatesAndProjectsElNombre(t *testing.T) {
 	}
 }
 
-func TestBranchesAvisaSinProyecto(t *testing.T) {
+func TestBranchesWarnsWithoutProject(t *testing.T) {
 	dir := t.TempDir()
 	bin, _ := recorder(t, dir, "gh")
 
 	names, warns := New("github.com", bin).Branches(context.Background(), model.RepoRef{})
 	if len(names) != 0 {
-		t.Errorf("Branches = %v, want lista vacía", names)
+		t.Errorf("Branches = %v, want an empty list", names)
 	}
 	if !hasKind(warns, "notfound") {
 		t.Errorf("Branches = %+v, want notfound", warns)

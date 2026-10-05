@@ -54,7 +54,7 @@ const ghSearchFixture = `{
 func TestParseGHGraphQLSearch(t *testing.T) {
 	items, page, err := ParseGHGraphQLSearch(ghSearchFixture)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 2 {
 		t.Fatalf("items = %d, want 2", len(items))
@@ -87,10 +87,10 @@ func TestParseGHGraphQLSearch(t *testing.T) {
 	}
 
 	if items[1].Number != 43 || items[1].Ref.Project != "acme/lib" || items[1].State != "OPEN" {
-		t.Errorf("segundo ítem inesperado: %+v", items[1])
+		t.Errorf("unexpected second item: %+v", items[1])
 	}
 	if items[1].Checks.State != model.ChecksUnknown {
-		t.Errorf("checks del segundo ítem = %+v", items[1].Checks)
+		t.Errorf("the second item's checks = %+v", items[1].Checks)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestParseGHGraphQLSearchSinglePR(t *testing.T) {
 	}}}}`
 	items, _, err := ParseGHGraphQLSearch(raw)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 1 || items[0].Number != 9 {
 		t.Fatalf("items = %+v", items)
@@ -112,7 +112,7 @@ func TestParseGHGraphQLSearchSinglePR(t *testing.T) {
 func TestParseGHGraphQLSearchErrors(t *testing.T) {
 	_, _, err := ParseGHGraphQLSearch(`{"errors":[{"message":"boom"}]}`)
 	if err == nil {
-		t.Fatal("se esperaba error de GraphQL")
+		t.Fatal("a GraphQL error was expected")
 	}
 	assertParseError(t, err)
 }
@@ -120,7 +120,7 @@ func TestParseGHGraphQLSearchErrors(t *testing.T) {
 func TestParseGHGraphQLSearchMalformed(t *testing.T) {
 	_, _, err := ParseGHGraphQLSearch("not json")
 	if err == nil {
-		t.Fatal("se esperaba error de parseo")
+		t.Fatal("a parse error was expected")
 	}
 	assertParseError(t, err)
 }
@@ -144,7 +144,7 @@ const ghAuthoredFixture = `{
 func TestParseGHAuthored(t *testing.T) {
 	items, err := ParseGHAuthored(ghAuthoredFixture)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("items = %d, want 1", len(items))
@@ -169,7 +169,7 @@ func TestParseGHChecks(t *testing.T) {
 	]`
 	c, err := ParseGHChecks(raw)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if c.State != model.ChecksFailing || c.Total != 3 || c.Failing != 1 || c.Pending != 1 {
 		t.Errorf("checks = %+v", c)
@@ -196,7 +196,7 @@ const glGraphQLFixture = `{
 func TestParseGLGraphQL(t *testing.T) {
 	items, page, err := ParseGLGraphQL(glGraphQLFixture)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 3 {
 		t.Fatalf("items = %d, want 3", len(items))
@@ -248,7 +248,7 @@ func TestGLReviewDecisionFromApproved(t *testing.T) {
 
 	items, _, _ = ParseGLGraphQL(raw(false))
 	if items[0].ReviewDecision != "" {
-		t.Errorf("reviewDecision = %q, want vacío (desconocido)", items[0].ReviewDecision)
+		t.Errorf("reviewDecision = %q, want empty (unknown)", items[0].ReviewDecision)
 	}
 }
 
@@ -265,7 +265,7 @@ func TestParseGLMRList(t *testing.T) {
 	]`
 	items, err := ParseGLMRList(raw)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("items = %d, want 1", len(items))
@@ -284,13 +284,13 @@ func TestParseGLTodos(t *testing.T) {
 	]`
 	items, total, err := ParseGLTodos(raw)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("items = %d, want 1 (solo menciones de MR)", len(items))
+		t.Fatalf("items = %d, want 1 (only MR mentions)", len(items))
 	}
 	if total != 3 {
-		t.Errorf("total = %d, want 3 (todos de la página)", total)
+		t.Errorf("total = %d, want 3 (the page's todos)", total)
 	}
 	it := items[0]
 	if it.Section != model.SectionMentions || it.Number != 3 || it.Ref.Project != "grp/proj" {
@@ -339,11 +339,11 @@ func TestParseGHChecksBuckets(t *testing.T) {
 		raw  string
 		want model.CheckState
 	}{
-		{"cancel falla", `[{"name":"a","state":"CANCELLED","bucket":"cancel"}]`, model.ChecksFailing},
-		{"skipping no falla", `[{"name":"a","state":"SKIPPED","bucket":"skipping"}]`, model.ChecksPassing},
+		{"cancel fails", `[{"name":"a","state":"CANCELLED","bucket":"cancel"}]`, model.ChecksFailing},
+		{"skipping does not fail", `[{"name":"a","state":"SKIPPED","bucket":"skipping"}]`, model.ChecksPassing},
 		{"pending", `[{"name":"a","state":"PENDING","bucket":"pending"}]`, model.ChecksPending},
 		{"pass", `[{"name":"a","state":"SUCCESS","bucket":"pass"}]`, model.ChecksPassing},
-		{"sin bucket usa estado", `[{"name":"a","state":"FAILURE"}]`, model.ChecksFailing},
+		{"without bucket uses the state", `[{"name":"a","state":"FAILURE"}]`, model.ChecksFailing},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -360,37 +360,37 @@ func TestParseGHChecksBuckets(t *testing.T) {
 
 // A parse error has to say WHAT failed as well as where: without the cause, "invalid JSON"
 // says nothing.
-func TestParseErrorDiceQueYDonde(t *testing.T) {
+func TestParseErrorSaysWhatAndWhere(t *testing.T) {
 	_, _, err := ParseGHGraphQLSearch("{")
 	if err == nil {
-		t.Fatal("se esperaba error de parseo")
+		t.Fatal("a parse error was expected")
 	}
 	if got := err.Error(); !strings.HasPrefix(got, "parse gh-graphql: invalid JSON: ") || got == "parse gh-graphql: invalid JSON: " {
-		t.Errorf("Error() = %q, want el motivo con la causa del unmarshal", got)
+		t.Errorf("Error() = %q, want the reason with the unmarshal cause", got)
 	}
 
-	sinCausa := (&Error{Tool: "gh-graphql", Msg: "boom"}).Error()
-	if sinCausa != "parse gh-graphql: boom" {
-		t.Errorf("Error() sin causa = %q, want %q", sinCausa, "parse gh-graphql: boom")
+	noCause := (&Error{Tool: "gh-graphql", Msg: "boom"}).Error()
+	if noCause != "parse gh-graphql: boom" {
+		t.Errorf("Error() with no cause = %q, want %q", noCause, "parse gh-graphql: boom")
 	}
 }
 
 // A CheckRun's `status` is the in-progress signal and its `conclusion` the finished one.
-func TestGHRollupDistinguePendienteDeTerminado(t *testing.T) {
+func TestGHRollupTellsPendingApartFromFinished(t *testing.T) {
 	raw := `{"data":{"repository":{"pullRequest":{"number":1,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[
 		{"__typename":"CheckRun","status":"IN_PROGRESS","conclusion":""},
 		{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"}
 	]}}}}]}}}}}`
 	items, _, err := ParseGHGraphQLSearch(raw)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("items = %d, want 1", len(items))
 	}
 	c := items[0].Checks
 	if c.Total != 2 || c.Pending != 1 || c.Failing != 0 || c.State != model.ChecksPending {
-		t.Errorf("checks = %+v, want 1 de 2 pendiente y estado pending", c)
+		t.Errorf("checks = %+v, want 1 of 2 pending and state pending", c)
 	}
 }
 
@@ -402,7 +402,7 @@ func TestSplitRepoURL(t *testing.T) {
 		{"https://api.github.com/repos/acme/lib", "acme", "lib"},
 		{"https://api.github.com/repos/acme/lib/", "acme", "lib"},
 		{"/repos/acme/lib", "acme", "lib"},
-		{"repos/acme/lib", "", ""}, // sin el separador con barra inicial no es la misma ruta
+		{"repos/acme/lib", "", ""}, // without the leading-slash separator it is not the same path
 		{"https://api.github.com/user", "", ""},
 		{"", "", ""},
 	}
@@ -447,7 +447,7 @@ func TestParseGHGraphQLSearchUnionFragments(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("items = %d, want 1 (el nodo no-PR se descarta)", len(items))
+		t.Fatalf("items = %d, want 1 (the non-PR node is discarded)", len(items))
 	}
 	c := items[0].Checks
 	if c.State != model.ChecksFailing || c.Total != 2 || c.Failing != 1 {
@@ -482,7 +482,7 @@ const glReviewRequestedRealFixture = `{
 func TestParseGLGraphQLStringIID(t *testing.T) {
 	items, page, err := ParseGLGraphQL(glReviewRequestedRealFixture)
 	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("items = %d, want 1", len(items))
@@ -491,13 +491,13 @@ func TestParseGLGraphQLStringIID(t *testing.T) {
 		t.Errorf("Number = %d, want 1012", items[0].Number)
 	}
 	if items[0].Section != model.SectionReview || items[0].ReviewKind != model.ReviewRequested {
-		t.Errorf("sección/kind = %v/%v", items[0].Section, items[0].ReviewKind)
+		t.Errorf("section/kind = %v/%v", items[0].Section, items[0].ReviewKind)
 	}
 	if items[0].Ref.Project != "grp/sub/proj" || items[0].Ref.Owner != "grp/sub" {
 		t.Errorf("ref = %+v", items[0].Ref)
 	}
 	if page.More || page.Next == "" {
-		t.Errorf("pageInfo = %+v (More=false con endCursor string)", page)
+		t.Errorf("pageInfo = %+v (More=false with a string endCursor)", page)
 	}
 }
 
@@ -515,10 +515,10 @@ func TestGLDiffStatsSumsPerFileEntries(t *testing.T) {
 	}
 	d := items[0].Diff
 	if !d.Known {
-		t.Fatalf("diffstat presente debería ser conocido: %+v", d)
+		t.Fatalf("a present diffstat should be known: %+v", d)
 	}
 	if d.Additions != 42 || d.Deletions != 1 || d.Files != 2 {
-		t.Errorf("diffstat = %+v, want +42 -1 en 2 ficheros (sumado, no la primera entrada)", d)
+		t.Errorf("diffstat = %+v, want +42 -1 in 2 files (summed, not the first entry)", d)
 	}
 	if d.Total() != 43 {
 		t.Errorf("Total = %d, want 43", d.Total())
@@ -533,7 +533,7 @@ func TestGLDiffStatsEmptyVsAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d := items[0].Diff; !d.Known || d.Total() != 0 || d.Files != 0 {
-		t.Errorf("diffStats vacío = %+v, want conocido y 0/0", d)
+		t.Errorf("empty diffStats = %+v, want known and 0/0", d)
 	}
 
 	without := `{"data":{"project":{"mergeRequest":{"iid":"7"}}}}`
@@ -542,7 +542,7 @@ func TestGLDiffStatsEmptyVsAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d := items[0].Diff; d.Known {
-		t.Errorf("diffStats ausente = %+v, want desconocido", d)
+		t.Errorf("absent diffStats = %+v, want unknown", d)
 	}
 }
 
@@ -567,7 +567,7 @@ func TestGHDiffStatFromScalarFields(t *testing.T) {
 		t.Fatalf("items = %d, want 1", len(items))
 	}
 	if d := items[0].Diff; !d.Known || d.Additions != 381 || d.Deletions != 36 || d.Files != 11 {
-		t.Errorf("diffstat = %+v, want +381 -36 en 11 ficheros", d)
+		t.Errorf("diffstat = %+v, want +381 -36 in 11 files", d)
 	}
 }
 
@@ -578,7 +578,7 @@ func TestGHDiffStatAbsentIsUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d := items[0].Diff; d.Known {
-		t.Errorf("diffstat ausente = %+v, want desconocido", d)
+		t.Errorf("absent diffstat = %+v, want unknown", d)
 	}
 }
 
@@ -589,7 +589,7 @@ func TestGHDiffStatZeroIsKnown(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d := items[0].Diff; !d.Known || d.Total() != 0 {
-		t.Errorf("diffstat 0/0 = %+v, want conocido y total 0", d)
+		t.Errorf("diffstat 0/0 = %+v, want known and total 0", d)
 	}
 }
 
@@ -599,7 +599,7 @@ func TestGLRESTAndTodosHaveNoDiffStat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d := mrs[0].Diff; d.Known {
-		t.Errorf("REST mr list diffstat = %+v, want desconocido", d)
+		t.Errorf("REST mr list diffstat = %+v, want unknown", d)
 	}
 
 	todos, _, err := ParseGLTodos(`[{"id":1,"action_name":"mentioned","target_type":"MergeRequest",
@@ -611,7 +611,7 @@ func TestGLRESTAndTodosHaveNoDiffStat(t *testing.T) {
 		t.Fatalf("todos = %d, want 1", len(todos))
 	}
 	if d := todos[0].Diff; d.Known {
-		t.Errorf("todos diffstat = %+v, want desconocido", d)
+		t.Errorf("todos diffstat = %+v, want unknown", d)
 	}
 }
 

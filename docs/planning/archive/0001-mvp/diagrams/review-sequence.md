@@ -1,50 +1,51 @@
-# Secuencia — montaje del layout de review y loop de comentarios
+# Sequence — mounting the review layout and the comment loop
 
-Recorrido de F2 desde la selección del ítem hasta el loop comento→agente.
-Derivado de `behavior.feature` y del ADR `docs/adr/0001-worktree-provisioning.md`.
+F2 path from the item selection to the comment→agent loop.
+Derived from `behavior.feature` and the ADR
+`docs/adr/0001-worktree-provisioning.md`.
 
 ```mermaid
 sequenceDiagram
-    actor U as Usuario
+    actor U as User
     participant T as TUI prdash
     participant RR as reporesolver
     participant G as git
     participant H as herdr
     participant TU as TUICR
     participant HK as Hunk
-    participant AG as agente opencode
+    participant AG as opencode agent
 
-    U->>T: montar review del ítem
+    U->>T: mount the review of the item
     T->>RR: Resolve(repo)
 
-    alt repo no clonado
+    alt repo not cloned
         RR->>G: git clone --bare → XDG data/repos/...
     end
 
-    RR->>G: fetch del ref de review
+    RR->>G: fetch of the review ref
     Note right of G: refs/pull/N/head (GH)<br/>refs/merge-requests/N/head (GL)
-    RR->>G: crear rama local de trabajo
-    RR-->>T: ruta local + rama
+    RR->>G: create the local working branch
+    RR-->>T: local path + branch
 
     alt HERDR_ENV=1
         T->>H: herdr worktree create --branch <local> --path <dest>
-        H-->>T: worktree ligado a workspace
-        T->>H: abrir layout (3 panes)
+        H-->>T: worktree linked to workspace
+        T->>H: open layout (3 panes)
         H->>TU: pane tuicr pr N
         H->>HK: pane hunk session review
         H->>AG: pane opencode agent
-    else fuera de Herdr
+    else outside Herdr
         T->>G: git worktree add
-        T-->>U: aviso: layout requiere Herdr
+        T-->>U: warning: layout requires Herdr
     end
 
-    U->>TU: escribe comentario
-    U->>HK: escribe comentario
-    AG->>TU: lee comentarios (JSON)
-    AG->>HK: lee comentarios (JSON)
-    AG->>G: aplica cambios en el worktree
-    AG-->>U: resultado visible en el pane
+    U->>TU: writes a comment
+    U->>HK: writes a comment
+    AG->>TU: reads comments (JSON)
+    AG->>HK: reads comments (JSON)
+    AG->>G: applies changes in the worktree
+    AG-->>U: result visible in the pane
 
-    Note over T,H: al cerrar, el worktree se conserva (limpieza explícita)
-    Note over RR,T: sin permisos de clon/fetch → error claro, sin restos
+    Note over T,H: on close, the worktree is kept (explicit cleanup)
+    Note over RR,T: no clone/fetch permissions → clear error, no leftovers
 ```

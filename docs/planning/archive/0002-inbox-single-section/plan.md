@@ -1,205 +1,216 @@
-# 0002 — Inbox de una sola sección con leyenda de conteos — Plan
+# 0002 — Single-section inbox with a count legend — Plan
 
 adr_required: true
-adr_reason: la feature elimina la cabecera interna de sección, que es justo donde el ADR 0002 (Accepted) fija que vive el prefijo de ruta común; reubicarlo es una decisión de diseño con alternativas reales descartadas, y además cambia el modelo de navegación (una sección activa en vez de un cursor plano cross-sección).
+adr_reason: the feature removes the internal section header, which is exactly where ADR 0002 (Accepted) fixes that the common path prefix lives; relocating it is a design decision with real discarded alternatives, and it also changes the navigation model (one active section instead of a flat cross-section cursor).
 adr_title: adr-0004-inbox-single-section
 adr_path: docs/adr/0004-inbox-single-section.md
-adr_note: el ADR supersede la cláusula del ADR 0002 que ancla el prefijo en la cabecera de sección; el resto del ADR 0002 (cálculo del prefijo, ancho de ITEM, recorte por la cola) sigue vigente.
+adr_note: the ADR supersedes the clause of ADR 0002 that anchors the prefix in the section header; the rest of ADR 0002 (prefix computation, ITEM width, tail truncation) stays in force.
 
-## Resultado esperado
+## Expected outcome
 
-El Inbox deja de pintar las tres secciones apiladas: muestra **una sola sección
-activa** (`Mine`/`Assigned`/`Mentioned`), con **Assigned** al abrir, y `tab`
-cicla `Assigned → Mentioned → Mine → Assigned`. El borde superior izquierdo del
-Inbox lleva una **leyenda de conteos** con el formato exacto
-`Mine (9) · Assigned (4) · Mentioned (0)`, con la activa resaltada, que sustituye
-al título `Inbox`. El **prefijo de ruta común (ADR 0002) se conserva**: con una
-única sección visible, todas las filas comparten sección, así que el prefijo se
-calcula sobre la activa y se sigue mostrando. Cada sección recuerda su cursor y
-su scroll. El modo `--print`, el snapshot/cache y la API de `[keybindings]` no
-cambian.
+The Inbox stops painting the three sections stacked: it shows **a single
+active section** (`Mine`/`Assigned`/`Mentioned`), with **Assigned** on
+opening, and `tab` cycles `Assigned → Mentioned → Mine → Assigned`. The
+top-left border of the Inbox carries a **count legend** with the exact format
+`Mine (9) · Assigned (4) · Mentioned (0)`, with the active one highlighted,
+which replaces the `Inbox` title. The **common path prefix (ADR 0002) is
+kept**: with a single section visible, all rows share a section, so the prefix
+is computed on the active one and is still shown. Each section remembers its
+cursor and its scroll. The `--print` mode, the snapshot/cache and the
+`[keybindings]` API do not change.
 
-## Alcance
+## Scope
 
-- **In**: sección activa + default Assigned + ciclo de `tab`; leyenda de conteos
-  en el borde superior izquierdo; sin cabecera interna de sección; prefijo común
-  de la activa visible; cursor/scroll por sección; `(empty)`, `loading more…` y
-  avisos de la sección activa.
-- **Out**: `inbox.Build` (dedupe/autoridad) intacto; `--print` intacto; formato
-  de cache intacto; API de config intacta; adapters de forge intactos; **el
-  prefijo seleccionable/toggleable es una feature POSTERIOR** (aquí solo se deja
-  la costura, sin config ni teclas nuevas).
+- **In**: active section + Assigned default + `tab` cycle; count legend on the
+  top-left border; no internal section header; common prefix of the visible
+  active section; per-section cursor/scroll; `(empty)`, `loading more…` and
+  warnings of the active section.
+- **Out**: `inbox.Build` (dedupe/authority) untouched; `--print` untouched;
+  cache format untouched; config API untouched; forge adapters untouched;
+  **the selectable/toggleable prefix is a LATER feature** (here only the seam
+  is left open, with no new config nor keys).
 
-## Enfoque (alto nivel)
+## Approach (high level)
 
-Cambio de **vista y estado de UI** en `internal/tui`, más una etiqueta corta en
-`forge/model`. El pipeline de datos (streams → `inbox.Build` → secciones) no se
-toca: solo decide **qué sección se pinta** y **cómo se compone la lista**. El
-estado pasa de un cursor plano sobre todas las filas a **una sección activa con
-su propio cursor/scroll**, guardando la posición de cada sección al cambiar.
+A **view and UI state** change in `internal/tui`, plus a short label in
+`forge/model`. The data pipeline (streams → `inbox.Build` → sections) is not
+touched: it only decides **which section is painted** and **how the list is
+composed**. The state moves from a flat cursor over all rows to **one active
+section with its own cursor/scroll**, saving the position of each section when
+changing.
 
-## Decisiones clave
+## Key decisions
 
-1. **Sección activa única con estado propio.** `Model` gana una sección activa
-   (`activeSection`, default `model.SectionReview` = Assigned) y un cursor/scroll
-   por sección. `rows()`/`selected()`/`clampCursor()` operan sobre la sección
-   activa. Al cambiar de sección se guarda la posición actual y se restaura la de
-   la destino (default 0/0), acotada al contenido nuevo.
+1. **Single active section with its own state.** `Model` gains an active
+   section (`activeSection`, default `model.SectionReview` = Assigned) and a
+   per-section cursor/scroll. `rows()`/`selected()`/`clampCursor()` operate on
+   the active section. On changing section the current position is saved and
+   the destination one is restored (default 0/0), bounded to the new content.
 
-2. **`tab` cicla, reutilizando `section-next`.** Se conserva la acción y su tecla
-   por defecto (`tab`); cambia su efecto: avanza la sección activa en el orden
-   `Assigned → Mentioned → Mine → Assigned` (orden de **ciclo** distinto del orden
-   de **leyenda**, ver decisión 3). **Cicla siempre**, aunque la sección destino
-   esté vacía (el usuario quiere poder ver su estado vacío y su conteo).
-   `gotoNextSection`, `sectionOffsets` y `sectionIndexAtCursor` quedan obsoletos y
-   se eliminan. La barra de atajos (`hintOrder`, label `section`) y la API de
-   `[keybindings]` no cambian.
+2. **`tab` cycles, reusing `section-next`.** The action and its default key
+   (`tab`) are kept; its effect changes: it advances the active section in the
+   order `Assigned → Mentioned → Mine → Assigned` (**cycle** order different
+   from the **legend** order, see decision 3). **It always cycles**, even if
+   the destination section is empty (the user wants to be able to see its
+   empty state and its count). `gotoNextSection`, `sectionOffsets` and
+   `sectionIndexAtCursor` become obsolete and are removed. The shortcuts bar
+   (`hintOrder`, label `section`) and the `[keybindings]` API do not change.
 
-3. **Leyenda en el borde superior izquierdo, sustituyendo `Inbox`.** Se compone
-   iterando `m.inbox.Sections` (que ya viene en orden `authored > review >
-   mentions` → `Mine · Assigned · Mentioned`) y se pasa como **título del borde**
-   de la caja del Inbox. Formato exacto:
-   `Mine (9) · Assigned (4) · Mentioned (0)`. La activa se pinta **resaltada**
-   (color/negrita) y las demás **atenuadas**. En terminal estrecho el borde ya
-   trunca el título (ANSI-aware) por la derecha, así que la caja no se descuadra.
+3. **Legend on the top-left border, replacing `Inbox`.** It is composed by
+   iterating `m.inbox.Sections` (which already comes in `authored > review >
+   mentions` order → `Mine · Assigned · Mentioned`) and it is passed as the
+   **border title** of the Inbox box. Exact format:
+   `Mine (9) · Assigned (4) · Mentioned (0)`. The active one is painted
+   **highlighted** (color/bold) and the others **dimmed**. On a narrow terminal
+   the border already truncates the title (ANSI-aware) on the right, so the box
+   does not go out of alignment.
 
-4. **Mapeo de etiquetas: `Legend()` sin tocar `String()`.** Se añade
-   `func (s model.Section) Legend() string` → `Mine`/`Assigned`/`Mentioned`, junto
-   a `String()`. Se **conserva** `String()` (`Created by me`/`Review / assigned`/
-   `Mentions`) porque lo usa `--print` (que no debe cambiar) y es la etiqueta
-   larga del modo de datos. La leyenda usa `Legend()`; el resto, `String()`.
+4. **Label mapping: `Legend()` without touching `String()`.**
+   `func (s model.Section) Legend() string` → `Mine`/`Assigned`/`Mentioned`,
+   next to `String()`. `String()` (`Created by me`/`Review / assigned`/
+   `Mentions`) is **kept** because `--print` uses it (and it must not change)
+   and it is the long label of the data mode. The legend uses `Legend()`; the
+   rest, `String()`.
 
-5. **Dónde vive el prefijo de ruta común (propuesta).** En una **línea fija al
-   inicio del cuerpo de la lista**, atenuada, que contiene **solo el prefijo**
-   (p. ej. `  · APPCITTI/vsocial/backend/`), **sin título ni conteo**. Si la
-   sección activa no tiene prefijo común (un solo ítem, o nada en común), la
-   línea no se pinta y las celdas ITEM llevan la ruta completa recortada por la
-   cola (regla ya existente de ADR 0002).
-   - **Por qué**: mantiene la caja ITEM estrecha (las filas solo pintan el
-     sufijo), respeta el **formato exacto** de la leyenda (que es de conteos) y es
-     el sitio donde el prefijo ya estaba (era parte de la cabecera). Además es la
-     **costura natural para el futuro toggle/selección**: el prefijo se compone
-     como una unidad discreta desde una única fuente, así que una feature
-     posterior puede ocultarlo, alternarlo o hacerlo interactivo **sin tocar la
-     leyenda, el ancho de la tabla ni el cambio de sección**. No se añade config
-     ni teclas ahora.
-   - **Alternativas descartadas**:
-     - *En la leyenda del borde*: rompe el formato exacto y mezcla conteos de las
-       tres secciones con la ruta de una sola; la leyenda es de conteos.
-     - *En la cabecera `PRDash`*: está lejos de las filas, describe estado de
-       forges/refresco, y el prefijo cambia con la sección activa → confuso.
-     - *Ruta completa en cada celda ITEM (abandonar el prefijo)*: pierde
-       exactamente la legibilidad que motivó el ADR 0002 y contradice el motivo
-       declarado por el usuario para esta feature.
-     - *Reintroducir una cabecera de sección solo con el prefijo*: es lo mismo que
-       la opción elegida, pero conservando semántica de "header" y el conteo
-       duplicado; se descarta por nomenclatura y por duplicar la leyenda.
+5. **Where the common path prefix lives (proposal).** On a **fixed line at the
+   start of the list body**, dimmed, containing **only the prefix** (e.g.
+   `  · APPCITTI/vsocial/backend/`), **with no title nor count**. If the active
+   section has no common prefix (a single item, or nothing in common), the line
+   is not painted and the ITEM cells carry the full path truncated from the
+   tail (existing ADR 0002 rule).
+   - **Why**: it keeps the ITEM box narrow (rows only paint the suffix), it
+     respects the **exact format** of the legend (which is about counts) and it
+     is the place where the prefix already was (it was part of the header).
+     Also it is the **natural seam for the future toggle/selection**: the prefix
+     is composed as a discrete unit from a single source, so a later feature
+     can hide it, toggle it or make it interactive **without touching the
+     legend, the table width nor the section change**. No config nor keys are
+     added now.
+   - **Discarded alternatives**:
+     - *In the border legend*: it breaks the exact format and mixes the counts
+       of the three sections with the path of only one; the legend is about
+       counts.
+     - *In the `PRDash` header*: it is far from the rows, it describes
+       forge/refresh state, and the prefix changes with the active section →
+       confusing.
+     - *Full path in every ITEM cell (dropping the prefix)*: it loses exactly
+       the readability that motivated ADR 0002 and contradicts the reason
+       declared by the user for this feature.
+     - *Reintroduce a section header with only the prefix*: it is the same as
+       the chosen option but keeping "header" semantics and the duplicated
+       count; it is discarded for nomenclature and for duplicating the legend.
 
-6. **`newRefLayout` pasa a la sección activa.** Hoy `listLines()` llama
-   `newRefLayout(m.inbox.Sections)` y dimensiona ITEM por el sufijo más largo de
-   **todas** las secciones. Ahora solo se pinta una, así que debe recibir **solo
-   la sección activa** (una rebanada de un elemento): así el prefijo y el ancho de
-   ITEM son los de la activa, y no se gasta ancho en secciones que no se ven. Se
-   **conserva la firma** `newRefLayout([]inbox.Section)` para no romper los tests
-   unitarios de `refcol`; cambia el **llamador** y el valor pasado.
+6. **`newRefLayout` moves to the active section.** Today `listLines()` calls
+   `newRefLayout(m.inbox.Sections)` and sizes ITEM by the longest suffix of
+   **all** the sections. Now only one is painted, so it must receive **only the
+   active section** (a one-element slice): that way the prefix and the ITEM
+   width are the active section's, and no width is spent on sections that are
+   not seen. The `newRefLayout([]inbox.Section)` **signature is kept** so the
+   `refcol` unit tests do not break; the **caller** and the passed value change.
 
-7. **Estados de la sección activa (puntos abiertos resueltos).**
-   - **`(empty)`**: se muestra una línea en la lista cuando la activa no tiene
-     ítems y no hay avisos; la leyenda muestra su conteo 0.
-   - **`loading more…`**: es de la **sección activa** y va como línea atenuada al
-     final del cuerpo de la lista (no en la leyenda, que tiene formato exacto ni
-     en `PRDash`, que es de forges). Si la sección que pagina no es la activa, no
-     se muestra; al volver a ella, reaparece.
-   - **Avisos (`sectionProblems`)**: se muestran **solo de la sección activa**,
-     como hoy (`⚠ <forge>: could not be queried (…)`), al inicio del cuerpo. Los
-     avisos de secciones no activas no se pintan (al tabular a esa sección
-     aparecen). Riesgo asumido y documentado.
+7. **States of the active section (open points resolved).**
+   - **`(empty)`**: a line is shown in the list when the active section has no
+     items and there are no warnings; the legend shows its count 0.
+   - **`loading more…`**: it belongs to the **active section** and goes as a
+     dimmed line at the end of the list body (not in the legend, which has an
+     exact format, nor in `PRDash`, which is about forges). If the section
+     paginating is not the active one, it is not shown; on returning to it, it
+     reappears.
+   - **Warnings (`sectionProblems`)**: they are shown **only for the active
+     section**, as today (`⚠ <forge>: could not be queried (…)`), at the start
+     of the body. Warnings of non-active sections are not painted (they appear
+     on tabbing to that section). Accepted and documented risk.
 
-8. **Sin cambios en cache y en `--print`.** El cache indexa por
-   `(forge, section, kind)` y no depende de qué se pinta → intacto. `--print`
-   itera `box.Sections` y usa `Section.String()` → intacto (por eso no se toca
-   `String()`). Se verifica, no se modifica.
+8. **No changes in cache nor in `--print`.** The cache indexes by
+   `(forge, section, kind)` and does not depend on what is painted →
+   untouched. `--print` iterates `box.Sections` and uses `Section.String()` →
+   untouched (that is why `String()` is not touched). It is verified, not
+   modified.
 
-## Ficheros afectados
+## Affected files
 
-**Producción**
+**Production**
 
-- `internal/forge/model/model.go`: añadir `Section.Legend()`; no tocar `String()`.
-- `internal/tui/app.go`: `activeSection` (default `SectionReview`) + cursor/scroll
-  por sección; `rows()`/`selected()`/`clampCursor()` sobre la activa; helpers de
-  sección activa, prefijo de la activa y descriptores de la leyenda.
-- `internal/tui/update.go`: `case "section-next"` → ciclo de sección activa;
-  eliminar `gotoNextSection`/`sectionOffsets`/`sectionIndexAtCursor`;
-  `moveCursor`/`goTop`/`pageBy`/`syncScroll` sobre la activa.
-- `internal/tui/list.go`: `listLines()` compone **solo la activa** (línea de
-  prefijo opcional + avisos + header de columnas + filas, o `(empty)`, + `loading
-  more…`); sin título de sección; `newRefLayout` con la sección activa.
-- `internal/tui/sections.go`: `listSection()` pasa la **leyenda** como título del
-  borde (con resaltado) en vez de `"Inbox"`.
-- `internal/tui/refcol.go`: `newRefLayout` sigue igual; ajustar comentarios y el
-  uso desde `list.go`.
-- `internal/tui/styles.go`: estilo del tramo activo de la leyenda y de la línea
-  de prefijo (reutilizar `styleDim` + un resaltado).
-- `internal/tui/bordered/bordered.go`: **sin cambios** (admite título ya
-  estilizado); verificar el caso ANSI.
-- `internal/config/config.go`: **sin cambios** (se mantiene `section-next`/`tab`).
-- `cmd/prdash/print.go`: **sin cambios**.
-- `docs/adr/0004-inbox-single-section.md`: nuevo ADR (supersede la cláusula del
-  ADR 0002 sobre la cabecera).
+- `internal/forge/model/model.go`: add `Section.Legend()`; do not touch
+  `String()`.
+- `internal/tui/app.go`: `activeSection` (default `SectionReview`) +
+  per-section cursor/scroll; `rows()`/`selected()`/`clampCursor()` on the
+  active one; active-section helpers, active section prefix and legend
+  descriptors.
+- `internal/tui/update.go`: `case "section-next"` → active section cycle;
+  remove `gotoNextSection`/`sectionOffsets`/`sectionIndexAtCursor`;
+  `moveCursor`/`goTop`/`pageBy`/`syncScroll` on the active one.
+- `internal/tui/list.go`: `listLines()` composes **only the active one**
+  (optional prefix line + warnings + column header + rows, or `(empty)`, +
+  `loading more…`); no section title; `newRefLayout` with the active section.
+- `internal/tui/sections.go`: `listSection()` passes the **legend** as the
+  border title (with highlight) instead of `"Inbox"`.
+- `internal/tui/refcol.go`: `newRefLayout` stays the same; adjust comments and
+  the use from `list.go`.
+- `internal/tui/styles.go`: style for the active span of the legend and for the
+  prefix line (reuse `styleDim` + a highlight).
+- `internal/tui/bordered/bordered.go`: **no changes** (it accepts an already
+  styled title); verify the ANSI case.
+- `internal/config/config.go`: **no changes** (`section-next`/`tab` is kept).
+- `cmd/prdash/print.go`: **no changes**.
+- `docs/adr/0004-inbox-single-section.md`: new ADR (supersedes the ADR 0002
+  clause about the header).
 
-**Tests afectados / nuevos**
+**Affected / new tests**
 
-- `internal/tui/list_test.go`: reescribir `TestViewBoxesEverySection` (espera
-  `Inbox`) y los que asumen una lista plana; nuevos: leyenda exacta + resaltado,
-  `(empty)` de la activa, línea de prefijo.
-- `internal/tui/table_test.go`: reescribir `TestNavigationMovesCursor` y
-  `TestSectionNextHonorsRebind` (ciclo de sección activa); actualizar
+- `internal/tui/list_test.go`: rewrite `TestViewBoxesEverySection` (expects
+  `Inbox`) and the ones that assume a flat list; new: exact legend + highlight,
+  active `(empty)`, prefix line.
+- `internal/tui/table_test.go`: rewrite `TestNavigationMovesCursor` and
+  `TestSectionNextHonorsRebind` (active section cycle); update
   `newRefLayout(m.inbox.Sections)`.
-- `internal/tui/refcol_test.go`: reescribir los de integración sobre cabecera
+- `internal/tui/refcol_test.go`: rewrite the integration ones on the header
   (`TestListLinesMuestranElPrefijoEnLaCabecera`,
-  `TestListLinesSinPrefijoConservanLaRuta`); los unitarios de `newRefLayout`
-  se mantienen.
-- `internal/tui/app_test.go`: `TestPaginationIndicator` debe ser sobre la sección
-  activa (hoy usa authored con default Assigned); reescribir
-  `TestViewShowsThreeSectionsWithBothForges` (espera las 3 secciones a la vez) y
-  `TestSectionEmptyVsError` (espera varios `(empty)` simultáneos, ahora solo se
-  pinta el de la activa); conservar los de `sectionItems`.
-- `internal/forge/model/model_test.go`: caso de `Legend()`.
-- Nuevos: default Assigned; ciclo `tab`; cursor/scroll por sección; `loading
-  more…`/avisos de la activa; `--print` sin cambios; leyenda en ancho estrecho.
+  `TestListLinesWithNoPrefixKeepThePath`); the unit ones of `newRefLayout`
+  are kept.
+- `internal/tui/app_test.go`: `TestPaginationIndicator` must be on the active
+  section (today it uses authored with default Assigned); rewrite
+  `TestViewShowsThreeSectionsWithBothForges` (expects the 3 sections at once)
+  and `TestSectionEmptyVsError` (expects several simultaneous `(empty)`, now
+  only the active one is painted); keep the `sectionItems` ones.
+- `internal/forge/model/model_test.go`: `Legend()` case.
+- New: Assigned default; `tab` cycle; per-section cursor/scroll;
+  `loading more…`/warnings of the active one; `--print` unchanged; legend on a
+  narrow width.
 
-## Riesgos
+## Risks
 
-- **ANSI en el título del borde**: el borde envuelve el título con su color y los
-  tramos estilizados traen sus resets; verificar que ni el ancho ni el color de
-  relleno de la línea superior se rompen (se componen los tramos con estilos
-  completos, sin caracteres "desnudos").
-- **Prefijo + paginación**: el prefijo común puede encogerse al llegar más
-  páginas y ensanchar ITEM **una vez** (comportamiento ya aceptado en ADR 0002).
-- **Avisos de secciones no activas**: dejan de verse en la lista (solo su
-  conteo). Aceptado; el aviso aparece al tabular a esa sección.
-- **Tests acoplados a la lista multi-sección**: el alcance de reescritura de tests
-  es parte del trabajo, no un efecto colateral menor.
-- **`syncScroll`/`scrollFor`**: operan ahora sobre las líneas de la activa;
-  asegurar que el guardado/restauración de scroll por sección no deje el cursor
-  fuera de la ventana.
+- **ANSI in the border title**: the border wraps the title with its color and
+  the styled spans bring their resets; verify that neither the width nor the
+  fill color of the top line break (the spans are composed with full styles,
+  no "bare" characters).
+- **Prefix + pagination**: the common prefix can shrink when more pages arrive
+  and widen ITEM **once** (behavior already accepted in ADR 0002).
+- **Warnings of non-active sections**: they stop being visible in the list
+  (only their count). Accepted; the warning appears when tabbing to that
+  section.
+- **Tests coupled to the multi-section list**: the test rewrite scope is part
+  of the work, not a minor side effect.
+- **`syncScroll`/`scrollFor`**: they now operate on the active section's
+  lines; make sure that saving/restoring per-section scroll does not leave the
+  cursor outside the window.
 
-## Orden de trabajo (grueso)
+## Work order (rough)
 
-1. Estado: `activeSection` + cursor/scroll por sección + helpers; adaptar
-   `app.go`/`update.go`; eliminar los helpers obsoletos.
-2. Render: `listLines` de una sola sección con línea de prefijo; `newRefLayout`
-   con la activa; `listSection` con la leyenda.
-3. Etiquetas: `model.Section.Legend()`; composición y resaltado de la leyenda.
-4. Puntos abiertos: `(empty)`, `loading more…` y avisos de la activa.
-5. Tests: reescribir los acoplados y añadir los nuevos.
-6. ADR 0004 y cierre.
+1. State: `activeSection` + per-section cursor/scroll + helpers; adapt
+   `app.go`/`update.go`; remove the obsolete helpers.
+2. Render: single-section `listLines` with prefix line; `newRefLayout` with the
+   active one; `listSection` with the legend.
+3. Labels: `model.Section.Legend()`; legend composition and highlight.
+4. Open points: `(empty)`, `loading more…` and warnings of the active one.
+5. Tests: rewrite the coupled ones and add the new ones.
+6. ADR 0004 and closing.
 
-## Verificaciones
+## Verifications
 
-- `go build ./... && go vet ./... && go test ./...` (runner del repo, `make test`).
-- Smoke manual de TUI (tmux + `capture-pane`): default Assigned; ciclo de `tab`;
-  leyenda exacta con resaltado; prefijo visible de la activa; posición recordada
-  al volver; `(empty)` y `loading more…`.
-- `prdash --print` sigue mostrando las tres secciones con nombres largos.
-- Rebuild del binario instalado (`~/.local/bin/prdash`) al terminar.
+- `go build ./... && go vet ./... && go test ./...` (repo runner, `make test`).
+- Manual TUI smoke (tmux + `capture-pane`): Assigned default; `tab` cycle;
+  exact legend with highlight; active section prefix visible; position
+  remembered on return; `(empty)` and `loading more…`.
+- `prdash --print` keeps showing the three sections with long names.
+- Rebuild of the installed binary (`~/.local/bin/prdash`) when done.

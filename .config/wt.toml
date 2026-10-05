@@ -1,41 +1,41 @@
-# Worktrunk — configuración de PROYECTO para prdash
+# Worktrunk — PROJECT config for prdash
 #
-# Este fichero se versiona: es lo que hereda el equipo. Los hooks de proyecto se
-# AÑADEN a los de ~/.config/worktrunk/config.toml, y se ejecutan con los globales
-# primero. Los escalares (worktree-path) sí se sustituyen.
+# This file is versioned: it is what the team inherits. Project hooks are ADDED
+# to those in ~/.config/worktrunk/config.toml, and they run after the global ones.
+# Scalars (worktree-path) are overridden.
 #
-# prdash es Go, no Node. Nada de pnpm aquí: la ceremony es mod download, build
-# cache y gofmt. La ruta de los worktrees la pone el global (`<repo>/.worktrees/`).
+# prdash is Go, not Node. No pnpm here: the ceremony is mod download, build
+# cache and gofmt. The worktree path comes from the global config (`<repo>/.worktrees/`).
 
 
-# Al crear el worktree, antes de nada: resolver el módulo. La caché de módulos de
-# Go es global (~go/pkg/mod), así que esto solo descarga lo que falte. Corre
-# bloqueante pero es instantáneo si ya está descargado.
+# On worktree creation, before anything else: resolve the module. Go's module cache
+# is global (~go/pkg/mod), so this only downloads what is missing. It runs
+# blocking, but it is instant if everything is already downloaded.
 [pre-start]
 deps = "go mod download"
 
-# También al crear el worktree, pero en BACKGROUND (no bloquea).
-# La caché de compilación de Go es global, pero el primer build de un worktree
-# nuevo compila el repo entero desde cero. Calentarla aquí es lo que hace que el
-# primer `make test` del worktree tarde segundos en vez de medio minuto.
+# Also on worktree creation, but in the BACKGROUND (does not block).
+# Go's build cache is global, but the first build of a new worktree compiles the
+# whole repo from scratch. Warming it here is what makes the first `make test` of
+# the worktree take seconds instead of half a minute.
 [post-start]
 warm = "go build ./..."
 
 
-# Antes del squash commit, en wt merge. Barato y bloqueante: el formateo es
-# justo lo que más falla en un PR de Go, y el repo lo exige en `make test`.
+# Before the squash commit, in wt merge. Cheap and blocking: formatting is
+# exactly what fails most often in a Go PR, and the repo requires it in `make test`.
 [pre-commit]
-fmt = 'test -z "$(gofmt -l $(git ls-files "*.go"))" || { echo "gofmt pendiente en:"; gofmt -l $(git ls-files "*.go"); exit 1; }'
+fmt = 'test -z "$(gofmt -l $(git ls-files "*.go"))" || { echo "gofmt pending in:"; gofmt -l $(git ls-files "*.go"); exit 1; }'
 vet = "go vet ./..."
 
-# Tras el rebase, antes de mergear. Puerta de compilación: barata y atrapa el
-# error que más cuesta (no compila). La suite completa (`make test`, con -race)
-# se deja a mano: no bloquea el flujo diario.
+# After the rebase, before merging. Compilation gate: cheap, and it catches the
+# most expensive error (it does not compile). The full suite (`make test`, with
+# -race) is left to the human: it does not block the daily flow.
 [pre-merge]
 build = "go build ./..."
 
-# En la rama destino, tras mergear. `make install` deja el binario al día en
-# ~/.local/bin, que es justo "installing updated binaries" del doc de wt. Sin
-# esto, el `prdash` del PATH se queda en la versión anterior a cada merge.
+# On the target branch, after merging. `make install` keeps the binary current in
+# ~/.local/bin, which is exactly wt's "installing updated binaries" doc step.
+# Without it, the `prdash` on the PATH stays on the pre-merge version.
 [post-merge]
 install = "make install"

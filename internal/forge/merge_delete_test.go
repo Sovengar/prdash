@@ -23,13 +23,13 @@ func TestRunActionMergeAsksTheAdapterToDeleteTheBranch(t *testing.T) {
 		out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 10,
 			forge.MergeRequest{Mode: forge.Squash, DeleteBranch: want})
 		if !out.OK {
-			t.Fatalf("borrar=%v: outcome = %+v", want, out)
+			t.Fatalf("delete=%v: outcome = %+v", want, out)
 		}
 		if out.DeleteBranch != want {
 			t.Errorf("outcome.DeleteBranch = %v, want %v", out.DeleteBranch, want)
 		}
 		if got := fake.MergeDeleteCount(want); got != 1 {
-			t.Errorf("el adapter recibió %d merges con DeleteBranch=%v, want 1", got, want)
+			t.Errorf("the adapter received %d merges with DeleteBranch=%v, want 1", got, want)
 		}
 	}
 }
@@ -52,13 +52,13 @@ func TestRunActionKeepsTheMergeWhenOnlyTheDeleteFails(t *testing.T) {
 	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 11,
 		forge.MergeRequest{Mode: forge.Squash, DeleteBranch: true})
 	if !out.OK {
-		t.Fatalf("un merge que salió no puede reportarse como fallido: %+v", out)
+		t.Fatalf("a merge that went through cannot be reported as failed: %+v", out)
 	}
 	if out.Perm {
-		t.Error("no debe quedar registrado como denegado: el merge sí se puede hacer")
+		t.Error("it must not end up recorded as denied: the merge can be done")
 	}
 	if out.DeleteMsg == "" {
-		t.Error("falta el motivo por el que la rama no se borró")
+		t.Error("the reason the branch was not deleted is missing")
 	}
 }
 
@@ -75,10 +75,10 @@ func TestRunActionSaysNothingAboutTheBranchWithoutThePin(t *testing.T) {
 	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 12,
 		forge.MergeRequest{Mode: forge.Squash, DeleteBranch: true})
 	if out.OK {
-		t.Fatalf("sin pin no puede haber merge: %+v", out)
+		t.Fatalf("without a pin there can be no merge: %+v", out)
 	}
 	if out.DeleteMsg != "" {
-		t.Errorf("DeleteMsg = %q, want vacío: no hubo merge", out.DeleteMsg)
+		t.Errorf("DeleteMsg = %q, want empty: there was no merge", out.DeleteMsg)
 	}
 }
 
@@ -101,6 +101,6 @@ func TestRunActionDoesNotBlamTheBranchOnAForkPR(t *testing.T) {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if out.DeleteMsg == "" {
-		t.Error("un PR de fork no puede reportarse como rama borrada")
+		t.Error("a fork PR cannot be reported as branch-deleted")
 	}
 }

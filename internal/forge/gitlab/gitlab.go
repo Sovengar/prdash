@@ -116,7 +116,7 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 		return model.Item{}, []model.Warning{a.warn("", "parse", perr)}
 	}
 	if len(items) == 0 {
-		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("MR !%d no encontrado en %s", number, ref.Project))}
+		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("MR !%d not found in %s", number, ref.Project))}
 	}
 	it := items[0]
 	a.identity(&it)

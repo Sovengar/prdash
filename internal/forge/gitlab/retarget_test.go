@@ -17,25 +17,25 @@ func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 
 	warns := New("gitlab.example.com", bin).Retarget(context.Background(), mergeRef, 7, "release/2.0")
 	if len(warns) != 0 {
-		t.Fatalf("Retarget = %+v, want sin warnings", warns)
+		t.Fatalf("Retarget = %+v, want no warnings", warns)
 	}
 
 	got := strings.Join(readArgs(t, argsFile), " ")
 	// A nested project needs the %2F: without it the path splits in two and the request goes to the
 	// wrong place.
 	if want := "-X PUT projects/grp%2Fproj/merge_requests/7"; !strings.Contains(got, want) {
-		t.Errorf("argv = %q, want %q con el proyecto urlencoded", got, want)
+		t.Errorf("argv = %q, want %q with the project urlencoded", got, want)
 	}
 	if want := "-f target_branch=release/2.0"; !strings.Contains(got, want) {
-		t.Errorf("argv = %q, want el campo target_branch con la rama", got)
+		t.Errorf("argv = %q, want the target_branch field with the branch", got)
 	}
 	if strings.Contains(got, "mr update") {
-		t.Errorf("argv = %q, no debe usar `glab mr update`: es un comando de edición", got)
+		t.Errorf("argv = %q, must not use `glab mr update`: it is an editing command", got)
 	}
 	// The method has to be explicit: with -f glab falls back to POST, and a POST on the MR update
 	// route does not work.
 	if !strings.Contains(got, "--hostname gitlab.example.com") {
-		t.Errorf("argv = %q, want el host fijado", got)
+		t.Errorf("argv = %q, want the host pinned", got)
 	}
 }
 
@@ -45,10 +45,10 @@ func TestRetargetRefusesEmptyBranch(t *testing.T) {
 
 	warns := New("gitlab.example.com", bin).Retarget(context.Background(), mergeRef, 7, "  ")
 	if len(warns) == 0 || !strings.Contains(warns[0].Msg, "nothing to retarget to") {
-		t.Errorf("Retarget = %+v, want un motivo explícito", warns)
+		t.Errorf("Retarget = %+v, want an explicit reason", warns)
 	}
 	if _, err := os.Stat(argsFile); err == nil {
-		t.Errorf("Retarget llamó a la CLI: %q", readArgs(t, argsFile))
+		t.Errorf("Retarget called the CLI: %q", readArgs(t, argsFile))
 	}
 }
 
@@ -62,10 +62,10 @@ func TestBranchesPaginatesAsNDJSON(t *testing.T) {
 
 	names, warns := New("gitlab.example.com", bin).Branches(context.Background(), mergeRef)
 	if len(warns) != 0 {
-		t.Fatalf("Branches = %+v, want sin warnings", warns)
+		t.Fatalf("Branches = %+v, want no warnings", warns)
 	}
 	if strings.Join(names, ",") != "main,release/2.0" {
-		t.Errorf("Branches = %v, want las dos ramas en orden", names)
+		t.Errorf("Branches = %v, want the two branches in order", names)
 	}
 
 	got := strings.Join(readArgs(t, argsFile), " ")
@@ -73,7 +73,7 @@ func TestBranchesPaginatesAsNDJSON(t *testing.T) {
 		"projects/grp%2Fproj/repository/branches",
 		"per_page=100",
 		"--paginate",
-		"--output ndjson", // y no `--jq`, que glab no tiene
+		"--output ndjson", // and not `--jq`, which glab does not have
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("argv = %q, want %q", got, want)
@@ -81,26 +81,26 @@ func TestBranchesPaginatesAsNDJSON(t *testing.T) {
 	}
 }
 
-func TestBranchesAvisaSiLaSalidaNoSeEntiende(t *testing.T) {
+func TestBranchesWarnsWhenTheOutputIsUnreadable(t *testing.T) {
 	dir := t.TempDir()
-	bin := writeScript(t, dir, "glab", "#!/bin/sh\nprintf 'no soy json\\n'\n")
+	bin := writeScript(t, dir, "glab", "#!/bin/sh\nprintf 'I am not json\\n'\n")
 
 	names, warns := New("gitlab.example.com", bin).Branches(context.Background(), mergeRef)
 	if len(names) != 0 {
-		t.Errorf("Branches = %v, want lista vacía", names)
+		t.Errorf("Branches = %v, want an empty list", names)
 	}
 	if len(warns) == 0 || warns[0].Kind != "parse" {
-		t.Errorf("Branches = %+v, want un warning de parseo", warns)
+		t.Errorf("Branches = %+v, want a parse warning", warns)
 	}
 }
 
-func TestBranchesAvisaSinProyecto(t *testing.T) {
+func TestBranchesWarnsWithoutProject(t *testing.T) {
 	dir := t.TempDir()
 	bin, _ := recorder(t, dir, "glab")
 
 	names, warns := New("gitlab.example.com", bin).Branches(context.Background(), model.RepoRef{})
 	if len(names) != 0 {
-		t.Errorf("Branches = %v, want lista vacía", names)
+		t.Errorf("Branches = %v, want an empty list", names)
 	}
 	if len(warns) == 0 || warns[0].Kind != "notfound" {
 		t.Errorf("Branches = %+v, want notfound", warns)

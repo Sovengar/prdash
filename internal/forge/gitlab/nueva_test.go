@@ -9,141 +9,141 @@ import (
 )
 
 // The runner's host is what is checked, not the struct's.
-func TestNewCaenLosDefaultsYElHostSePoneEnElEntorno(t *testing.T) {
+func TestNewFallsBackToDefaultsAndTheHostGoesInTheEnvironment(t *testing.T) {
 	a := New("", "")
 	if a.Host() != "gitlab.example.com" {
-		t.Errorf("sin host dio %q, want el self-managed de ejemplo: un default que sea "+
-			"gitlab.com mandaria las llamadas a un sitio que el usuario no configuro",
+		t.Errorf("no host gave %q, want the example self-managed: a default that was "+
+			"gitlab.com would send the calls to a place the user did not configure",
 			a.Host())
 	}
 	if a.Forge() != ForgeName {
-		t.Errorf("Forge dio %q, want %q", a.Forge(), ForgeName)
+		t.Errorf("Forge gave %q, want %q", a.Forge(), ForgeName)
 	}
 	if a.runner == nil {
-		t.Fatal("New dejo el runner a nil")
+		t.Fatal("New left the runner nil")
 	}
 	if got := a.runner.Extra; !contains(got, "GITLAB_HOST=gitlab.example.com") {
-		t.Errorf("el runner no lleva GITLAB_HOST: %v", got)
+		t.Errorf("the runner does not carry GITLAB_HOST: %v", got)
 	}
 	if got := a.runner.Extra; !contains(got, "GLAB_NO_PROMPT=1") {
-		t.Errorf("el runner no lleva GLAB_NO_PROMPT: sin el, glab puede pedir un token "+
-			"en un proceso sin terminal y quedarse colgado: %v", got)
+		t.Errorf("the runner does not carry GLAB_NO_PROMPT: without it glab can ask for a token "+
+			"in a process with no terminal and hang: %v", got)
 	}
 
 	selfManaged := New("git.umane.example", "")
 	if selfManaged.Host() != "git.umane.example" {
-		t.Errorf("con host dio %q", selfManaged.Host())
+		t.Errorf("with a host gave %q", selfManaged.Host())
 	}
 	if got := selfManaged.runner.Extra; !contains(got, "GITLAB_HOST=git.umane.example") {
-		t.Errorf("el runner no lleva el host configurado: %v", got)
+		t.Errorf("the runner does not carry the configured host: %v", got)
 	}
 
-	propio := New("", "/opt/glab")
-	if got := propio.runner.Bin; got != "/opt/glab" {
-		t.Errorf("con binario dio %q", got)
+	custom := New("", "/opt/glab")
+	if got := custom.runner.Bin; got != "/opt/glab" {
+		t.Errorf("with a binary gave %q", got)
 	}
-	// Y el default.
+	// And the default.
 	if got := New("", "").runner.Bin; got != "glab" {
-		t.Errorf("sin binario dio %q, want glab", got)
+		t.Errorf("with no binary gave %q, want glab", got)
 	}
 }
 
-func TestAuthDistingueSesionYTokenMalo(t *testing.T) {
+func TestAuthDistinguishesSessionAndBadToken(t *testing.T) {
 	dir := t.TempDir()
 
 	// GitLab's format is "as <login>", not GitHub's "account <login>".
-	good := scriptDe(t, dir, "glab-ok", `#!/bin/sh
+	good := glabScript(t, dir, "glab-ok", `#!/bin/sh
 echo "Logged in to git.umane.example as glab (GLAB_TOKEN)"
 exit 0
 `)
 	a := New("git.umane.example", good)
 	auth := a.Auth(context.Background())
 	if !auth.OK {
-		t.Fatalf("sesion buena dio OK=false: %s", auth.Reason)
+		t.Fatalf("a good session gave OK=false: %s", auth.Reason)
 	}
 	if auth.Forge != ForgeName {
-		t.Errorf("el estado no trae el nombre del forge: %+v", auth)
+		t.Errorf("the state does not bring the forge name: %+v", auth)
 	}
 	if auth.Login != "glab" {
 		t.Errorf("login %q, want glab", auth.Login)
 	}
 
 	// The reason is the FIRST line of stderr, not the last and not all of them.
-	bad := scriptDe(t, dir, "glab-ko", `#!/bin/sh
+	bad := glabScript(t, dir, "glab-ko", `#!/bin/sh
 echo "401 Unauthorized" >&2
-echo "detalle que no se ve" >&2
+echo "detail that is not shown" >&2
 exit 1
 `)
 	auth = New("git.umane.example", bad).Auth(context.Background())
 	if auth.OK {
-		t.Error("sesion mala dio OK=true")
+		t.Error("a bad session gave OK=true")
 	}
 	if strings.TrimSpace(auth.Reason) == "" {
-		t.Error("sesion mala dio Reason vacío")
+		t.Error("a bad session gave an empty Reason")
 	}
 	if !strings.Contains(auth.Reason, "401") {
-		t.Errorf("el motivo %q no trae lo que dijo la CLI", auth.Reason)
+		t.Errorf("the reason %q does not bring what the CLI said", auth.Reason)
 	}
 	if auth.Login != "" {
-		t.Errorf("sesion mala trae login %q", auth.Login)
+		t.Errorf("a bad session brings login %q", auth.Login)
 	}
 
-	auth = New("git.umane.example", filepath.Join(dir, "no-existe")).Auth(context.Background())
+	auth = New("git.umane.example", filepath.Join(dir, "does-not-exist")).Auth(context.Background())
 	if auth.OK {
-		t.Error("un binario inexistente dio OK=true")
+		t.Error("a nonexistent binary gave OK=true")
 	}
 	if strings.TrimSpace(auth.Reason) == "" {
-		t.Error("un binario inexistente dio Reason vacío")
+		t.Error("a nonexistent binary gave an empty Reason")
 	}
 
 	// A good session with unexpected output: OK=true and an empty login, and that is the honest
 	// answer.
-	raro := scriptDe(t, dir, "glab-raro", "#!/bin/sh\necho 'algo distinto'\nexit 0\n")
-	auth = New("git.umane.example", raro).Auth(context.Background())
+	strange := glabScript(t, dir, "glab-strange", "#!/bin/sh\necho 'something else'\nexit 0\n")
+	auth = New("git.umane.example", strange).Auth(context.Background())
 	if !auth.OK {
-		t.Errorf("una salida inesperada dio OK=false: %s", auth.Reason)
+		t.Errorf("unexpected output gave OK=false: %s", auth.Reason)
 	}
 	if auth.Login != "" {
-		t.Errorf("una salida inesperada dio login %q, want vacío", auth.Login)
+		t.Errorf("unexpected output gave login %q, want empty", auth.Login)
 	}
 }
 
 // The regex points at "Logged in to <host> as <login>".
-func TestElLoginSeSacaDelFormatoQueDiceGlab(t *testing.T) {
-	casos := []struct {
-		nombre string
-		salida string
+func TestTheLoginIsExtractedFromGlabsFormat(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
 		want   string
 	}{
-		{"formato completo", "Logged in to git.umane.example as glab (GLAB_TOKEN)", "glab"},
-		{"con puntos en el login", "as j.perez (GLAB_TOKEN)", "j.perez"},
-		{"con guion en el login", "as mi-usuario (GLAB_TOKEN)", "mi-usuario"},
-		{"sin la ruta del token", "Logged in to git.umane.example as glab", "glab"},
+		{"full format", "Logged in to git.umane.example as glab (GLAB_TOKEN)", "glab"},
+		{"dots in the login", "as j.perez (GLAB_TOKEN)", "j.perez"},
+		{"hyphen in the login", "as mi-user (GLAB_TOKEN)", "mi-user"},
+		{"without the token path", "Logged in to git.umane.example as glab", "glab"},
 		{"active account", "  Active account: true\n  Logged in to x as glab (Y)", "glab"},
-		{"sin la palabra as", "algo distinto", ""},
-		{"vacio", "", ""},
-		{"solo espacios", "   \n  ", ""},
-		{"login con parentesis pegado", "as user(GLAB_TOKEN)", "user"},
+		{"without the word as", "something else", ""},
+		{"empty", "", ""},
+		{"only spaces", "   \n  ", ""},
+		{"login with a glued parenthesis", "as user(GLAB_TOKEN)", "user"},
 	}
-	for _, c := range casos {
-		got := loginFromAuthStatus(c.salida)
+	for _, c := range cases {
+		got := loginFromAuthStatus(c.output)
 		if got != c.want {
-			t.Errorf("%s: dio %q, want %q", c.nombre, got, c.want)
+			t.Errorf("%s: gave %q, want %q", c.name, got, c.want)
 		}
 		// It never prints text containing the token, which is what would break the comparison.
 		if strings.ContainsAny(got, "()") {
-			t.Errorf("%s: el login trae parentesis: %q", c.nombre, got)
+			t.Errorf("%s: the login carries parentheses: %q", c.name, got)
 		}
 	}
 }
 
-func scriptDe(t *testing.T, dir, nombre, cuerpo string) string {
+func glabScript(t *testing.T, dir, name, body string) string {
 	t.Helper()
-	ruta := filepath.Join(dir, nombre)
-	if err := os.WriteFile(ruta, []byte(cuerpo), 0o755); err != nil {
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return ruta
+	return path
 }
 
 func contains(xs []string, want string) bool {

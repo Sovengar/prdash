@@ -1,235 +1,235 @@
-# prdash — comportamiento esperado: prefijo de ruta seleccionable y toggleable.
+# prdash — expected behavior: selectable and toggleable path prefix.
 #
-# Fuente ÚNICA del comportamiento esperado de esta feature. No es Cucumber (sin
-# step definitions ni runner). El executor derivará de aquí tests reales
-# (unit/integration) estilo BDD/ATDD.
+# The UNIQUE source of the expected behavior of this feature. It is not Cucumber
+# (no step definitions nor runner). The executor will derive real tests from
+# here (unit/integration) in BDD/ATDD style.
 #
-# Gherkin en inglés; las descripciones van en español.
+# Gherkin in English; the descriptions are in English too.
 #
-# Contexto de diseño: el ADR 0002 partió la ruta de ITEM en un prefijo común (en
-# una línea fija, desde el ADR 0004) y un sufijo por celda. El ADR 0004 dejó
-# abierta la costura de poder alternarlo. Esta feature la cierra con TRES modos
-# ciclados por una tecla, global y sin persistir.
+# Design context: ADR 0002 split the ITEM path into a common prefix (on a fixed
+# line, since ADR 0004) and a per-cell suffix. ADR 0004 left open the seam of
+# being able to toggle it. This feature closes it with THREE modes cycled by one
+# key, global and not persisted.
 #
-# Sobre el hint: la barra de atajos se deriva de `hintOrder` (config), pero la
-# etiqueta de `p` tiene que nombrar el modo ACTUAL, que es estado de la TUI. La
-# costura elegida es que `Config.Hints()` reciba ese estado: `hintOrder` sigue
-# siendo la fuente de lista, orden y etiqueta por defecto, y el rebind de
-# `[keybindings]` sigue siendo genérico. Estos escenarios fijan ese contrato.
+# About the hint: the shortcuts bar is derived from `hintOrder` (config), but the
+# label of `p` has to name the CURRENT mode, which is state of the TUI. The seam
+# chosen is that `Config.Hints()` receives that state: `hintOrder` keeps being
+# the source of list, order and default label, and the rebind of
+# `[keybindings]` keeps being generic. These scenarios pin that contract.
 
-Feature: Prefijo de ruta seleccionable y toggleable en la columna ITEM
+Feature: Selectable and toggleable path prefix in the ITEM column
 
   Background:
-    Given la sección activa "Assigned" tiene ítems de los repos "APPCITTI/vsocial/backend/api-gateway#100" y "APPCITTI/vsocial/web-app#101"
-    And ejecuto "prdash" dentro de una TUI
-    And el modo de prefijo es "common" (el valor por defecto)
+    Given the active section "Assigned" has items from the repos "APPCITTI/vsocial/backend/api-gateway#100" and "APPCITTI/vsocial/web-app#101"
+    And I run "prdash" inside a TUI
+    And the prefix mode is "common" (the default value)
 
-  # ──────────────────────────── Ciclo de modos ────────────────────────────
+  # ─────────────────────────── Mode cycle ───────────────────────────
 
-  @inbox @prefijo @keybindings
-  Scenario: p cicla common → full → leaf → common
-    Given el modo de prefijo es "common"
-    When pulso "p"
-    Then el modo de prefijo pasa a ser "full"
-    When pulso "p"
-    Then el modo de prefijo pasa a ser "leaf"
-    When pulso "p"
-    Then el modo de prefijo vuelve a ser "common"
-    And el ciclo se repite indefinidamente en ese orden
+  @inbox @prefix @keybindings
+  Scenario: p cycles common → full → leaf → common
+    Given the prefix mode is "common"
+    When I press "p"
+    Then the prefix mode becomes "full"
+    When I press "p"
+    Then the prefix mode becomes "leaf"
+    When I press "p"
+    Then the prefix mode goes back to "common"
+    And the cycle repeats indefinitely in that order
 
-  @inbox @prefijo @keybindings
-  Scenario: La tecla de ciclo sale de la config, no de un "p" cableado
-    Given la config reasigna "prefix-mode" a otra tecla
-    When pulso esa tecla
-    Then el modo de prefijo cicla igual
-    And "p" deja de cambiar el modo de prefijo
+  @inbox @prefix @keybindings
+  Scenario: The cycle key comes from the config, not from a hardcoded "p"
+    Given the config rebinds "prefix-mode" to another key
+    When I press that key
+    Then the prefix mode cycles the same way
+    And "p" stops changing the prefix mode
 
-  @inbox @prefijo @keybindings
-  Scenario: p no dispara ninguna otra acción
-    Given hay un ítem seleccionado y la TUI está en su estado normal
-    When pulso "p"
-    Then no se aprueba, no se mergea, no se monta review, no se refresca y no se sale
-    And el merge no se arma
+  @inbox @prefix @keybindings
+  Scenario: p does not trigger any other action
+    Given there is a selected item and the TUI is in its normal state
+    When I press "p"
+    Then nothing is approved, nothing is merged, no review is mounted, nothing is refreshed and nothing is quit
+    And the merge is not armed
 
-  @inbox @prefijo @navegacion
-  Scenario: El modo es global y no lo reinicia el cambio de sección
-    Given el modo de prefijo es "leaf"
-    When pulso "tab" hasta "Mine" y de vuelta a "Assigned"
-    Then el modo de prefijo sigue siendo "leaf"
-    And el cursor y el scroll de cada sección se siguen recordando
+  @inbox @prefix @navigation
+  Scenario: The mode is global and the section change does not reset it
+    Given the prefix mode is "leaf"
+    When I press "tab" up to "Mine" and back to "Assigned"
+    Then the prefix mode is still "leaf"
+    And the cursor and the scroll of each section are still remembered
 
-  @inbox @prefijo @persistencia
-  Scenario: El modo no se persiste entre ejecuciones
-    Given elijo el modo "full" con "p"
-    When cierro la TUI y vuelvo a abrirla
-    Then el modo de prefijo es "common"
+  @inbox @prefix @persistence
+  Scenario: The mode is not persisted between runs
+    Given I choose the mode "full" with "p"
+    When I close the TUI and open it again
+    Then the prefix mode is "common"
 
-  # ────────────────────────────── Modo common ──────────────────────────────
+  # ────────────────────────────── Mode common ──────────────────────────────
 
-  @inbox @prefijo
-  Scenario: common muestra el prefijo común en su línea y el sufijo en la celda
-    Given el modo de prefijo es "common"
-    When se pinta la lista
-    Then una línea atenuada al inicio del cuerpo declara el prefijo común "APPCITTI/vsocial/"
-    And las celdas ITEM muestran solo el sufijo ("backend/api-gateway#100"), sin el prefijo
-    And el prefijo aparece una sola vez en la vista
+  @inbox @prefix
+  Scenario: common shows the common prefix on its line and the suffix in the cell
+    Given the prefix mode is "common"
+    When the list is painted
+    Then a dimmed line at the start of the body declares the common prefix "APPCITTI/vsocial/"
+    And the ITEM cells show only the suffix ("backend/api-gateway#100"), without the prefix
+    And the prefix appears only once in the view
 
-  @inbox @prefijo
-  Scenario: common es el comportamiento de siempre, sin cambios respecto a hoy
-    Given el modo de prefijo es "common"
-    When se pinta la lista con cualquier conjunto de ítems
-    Then la vista es idéntica a la de antes de esta feature
+  @inbox @prefix
+  Scenario: common is the behavior as always, unchanged with respect to today
+    Given the prefix mode is "common"
+    When the list is painted with any set of items
+    Then the view is identical to the one before this feature
 
-  # ─────────────────────────────── Modo full ───────────────────────────────
+  # ─────────────────────────────── Mode full ───────────────────────────────
 
-  @inbox @prefijo
-  Scenario: full no pinta línea de prefijo y pone la referencia completa en la celda
-    Given el modo de prefijo es "full"
-    And la sección activa tiene los ítems "acme/one#7" y "other/two#8", cuyas referencias caben
-    When se pinta la lista
-    Then no hay ninguna línea de prefijo en el cuerpo de la lista
-    And cada celda ITEM lleva la referencia completa, sin recortar: "acme/one#7" y "other/two#8"
+  @inbox @prefix
+  Scenario: full does not paint a prefix line and puts the full reference in the cell
+    Given the prefix mode is "full"
+    And the active section has the items "acme/one#7" and "other/two#8", whose references fit
+    When the list is painted
+    Then there is no prefix line anywhere in the body of the list
+    And every ITEM cell carries the full reference, untruncated: "acme/one#7" and "other/two#8"
 
-  @inbox @prefijo @recorte
-  Scenario: En full, lo que no cabe se recorta por la cola y sobrevive el #número
-    Given el modo de prefijo es "full"
-    And la sección activa es la de Background, con "APPCITTI/vsocial/backend/api-gateway#100"
-    When se pinta la lista
-    Then la celda ITEM no cabe entera y se recorta por la izquierda con "…"
-    And la celda es "…/vsocial/backend/api-gateway#100": termina en "#100" y conserva la hoja del proyecto y el número
+  @inbox @prefix @truncation
+  Scenario: In full, what does not fit is truncated from the tail and the #number survives
+    Given the prefix mode is "full"
+    And the active section is the one from Background, with "APPCITTI/vsocial/backend/api-gateway#100"
+    When the list is painted
+    Then the ITEM cell does not fit whole and is truncated from the left with "…"
+    And the cell is "…/vsocial/backend/api-gateway#100": it ends in "#100" and keeps the project leaf and the number
 
-  @inbox @prefijo @layout
-  Scenario: full recupera la línea de alto que ocupaba el prefijo
-    Given el modo de prefijo es "full"
-    And la sección activa tiene prefijo común
-    When se pinta la lista
-    Then el cuerpo de la lista tiene una línea menos que en modo "common"
-    And la caja del inbox no encoge: sigue ocupando el alto reservado
+  @inbox @prefix @layout
+  Scenario: full recovers the height line the prefix used to take
+    Given the prefix mode is "full"
+    And the active section has a common prefix
+    When the list is painted
+    Then the body of the list has one line less than in mode "common"
+    And the inbox box does not shrink: it keeps taking the reserved height
 
-  # ─────────────────────────────── Modo leaf ───────────────────────────────
+  # ─────────────────────────────── Mode leaf ───────────────────────────────
 
-  @inbox @prefijo
-  Scenario: leaf no pinta línea de prefijo y pone solo la hoja del proyecto
-    Given el modo de prefijo es "leaf"
-    When se pinta la lista
-    Then no hay ninguna línea de prefijo en el cuerpo de la lista
-    And cada celda ITEM lleva el último segmento del proyecto más "#n" ("api-gateway#100", "web-app#101")
+  @inbox @prefix
+  Scenario: leaf does not paint a prefix line and puts only the project leaf
+    Given the prefix mode is "leaf"
+    When the list is painted
+    Then there is no prefix line anywhere in the body of the list
+    And every ITEM cell carries the last segment of the project plus "#n" ("api-gateway#100", "web-app#101")
 
-  @inbox @prefijo @layout
-  Scenario: leaf da la máxima densidad de la columna ITEM
-    Given el modo de prefijo es "leaf"
-    When se pinta la lista
-    Then la columna ITEM es más estrecha que en "full"
-    And sigue reservando al menos el ancho mínimo para no pegarse a la columna vecina
+  @inbox @prefix @layout
+  Scenario: leaf gives the maximum density of the ITEM column
+    Given the prefix mode is "leaf"
+    When the list is painted
+    Then the ITEM column is narrower than in "full"
+    And it still reserves at least the minimum width so it does not stick to the neighboring column
 
-  @inbox @prefijo
-  Scenario: leaf no puede desambiguar dos repos con la misma hoja
-    Given el modo de prefijo es "leaf"
-    And la sección activa tiene los ítems "acme/one#7" y "other/one#8", que no comparten prefijo
-    When se pinta la lista
-    Then las dos celdas ITEM muestran "one#7" y "one#8"
-    And el detalle y --print siguen mostrando la ruta completa de cada uno
+  @inbox @prefix
+  Scenario: leaf cannot disambiguate two repos with the same leaf
+    Given the prefix mode is "leaf"
+    And the active section has the items "acme/one#7" and "other/one#8", which do not share a prefix
+    When the list is painted
+    Then the two ITEM cells show "one#7" and "one#8"
+    And the detail and --print keep showing the full path of each one
 
-  # ────────────────────────── Recalculo del ancho ──────────────────────────
+  # ────────────────────────── Width recomputation ──────────────────────────
 
-  @inbox @prefijo @layout
-  Scenario: El ancho de ITEM se recalcula en cada modo
-    Given el modo de prefijo es "common"
-    When se pinta la lista
-    Then la columna ITEM mide lo que el sufijo más largo + hueco de separación (24 para el fixture de Background)
-    When cambio el modo a "full"
-    Then la columna ITEM mide lo que la referencia completa + hueco, acotado al tope (34)
-    When cambio el modo a "leaf"
-    Then la columna ITEM mide lo que la hoja más larga + hueco (16)
-    And en los tres modos el ancho se mantiene dentro de [6, 34]
+  @inbox @prefix @layout
+  Scenario: The ITEM width is recomputed in each mode
+    Given the prefix mode is "common"
+    When the list is painted
+    Then the ITEM column measures the longest suffix + gap (24 for the Background fixture)
+    When I change the mode to "full"
+    Then the ITEM column measures the full reference + gap, bounded to the cap (34)
+    When I change the mode to "leaf"
+    Then the ITEM column measures the longest leaf + gap (16)
+    And in the three modes the width stays within [6, 34]
 
-  @inbox @prefijo @layout
-  Scenario: El ancho se calcula una vez por render y todas las filas coinciden
-    Given el modo de prefijo es "leaf"
-    When se pinta la lista
-    Then todas las filas.Items empiezan en la misma columna
-    And el header de columnas y las filas comparten la misma rejilla
-    And la tabla no baila al escribir encima
+  @inbox @prefix @layout
+  Scenario: The width is computed once per render and all rows match
+    Given the prefix mode is "leaf"
+    When the list is painted
+    Then all rows.Items start at the same column
+    And the column header and the rows share the same grid
+    And the table does not dance when typing on top
 
-  @inbox @prefijo @layout
-  Scenario: Cambiar de modo no deja el cursor fuera de la ventana
-    Given el modo de prefijo es "common"
-    And la lista está desplazada y el cursor está en una fila visible
-    When pulso "p" para pasar a "full"
-    Then el cursor sigue en el mismo ítem y sigue visible en la ventana
+  @inbox @prefix @layout
+  Scenario: Changing mode does not leave the cursor outside the window
+    Given the prefix mode is "common"
+    And the list is scrolled and the cursor is on a visible row
+    When I press "p" to go to "full"
+    Then the cursor is still on the same item and still visible in the window
 
-  @inbox @prefijo @layout
-  Scenario: Un item vacío o un proyecto vacío no rompen el ancho
-    Given el modo de prefijo es "leaf"
-    And la sección activa incluye un ítem con proyecto vacío
-    When se pinta la lista
-    Then la celda de ese ítem es solo "#<número>"
-    And el resto de la tabla no se descuadra
+  @inbox @prefix @layout
+  Scenario: An empty item or an empty project do not break the width
+    Given the prefix mode is "leaf"
+    And the active section includes an item with an empty project
+    When the list is painted
+    Then the cell of that item is only "#<number>"
+    And the rest of the table does not go out of alignment
 
-  # ───────────────────── Degradación sin prefijo común ─────────────────────
+  # ───────────────────── Degradation without common prefix ─────────────────────
 
-  @inbox @prefijo @degradacion
-  Scenario: common degrada a full si la sección no tiene prefijo común
-    Given el modo de prefijo es "common"
-    And la sección activa tiene un solo ítem, o ítems que no comparten directorio
-    When se pinta la lista
-    Then no se muestra ninguna línea de prefijo
-    And cada celda ITEM lleva la ruta completa, recortada por la cola si no cabe
-    And el modo "common" se ve exactamente igual que el modo "full"
+  @inbox @prefix @degradation
+  Scenario: common degrades to full if the section has no common prefix
+    Given the prefix mode is "common"
+    And the active section has a single item, or items that do not share a directory
+    When the list is painted
+    Then no prefix line is shown anywhere
+    And every ITEM cell carries the full path, truncated from the tail if it does not fit
+    And mode "common" looks exactly the same as mode "full"
 
-  @inbox @prefijo @degradacion
-  Scenario: La degradación no inventa un prefijo ni repite la ruta
-    Given el modo de prefijo es "common"
-    And la sección activa tiene los ítems "acme/one#7" y "other/one#8"
-    When se pinta la lista
-    Then el prefijo común no se pinta por ninguna parte
-    And la ruta completa no aparece ni en la línea de prefijo ni duplicada en la celda
+  @inbox @prefix @degradation
+  Scenario: The degradation does not invent a prefix nor repeat the path
+    Given the prefix mode is "common"
+    And the active section has the items "acme/one#7" and "other/one#8"
+    When the list is painted
+    Then the common prefix is not painted anywhere
+    And the full path does not appear neither on the prefix line nor duplicated in the cell
 
-  # ────────────────────────── Hint del modo actual ──────────────────────────
+  # ────────────────────────── Hint of the current mode ──────────────────────────
 
-  @inbox @prefijo @hints
-  Scenario: El hint de p nombra el modo actual, no solo la tecla
-    Given el modo de prefijo es "common"
-    When se pinta la barra de atajos
-    Then muestra "p prefix: common"
-    And no muestra la tecla a secas ("p prefix")
-    When pulso "p" para pasar a "full"
-    Then la barra muestra "p prefix: full"
-    When pulso "p" para pasar a "leaf"
-    Then la barra muestra "p prefix: leaf"
+  @inbox @prefix @hints
+  Scenario: The hint of p names the current mode, not only the key
+    Given the prefix mode is "common"
+    When the shortcuts bar is painted
+    Then it shows "p prefix: common"
+    And it does not show the bare key ("p prefix")
+    When I press "p" to go to "full"
+    Then the bar shows "p prefix: full"
+    When I press "p" to go to "leaf"
+    Then the bar shows "p prefix: leaf"
 
-  @inbox @prefijo @hints @keybindings
-  Scenario: El hint del modo sigue al rebind de la tecla
-    Given la config reasigna "prefix-mode" a "P"
-    And el modo de prefijo es "leaf"
-    When se pinta la barra de atajos
-    Then muestra "P prefix: leaf"
+  @inbox @prefix @hints @keybindings
+  Scenario: The hint of the mode follows the key rebind
+    Given the config rebinds "prefix-mode" to "P"
+    And the prefix mode is "leaf"
+    When the shortcuts bar is painted
+    Then it shows "P prefix: leaf"
 
-  @inbox @prefijo @hints
-  Scenario: Todo keybind registrado sale en la barra
-    Given la config por defecto
-    When se pinta la barra de atajos
-    Then sale una entrada por cada acción de [keybindings], incluida "prefix-mode"
+  @inbox @prefix @hints
+  Scenario: Every registered keybind comes out on the bar
+    Given the default config
+    When the shortcuts bar is painted
+    Then one entry comes out for each action of [keybindings], including "prefix-mode"
 
-  @inbox @prefijo @hints
-  Scenario: Con el merge armado la Confirmación sustituye a la barra
-    Given el modo de prefijo es "leaf"
-    And el merge está armado
-    When se pinta la barra de atajos
-    Then se ve la Confirmación de merge y no la barra de atajos
+  @inbox @prefix @hints
+  Scenario: With the merge armed the Confirmation replaces the bar
+    Given the prefix mode is "leaf"
+    And the merge is armed
+    When the shortcuts bar is painted
+    Then the merge Confirmation is seen and not the shortcuts bar
 
-  # ─────────────────────── No-regresión de otros modos ───────────────────────
+  # ─────────────────────── No-regression of other modes ───────────────────────
 
-  @inbox @prefijo @print
-  Scenario: El modo --print no cambia
-    When ejecuto "prdash --print"
-    Then imprime la ruta completa "proyecto/subgrupo#número" de cada ítem
-    And sus tres secciones con sus nombres largos ("Created by me", "Review / assigned", "Mentions")
-    And no aplica ningún modo de prefijo ni ninguna línea de prefijo
+  @inbox @prefix @print
+  Scenario: The --print mode does not change
+    When I run "prdash --print"
+    Then it prints the full path "project/subgroup#number" of each item
+    And its three sections with their long names ("Created by me", "Review / assigned", "Mentions")
+    And it applies no prefix mode nor any prefix line
 
-  @inbox @prefijo
-  Scenario: El detalle y la leyenda siguen mostrando la ruta completa
-    Given el modo de prefijo es "leaf"
-    When se selecciona un ítem y se mira su ficha
-    Then el título de la caja de detalle es la referencia completa
-    And la leyenda de conteos del borde no cambia de formato
+  @inbox @prefix
+  Scenario: The detail and the legend keep showing the full path
+    Given the prefix mode is "leaf"
+    When an item is selected and its card is looked at
+    Then the title of the detail box is the full reference
+    And the count legend on the border does not change format

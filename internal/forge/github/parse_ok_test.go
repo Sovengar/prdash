@@ -9,11 +9,11 @@ import (
 )
 
 // The INVERTED condition makes this work.
-func TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso(t *testing.T) {
+func TestAResponseThatParsesGivesTheItemAndNotAWarning(t *testing.T) {
 	dir := t.TempDir()
 
-	conPR := `{"data":{"search":{"issueCount":1,"nodes":[{"__typename":"PullRequest","number":7,"title":"uno","state":"OPEN","updatedAt":"2026-03-17T10:00:00Z","url":"https://github.com/acme/widget/pull/7","author":{"login":"alice"},"headRefName":"feat/x","baseRefName":"main","mergeable":"MERGEABLE"}]}}}`
-	script := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+conPR+"'\n")
+	withPR := `{"data":{"search":{"issueCount":1,"nodes":[{"__typename":"PullRequest","number":7,"title":"uno","state":"OPEN","updatedAt":"2026-03-17T10:00:00Z","url":"https://github.com/acme/widget/pull/7","author":{"login":"alice"},"headRefName":"feat/x","baseRefName":"main","mergeable":"MERGEABLE"}]}}}`
+	script := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+withPR+"'\n")
 	a := New("github.com", script)
 
 	it, warns := a.ItemState(context.Background(),
@@ -21,62 +21,62 @@ func TestUnaRespuestaQueSeParseaDaElItemYNoUnAviso(t *testing.T) {
 			Owner: "acme", Name: "widget"}, 7)
 
 	if len(warns) != 0 {
-		t.Errorf("una respuesta que se parsea dio %d avisos: %+v. Con la condición "+
-			"invertida el camino bueno devuelve un aviso de parseo, y el PR sale vacío "+
-			"sin que se note por qué", len(warns), warns)
+		t.Errorf("a response that parses gave %d warnings: %+v. With the condition "+
+			"inverted the good path returns a parse warning, and the PR comes out empty "+
+			"without it being noticed why", len(warns), warns)
 	}
 	if it.Number != 7 {
-		t.Errorf("el item salió con número %d, want 7: la respuesta trae el PR 7", it.Number)
+		t.Errorf("the item came out with number %d, want 7: the response carries PR 7", it.Number)
 	}
 	if it.Title != "uno" {
-		t.Errorf("el item salió con título %q, want %q", it.Title, "uno")
+		t.Errorf("the item came out with title %q, want %q", it.Title, "uno")
 	}
 
 	// The other half: a response that does NOT parse MUST give a warning. Without it the assertion above
 	//passes with the condition reversed.
-	vacio := `{"data":{"search":{"issueCount":0,"nodes":[]}}}`
-	scriptVacio := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+vacio+"'\n")
-	aVacio := New("github.com", scriptVacio)
-	_, warns = aVacio.ItemState(context.Background(),
+	empty := `{"data":{"search":{"issueCount":0,"nodes":[]}}}`
+	emptyScript := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+empty+"'\n")
+	emptyAdapter := New("github.com", emptyScript)
+	_, warns = emptyAdapter.ItemState(context.Background(),
 		model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget",
 			Owner: "acme", Name: "widget"}, 7)
 	if len(warns) == 0 {
-		t.Error("una respuesta sin PRs no dio ningún aviso, y debería decir que no se " +
-			"ha encontrado ese número")
+		t.Error("a response with no PRs gave no warning, and it should say that " +
+			"that number was not found")
 	}
 	if warns[0].Kind != "notfound" && warns[0].Kind != "parse" {
-		t.Errorf("el aviso salió de tipo %q, y aquí lo esperable es notfound o parse", warns[0].Kind)
+		t.Errorf("the warning came out of kind %q, and what is expected here is notfound or parse", warns[0].Kind)
 	}
 
 	// An undeserialisable response has to give a PARSE warning, the only path that reaches it.
-	basura := writeScript(t, dir, "gh", "#!/bin/sh\necho 'esto no es json'\n")
-	aBasura := New("github.com", basura)
-	it, warns = aBasura.ItemState(context.Background(),
+	garbage := writeScript(t, dir, "gh", "#!/bin/sh\necho 'this is not json'\n")
+	garbageAdapter := New("github.com", garbage)
+	it, warns = garbageAdapter.ItemState(context.Background(),
 		model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget",
 			Owner: "acme", Name: "widget"}, 7)
 	if len(warns) == 0 {
-		t.Fatal("una respuesta que no es JSON no dio ningún aviso: el aviso de parseo " +
-			"es lo único que dice que la API cambió de formato")
+		t.Fatal("a response that is not JSON gave no warning: the parse warning " +
+			"is the only thing that says the API changed format")
 	}
 	if warns[0].Kind != "parse" {
-		t.Errorf("una respuesta ilegible dio un aviso de tipo %q, want parse", warns[0].Kind)
+		t.Errorf("an unreadable response gave a warning of kind %q, want parse", warns[0].Kind)
 	}
 	if !strings.Contains(strings.ToLower(warns[0].Msg), "json") {
-		t.Errorf("el aviso de parseo dice %q y no menciona el JSON: el mensaje es lo que "+
-			"le dice al usuario si mirar su red o la API", warns[0].Msg)
+		t.Errorf("the parse warning says %q and does not mention JSON: the message is what "+
+			"tells the user whether to look at their network or the API", warns[0].Msg)
 	}
 	if it.Number != 0 {
-		t.Errorf("una respuesta ilegible devolvió el ítem %d: sin parsear no hay ítem", it.Number)
+		t.Errorf("an unreadable response returned item %d: without parsing there is no item", it.Number)
 	}
 }
 
-func TestElHostPorDefTampocoSePisa(t *testing.T) {
-	for _, c := range []struct{ entra, want string }{
+func TestTheDefaultHostIsNotOverwrittenEither(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
 		{"", "github.com"},
-		{"ghe.ejemplo.com", "ghe.ejemplo.com"},
+		{"ghe.example.com", "ghe.example.com"},
 	} {
-		if got := New(c.entra, "").Host(); got != c.want {
-			t.Errorf("New(%q).Host() = %q, want %q", c.entra, got, c.want)
+		if got := New(c.in, "").Host(); got != c.want {
+			t.Errorf("New(%q).Host() = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

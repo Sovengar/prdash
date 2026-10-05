@@ -1,29 +1,30 @@
-# Flujo de datos — prdash MVP
+# Data flow — prdash MVP
 
-Dos recorridos: (1) el pipeline del inbox y (2) la provisión del review.
-La capa pura (parse/inbox/state/plan) no toca red, disco ni subprocess.
+Two paths: (1) the inbox pipeline and (2) the review provisioning.
+The pure layer (parse/inbox/state/plan) touches neither network, disk nor
+subprocess.
 
-## 1. Pipeline del inbox (F1)
+## 1. Inbox pipeline (F1)
 
 ```mermaid
 flowchart LR
-    subgraph Fuentes["Forge clients (I/O)"]
+    subgraph SOURCES["Forge clients (I/O)"]
         GH["gh CLI<br/>github.com"]
         GL["glab CLI<br/>self-managed · /git/api/v4/"]
-        BB["bitbucket adapter<br/>solo interfaz · sin red"]
+        BB["bitbucket adapter<br/>interface only · no network"]
     end
 
-    subgraph Nucleo["Núcleo puro"]
+    subgraph CORE["Pure core"]
         AD["forge.Adapter<br/>github · gitlab"]
         PA["forge/parse<br/>JSON/GraphQL → model"]
-        IN["inbox<br/>merge · dedupe · ¿me toca?"]
-        ST["state<br/>precedencia · score"]
+        IN["inbox<br/>merge · dedupe · does it fall to me?"]
+        ST["state<br/>precedence · score"]
     end
 
-    subgraph Salida
-        CA[("cache<br/>snapshot + rutas")]
-        TU["tui<br/>tabla · detalle · cadencia"]
-        PR["--print<br/>tabla one-shot"]
+    subgraph OUTPUT
+        CA[("cache<br/>snapshot + paths")]
+        TU["tui<br/>table · detail · cadence"]
+        PR["--print<br/>one-shot table"]
     end
 
     GH --> AD
@@ -38,26 +39,28 @@ flowchart LR
     AD -->|401 gitlab.com · rate limit| TU
 ```
 
-## 2. Provisión del worktree de review (F2)
+## 2. Review worktree provisioning (F2)
 
 ```mermaid
 flowchart LR
-    IT["Item seleccionado"] --> RR["reporesolver<br/>roots + índice + memoria de rutas"]
-    RR -->|no local| BARE["git clone --bare<br/>XDG data/repos/forge/host/owner/repo"]
+    IT["Selected item"] --> RR["reporesolver<br/>roots + index + path memory"]
+    RR -->|not local| BARE["git clone --bare<br/>XDG data/repos/forge/host/owner/repo"]
     RR -->|local| WT
     BARE --> WT["worktree.Provisioner"]
     WT -->|"HERDR_ENV=1"| HN["herdr worktree create<br/>--branch &lt;local&gt; --path &lt;dest&gt;"]
-    WT -->|fuera de Herdr| GW["git worktree add"]
+    WT -->|outside Herdr| GW["git worktree add"]
     HN --> LAY["herdr.Port<br/>layout 3 panes"]
     LAY --> P1["pane TUICR"]
     LAY --> P2["pane Hunk"]
     LAY --> P3["pane opencode"]
 
-    RR -.->|fetch antes de provisionar| REF["refs/pull/N/head<br/>refs/merge-requests/N/head<br/>→ rama local"]
+    RR -.->|fetch before provisioning| REF["refs/pull/N/head<br/>refs/merge-requests/N/head<br/>→ local branch"]
     REF --> WT
 ```
 
-**Fronteras**
-- `reporesolver` es el único dueño del namespace de rutas (clon bare + worktrees).
-- Solo el puerto `herdr` conoce la CLI nativa y aloja el fallback a git.
-- El fetch del ref ocurre SIEMPRE antes de provisionar (ver ADR `docs/adr/0001-worktree-provisioning.md`).
+**Boundaries**
+- `reporesolver` is the sole owner of the path namespace (bare clone +
+  worktrees).
+- Only the `herdr` port knows the native CLI and hosts the git fallback.
+- The ref fetch happens ALWAYS before provisioning (see ADR
+  `docs/adr/0001-worktree-provisioning.md`).

@@ -9,36 +9,36 @@ import (
 )
 
 // Each stream is saved with its forge's host.
-func TestElSnapshotGuardaElHostDeCadaForge(t *testing.T) {
+func TestTheSnapshotStoresEachForgesHost(t *testing.T) {
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(t, adapt)
 
 	if st := m.statuses["github"]; st == nil {
-		t.Fatal("el adapter registrado no tiene estado, y el test necesita uno con host")
+		t.Fatal("the registered adapter has no state, and the test needs one with a host")
 	}
 
-	m.applySnapshot(snapshotCon(mkItem("github", "github.com", "acme/widget", "uno", 1, "")))
+	m.applySnapshot(snapshotWith(mkItem("github", "github.com", "acme/widget", "one", 1, "")))
 	m.rebuild()
 
 	f := m.snapshot()
 	if len(f.Streams) == 0 {
-		t.Fatal("el snapshot salió sin streams, y el test necesita al menos uno")
+		t.Fatal("the snapshot came out with no streams, and the test needs at least one")
 	}
 
 	vistos := map[string]bool{}
 	for _, s := range f.Streams {
 		vistos[s.Forge] = true
 		if s.Forge == "github" && s.Host == "" {
-			t.Errorf("el stream de github se guardó sin host. El host es lo que separa "+
-				"dos streams del mismo forge en dos instancias, y sin él la apertura "+
-				"siguiente no puede saber cuál es cuál: %+v", s)
+			t.Errorf("the github stream was stored without host. The host is what separates "+
+				"two streams of the same forge in two instances, and without it the next "+
+				"open cannot tell which is which: %+v", s)
 		}
 		if s.Forge == "github" && s.Host != "github.com" {
-			t.Errorf("el stream de github se guardó con host %q, want github.com", s.Host)
+			t.Errorf("the github stream was stored with host %q, want github.com", s.Host)
 		}
 	}
 	if !vistos["github"] {
-		t.Error("el snapshot no tiene stream de github")
+		t.Error("the snapshot has no github stream")
 	}
 
 	m.applySnapshot(cache.File{Streams: []cache.Stream{{
@@ -51,31 +51,31 @@ func TestElSnapshotGuardaElHostDeCadaForge(t *testing.T) {
 	m.rebuild()
 
 	f = m.snapshot()
-	conHost, sinEstado := 0, 0
+	withHost, noState := 0, 0
 	for _, s := range f.Streams {
 		if s.Forge == "github" && s.Host == "github.com" {
-			conHost++
+			withHost++
 		}
 		if s.Forge == "gitlab" && s.Host == "" {
-			sinEstado++
+			noState++
 		}
 	}
-	if conHost == 0 {
-		t.Error("después de meter un forge sin estado, el stream de github perdió su host")
+	if withHost == 0 {
+		t.Error("after inserting a forge with no state, the github stream lost its host")
 	}
-	if sinEstado == 0 {
-		t.Error("el stream de un forge sin estado no llegó al snapshot: perderlo entero " +
-			"sería peor que guardarlo sin host")
+	if noState == 0 {
+		t.Error("the stream of a forge with no state did not reach the snapshot: losing it " +
+			"entirely would be worse than storing it without host")
 	}
 }
 
 // The snapshot comes out sorted by forge.
-func TestElSnapshotVaOrdenadoPorForgeSeccionYTipo(t *testing.T) {
+func TestTheSnapshotIsOrderedByForgeSectionAndKind(t *testing.T) {
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(t, adapt)
 
 	// The keys are written in an order that is NOT the sorted one, and there are SEVERAL kinds.
-	claves := []struct{ forge, section, kind string }{
+	keys := []struct{ forge, section, kind string }{
 		{"github", "authored", "commented"},
 		{"gitlab", "review", "assigned"},
 		{"github", "mentions", "requested"},
@@ -92,7 +92,7 @@ func TestElSnapshotVaOrdenadoPorForgeSeccionYTipo(t *testing.T) {
 		{"gitlab", "review", "commented"},
 		{"github", "authored", "assigned"},
 	}
-	for _, c := range claves {
+	for _, c := range keys {
 		m.applySnapshot(cache.File{Streams: []cache.Stream{{
 			Forge: c.forge, Section: model.Section(c.section), Kind: model.ReviewKind(c.kind),
 		}}})
@@ -119,15 +119,15 @@ func TestElSnapshotVaOrdenadoPorForgeSeccionYTipo(t *testing.T) {
 
 	f := m.snapshot()
 	if len(f.Streams) != len(want) {
-		t.Fatalf("el snapshot tiene %d streams, want %d", len(f.Streams), len(want))
+		t.Fatalf("the snapshot has %d streams, want %d", len(f.Streams), len(want))
 	}
 	for i, s := range f.Streams {
 		got := s.Forge + "/" + string(s.Section) + "/" + string(s.Kind)
 		if got != want[i] {
-			t.Errorf("stream %d es %q, want %q. El snapshot se ordena por forge, luego "+
-				"sección y luego tipo, y el orden es el de las letras: se compara entre "+
-				"ejecuciones para saber si el inbox ha cambiado, y un orden invertido "+
-				"produce un «ha cambiado» cada vez que se abre",
+			t.Errorf("stream %d is %q, want %q. The snapshot is ordered by forge, then "+
+				"section and then kind, and the order is alphabetical: it is compared across "+
+				"runs to know whether the inbox changed, and an inverted order "+
+				"produces a \u201cchanged\u201d every time it opens",
 				i, got, want[i])
 		}
 	}

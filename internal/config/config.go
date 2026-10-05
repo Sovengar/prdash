@@ -35,7 +35,7 @@ type GitLabConfig struct {
 	// glab resolves its own host and API base but a git clone does not.
 	APIBase   string
 	CloneBase string
-	TokenEnv  string // nombre de la variable de entorno del token (lo maneja glab)
+	TokenEnv  string // name of the token env var (glab reads it)
 }
 
 func (g GitHubConfig) ClonePrefix() string { return normalizeBase(g.CloneBase) }
@@ -166,7 +166,7 @@ func LoadFrom(path string) (Config, string) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return cfg, "" // sin fichero, defaults silenciosos
+			return cfg, "" // no file: silent defaults
 		}
 		return cfg, fmt.Sprintf("config: %v", err)
 	}
@@ -177,7 +177,7 @@ func LoadFrom(path string) (Config, string) {
 	}
 
 	if fc.Roots != nil {
-		cfg.Roots = expandAll(fc.Roots) // sustituye, no añade
+		cfg.Roots = expandAll(fc.Roots) // replaces, does not append
 	}
 	if fc.RefreshInterval != nil {
 		if d, err := time.ParseDuration(*fc.RefreshInterval); err == nil && d >= 0 {

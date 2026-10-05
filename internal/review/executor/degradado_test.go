@@ -16,212 +16,212 @@ import (
 // The three remaining ones share one property: they are DEGRADATION.
 
 // The reason for the Planner field is not testability.
-func TestElPlanSeConstruyeConElPlannerCuandoLoHay(t *testing.T) {
+func TestThePlanIsBuiltWithThePlannerWhenThereIsOne(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Project: "o/r"}, 7)
 	wt := worktree.Worktree{Path: "/wt/pr-7", Branch: "feat/x", Label: "prdash-pr-7"}
 
-	vistos := 0
-	var recibidoItem model.Item
-	var recibidoWT plan.Worktree
+	calls := 0
+	var receivedItem model.Item
+	var receivedWt plan.Worktree
 	e := &Executor{
 		Planner: func(pr model.Item, pw plan.Worktree) plan.Plan {
-			vistos++
-			recibidoItem, recibidoWT = pr, pw
-			return plan.Plan{Tabs: []plan.Tab{{Label: "MIO"}}}
+			calls++
+			receivedItem, receivedWt = pr, pw
+			return plan.Plan{Tabs: []plan.Tab{{Label: "MINE"}}}
 		},
 	}
 	got := e.buildPlan(it, wt)
-	if vistos != 1 {
-		t.Errorf("el Planner se llamó %d veces, want 1", vistos)
+	if calls != 1 {
+		t.Errorf("the Planner was called %d times, want 1", calls)
 	}
-	if len(got.Tabs) != 1 || got.Tabs[0].Label != "MIO" {
-		t.Errorf("buildPlan devolvió %+v, want el plan del Planner", got)
+	if len(got.Tabs) != 1 || got.Tabs[0].Label != "MINE" {
+		t.Errorf("buildPlan returned %+v, want the Planner's plan", got)
 	}
-	if recibidoItem.Number != 7 {
-		t.Errorf("el Planner recibió el item %+v", recibidoItem)
+	if receivedItem.Number != 7 {
+		t.Errorf("the Planner received item %+v", receivedItem)
 	}
 	// The worktree arrives mapped to the three fields, because those are what the plan uses to build
 	// the argv.
-	for nombre, valor := range map[string]string{
-		"Path": recibidoWT.Path, "Branch": recibidoWT.Branch, "Label": recibidoWT.Label,
+	for name, value := range map[string]string{
+		"Path": receivedWt.Path, "Branch": receivedWt.Branch, "Label": receivedWt.Label,
 	} {
-		if valor == "" {
-			t.Errorf("el Planner recibió el worktree con %s vacío: %+v", nombre, recibidoWT)
+		if value == "" {
+			t.Errorf("the Planner received the worktree with %s empty: %+v", name, receivedWt)
 		}
 	}
-	if recibidoWT.Path != wt.Path || recibidoWT.Branch != wt.Branch || recibidoWT.Label != wt.Label {
-		t.Errorf("el worktree no llego integro al Planner: %+v", recibidoWT)
+	if receivedWt.Path != wt.Path || receivedWt.Branch != wt.Branch || receivedWt.Label != wt.Label {
+		t.Errorf("the worktree did not arrive intact at the Planner: %+v", receivedWt)
 	}
 
-	sinPlanner := &Executor{
+	withoutPlanner := &Executor{
 		Tools: plan.Tools{Tuicr: plan.Tool{Argv: []string{"tuicr"}}},
 		Env:   plan.Env{Available: map[string]bool{}},
 	}
-	if got := sinPlanner.buildPlan(it, wt); len(got.Tabs) == 0 {
-		t.Errorf("sin Planner, buildPlan devolvió un plan sin pestañas: %+v", got)
+	if got := withoutPlanner.buildPlan(it, wt); len(got.Tabs) == 0 {
+		t.Errorf("without a Planner, buildPlan returned a plan with no tabs: %+v", got)
 	}
 }
 
 // What makes this a degradation and not a failure.
-func TestSinHerdrElWorktreeQuedaMontadoYAvisado(t *testing.T) {
+func TestWithoutHerdrTheWorktreeIsStillMountedAndWarned(t *testing.T) {
 	wt := worktree.Worktree{Path: "/wt", Branch: "b", Label: "prdash-pr-1"}
 	res := Result{}
 
-	// Sin puerto de Herdr en absoluto.
+	// No Herdr port at all.
 	e := &Executor{}
 	if e.mountLayout(context.Background(), wt, plan.Plan{}, &res) {
-		t.Error("sin Herdr se reportó el layout montado")
+		t.Error("without Herdr the layout was reported mounted")
 	}
 	if len(res.Warnings) != 1 {
-		t.Fatalf("avisos = %v, want 1", res.Warnings)
+		t.Fatalf("warnings = %v, want 1", res.Warnings)
 	}
 	if !strings.Contains(res.Warnings[0], "Herdr") || !strings.Contains(res.Warnings[0], "worktree") {
-		t.Errorf("el aviso %q tiene que decir que falta Herdr y que el worktree queda", res.Warnings[0])
+		t.Errorf("the warning %q has to say that Herdr is missing and that the worktree stays", res.Warnings[0])
 	}
 
-	noDisponible := &Executor{Herdr: &fakeHerdr{available: false}}
+	unavailable := &Executor{Herdr: &fakeHerdr{available: false}}
 	res = Result{}
-	if noDisponible.mountLayout(context.Background(), wt, plan.Plan{}, &res) {
-		t.Error("con Herdr no disponible se reportó el layout montado")
+	if unavailable.mountLayout(context.Background(), wt, plan.Plan{}, &res) {
+		t.Error("with Herdr unavailable the layout was reported mounted")
 	}
 	if len(res.Warnings) != 1 {
-		t.Errorf("avisos = %v, want 1", res.Warnings)
+		t.Errorf("warnings = %v, want 1", res.Warnings)
 	}
 }
 
-// herdrQueFallaEsUnPuertoQueDisponiblePeroNoMonta.
-type herdrQueFalla struct {
+// failingHerdr is a port that IS available but does not mount.
+type failingHerdr struct {
 	err   error
 	warns []string
 }
 
-func (h *herdrQueFalla) Available() bool { return true }
+func (h *failingHerdr) Available() bool { return true }
 
-func (h *herdrQueFalla) MountLayout(context.Context, herdr.Container, plan.Plan) ([]string, error) {
+func (h *failingHerdr) MountLayout(context.Context, herdr.Container, plan.Plan) ([]string, error) {
 	return h.warns, h.err
 }
 
-func (h *herdrQueFalla) Notify(context.Context, string, herdr.NotifyOptions) error { return nil }
+func (h *failingHerdr) Notify(context.Context, string, herdr.NotifyOptions) error { return nil }
 
 // The two paths of mountLayout with Herdr available.
-func TestElLayoutAportaSusAvisosYLosDeUnFallounoDeMas(t *testing.T) {
+func TestTheLayoutContributesItsWarningsAndTheFailureAddsMore(t *testing.T) {
 	wt := worktree.Worktree{Path: "/wt", Branch: "b", Label: "prdash-pr-1"}
 	ctx := context.Background()
 
-	falso := &fakeHerdr{available: true}
-	e := &Executor{Herdr: falso}
+	fake := &fakeHerdr{available: true}
+	e := &Executor{Herdr: fake}
 	res := Result{}
 	if !e.mountLayout(ctx, wt, plan.Plan{}, &res) {
-		t.Error("con Herdr disponible no montó")
+		t.Error("with Herdr available it did not mount")
 	}
-	if len(falso.notified) != 1 {
-		t.Errorf("notificaciones = %v, want 1", falso.notified)
+	if len(fake.notified) != 1 {
+		t.Errorf("notifications = %v, want 1", fake.notified)
 	}
 	if len(res.Warnings) != 0 {
-		t.Errorf("el camino bueno dio avisos %v", res.Warnings)
+		t.Errorf("the happy path gave warnings %v", res.Warnings)
 	}
 	// The container that reaches the layout is the worktree's, which is what connects the pane to the
 	// right directory.
-	if falso.container.WorkspaceID != wt.WorkspaceID || falso.container.PaneID != wt.RootPaneID {
-		t.Errorf("el contenedor al layout no es el del worktree: %+v", falso.container)
+	if fake.container.WorkspaceID != wt.WorkspaceID || fake.container.PaneID != wt.RootPaneID {
+		t.Errorf("the container reaching the layout is not the worktree's: %+v", fake.container)
 	}
 
-	conAvisos := &Executor{Herdr: &herdrQueFalla{warns: []string{"hunk no está instalado"}}}
-	res = Result{Warnings: []string{"aviso previo"}}
-	if !conAvisos.mountLayout(ctx, wt, plan.Plan{}, &res) {
-		t.Error("un layout con avisos no fatales no debe considerarse fallido")
+	withWarnings := &Executor{Herdr: &failingHerdr{warns: []string{"hunk is not installed"}}}
+	res = Result{Warnings: []string{"previous warning"}}
+	if !withWarnings.mountLayout(ctx, wt, plan.Plan{}, &res) {
+		t.Error("a layout with non-fatal warnings must not be considered failed")
 	}
 	if len(res.Warnings) != 2 {
-		t.Fatalf("avisos = %v, want los dos", res.Warnings)
+		t.Fatalf("warnings = %v, want both", res.Warnings)
 	}
-	if res.Warnings[0] != "aviso previo" {
-		t.Errorf("los avisos previos se perdieron: %v", res.Warnings)
+	if res.Warnings[0] != "previous warning" {
+		t.Errorf("the previous warnings were lost: %v", res.Warnings)
 	}
 	if !strings.Contains(res.Warnings[1], "hunk") {
-		t.Errorf("el aviso del layout no llegó: %v", res.Warnings)
+		t.Errorf("the layout's warning did not arrive: %v", res.Warnings)
 	}
 
 	// And on failure: the layout's warnings plus the failure's, and the two texts have to be
 	// distinguishable.
-	conFallo := &Executor{Herdr: &herdrQueFalla{err: errors.New("el socket no responde")}}
+	withFailure := &Executor{Herdr: &failingHerdr{err: errors.New("the socket does not respond")}}
 	res = Result{}
-	if conFallo.mountLayout(ctx, wt, plan.Plan{}, &res) {
-		t.Error("un layout que falló se reportó como montado")
+	if withFailure.mountLayout(ctx, wt, plan.Plan{}, &res) {
+		t.Error("a layout that failed was reported as mounted")
 	}
 	if len(res.Warnings) == 0 {
-		t.Fatal("el fallo del layout no dejó aviso")
+		t.Fatal("the layout failure left no warning")
 	}
-	texto := strings.Join(res.Warnings, " | ")
-	if !strings.Contains(texto, "layout") {
-		t.Errorf("el aviso %q no dice que el layout falló", texto)
+	joined := strings.Join(res.Warnings, " | ")
+	if !strings.Contains(joined, "layout") {
+		t.Errorf("the warning %q does not say the layout failed", joined)
 	}
-	if strings.Contains(texto, "requires HERDR_ENV") {
-		t.Errorf("el aviso %q dice que falta Herdr, que sí estaba: manda al usuario a "+
-			"buscar un problema que no existe", texto)
+	if strings.Contains(joined, "requires HERDR_ENV") {
+		t.Errorf("the warning %q says Herdr is missing, which it was not: it sends the user off "+
+			"to look for a problem that does not exist", joined)
 	}
 }
 
 // The condition is `created`, not whether the bare exists.
-func TestLimpiarElBareSoloSiSeCreoEnEstaLlamada(t *testing.T) {
+func TestCleanupBareOnlyIfCreatedInThisCall(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Project: "o/r"}, 1)
 
-	r := &resolverQueRegistra{}
+	r := &recordingResolver{}
 	e := &Executor{Resolver: r}
 	e.cleanupBare(false, it)
-	if r.quitados != 0 {
-		t.Errorf("con created=false quitó %d clones: se llevaría por delante el clon de otra "+
-			"pestaña del mismo PR", r.quitados)
+	if r.removed != 0 {
+		t.Errorf("with created=false it removed %d clones: it would take down the clone of another "+
+			"tab of the same PR", r.removed)
 	}
 
 	e.cleanupBare(true, it)
-	if r.quitados != 1 {
-		t.Errorf("con created=true quitó %d clones, want 1", r.quitados)
+	if r.removed != 1 {
+		t.Errorf("with created=true it removed %d clones, want 1", r.removed)
 	}
 }
 
-type resolverQueRegistra struct {
-	reporesolverFalso
-	quitados int
+type recordingResolver struct {
+	fakeRepoResolver
+	removed int
 }
 
-func (r *resolverQueRegistra) RemoveBare(model.RepoRef) error {
-	r.quitados++
+func (r *recordingResolver) RemoveBare(model.RepoRef) error {
+	r.removed++
 	return nil
 }
 
 // It implements the minimum of Resolver to be embeddable.
-type reporesolverFalso struct{}
+type fakeRepoResolver struct{}
 
-func (reporesolverFalso) ResolveLocal(model.RepoRef) (string, bool) { return "", false }
-func (reporesolverFalso) HasBare(model.RepoRef) bool                { return false }
-func (reporesolverFalso) EnsureBare(context.Context, model.RepoRef) (string, error) {
+func (fakeRepoResolver) ResolveLocal(model.RepoRef) (string, bool) { return "", false }
+func (fakeRepoResolver) HasBare(model.RepoRef) bool                { return false }
+func (fakeRepoResolver) EnsureBare(context.Context, model.RepoRef) (string, error) {
 	return "", nil
 }
-func (reporesolverFalso) RemoveBare(model.RepoRef) error { return nil }
-func (reporesolverFalso) FetchReviewRef(context.Context, string, model.Item) (string, error) {
+func (fakeRepoResolver) RemoveBare(model.RepoRef) error { return nil }
+func (fakeRepoResolver) FetchReviewRef(context.Context, string, model.Item) (string, error) {
 	return "", nil
 }
-func (reporesolverFalso) WorktreePath(model.RepoRef, int) string            { return "" }
-func (reporesolverFalso) Remember(model.RepoRef, string)                    {}
-func (reporesolverFalso) RecordReview(model.Item, cache.ReviewRecord) error { return nil }
-func (reporesolverFalso) ActiveReview(model.ID) (cache.ReviewRecord, bool) {
+func (fakeRepoResolver) WorktreePath(model.RepoRef, int) string            { return "" }
+func (fakeRepoResolver) Remember(model.RepoRef, string)                    {}
+func (fakeRepoResolver) RecordReview(model.Item, cache.ReviewRecord) error { return nil }
+func (fakeRepoResolver) ActiveReview(model.ID) (cache.ReviewRecord, bool) {
 	return cache.ReviewRecord{}, false
 }
-func (reporesolverFalso) ForgetReview(model.Item) error { return nil }
+func (fakeRepoResolver) ForgetReview(model.Item) error { return nil }
 
-func TestLabelLlevaElNumeroYElPrefijoQueEsLoQueMarcaLaPropiedad(t *testing.T) {
+func TestLabelCarriesTheNumberAndPrefixThatMarkOwnership(t *testing.T) {
 	if got := Label(7); got != "prdash-pr-7" {
-		t.Errorf("Label(7) dio %q", got)
+		t.Errorf("Label(7) gave %q", got)
 	}
 	// Two different numbers give two different labels, which is what stops two reviews from
 	// colliding.
 	if Label(7) == Label(8) {
-		t.Error("dos números dieron la misma etiqueta")
+		t.Error("two numbers gave the same label")
 	}
 	// The label is what Owned recognises, and that is the link between the name and the
 	// provisioning.
 	if !strings.HasPrefix(Label(1), worktree.LabelPrefix) {
-		t.Errorf("Label(1) = %q no empieza por %q: Owned no lo reconocería",
+		t.Errorf("Label(1) = %q does not start with %q: Owned would not recognise it",
 			Label(1), worktree.LabelPrefix)
 	}
 }

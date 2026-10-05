@@ -21,12 +21,12 @@ import (
 
 // A real JPEG, because applySim loads it with sim.Load: an invented path would only measure the
 // discard, not the good path loading the image.
-func renderFalso(t *testing.T) sim.Result {
+func fakeRender(t *testing.T) sim.Result {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "render.jpg")
 	f, err := os.Create(path)
 	if err != nil {
-		t.Fatalf("crear el render falso: %v", err)
+		t.Fatalf("creating the fake render: %v", err)
 	}
 	defer func() { _ = f.Close() }()
 	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
@@ -36,123 +36,123 @@ func renderFalso(t *testing.T) sim.Result {
 		}
 	}
 	if err := jpeg.Encode(f, img, nil); err != nil {
-		t.Fatalf("codificar el render falso: %v", err)
+		t.Fatalf("encoding the fake render: %v", err)
 	}
 	return sim.Result{Kind: sim.KindMerge, Path: path, Ref: "HEAD", Base: "main"}
 }
 
-func simKindDePrueba(_ bool) sim.Kind { return sim.KindMerge }
+func simKindForTest(_ bool) sim.Kind { return sim.KindMerge }
 
-func otraKind() sim.Kind { return sim.KindRebase }
+func otherKind() sim.Kind { return sim.KindRebase }
 
 // The counter is incremented in startSim BEFORE leaving to the goroutine, so what is slow here does
 // not have to do with what is invalidated.
-type simuladorMudo struct{}
+type silentSimulator struct{}
 
-func (simuladorMudo) Available() bool { return true }
+func (silentSimulator) Available() bool { return true }
 
-func (simuladorMudo) Simulate(context.Context, model.Item, sim.Kind) (sim.Result, error) {
-	return sim.Result{}, errors.New("simulador mudo: este test no renderiza")
+func (silentSimulator) Simulate(context.Context, model.Item, sim.Kind) (sim.Result, error) {
+	return sim.Result{}, errors.New("silent simulator: this test does not render")
 }
 
 // The 64x64 size is not arbitrary: with a 4x4 image it fitted in ONE cell at any cell size, so
 // changing the cell changed nothing and every geometry assertion passed without looking.
-func imagenParaLaGeometria() image.Image {
-	const lado = 64
-	img := image.NewRGBA(image.Rect(0, 0, lado, lado))
-	for y := range lado {
-		for x := range lado {
+func imageForGeometry() image.Image {
+	const side = 64
+	img := image.NewRGBA(image.Rect(0, 0, side, side))
+	for y := range side {
+		for x := range side {
 			img.Set(x, y, image.White)
 		}
 	}
 	return img
 }
 
-func modeloConSimDeLasCeldasDadas(t *testing.T, w, h int) Model {
+func modelWithSimAtCells(t *testing.T, w, h int) Model {
 	t.Helper()
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 	m.sim.viaGraphics = false
 	m.sim.cellW_px, m.sim.cellH_px = w, h
 	return m
 }
 
-func TestRenderSimCellsComponeYAnotaLaGeometria(t *testing.T) {
-	m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+func TestRenderSimCellsComposesAndAnnotatesTheGeometry(t *testing.T) {
+	m := modelWithSimAtCells(t, 1, 2)
 	m.renderSimCells()
 
 	if len(m.sim.cells) == 0 {
-		t.Fatal("con el popup visible y la imagen puesta no compuso celdas ninguna")
+		t.Fatal("with the popup visible and the image set it composed no cells")
 	}
 	wantW, wantH := m.simBox()
 	wantW, wantH = wantW-2, wantH-simChrome
 	if m.sim.cellW != wantW || m.sim.cellH != wantH {
-		t.Errorf("anotó %dx%d, want %dx%d (la geometría interior de la caja)",
+		t.Errorf("it recorded %dx%d, want %dx%d (the boxes inner geometry)",
 			m.sim.cellW, m.sim.cellH, wantW, wantH)
 	}
 }
 
-func TestRenderSimCellsNoRecomposeConLaMismaGeometria(t *testing.T) {
-	m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+func TestRenderSimCellsDoesNotRecomposeWithTheSameGeometry(t *testing.T) {
+	m := modelWithSimAtCells(t, 1, 2)
 	m.renderSimCells()
 	primeras := len(m.sim.cells)
 	if primeras == 0 {
-		t.Fatal("no compuso nada la primera vez")
+		t.Fatal("it composed nothing the first time")
 	}
 
 	for range 4 {
 		m.renderSimCells()
 	}
 	if len(m.sim.cells) != primeras {
-		t.Errorf("tras cuatro render con la misma geometría hay %d celdas, want %d: "+
-			"la caché no está cortando, y reescalar la imagen entera en cada resize es "+
-			"justo lo que hace que el popup se congele", len(m.sim.cells), primeras)
+		t.Errorf("after four renders with the same geometry there are %d cells, want %d: "+
+			"the cache is not cutting, and rescaling the whole image on every resize is "+
+			"exactly what makes the popup freeze", len(m.sim.cells), primeras)
 	}
 	if m.sim.cellW == 0 || m.sim.cellH == 0 {
-		t.Error("la geometría anotada se ha perdido: sin ella la caché no puede validarse")
+		t.Error("the recorded geometry was lost: without it the cache cannot be validated")
 	}
 }
 
-func TestRenderSimCellsRecomponeAlCambiarLaGeometria(t *testing.T) {
-	casos := []struct {
-		nombre string
-		ancho  int
-		alto   int
+func TestRenderSimCellsRecomposesWhenTheGeometryChanges(t *testing.T) {
+	cases := []struct {
+		name   string
+		width  int
+		height int
 	}{
-		{"más ancho", 2, 2},       // solo cambia w
-		{"más alto", 1, 4},        // solo cambia h
-		{"otro de las dos", 2, 3}, // cambian las dos
-		{"más estrecho y más bajo", 1, 1},
+		{"more width", 2, 2},           // only w changes
+		{"more height", 1, 4},          // only h changes
+		{"the other of the two", 2, 3}, // both change
+		{"narrower and shorter", 1, 1},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := modelWithSimAtCells(t, 1, 2)
 			m.renderSimCells()
 			if len(m.sim.cells) == 0 {
-				t.Fatal("no compuso nada la primera vez")
+				t.Fatal("it composed nothing the first time")
 			}
-			antesW, antesH := m.sim.cellW, m.sim.cellH
+			beforeW, beforeH := m.sim.cellW, m.sim.cellH
 
-			m.sim.cellW_px, m.sim.cellH_px = c.ancho, c.alto
+			m.sim.cellW_px, m.sim.cellH_px = c.width, c.height
 			m.renderSimCells()
 
 			wantW, wantH := m.simBox()
 			wantW, wantH = wantW-2, wantH-simChrome
 
 			if m.sim.cellW != wantW || m.sim.cellH != wantH {
-				t.Errorf("tras cambiar la celda a %dx%d la geometría anotada quedó %dx%d, "+
-					"want %dx%d: no se recompuso con la nueva, y la imagen se queda desfasada",
-					c.ancho, c.alto, m.sim.cellW, m.sim.cellH, wantW, wantH)
+				t.Errorf("after changing the cell to %dx%d the recorded geometry ended at %dx%d, "+
+					"want %dx%d: it did not recompose with the new one, and the image stays out of sync",
+					c.width, c.height, m.sim.cellW, m.sim.cellH, wantW, wantH)
 			}
 			// The new geometry has to DIFFER from the old one, or the case would not tell a recomposed from
 			// a no-op and the assertion above would pass with nothing happening.
-			if m.sim.cellW == antesW && m.sim.cellH == antesH {
-				t.Errorf("la geometría anotada sigue en %dx%d tras cambiar la celda a "+
-					"%dx%d: el caso no probaría el cambio, daría lo mismo Compose y no-op",
-					antesW, antesH, c.ancho, c.alto)
+			if m.sim.cellW == beforeW && m.sim.cellH == beforeH {
+				t.Errorf("the recorded geometry is still %dx%d after changing the cell to "+
+					"%dx%d: the case would not test the change, Compose and no-op would give the same",
+					beforeW, beforeH, c.width, c.height)
 			}
 		})
 	}
@@ -160,38 +160,38 @@ func TestRenderSimCellsRecomponeAlCambiarLaGeometria(t *testing.T) {
 
 // The stale cells belong to the PREVIOUS image with a different geometry; leaving them would paint
 // the old image inside the new frame, so the user sees a review that is not the one in front of them.
-func TestRenderSimCellsSinImagenNoDejaCeldasViejas(t *testing.T) {
-	m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+func TestRenderSimCellsWithoutAnImageLeavesNoOldCells(t *testing.T) {
+	m := modelWithSimAtCells(t, 1, 2)
 	m.renderSimCells()
 	if len(m.sim.cells) == 0 {
-		t.Fatal("no compuso nada la primera vez")
+		t.Fatal("it composed nothing the first time")
 	}
 
 	for _, c := range []struct {
-		nombre  string
+		name    string
 		prepara func(*Model)
 	}{
-		{"la imagen desaparece", func(m *Model) { m.sim.img = nil }},
-		{"el popup ya no está visible", func(m *Model) { m.sim.state = simRendering }},
-		{"la imagen va por la capa de gráficos", func(m *Model) { m.sim.viaGraphics = true }},
+		{"the image disappears", func(m *Model) { m.sim.img = nil }},
+		{"the popup is no longer visible", func(m *Model) { m.sim.state = simRendering }},
+		{"the image goes through the graphics layer", func(m *Model) { m.sim.viaGraphics = true }},
 	} {
-		t.Run(c.nombre, func(t *testing.T) {
-			m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+		t.Run(c.name, func(t *testing.T) {
+			m := modelWithSimAtCells(t, 1, 2)
 			m.renderSimCells()
 			if len(m.sim.cells) == 0 {
-				t.Fatal("no compuso nada la primera vez")
+				t.Fatal("it composed nothing the first time")
 			}
 			c.prepara(&m)
 			m.renderSimCells()
 
 			if len(m.sim.cells) != 0 {
-				t.Errorf("quedaron %d celdas de la imagen anterior: se vería el review "+
-					"viejo con el marco del nuevo, y sin nada que diga que está desfasado",
+				t.Errorf("%d cells of the previous image were left: the old review "+
+					"would be seen with the new frame, and with nothing saying it is out of sync",
 					len(m.sim.cells))
 			}
 			if m.sim.cellW != 0 || m.sim.cellH != 0 {
-				t.Errorf("la geometría anotada quedó en %dx%d, want 0x0: sin celdas no "+
-					"puede quedar una geometría, o la siguiente vuelta compararía contra ella",
+				t.Errorf("the recorded geometry ended at %dx%d, want 0x0: with no cells no "+
+					"geometry can remain, or the next round would compare against it",
 					m.sim.cellW, m.sim.cellH)
 			}
 		})
@@ -200,29 +200,29 @@ func TestRenderSimCellsSinImagenNoDejaCeldasViejas(t *testing.T) {
 
 // Not a tautology: it CALLS simBox's formula, and `cols-2 > 0` alone is not enough. This
 // REPLACES a test whose t.Fatalf never ran: it swept 4,500 combinations and always passed.
-func TestLaCajaDelPopupSiempreTieneHuecoInterior(t *testing.T) {
-	imagenes := []image.Image{
-		imagenParaLaGeometria(), // cuadrada
-		imagenDe(4, 512),        // vertical extrema: la de una columna
-		imagenDe(2, 512),        // todavía más vertical
-		imagenDe(512, 4),        // apaisada extrema
-		imagenDe(64, 64),
+func TestThePopupsBoxAlwaysHasAnInteriorGap(t *testing.T) {
+	images := []image.Image{
+		imageForGeometry(), // cuadrada
+		imageOf(4, 512),    // extreme vertical: the one of one column
+		imageOf(2, 512),    // even more vertical
+		imageOf(512, 4),    // apaisada extrema
+		imageOf(64, 64),
 	}
 
-	for vi, img := range imagenes {
-		for _, celda := range [][2]int{{1, 2}, {2, 1}, {9, 19}, {1, 19}} {
+	for vi, img := range images {
+		for _, cell := range [][2]int{{1, 2}, {2, 1}, {9, 19}, {1, 19}} {
 			for w := 40; w <= 200; w += 13 {
 				for h := 6; h <= 120; h += 11 {
-					m := modeloConSimDeLasCeldasDadas(t, celda[0], celda[1])
+					m := modelWithSimAtCells(t, cell[0], cell[1])
 					m.width, m.height = w, h
 					m.sim.state = simShowing
 					m.sim.img = img
 					cols, rows := m.simBox()
 					if cols-2 <= 0 || rows-simChrome <= 0 {
-						t.Fatalf("imagen %d, celda %dx%d, terminal %dx%d: el hueco interior "+
-							"es de %dx%d, que no cabe ni una celda. simBox devolvió %dx%d, "+
-							"y FitCells no puede devolver menos de 1 en ninguna dimensión",
-							vi, celda[0], celda[1], w, h,
+						t.Fatalf("image %d, cell %dx%d, terminal %dx%d: the inner room "+
+							"is %dx%d, not even one cell fits. simBox returned %dx%d, "+
+							"and FitCells cannot return less than 1 in any dimension",
+							vi, cell[0], cell[1], w, h,
 							cols-2, rows-simChrome, cols, rows)
 					}
 				}
@@ -233,36 +233,36 @@ func TestLaCajaDelPopupSiempreTieneHuecoInterior(t *testing.T) {
 
 // Not a counter: a mechanism for INVALIDATING, which works only because the number always moves
 // up. With `--` instead, closing with `++` lands back on 0 and an old render paints over the new.
-func TestSimSeqSubeYNuncaBaja(t *testing.T) {
+func TestSimSeqIncrementsAndNeverDecrements(t *testing.T) {
 	m := newTestModel(t)
-	m.SetSimulator(simuladorMudo{})
-	partido := m.simSeq
+	m.SetSimulator(silentSimulator{})
+	split := m.simSeq
 	vistos := map[int]bool{}
 
 	for i := range 20 {
-		m.startSim(simKindDePrueba(false))
+		m.startSim(simKindForTest(false))
 		// An increment of ONE, not just "it went up": if open and close summed more, two opens could land
 		// on the same number and the discard would break unnoticed.
-		if m.simSeq != partido+1 {
-			t.Fatalf("abrir el popup (vuelta %d) dejó simSeq en %d, want %d: "+
-				"tiene que subir de uno en uno", i, m.simSeq, partido+1)
+		if m.simSeq != split+1 {
+			t.Fatalf("opening the popup (round %d) left simSeq at %d, want %d: "+
+				"it has to grow by one at a time", i, m.simSeq, split+1)
 		}
-		partido = m.simSeq
+		split = m.simSeq
 		if vistos[m.simSeq] {
-			t.Fatalf("simSeq=%d ya se había visto: un número repetido hace que un "+
-				"resultado antiguo pase la comparación de applySim", m.simSeq)
+			t.Fatalf("simSeq=%d had already been seen: a repeated number makes an "+
+				"old result pass the applySim comparison", m.simSeq)
 		}
 		vistos[m.simSeq] = true
 
 		m.closeSim()
-		if m.simSeq != partido+1 {
-			t.Fatalf("cerrar el popup %d vez no subió simSeq: quedó en %d, tenía "+
-				"que pasar de %d. Un cierre que no invalida deja que el render en vuelo "+
-				"pinte su imagen en un popup que ya no existe", i, m.simSeq, partido)
+		if m.simSeq != split+1 {
+			t.Fatalf("closing the popup for the %d time did not raise simSeq: it stayed at %d, it had "+
+				"to go from %d. A close that does not invalidate lets the render in flight "+
+				"paint its image in a popup that no longer exists", i, m.simSeq, split)
 		}
-		partido = m.simSeq
+		split = m.simSeq
 		if vistos[m.simSeq] {
-			t.Fatalf("simSeq=%d ya se había visto tras cerrar", m.simSeq)
+			t.Fatalf("simSeq=%d had already been seen after closing", m.simSeq)
 		}
 		vistos[m.simSeq] = true
 	}
@@ -270,338 +270,338 @@ func TestSimSeqSubeYNuncaBaja(t *testing.T) {
 
 // The case that matters is the CHANGED strategy with the popup open: the first result arrives
 // while the second is still rendering and would paint over it.
-func TestApplySimDescartaLoObsoleto(t *testing.T) {
+func TestApplySimDiscardsTheStaleOne(t *testing.T) {
 	for _, c := range []struct {
-		nombre  string
+		name    string
 		prepara func(*Model)
-		quiere  string
+		wants   string
 	}{
 		{
-			"el popup se cerró mientras corría",
+			"the popup closed while it ran",
 			func(m *Model) { m.closeSim() },
-			"quedarse sin imagen",
+			"being left with no image",
 		},
 		{
-			"el popup se reabrió con otra estrategia",
+			"the popup reopened with another strategy",
 			func(m *Model) {
 				m.sim.state = simRendering
-				m.sim.kind = otraKind()
+				m.sim.kind = otherKind()
 				m.simSeq++
 			},
-			"quedarse con la estrategia nueva y sin imagen",
+			"keeping the new strategy and no image",
 		},
 	} {
-		t.Run(c.nombre, func(t *testing.T) {
-			m := modeloConSimDeLasCeldasDadas(t, 1, 2)
-			m.SetSimulator(simuladorMudo{})
-			m.startSim(simKindDePrueba(false))
-			obsoleto := simMsg{seq: m.simSeq, kind: m.sim.kind}
+		t.Run(c.name, func(t *testing.T) {
+			m := modelWithSimAtCells(t, 1, 2)
+			m.SetSimulator(silentSimulator{})
+			m.startSim(simKindForTest(false))
+			stale := simMsg{seq: m.simSeq, kind: m.sim.kind}
 
 			c.prepara(&m)
-			antesSeq := m.simSeq
+			beforeSeq := m.simSeq
 
-			m.applySim(obsoleto)
+			m.applySim(stale)
 
-			if m.simSeq != antesSeq {
-				t.Errorf("applySim movió simSeq de %d a %d al descartar un resultado "+
-					"obsoleto: descartar no es avanzar, y avanzar invalida la petición "+
-					"que sí está en vuelo", antesSeq, m.simSeq)
+			if m.simSeq != beforeSeq {
+				t.Errorf("applySim moved simSeq from %d to %d when discarding a stale "+
+					"result: discarding is not advancing, and advancing invalidates the request "+
+					"that IS in flight", beforeSeq, m.simSeq)
 			}
 			if len(m.sim.cells) != 0 {
-				t.Errorf("un resultado obsoleto dejó %d celdas: se pintó el render de "+
-					"la petición anterior, y no hay nada que diga que está desfasado",
+				t.Errorf("a stale result left %d cells: the render of the "+
+					"previous request was painted, and nothing says it is out of sync",
 					len(m.sim.cells))
 			}
 		})
 	}
 
-	t.Run("el resultado que sí es el actual se aplica", func(t *testing.T) {
-		m := modeloConSimDeLasCeldasDadas(t, 1, 2)
-		m.SetSimulator(simuladorMudo{})
-		m.startSim(simKindDePrueba(false))
-		actual := simMsg{seq: m.simSeq, kind: m.sim.kind, res: renderFalso(t)}
+	t.Run("the result that IS current is applied", func(t *testing.T) {
+		m := modelWithSimAtCells(t, 1, 2)
+		m.SetSimulator(silentSimulator{})
+		m.startSim(simKindForTest(false))
+		current := simMsg{seq: m.simSeq, kind: m.sim.kind, res: fakeRender(t)}
 
-		m.applySim(actual)
+		m.applySim(current)
 
 		if m.sim.state != simShowing {
-			t.Errorf("state=%v, want simShowing: un resultado actual tiene que abrir "+
-				"el popup, o el descarte de los obsoletos no descarta nada",
+			t.Errorf("state=%v, want simShowing: a current result has to open "+
+				"the popup, or discarding the stale ones discards nothing",
 				m.sim.state)
 		}
 		if m.sim.img == nil {
-			t.Error("no se cargó la imagen del resultado actual")
+			t.Error("the current results image was not loaded")
 		}
 	})
 }
 
 // Storing the context is what makes the delete's timeout testable: "how long does this wait" is
 // answered by the deadline the call received, not by the clock.
-type graphicsCaptura struct {
-	celdaW, celdaH int
+type graphicsCapture struct {
+	cellW, cellH int
 
 	mu       sync.Mutex
 	clearCtx []clearCall
-	capas    []string
+	layers   []string
 }
 
 // The moment matters: releaseSimLayer does `defer cancel()`, so a double that stored the context
 // would always read "cancelled" and conclude the delete inherits the app's context.
 type clearCall struct {
-	errAlLlamar   error
-	plazoAlLlamar time.Duration
-	hayPlazo      bool
+	errOnCall     error
+	timeoutOnCall time.Duration
+	hasTimeout    bool
 }
 
-func (g *graphicsCaptura) Available() bool { return true }
+func (g *graphicsCapture) Available() bool { return true }
 
-func (g *graphicsCaptura) CellSize(context.Context) (int, int) { return g.celdaW, g.celdaH }
+func (g *graphicsCapture) CellSize(context.Context) (int, int) { return g.cellW, g.cellH }
 
-func (g *graphicsCaptura) SetImage(context.Context, string, image.Image, herdr.Placement) error {
+func (g *graphicsCapture) SetImage(context.Context, string, image.Image, herdr.Placement) error {
 	return nil
 }
 
-func (g *graphicsCaptura) Clear(ctx context.Context, layer string) error {
+func (g *graphicsCapture) Clear(ctx context.Context, layer string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	dl, hay := ctx.Deadline()
+	dl, exists := ctx.Deadline()
 	var plazo time.Duration
-	if hay {
+	if exists {
 		// The deadline is read HERE, at call time, not when the test looks later: the test's own time passes
 		// in between, and with a millisecond deadline you would be measuring the test's clock.
 		plazo = time.Until(dl)
 	}
 	g.clearCtx = append(g.clearCtx, clearCall{
-		errAlLlamar:   ctx.Err(),
-		plazoAlLlamar: plazo,
-		hayPlazo:      hay,
+		errOnCall:     ctx.Err(),
+		timeoutOnCall: plazo,
+		hasTimeout:    exists,
 	})
-	g.capas = append(g.capas, layer)
+	g.layers = append(g.layers, layer)
 	return nil
 }
 
-func (g *graphicsCaptura) ctxs() []clearCall {
+func (g *graphicsCapture) ctxs() []clearCall {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([]clearCall(nil), g.clearCtx...)
 }
 
-func (g *graphicsCaptura) capasVistas() []string {
+func (g *graphicsCapture) visibleLayers() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return append([]string(nil), g.capas...)
+	return append([]string(nil), g.layers...)
 }
 
-func TestLaCedaSinMedirSupone1x2(t *testing.T) {
+func TestTheUnmeasuredCellAssumes1x2(t *testing.T) {
 	for _, c := range []struct {
-		nombre string
+		name   string
 		medida [2]int
 	}{
-		{"Herdr no sabe nada", [2]int{0, 0}},
-		{"Herdr mide ancho pero no alto", [2]int{9, 0}},
-		{"Herdr mide alto pero no ancho", [2]int{0, 19}},
-		{"Herdr devuelve negativos, que no son medidas", [2]int{-9, -19}},
+		{"Herdr knows nothing", [2]int{0, 0}},
+		{"Herdr measures width but not height", [2]int{9, 0}},
+		{"Herdr measures height but not width", [2]int{0, 19}},
+		{"Herdr returns negatives, which are not measures", [2]int{-9, -19}},
 	} {
-		t.Run(c.nombre, func(t *testing.T) {
-			m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+		t.Run(c.name, func(t *testing.T) {
+			m := modelWithSimAtCells(t, 1, 2)
 			m.sim.state = simShowing
-			m.sim.img = imagenParaLaGeometria()
-			m.graphics = &graphicsCaptura{celdaW: c.medida[0], celdaH: c.medida[1]}
+			m.sim.img = imageForGeometry()
+			m.graphics = &graphicsCapture{cellW: c.medida[0], cellH: c.medida[1]}
 
 			w, h := m.cellSize()
 			if w != 1 || h != 2 {
-				t.Errorf("con CellSize devolviendo %v, cellSize dio %dx%d, want 1x2: "+
-					"una celda de terminal es un carácter de ancho por dos puntos de alto",
+				t.Errorf("with CellSize returning %v, cellSize gave %dx%d, want 1x2: "+
+					"a terminal cell is one character of width by two dots of height",
 					c.medida, w, h)
 			}
 		})
 	}
 
-	t.Run("la medida de Herdr manda", func(t *testing.T) {
-		m := modeloConSimDeLasCeldasDadas(t, 9, 19)
+	t.Run("Herdr wins the measure", func(t *testing.T) {
+		m := modelWithSimAtCells(t, 9, 19)
 		w, h := m.cellSize()
 		if w != 9 || h != 19 {
-			t.Errorf("con Herdr midiendo 9x19, cellSize dio %dx%d, want 9x19", w, h)
+			t.Errorf("with Herdr measuring 9x19, cellSize gave %dx%d, want 9x19", w, h)
 		}
 	})
 }
 
-func TestElSueloDeLaCedaCambiaLaGeometriaDeLaImagen(t *testing.T) {
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0) // Herdr no mide: entra el suelo
+func TestTheCellFloorChangesTheImageGeometry(t *testing.T) {
+	m := modelWithSimAtCells(t, 0, 0) // Herdr does not measure: the floor kicks in
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 	m.renderSimCells()
 	if m.sim.cellW == 0 {
-		t.Fatal("con el suelo 1x2 no compuso nada")
+		t.Fatal("with the 1x2 floor it composed nothing")
 	}
-	ancho1x2 := m.sim.cellW
+	width1x2 := m.sim.cellW
 
-	m2 := modeloConSimDeLasCeldasDadas(t, 2, 1)
+	m2 := modelWithSimAtCells(t, 2, 1)
 	m2.sim.state = simShowing
-	m2.sim.img = imagenParaLaGeometria()
+	m2.sim.img = imageForGeometry()
 	m2.renderSimCells()
-	ancho2x1 := m2.sim.cellW
+	width2x1 := m2.sim.cellW
 
-	if ancho2x1 >= ancho1x2 {
-		t.Errorf("con celda 2px de ancho hay %d columnas y con 1px hay %d: una celda del "+
-			"doble de ancho tiene que dar menos columnas para la misma imagen",
-			ancho2x1, ancho1x2)
+	if width2x1 >= width1x2 {
+		t.Errorf("with a cell of 2px width there are %d columns and with 1px %d: a cell at "+
+			"double the width has to give fewer columns for the same image",
+			width2x1, width1x2)
 	}
-	m4 := modeloConSimDeLasCeldasDadas(t, 4, 1)
+	m4 := modelWithSimAtCells(t, 4, 1)
 	m4.sim.state = simShowing
-	m4.sim.img = imagenParaLaGeometria()
+	m4.sim.img = imageForGeometry()
 	m4.renderSimCells()
-	if m4.sim.cellW >= ancho2x1 {
-		t.Errorf("con celda 4px hay %d columnas y con 2px hay %d: el número de columnas "+
-			"tiene que bajar con el ancho de la celda", m4.sim.cellW, ancho2x1)
+	if m4.sim.cellW >= width2x1 {
+		t.Errorf("with a cell of 4px there are %d columns and with 2px %d: the number of columns "+
+			"has to go down with the cells width", m4.sim.cellW, width2x1)
 	}
 }
 
-func TestElBorradoDeLaCapaEsperaPocoYEnSegundoPlano(t *testing.T) {
-	g := &graphicsCaptura{}
+func TestTheLayerWipeWaitsBrieflyAndInTheBackground(t *testing.T) {
+	g := &graphicsCapture{}
 	m := newTestModel(t)
 	m.graphics = g
 	m.sim.viaGraphics = true
 
 	m.releaseSimLayer()
 
-	llamadas := esperarLlamadas(t, g, 200, 5*time.Millisecond)
-	if len(llamadas) != 1 {
-		t.Fatalf("se llamó a Clear %d veces, want 1: un reintento sobre una capa que ya "+
-			"no está no la quita más rápido", len(llamadas))
+	calls := waitForCalls(t, g, 200, 5*time.Millisecond)
+	if len(calls) != 1 {
+		t.Fatalf("Clear was called %d times, want 1: a retry on a layer that is no "+
+			"longer there does not remove it faster", len(calls))
 	}
-	llamada := llamadas[0]
+	call := calls[0]
 
-	if !llamada.hayPlazo {
-		t.Fatal("el contexto del borrado no tiene deadline: si Herdr no responde, el " +
-			"Clear se queda esperando y lo que se congela es el proceso al salir")
+	if !call.hasTimeout {
+		t.Fatal("the deletion context has no deadline: if Herdr does not answer, the " +
+			"Clear stays waiting and what freezes is the process on exit")
 	}
 	const (
 		want = 2 * time.Second
 		tol  = 20 * time.Millisecond
 	)
-	if d := llamada.plazoAlLlamar - want; d > tol || d < -tol {
-		t.Errorf("el plazo del borrado es de %v al llamar, want %v±%v (se aparta %v): "+
-			"por debajo el Clear no tiene ni tiempo de contestarle a Herdr, y por arriba "+
-			"lo que se congela es el proceso al salir",
-			llamada.plazoAlLlamar.Round(time.Millisecond), want, tol,
+	if d := call.timeoutOnCall - want; d > tol || d < -tol {
+		t.Errorf("the deletion deadline is %v when calling, want %v±%v (it departs %v): "+
+			"below it the Clear has no time to answer Herdr, and above "+
+			"what freezes is the process on exit",
+			call.timeoutOnCall.Round(time.Millisecond), want, tol,
 			d.Round(time.Millisecond))
 	}
-	if llamada.errAlLlamar != nil {
-		t.Errorf("el contexto del borrado ya estaba cancelado (%v) al llamar: si "+
-			"heredara el de la app, el Clear no llegaría a hacer nada y la imagen se "+
-			"quedaría pegada al salir de la TUI", llamada.errAlLlamar)
+	if call.errOnCall != nil {
+		t.Errorf("the deletion context was already cancelled (%v) when calling: if "+
+			"it inherited the apps one, the Clear would not get to do anything and the image "+
+			"would stay stuck when leaving the TUI", call.errOnCall)
 	}
 }
 
-func TestElBorradoNoSeIntentaSiNoHayImagenEnLaCapa(t *testing.T) {
+func TestTheWipeIsNotAttemptedWhenTheLayerHasNoImage(t *testing.T) {
 	for _, c := range []struct {
-		nombre  string
+		name    string
 		prepara func(*Model)
 	}{
-		{"no se publicó nada", func(m *Model) { m.sim.viaGraphics = false }},
-		{"no hay graphics", func(m *Model) { m.graphics = nil }},
+		{"nothing was published", func(m *Model) { m.sim.viaGraphics = false }},
+		{"there is no graphics", func(m *Model) { m.graphics = nil }},
 	} {
-		t.Run(c.nombre, func(t *testing.T) {
-			g := &graphicsCaptura{}
+		t.Run(c.name, func(t *testing.T) {
+			g := &graphicsCapture{}
 			m := newTestModel(t)
 			m.graphics = g
 			m.sim.viaGraphics = true
 			c.prepara(&m)
 
 			m.releaseSimLayer()
-			esperarLlamadas(t, g, 40, 5*time.Millisecond)
+			waitForCalls(t, g, 40, 5*time.Millisecond)
 
 			if len(g.ctxs()) != 0 {
-				t.Errorf("llamó a Clear %d veces cuando no había nada en la capa: "+
-					"es una llamada a un proceso entero, y el caso de no tener nada es el normal",
+				t.Errorf("Clear was called %d times when there was nothing on the layer: "+
+					"it is a call to a whole process, and having nothing is the normal case",
 					len(g.ctxs()))
 			}
 		})
 	}
 }
 
-func TestElBorradoVaSobreLaCapaDelSimulador(t *testing.T) {
-	g := &graphicsCaptura{}
+func TestTheWipeGoesOnTopOfTheSimulatorsLayer(t *testing.T) {
+	g := &graphicsCapture{}
 	m := newTestModel(t)
 	m.graphics = g
 	m.sim.viaGraphics = true
 
 	m.releaseSimLayer()
-	esperarLlamadas(t, g, 200, 5*time.Millisecond)
+	waitForCalls(t, g, 200, 5*time.Millisecond)
 
-	capas := g.capasVistas()
-	if len(capas) != 1 {
-		t.Fatalf("se llamó a Clear %d veces, want 1", len(capas))
+	layers := g.visibleLayers()
+	if len(layers) != 1 {
+		t.Fatalf("Clear was called %d times, want 1", len(layers))
 	}
-	if capas[0] != simLayer {
-		t.Errorf("borró la capa %q, want %q: un Clear sobre otra capa es un no-op "+
-			"silencioso, y la imagen se queda pegada sin que nada lo relacione con el popup",
-			capas[0], simLayer)
+	if layers[0] != simLayer {
+		t.Errorf("it erased layer %q, want %q: a Clear on another layer is a silent "+
+			"no-op, and the image stays stuck with nothing relating it to the popup",
+			layers[0], simLayer)
 	}
 }
 
-func esperarLlamadas(t *testing.T, g *graphicsCaptura, intentos int, espera time.Duration) []clearCall {
+func waitForCalls(t *testing.T, g *graphicsCapture, attempts int, wait time.Duration) []clearCall {
 	t.Helper()
-	for range intentos {
+	for range attempts {
 		if c := g.ctxs(); len(c) > 0 {
 			return c
 		}
-		time.Sleep(espera)
+		time.Sleep(wait)
 	}
 	return g.ctxs()
 }
 
-type graphicsConErrores struct {
-	celdaW, celdaH int
-	celdaErr       error
-	setErr         error
+type graphicsWithErrors struct {
+	cellW, cellH int
+	cellErr      error
+	setErr       error
 
 	mu        sync.Mutex
 	setCalls  []herdr.Placement
 	setCtxErr []error
-	setImagen []image.Image
+	setImage  []image.Image
 }
 
-func (g *graphicsConErrores) Available() bool { return true }
+func (g *graphicsWithErrors) Available() bool { return true }
 
-func (g *graphicsConErrores) CellSize(context.Context) (int, int) {
-	if g.celdaErr != nil {
+func (g *graphicsWithErrors) CellSize(context.Context) (int, int) {
+	if g.cellErr != nil {
 		return 0, 0
 	}
-	return g.celdaW, g.celdaH
+	return g.cellW, g.cellH
 }
 
-func (g *graphicsConErrores) SetImage(ctx context.Context, _ string, img image.Image, p herdr.Placement) error {
+func (g *graphicsWithErrors) SetImage(ctx context.Context, _ string, img image.Image, p herdr.Placement) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.setCalls = append(g.setCalls, p)
 	g.setCtxErr = append(g.setCtxErr, ctx.Err())
-	g.setImagen = append(g.setImagen, img)
+	g.setImage = append(g.setImage, img)
 	return g.setErr
 }
 
-func (g *graphicsConErrores) Clear(context.Context, string) error { return nil }
+func (g *graphicsWithErrors) Clear(context.Context, string) error { return nil }
 
-func (g *graphicsConErrores) placements() []herdr.Placement {
+func (g *graphicsWithErrors) placements() []herdr.Placement {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([]herdr.Placement(nil), g.setCalls...)
 }
 
-func (g *graphicsConErrores) contextos() []error {
+func (g *graphicsWithErrors) contexts() []error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([]error(nil), g.setCtxErr...)
 }
 
-func TestPublishSimImageMideLaCedaYLaGuarda(t *testing.T) {
-	const celdaW, celdaH = 9, 19
-	g := &graphicsConErrores{celdaW: celdaW, celdaH: celdaH}
+func TestPublishSimImageMeasuresTheCellAndStoresIt(t *testing.T) {
+	const cellW, cellH = 9, 19
+	g := &graphicsWithErrors{cellW: cellW, cellH: cellH}
 
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+	m := modelWithSimAtCells(t, 0, 0)
 	m.graphics = g
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 
 	cols, rows := m.simBox()
 	col, row := m.simBoxOrigin(cols, rows)
@@ -613,289 +613,289 @@ func TestPublishSimImageMideLaCedaYLaGuarda(t *testing.T) {
 	}
 
 	if !m.publishSimImage(m.sim.img) {
-		t.Fatal("publishSimImage dijo que no pudo publicar, y el doble no falla en nada")
+		t.Fatal("publishSimImage said it could not publish, and the double never fails")
 	}
 
-	if m.sim.cellW_px != celdaW || m.sim.cellH_px != celdaH {
-		t.Errorf("guardó la celda como %dx%d, want %dx%d: sin guardarla, si la capa deja "+
-			"de estar disponible el popup dibuja a 1x2 una imagen que se dimensionó para "+
-			"%dx%d", m.sim.cellW_px, m.sim.cellH_px, celdaW, celdaH, celdaW, celdaH)
+	if m.sim.cellW_px != cellW || m.sim.cellH_px != cellH {
+		t.Errorf("it stored the cell as %dx%d, want %dx%d: without storing it, if the layer stops "+
+			"being available the popup draws at 1x2 an image that was sized for "+
+			"%dx%d", m.sim.cellW_px, m.sim.cellH_px, cellW, cellH, cellW, cellH)
 	}
 
 	placements := g.placements()
 	if len(placements) != 1 {
-		t.Fatalf("mandó %d imágenes, want 1", len(placements))
+		t.Fatalf("sent %d images, want 1", len(placements))
 	}
 	if placements[0] != want {
-		t.Errorf("colocó en %+v, want %+v: la imagen va en el hueco interior del popup, "+
-			"una celda dentro del marco", placements[0], want)
+		t.Errorf("placed at %+v, want %+v: the image goes in the popups inner room, "+
+			"one cell inside the frame", placements[0], want)
 	}
 }
 
-func TestPublishSimImageSinCeldaMedidaAsume1x2(t *testing.T) {
+func TestPublishSimImageWithoutAMeasuredCellAssumes1x2(t *testing.T) {
 	for _, c := range []struct {
-		nombre string
+		name   string
 		medida [2]int
 	}{
-		{"Herdr devuelve (0,0)", [2]int{0, 0}},
-		{"Herdr mide solo el ancho", [2]int{9, 0}},
-		{"Herdr mide solo el alto", [2]int{0, 19}},
+		{"Herdr returns (0,0)", [2]int{0, 0}},
+		{"Herdr measures only the width", [2]int{9, 0}},
+		{"Herdr measures only the height", [2]int{0, 19}},
 	} {
-		t.Run(c.nombre, func(t *testing.T) {
-			g := &graphicsConErrores{celdaW: c.medida[0], celdaH: c.medida[1]}
-			m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+		t.Run(c.name, func(t *testing.T) {
+			g := &graphicsWithErrors{cellW: c.medida[0], cellH: c.medida[1]}
+			m := modelWithSimAtCells(t, 0, 0)
 			m.graphics = g
 			m.sim.state = simShowing
-			m.sim.img = imagenParaLaGeometria()
+			m.sim.img = imageForGeometry()
 
 			if !m.publishSimImage(m.sim.img) {
-				t.Fatal("sin celda medida no pudo publicar: el suelo 1x2 tiene que " +
-					"dejar el camino de la capa gráfica disponible")
+				t.Fatal("with no measured cell it could not publish: the 1x2 floor has to " +
+					"leave the graphics layer path available")
 			}
 			if m.sim.cellW_px != 1 || m.sim.cellH_px != 2 {
-				t.Errorf("guardó la celda como %dx%d, want 1x2",
+				t.Errorf("it stored the cell as %dx%d, want 1x2",
 					m.sim.cellW_px, m.sim.cellH_px)
 			}
 		})
 	}
 }
 
-func TestPublicarUsaElContextoPropioYNoElDeLaApp(t *testing.T) {
-	g := &graphicsConErrores{celdaW: 9, celdaH: 19}
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+func TestPublishUsesItsOwnContextAndNotTheApplications(t *testing.T) {
+	g := &graphicsWithErrors{cellW: 9, cellH: 19}
+	m := modelWithSimAtCells(t, 0, 0)
 	m.graphics = g
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 
 	ctx, cancel := context.WithCancel(m.ctx)
 	cancel()
 	m.ctx = ctx
 
 	if !m.publishSimImage(m.sim.img) {
-		t.Fatal("no pudo publicar con el contexto de la app cancelado: la publicación " +
-			"tiene que llevar el suyo, o al salir de la TUI la imagen se queda pegada")
+		t.Fatal("it could not publish with the apps context cancelled: the publication " +
+			"has to carry its own, or when leaving the TUI the image stays stuck")
 	}
 
-	ctxs := g.contextos()
+	ctxs := g.contexts()
 	if len(ctxs) != 1 {
-		t.Fatalf("mandó %d imágenes, want 1", len(ctxs))
+		t.Fatalf("sent %d images, want 1", len(ctxs))
 	}
 	if ctxs[0] != nil {
-		t.Errorf("el contexto de la publicación estaba cancelado (%v) al mandar la "+
-			"imagen: heredó el de la app, que al salir de la TUI ya está muerto",
+		t.Errorf("the publication context was cancelled (%v) when sending the "+
+			"image: it inherited the apps one, which is already dead when leaving the TUI",
 			ctxs[0])
 	}
 }
 
-func TestPublishSimImageNoPublicaSiElSetFalla(t *testing.T) {
-	g := &graphicsConErrores{celdaW: 9, celdaH: 19, setErr: errors.New("layer busy")}
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+func TestPublishSimImageDoesNotPublishIfTheSetFails(t *testing.T) {
+	g := &graphicsWithErrors{cellW: 9, cellH: 19, setErr: errors.New("layer busy")}
+	m := modelWithSimAtCells(t, 0, 0)
 	m.graphics = g
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 
 	if m.publishSimImage(m.sim.img) {
-		t.Fatal("dijo que publicó cuando Herdr la rechazó")
+		t.Fatal("it said it published when Herdr rejected it")
 	}
 	if m.sim.viaGraphics {
-		t.Error("marcó viaGraphics con la publicación fallida: el popup no pintaría nada " +
-			"y no sabría que lo espera, o sea un marco vacío")
+		t.Error("it marked viaGraphics with the failed publication: the popup would paint nothing " +
+			"and would not know it is waiting, that is an empty frame")
 	}
 }
 
-func TestPublishSimImageMarcaLaBanderaYVaciaLasCeldas(t *testing.T) {
-	g := &graphicsConErrores{celdaW: 9, celdaH: 19}
-	m := modeloConSimDeLasCeldasDadas(t, 1, 2)
+func TestPublishSimImageMarksTheFlagAndEmptiesTheCells(t *testing.T) {
+	g := &graphicsWithErrors{cellW: 9, cellH: 19}
+	m := modelWithSimAtCells(t, 1, 2)
 	m.graphics = g
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 
 	m.renderSimCells()
 	if len(m.sim.cells) == 0 {
-		t.Fatal("no dejó celdas previas: el caso necesita celdas que puedan quedar")
+		t.Fatal("it left no previous cells: the case needs cells that can remain")
 	}
 
 	if !m.publishSimImage(m.sim.img) {
 		t.Fatal("no pudo publicar")
 	}
 	if !m.sim.viaGraphics {
-		t.Error("no marcó viaGraphics tras publicar: el popup se pintaría a sí mismo " +
-			"una imagen que la capa ya está pintando")
+		t.Error("it did not mark viaGraphics after publishing: the popup would paint over itself " +
+			"an image the layer is already painting")
 	}
 	if len(m.sim.cells) != 0 {
-		t.Errorf("quedaron %d celdas tras publicar en la capa: son de la imagen anterior, "+
-			"que es de otra geometría, y se pintarían encima de la nueva", len(m.sim.cells))
+		t.Errorf("%d cells were left after publishing on the layer: they are of the previous image, "+
+			"which has another geometry, and they would be painted over the new one", len(m.sim.cells))
 	}
 }
 
-func TestPublishSimImageSinGraficosNiCapaNoIntentaNada(t *testing.T) {
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+func TestPublishSimImageWithoutGraphicsNorLayerAttemptsNothing(t *testing.T) {
+	m := modelWithSimAtCells(t, 0, 0)
 	m.graphics = nil
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 	if m.publishSimImage(m.sim.img) {
-		t.Error("publicó sin tener Herdr")
+		t.Error("it published without having Herdr")
 	}
 	if m.sim.viaGraphics || m.sim.cellW_px != 0 {
-		t.Error("sin Herdr no debe tocar ni la bandera ni la celda guardada")
+		t.Error("without Herdr it must touch neither the flag nor the stored cell")
 	}
 }
 
-func TestPublishSimImageUsaLaCapaDelSimulador(t *testing.T) {
-	g := &graphicsConErrores{celdaW: 9, celdaH: 19}
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+func TestPublishSimImageUsesTheSimulatorsLayer(t *testing.T) {
+	g := &graphicsWithErrors{cellW: 9, cellH: 19}
+	m := modelWithSimAtCells(t, 0, 0)
 	m.graphics = g
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 
 	m.publishSimImage(m.sim.img)
 	if simLayer == "" {
-		t.Error("la capa del simulador está vacía")
+		t.Error("the simulator layer is empty")
 	}
 }
 
-func TestPublishSimImageNoPublicaConUnaCajaQueNoCabe(t *testing.T) {
-	g := &graphicsConErrores{celdaW: 9, celdaH: 19}
+func TestPublishSimImageDoesNotPublishWithABoxThatDoesNotFit(t *testing.T) {
+	g := &graphicsWithErrors{cellW: 9, cellH: 19}
 
-	m := modeloConSimDeLasCeldasDadas(t, 0, 0)
+	m := modelWithSimAtCells(t, 0, 0)
 	m.graphics = g
 	m.sim.state = simShowing
-	m.sim.img = imagenParaLaGeometria()
+	m.sim.img = imageForGeometry()
 
 	for w := 20; w >= 4; w-- {
 		for h := 8; h >= 4; h-- {
 			m.width, m.height = w, h
-			antes := len(g.placements())
+			before := len(g.placements())
 			m.publishSimImage(m.sim.img)
 			cols, rows := m.simBox()
 			if cols-2 > 0 && rows-simChrome > 0 {
-				continue // la caja todavía cabe
+				continue // the box still fits
 			}
-			if len(g.placements()) != antes {
-				t.Fatalf("con %dx%d la caja no cabe (%dx%d) y se publicó algo: un hueco "+
-					"interior de 0 columnas es una imagen de 0 píxeles",
+			if len(g.placements()) != before {
+				t.Fatalf("with %dx%d the box does not fit (%dx%d) and something was published: an inner "+
+					"room of 0 columns is an image of 0 pixels",
 					w, h, cols-2, rows-simChrome)
 			}
 		}
 	}
 }
 
-type casoGeom struct {
-	img        image.Image
-	col, filas int
+type caseGeom struct {
+	img       image.Image
+	col, rows int
 }
 
-func TestElAnchoNoDeterminaLaAltura(t *testing.T) {
+func TestTheWidthDoesNotDetermineTheHeight(t *testing.T) {
 	const (
-		anchoVista, altoVista = 60, 100
-		celdaW, celdaH        = 1, 2
+		viewWidth, viewHeight = 60, 100
+		cellW, cellH          = 1, 2
 	)
 
-	var primero, segundo *casoGeom
+	var first, second *caseGeom
 
-	for lado := 8; lado <= 128 && segundo == nil; lado += 8 {
-		for altoPx := 8; altoPx <= 128 && segundo == nil; altoPx += 8 {
-			m := modeloConSimDeLasCeldasDadas(t, celdaW, celdaH)
-			m.width, m.height = anchoVista, altoVista
+	for side := 8; side <= 128 && second == nil; side += 8 {
+		for heightPx := 8; heightPx <= 128 && second == nil; heightPx += 8 {
+			m := modelWithSimAtCells(t, cellW, cellH)
+			m.width, m.height = viewWidth, viewHeight
 			m.sim.state = simShowing
-			m.sim.img = imagenDe(lado, altoPx)
+			m.sim.img = imageOf(side, heightPx)
 			m.renderSimCells()
 			if m.sim.cellW == 0 || m.sim.cellH == 0 {
 				continue
 			}
-			caso := &casoGeom{img: m.sim.img, col: m.sim.cellW, filas: m.sim.cellH}
+			sample := &caseGeom{img: m.sim.img, col: m.sim.cellW, rows: m.sim.cellH}
 			switch {
-			case primero == nil:
-				primero = caso
-			case segundo == nil && caso.col == primero.col && caso.filas != primero.filas:
-				segundo = caso
+			case first == nil:
+				first = sample
+			case second == nil && sample.col == first.col && sample.rows != first.rows:
+				second = sample
 			}
 		}
 	}
 
-	if segundo == nil {
-		t.Fatal("no se encontró ninguna imagen que dé el mismo ancho de caja con " +
-			"distinta altura. Si ya no existe, el ancho determina la altura, la " +
-			"comparación de cellH de la caché se puede quitar, y este test está " +
-			"diciendo algo que ha dejado de ser verdad")
+	if second == nil {
+		t.Fatal("no image was found that gives the same box width with " +
+			"a different height. If it no longer exists, the width determines the height, the " +
+			"cellH cache comparison can be removed, and this test is " +
+			"saying something that is no longer true")
 	}
-	t.Logf("mismas %d columnas: %d filas con la primera imagen y %d con la segunda",
-		primero.col, primero.filas, segundo.filas)
+	t.Logf("same %d columns: %d rows with the first image and %d with the second",
+		first.col, first.rows, second.rows)
 
-	m := modeloConSimDeLasCeldasDadas(t, celdaW, celdaH)
-	m.width, m.height = anchoVista, altoVista
+	m := modelWithSimAtCells(t, cellW, cellH)
+	m.width, m.height = viewWidth, viewHeight
 	m.sim.state = simShowing
-	m.sim.img = primero.img
+	m.sim.img = first.img
 	m.renderSimCells()
-	if m.sim.cellW != primero.col || m.sim.cellH != primero.filas {
-		t.Fatalf("la primera imagen dio %dx%d, want %dx%d",
-			m.sim.cellW, m.sim.cellH, primero.col, primero.filas)
+	if m.sim.cellW != first.col || m.sim.cellH != first.rows {
+		t.Fatalf("the first image gave %dx%d, want %dx%d",
+			m.sim.cellW, m.sim.cellH, first.col, first.rows)
 	}
-	celdasPrimeras := len(m.sim.cells)
+	firstCells := len(m.sim.cells)
 
-	m.sim.img = segundo.img
+	m.sim.img = second.img
 	m.renderSimCells()
 
-	if m.sim.cellH != segundo.filas {
-		t.Errorf("con la segunda imagen (mismo ancho de %d, %d filas) se quedó en %d: "+
-			"no recompuso, así que las celdas son de la imagen anterior —%d de ellas— y "+
-			"la nueva se sale por abajo del marco",
-			segundo.col, segundo.filas, m.sim.cellH, celdasPrimeras)
+	if m.sim.cellH != second.rows {
+		t.Errorf("with the second image (same width of %d, %d rows) it stayed at %d: "+
+			"it did not recompose, so the cells are of the previous image —%d of them— and "+
+			"the new one leaves at the bottom of the frame",
+			second.col, second.rows, m.sim.cellH, firstCells)
 	}
-	if m.sim.cellW != primero.col {
-		t.Errorf("el ancho cambió a %d con la segunda imagen, y el caso era de mismo "+
-			"ancho (%d)", m.sim.cellW, primero.col)
+	if m.sim.cellW != first.col {
+		t.Errorf("the width changed to %d with the second image, and the case was of the same "+
+			"width (%d)", m.sim.cellW, first.col)
 	}
 }
 
-func imagenDe(anchoPx, altoPx int) image.Image {
-	img := image.NewRGBA(image.Rect(0, 0, anchoPx, altoPx))
-	for y := range altoPx {
-		for x := range anchoPx {
+func imageOf(widthPx, heightPx int) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, widthPx, heightPx))
+	for y := range heightPx {
+		for x := range widthPx {
 			img.Set(x, y, image.White)
 		}
 	}
 	return img
 }
 
-func TestPadRightRellenarODejarlo(t *testing.T) {
-	casos := []struct {
-		nombre     string
-		s          string
-		n          int
-		quiereCols int
+func TestPadRightPadItOrLeaveIt(t *testing.T) {
+	cases := []struct {
+		name      string
+		s         string
+		n         int
+		wantsCols int
 	}{
-		{"corta, rellena", "ab", 6, 6},
-		{"justa, no toca", "abcd", 4, 4},
-		{"justa con una menos", "abcd", 3, 4},  // no cabe: se deja como está
-		{"larguísima", "muchas letras", 3, 13}, // ni la toca
-		{"vacía", "", 5, 5},
-		{"a cero", "abc", 0, 3},
+		{"short, it pads", "ab", 6, 6},
+		{"exact, it does not touch", "abcd", 4, 4},
+		{"exact with one less", "abcd", 3, 4}, // it does not fit: it is left as is
+		{"very long", "many letters", 3, 13},  // it does not touch it either
+		{"empty", "", 5, 5},
+		{"a zero", "abc", 0, 3},
 		{"n negativa", "abc", -4, 3},
-		{"con acentos", "áéí", 6, 3}, // 3 columnas, 6 bytes
-		{"con emoji", "🙂", 4, 2},     // 2 columnas, 4 bytes
-		{"emoji y texto", "a🙂b", 6, 4},
+		{"with accents", "áéí", 6, 3}, // 3 columns, 6 bytes
+		{"with emoji", "🙂", 4, 2},     // 2 columns, 4 bytes
+		{"emoji y text", "a🙂b", 6, 4},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			got := padRight(c.s, c.n)
 			want := max(ansi.StringWidth(c.s), c.n)
 
 			if w := ansi.StringWidth(got); w != want {
-				t.Errorf("padRight(%q, %d) mide %d columnas visibles, want %d. La entrada "+
-					"mide %d bytes y %d columnas: rellenar por bytes desalinea las etiquetas, "+
-					"que es lo único que esta función arregla",
+				t.Errorf("padRight(%q, %d) measures %d visible columns, want %d. The input "+
+					"measures %d bytes and %d columns: padding by bytes misaligns the labels, "+
+					"which is the only thing this function fixes",
 					c.s, c.n, w, want, len(c.s), ansi.StringWidth(c.s))
 			}
 			if len(got) < len(c.s) || got[:len(c.s)] != c.s {
-				t.Errorf("padRight(%q, %d) devolvió %q, que no empieza por el texto original: "+
-					"no se recorta, se rellena", c.s, c.n, got)
+				t.Errorf("padRight(%q, %d) returned %q, which does not start with the original text: "+
+					"it does not clip, it pads", c.s, c.n, got)
 			}
 			for i, r := range got[len(c.s):] {
 				if r != ' ' {
-					t.Errorf("el relleno lleva %q en la posición %d, want un espacio: "+
-						"un carácter distinto se lee como parte de la etiqueta", r, i)
+					t.Errorf("the padding carries %q at position %d, want a space: "+
+						"a different character reads as part of the label", r, i)
 					break
 				}
 			}
@@ -903,21 +903,21 @@ func TestPadRightRellenarODejarlo(t *testing.T) {
 	}
 }
 
-func TestPadRightConElBordeExacto(t *testing.T) {
+func TestPadRightWithTheExactEdge(t *testing.T) {
 	for _, s := range []string{"", "a", "ab", "áé", "🙂"} {
-		ancho := ansi.StringWidth(s)
-		got := padRight(s, ancho)
+		width := ansi.StringWidth(s)
+		got := padRight(s, width)
 		if got != s {
-			t.Errorf("con el ancho justo (%q ocupa %d) devolvió %q, want el texto sin cambios",
-				s, ancho, got)
+			t.Errorf("with the exact width (%q takes %d) it returned %q, want the text unchanged",
+				s, width, got)
 		}
-		if ansi.StringWidth(got) != ancho {
-			t.Errorf("con el ancho justo devolvió %d columnas, want %d", ansi.StringWidth(got), ancho)
+		if ansi.StringWidth(got) != width {
+			t.Errorf("with the exact width it returned %d columns, want %d", ansi.StringWidth(got), width)
 		}
-		if p := padRight(s, ancho+1); ansi.StringWidth(p) != ancho+1 {
-			t.Errorf("con una columna de más devolvió %d columnas, want %d: el relleno "+
-				"no ocurre, y el aserto del borde exacto pasaría igual",
-				ansi.StringWidth(p), ancho+1)
+		if p := padRight(s, width+1); ansi.StringWidth(p) != width+1 {
+			t.Errorf("with one extra column it returned %d columns, want %d: the padding "+
+				"does not happen, and the exact border assertion would pass anyway",
+				ansi.StringWidth(p), width+1)
 		}
 	}
 }

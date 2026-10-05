@@ -2,8 +2,8 @@ package tui
 
 import "testing"
 
-func TestLandRowEligeLaFilaMasBajaQueCabe(t *testing.T) {
-	abiertas := func(n int) []bool {
+func TestLandRowPicksTheLowestRowThatFits(t *testing.T) {
+	opened := func(n int) []bool {
 		rows := make([]bool, n)
 		for i := range rows {
 			rows[i] = true
@@ -11,56 +11,56 @@ func TestLandRowEligeLaFilaMasBajaQueCabe(t *testing.T) {
 		return rows
 	}
 
-	base, ok := landRow(abiertas(10), 9, 3)
+	base, ok := landRow(opened(10), 9, 3)
 	if !ok {
-		t.Fatal("una caja de 3 filas en una ventana de 10 no encontró sitio, y sobra hueco")
+		t.Fatal("a box of 3 rows in a window of 10 found no room, and there is spare gap")
 	}
 	if base != 9 {
-		t.Errorf("una caja de 3 filas en una ventana de 10 se apoyó en la fila %d, want 9 (la más baja)", base)
+		t.Errorf("a box of 3 rows in a window of 10 landed on row %d, want 9 (the lowest)", base)
 	}
-	if desde := base - 3 + 1; desde != 7 {
-		t.Errorf("con la base en la %d ocupa desde la %d, want 7", base, desde)
-	}
-
-	if _, ok := landRow(abiertas(3), 2, 10); ok {
-		t.Error("una caja de 10 filas encontró sitio en una ventana de 3")
+	if fromVar := base - 3 + 1; fromVar != 7 {
+		t.Errorf("with the base at %d it occupies from %d, want 7", base, fromVar)
 	}
 
-	if base, ok := landRow(abiertas(10), 9, 1); !ok || base != 9 {
-		t.Errorf("una caja de 1 fila fue a la %d (ok=%v), want la 9", base, ok)
+	if _, ok := landRow(opened(3), 2, 10); ok {
+		t.Error("a box of 10 rows found room in a window of 3")
+	}
+
+	if base, ok := landRow(opened(10), 9, 1); !ok || base != 9 {
+		t.Errorf("a box of 1 row went to %d (ok=%v), want 9", base, ok)
 	}
 }
 
 // The anchor is the limit: a warning already in place cannot move again.
-func TestLandRowNoSeSaleDelAncla(t *testing.T) {
-	abiertas := func(n int) []bool {
+func TestLandRowDoesNotLeaveTheAnchor(t *testing.T) {
+	opened := func(n int) []bool {
 		rows := make([]bool, n)
 		for i := range rows {
 			rows[i] = true
 		}
 		return rows
 	}
-	rows := abiertas(20)
+	rows := opened(20)
 
 	base, ok := landRow(rows, 4, 3)
 	if !ok {
-		t.Fatal("una caja de 3 filas con el ancla en la 4 no encontró sitio, y caben de sobra")
+		t.Fatal("a box of 3 rows with the anchor at 4 found no room, and there is spare fit")
 	}
 	if base > 4 {
-		t.Errorf("con el ancla en la 4 la caja se apoyó en la %d: se pasó del ancla", base)
+		t.Errorf("with the anchor at 4 the box landed at %d: it went past the anchor", base)
 	}
 	if base != 4 {
-		t.Errorf("con el ancla en la 4 y sitio de sobra la caja se apoyó en la %d, want 4", base)
+		t.Errorf("with the anchor at 4 and spare room the box landed at %d, want 4", base)
 	}
 	if _, ok := landRow(rows, 1, 3); ok {
-		t.Error("una caja de 3 filas encontró sitio con el ancla en la 1: no cabe por encima del ancla")
+		t.Error("a box of 3 rows found room with the anchor at 1: it does not fit above the anchor")
 	}
 	if base, ok := landRow(rows, 2, 3); !ok || base != 2 {
-		t.Errorf("con el ancla en la 2 la caja de 3 filas fue a la %d (ok=%v), want la 2", base, ok)
+		t.Errorf("with the anchor at 2 the box of 3 rows went to %d (ok=%v), want 2", base, ok)
 	}
 }
 
-func TestLandRowSubePorEncimaDeLoQueNoAdmite(t *testing.T) {
+func TestLandRowGoesAboveWhatItCannotAdmit(t *testing.T) {
 	rows := make([]bool, 10)
 	for i := range rows {
 		rows[i] = true
@@ -69,14 +69,14 @@ func TestLandRowSubePorEncimaDeLoQueNoAdmite(t *testing.T) {
 
 	base, ok := landRow(rows, 9, 3)
 	if !ok {
-		t.Fatal("una caja de 3 filas no encontró sitio con las 3 de abajo cerradas, y las 7 de arriba están libres")
+		t.Fatal("a box of 3 rows found no room with the 3 below closed, and the 7 above are free")
 	}
 	if base != 6 {
-		t.Errorf("la caja se apoyó en la fila %d, want 6 (justo encima de las cerradas)", base)
+		t.Errorf("the box landed on row %d, want 6 (exactly above the closed ones)", base)
 	}
 	for i := base - 3 + 1; i <= base; i++ {
 		if !rows[i] {
-			t.Errorf("la caja ocupa la fila %d, que no admite avisos: parte un marco", i)
+			t.Errorf("the box occupies row %d, which takes no notices: it splits a frame", i)
 		}
 	}
 
@@ -86,18 +86,18 @@ func TestLandRowSubePorEncimaDeLoQueNoAdmite(t *testing.T) {
 	}
 	rows2[8], rows2[9] = false, false
 	if base, ok := landRow(rows2, 9, 2); !ok || base != 7 {
-		t.Errorf("con un hueco de 2 filas abajo la caja de 2 fue a la %d (ok=%v), want la 7", base, ok)
+		t.Errorf("with a gap of 2 rows below the box of 2 went to %d (ok=%v), want 7", base, ok)
 	}
 
-	ninguna := make([]bool, 5)
-	if _, ok := landRow(ninguna, 4, 3); ok {
-		t.Error("una caja de 3 filas encontró sitio en una ventana donde no admits ninguna fila")
+	none := make([]bool, 5)
+	if _, ok := landRow(none, 4, 3); ok {
+		t.Error("a box of 3 rows found room in a window that admits no row")
 	}
 }
 
 // ALL the rows have to admit it: one closed row is enough to refuse.
-func TestAdmitenAvisoEsTodoONada(t *testing.T) {
-	abiertas := func(n int) []bool {
+func TestNoticesAreAdmittedAllOrNothing(t *testing.T) {
+	opened := func(n int) []bool {
 		rows := make([]bool, n)
 		for i := range rows {
 			rows[i] = true
@@ -105,47 +105,47 @@ func TestAdmitenAvisoEsTodoONada(t *testing.T) {
 		return rows
 	}
 
-	if !admitenAviso(abiertas(10), 0, 10) {
-		t.Error("diez filas abiertas no se admitting themselves: la función está rota")
+	if !admitsWarning(opened(10), 0, 10) {
+		t.Error("ten open rows do not admit themselves: the function is broken")
 	}
-	for _, cerrada := range []int{0, 3, 6, 9} {
-		rows := abiertas(10)
-		rows[cerrada] = false
-		if admitenAviso(rows, 0, 10) {
-			t.Errorf("con la fila %d cerrada, el bloque entero se admitió: medio aviso parte el marco igual que entero", cerrada)
+	for _, closed := range []int{0, 3, 6, 9} {
+		rows := opened(10)
+		rows[closed] = false
+		if admitsWarning(rows, 0, 10) {
+			t.Errorf("with row %d closed, the whole block was admitted: half a notice breaks the frame just like a whole one", closed)
 		}
 	}
-	if admitenAviso(abiertas(10), 8, 5) {
-		t.Error("un bloque que se sale por abajo se admitió: la fila 12 no existe")
+	if admitsWarning(opened(10), 8, 5) {
+		t.Error("a block that escapes at the bottom was admitted: row 12 does not exist")
 	}
-	if admitenAviso(abiertas(10), -3, 2) {
-		t.Error("un bloque con un índice negativo se admitió")
+	if admitsWarning(opened(10), -3, 2) {
+		t.Error("a block with a negative index was admitted")
 	}
-	if !admitenAviso(abiertas(10), 8, 2) {
-		t.Error("un bloque que termina justo en la última fila no se admitió")
+	if !admitsWarning(opened(10), 8, 2) {
+		t.Error("a block that ends exactly on the last row was not admitted")
 	}
-	if admitenAviso(abiertas(10), 9, 2) {
-		t.Error("un bloque que termina una fila más allá de la última se admitió")
+	if admitsWarning(opened(10), 9, 2) {
+		t.Error("a block that ends one row past the last was admitted")
 	}
-	if !admitenAviso(abiertas(10), 5, 0) {
-		t.Error("un bloque de cero filas debería admitirse: no hay nada que se oponga")
+	if !admitsWarning(opened(10), 5, 0) {
+		t.Error("a block of zero rows should be admitted: nothing opposes it")
 	}
-	if admitenAviso(nil, 0, 1) {
-		t.Error("un bloque sobre un slice vacío se admitió")
+	if admitsWarning(nil, 0, 1) {
+		t.Error("a block over an empty slice was admitted")
 	}
 }
 
-func TestLandRowConUnaCajaDeAlturaCero(t *testing.T) {
+func TestLandRowWithABoxOfHeightZero(t *testing.T) {
 	rows := make([]bool, 10)
 	for i := range rows {
 		rows[i] = true
 	}
 	for _, bh := range []int{0, -1, -10} {
 		if base, ok := landRow(rows, 9, bh); ok {
-			t.Errorf("una caja de %d filas se colocó en la %d: no hay nada que pintar", bh, base)
+			t.Errorf("a box of %d rows was placed at %d: there is nothing to paint", bh, base)
 		}
 	}
 	if _, ok := landRow(rows, -1, 3); ok {
-		t.Error("una caja encontró sitio con un ancla negativo")
+		t.Error("a box found room with a negative anchor")
 	}
 }

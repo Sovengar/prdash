@@ -203,7 +203,7 @@ func (s *Service) keep(image string, it model.Item, kind Kind) (string, error) {
 
 // An interface because Close is the only copy error that is not a disk error and cannot be
 // provoked: everything written goes through the page cache, so io.Copy finishes even if the disk fills.
-type escritura interface {
+type writer interface {
 	io.Writer
 	io.Closer
 }
@@ -214,14 +214,14 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer func() { _ = in.Close() }()
-	return copiaPublicando(in, dst, creaTemporal)
+	return copyPublishing(in, dst, createTemp)
 }
 
-func creaTemporal(ruta string) (escritura, error) { return os.Create(ruta) }
+func createTemp(ruta string) (writer, error) { return os.Create(ruta) }
 
 // Only the creator is injected: the rename and the delete stay on os and are testable for real,
 // since a `dst` that is already a non-empty directory fails the rename.
-func copiaPublicando(in io.Reader, dst string, crea func(string) (escritura, error)) error {
+func copyPublishing(in io.Reader, dst string, crea func(string) (writer, error)) error {
 	tmp := dst + ".part"
 	out, err := crea(tmp)
 	if err != nil {
@@ -248,14 +248,14 @@ func copiaPublicando(in io.Reader, dst string, crea func(string) (escritura, err
 // The listing is injected because DirEntry.Info only fails if the file vanishes between ReadDir
 // and the lstat, and races cannot be forced. What matters is that the prune CARRIES ON past a dead entry.
 func prune(dir string, keep int) {
-	poda(dir, keep, os.ReadDir)
+	pruneWith(dir, keep, os.ReadDir)
 }
 
-func poda(dir string, keep int, listado func(string) ([]os.DirEntry, error)) {
+func pruneWith(dir string, keep int, listing func(string) ([]os.DirEntry, error)) {
 	if keep < 0 {
 		keep = 0
 	}
-	entries, err := listado(dir)
+	entries, err := listing(dir)
 	if err != nil {
 		return
 	}

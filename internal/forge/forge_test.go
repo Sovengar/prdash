@@ -31,10 +31,10 @@ func TestCollectPagesThroughAllStreams(t *testing.T) {
 	res := forge.Collect(context.Background(), fake)
 
 	if len(res.Authored) != 2 {
-		t.Fatalf("authored = %d, want 2 (dos páginas)", len(res.Authored))
+		t.Fatalf("authored = %d, want 2 (two pages)", len(res.Authored))
 	}
 	if fake.ListCallCount() < len(forge.Streams) {
-		t.Errorf("List se llamó %d veces, want >= %d", fake.ListCallCount(), len(forge.Streams))
+		t.Errorf("List was called %d times, want >= %d", fake.ListCallCount(), len(forge.Streams))
 	}
 }
 
@@ -72,7 +72,7 @@ func TestStreamEmitsPages(t *testing.T) {
 	var firsts, nexts int
 	forge.Stream(context.Background(), fake, func(p forge.PageResult) bool {
 		if p.Query.Section != model.SectionReview || p.Query.ReviewKind != model.ReviewRequested {
-			return true // ignora las listas vacías
+			return true // ignore empty lists
 		}
 		if len(p.Items) == 0 {
 			return true
@@ -86,7 +86,7 @@ func TestStreamEmitsPages(t *testing.T) {
 	})
 
 	if firsts != 1 || nexts != 1 {
-		t.Fatalf("firsts=%d nexts=%d, want 1 y 1", firsts, nexts)
+		t.Fatalf("firsts=%d nexts=%d, want 1 and 1", firsts, nexts)
 	}
 }
 
@@ -104,11 +104,11 @@ func TestStreamStopsWhenEmitReturnsFalse(t *testing.T) {
 	}
 
 	forge.Stream(context.Background(), fake, func(p forge.PageResult) bool {
-		return p.Query.Section != model.SectionAuthored // corta en authored
+		return p.Query.Section != model.SectionAuthored // stop at authored
 	})
 
 	if got := fake.ListCallCount(); got > len(forge.Streams) {
-		t.Fatalf("List se llamó %d veces; el corte debería evitar la 2ª página de authored", got)
+		t.Fatalf("List was called %d times; the cut should prevent the 2nd authored page", got)
 	}
 }
 
@@ -126,7 +126,7 @@ func TestRunActionApproveOK(t *testing.T) {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if !out.HasItem {
-		t.Error("debería traer el estado releído")
+		t.Error("it should bring back the re-read state")
 	}
 }
 
@@ -144,7 +144,7 @@ func TestRunActionConflictWhenMerged(t *testing.T) {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if !out.HasItem || out.Item.State != "MERGED" {
-		t.Errorf("debería traer el estado releído: %+v", out.Item)
+		t.Errorf("it should bring back the re-read state: %+v", out.Item)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestRunActionPermissionDisabled(t *testing.T) {
 		ForgeName:      "gitlab",
 		HostName:       "gitlab.example.com",
 		ItemStates:     map[string]model.Item{testutil.ItemKey("grp/proj", 4): item},
-		ActionWarnings: map[string][]model.Warning{"approve:grp/proj#4": {{Forge: "gitlab", Kind: "permission", Msg: "no tienes permiso"}}},
+		ActionWarnings: map[string][]model.Warning{"approve:grp/proj#4": {{Forge: "gitlab", Kind: "permission", Msg: "you do not have permission"}}},
 	}
 
 	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, item.Ref, 4, forge.MergeRequest{Mode: forge.Squash})
@@ -183,7 +183,7 @@ func TestRunActionUnsupportedDisabled(t *testing.T) {
 		ForgeName:      "bitbucket",
 		HostName:       "bitbucket.org",
 		ItemStates:     map[string]model.Item{testutil.ItemKey("acme/widget", 5): item},
-		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#5": {{Forge: "bitbucket", Kind: "unsupported", Msg: "no soportado"}}},
+		ActionWarnings: map[string][]model.Warning{"merge:acme/widget#5": {{Forge: "bitbucket", Kind: "unsupported", Msg: "not supported"}}},
 	}
 
 	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, item.Ref, 5, forge.MergeRequest{Mode: forge.Squash})
@@ -210,7 +210,7 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if out.Msg != state.SelfReviewReason {
-		t.Errorf("Msg = %q, want %q (no el stderr de la CLI)", out.Msg, state.SelfReviewReason)
+		t.Errorf("Msg = %q, want %q (not the CLI stderr)", out.Msg, state.SelfReviewReason)
 	}
 }
 
@@ -218,7 +218,7 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 // the UI promise a refresh that fixes nothing.
 func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 7)
-	item.HeadSHA = "abc1234" // sin pin el merge no sale, y esto no es lo que se prueba
+	item.HeadSHA = "abc1234" // without a pin the merge does not go through, and that is not what is being tested
 	fake := &testutil.FakeAdapter{
 		ForgeName:  "github",
 		HostName:   "github.com",
@@ -234,13 +234,13 @@ func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
 		t.Fatalf("Unmergeable = false, outcome = %+v", out)
 	}
 	if out.OK || out.Conflict {
-		t.Errorf("un rechazo por ramas no es un conflicto de estado: %+v", out)
+		t.Errorf("a rejection because of branches is not a state conflict: %+v", out)
 	}
 	if out.Perm {
-		t.Error("Perm = true: un rebase lo arregla, el ítem no queda denegado para siempre")
+		t.Error("Perm = true: a rebase fixes it, the item is not denied forever")
 	}
 	if out.Msg != state.UnmergeableReason {
-		t.Errorf("Msg = %q, want %q (no el stderr de la CLI)", out.Msg, state.UnmergeableReason)
+		t.Errorf("Msg = %q, want %q (not the CLI stderr)", out.Msg, state.UnmergeableReason)
 	}
 }
 
@@ -261,7 +261,7 @@ func TestRunActionConflictStaysAConflict(t *testing.T) {
 		t.Fatalf("Conflict = false, outcome = %+v", out)
 	}
 	if out.Unmergeable {
-		t.Error("Unmergeable = true: esto se resuelve refrescando")
+		t.Error("Unmergeable = true: this is resolved by refreshing")
 	}
 }
 
@@ -272,7 +272,7 @@ func assertKind(t *testing.T, warns []model.Warning, kind string) {
 			return
 		}
 	}
-	t.Fatalf("no hay warning de tipo %q en %+v", kind, warns)
+	t.Fatalf("no warning of kind %q in %+v", kind, warns)
 }
 
 func TestCollectStopsOnRateLimit(t *testing.T) {
@@ -294,7 +294,7 @@ func TestCollectStopsOnRateLimit(t *testing.T) {
 	res := forge.Collect(context.Background(), fake)
 
 	if fake.ListCallCount() != len(forge.Streams) {
-		t.Fatalf("List se llamó %d veces; con rate limit debería parar en la primera página", fake.ListCallCount())
+		t.Fatalf("List was called %d times; with a rate limit it should stop at the first page", fake.ListCallCount())
 	}
 	assertKind(t, res.Warnings, "ratelimit")
 }
@@ -303,11 +303,11 @@ func TestEscapeGraphQL(t *testing.T) {
 	in := "x\"y\\z\nw\tv\ru"
 	out := forge.EscapeGraphQL(in)
 	if strings.ContainsAny(out, "\n\t\r") {
-		t.Fatalf("no debe quedar control crudo: %q", out)
+		t.Fatalf("no raw control may remain: %q", out)
 	}
 	for _, want := range []string{`\"`, `\\`, `\n`, `\t`, `\r`} {
 		if !strings.Contains(out, want) {
-			t.Errorf("falta el escape %q en %q", want, out)
+			t.Errorf("escape %q missing in %q", want, out)
 		}
 	}
 }

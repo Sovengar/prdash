@@ -1,232 +1,254 @@
-# ADR 0005 — Prefijo de ruta seleccionable y toggleable
+# ADR 0005 — Selectable and toggleable path prefix
 
-- **Estado**: Accepted
-- **Fecha**: 2026-09-26
-- **Decisor**: usuario (buble)
-- **Alcance**: inbox de la TUI, columna ITEM, línea de prefijo, barra de atajos
-- **Patrón de nombres**: `docs/adr/NNNN-slug.md`
-- **Sustituye a**: **ADR 0002**, en su §Decisión punto 1 (el prefijo de ruta común
-  se declara en la cabecera de la sección) y en el punto 4 («el frente perdido es
-  el grupo, que la cabecera ya declara»).
-- **Sustituye a**: **ADR 0004**, en su §Decisión punto 4 (el prefijo pasa a una
-  línea fija al inicio del cuerpo de la lista), que este ADR convierte en la
-  línea que solo se pinta en el modo por defecto.
-- **Deja vigente**: el cálculo del prefijo común (`sectionPrefix`: alineado en
-  fronteras `/`, prefijo común estricto, sin comerse nunca el segmento final), la
-  fórmula del ancho de ITEM (contenido más el hueco de separación, acotado a
-  `[6, 34]`), el recorte por la cola (`truncateTail`), la regla de la sección de
-  un solo ítem, y el punto 5 del ADR 0004 (el ancho se calcula sobre la sección
-  activa).
+- **Status**: Accepted
+- **Date**: 2026-09-26
+- **Decider**: user (buble)
+- **Scope**: the TUI inbox, ITEM column, prefix line, hints bar
+- **Naming pattern**: `docs/adr/NNNN-slug.md`
+- **Supersedes**: **ADR 0002**, in its §Decision point 1 (the common path
+  prefix is declared in the section header) and in point 4 ("the part lost at
+  the front is the group, which the header already declares").
+- **Also supersedes**: **ADR 0004**, in its §Decision point 4 (the prefix moves to
+  a fixed line at the start of the list body), which this ADR turns into the
+  line that is only painted in the default mode.
+- **Leaves in force**: the common prefix computation (`sectionPrefix`:
+  aligned on `/` boundaries, strict common prefix, never eating the final
+  segment), the ITEM width formula (content plus the separating gap, bounded
+  to `[6, 34]`), the tail truncation (`truncateTail`), the single-item section
+  rule, and point 5 of ADR 0004 (the width is computed on the active section).
 
-## Contexto
+## Context
 
-Desde el ADR 0002 la ruta de un ítem se parte en dos: el prefijo que comparten los
-ítems de la sección vive en una línea fija, y la celda ITEM solo pinta el sufijo.
-El ADR 0004 movió esa línea al inicio del cuerpo de la lista, al pintar una sola
-sección a la vez, y dejó escrita la costura:
+Since ADR 0002 an item's path is split in two: the prefix shared by the
+section's items lives in a fixed line, and the ITEM cell only paints the
+suffix. ADR 0004 moved that line to the start of the list body, by painting a
+single section at a time, and left the seam written down:
 
-> Deja abierta la **costura para el prefijo seleccionable/toggleable** (feature
-> posterior): el prefijo se compone como una unidad discreta desde una única
-> fuente, así que una feature posterior puede ocultarlo, alternarlo o hacerlo
-> interactivo sin tocar la leyenda, el ancho de la tabla ni el cambio de sección.
+> It leaves open the **seam for the selectable/toggleable prefix** (a later
+> feature): the prefix is composed as a discrete unit from a single source,
+> so a later feature can hide it, toggle it or make it interactive without
+> touching the legend, the table width or the section change.
 
-El reparto del ADR 0002 es el mejor de los posibles **con una sola opción**, y es
-justo lo que pasa: no hay manera de elegir otra. Y no todas las lecturas lo
-prefieren igual:
+ADR 0002's split is the best of the possible ones **with a single option**, and
+that is exactly what happens: there is no way to choose another one. And not
+every reading prefers it equally:
 
-- **La fila deja de ser auto-contenida.** Con el prefijo en su línea, la
-  referencia de un ítem no está en la fila: hay que leer dos sitios. Para quien
-  nombra un PR en voz alta, o lee la tabla fila a fila, o copia la referencia, la
-  ruta completa en la celda es más directa aunque la tabla sea más ancha.
-- **El prefijo es una línea fija que no se puede apagar.** Con la densidad como
-  criterio, `APPCITTI/vsocial/` es una línea entera para el grupo y un texto
-  idéntico en todas las filas. Cuando solo importa la hoja, sobra.
-- **El prefijo cambia con la sección.** `tab` salta a secciones cuyo prefijo
-  común es otro y reescribe la línea de arriba en cada salto. Con la ruta en la
-  celda, cada fila es estable y no hay que releer el contexto.
+- **The row stops being self-contained.** With the prefix on its own line, an
+  item's reference is not in the row: you have to read two places. For whoever
+  names a PR out loud, or reads the table row by row, or copies the reference,
+  the full path in the cell is more direct even if the table is wider.
+- **The prefix is a fixed line that cannot be turned off.** With density as
+  the criterion, `APPCITTI/vsocial/` is a whole line for the group and
+  identical text on every row. When only the leaf matters, it is in the way.
+- **The prefix changes with the section.** `tab` jumps to sections whose
+  common prefix is another one and rewrites the line above on every jump. With
+  the path in the cell, every row is stable and the context does not have to
+  be re-read.
 
-Ninguno de los tres casos es un capricho: son tres lecturas legítimas de la misma
-tabla, y el diseño solo hueco.
+None of the three cases is a whim: they are three legitimate readings of the
+same table, and the design only offered one.
 
-## Decisión
+## Decision
 
-1. **Tres modos de prefijo, uno global, ciclados por una tecla.** La acción
-   `prefix-mode` (default `p`) cicla `common → full → leaf → common`. El modo es
-   **global**, no por sección, porque la barra lo nombra una vez y la vista pinta
-   una sola sección: un modo por sección no tendría dónde anunciarse.
+1. **Three prefix modes, one global, cycled by a key.** The action
+   `prefix-mode` (default `p`) cycles `common → full → leaf → common`. The
+   mode is **global**, not per section, because the bar names it once and the
+   view paints a single section: a per-section mode would have nowhere to
+   announce itself.
 
-   | Modo | Línea de prefijo | Celda ITEM |
+   | Mode | Prefix line | ITEM cell |
    |---|---|---|
-   | `common` (por defecto) | sí, con el prefijo común de la activa | solo el sufijo |
-   | `full` | no | la referencia completa `proyecto/subgrupo#n`, **recortada por la cola si no cabe** |
-   | `leaf` | no | la hoja del proyecto más `#n` |
+   | `common` (default) | yes, with the active section's common prefix | only the suffix |
+   | `full` | no | the full reference `project/subgroup#n`, **tail-truncated if it does not fit** |
+   | `leaf` | no | the project's leaf plus `#n` |
 
-2. **`common` es el comportamiento heredado** y no se toca: es el de los ADR
-   0002/0004, y por ser el default es lo que ve quien no pulsa la tecla. La
-   feature **no cambia nada** de lo que se veía antes.
+2. **`common` is the legacy behaviour** and it is not touched: it is the one
+   of ADR 0002/0004, and being the default it is what whoever does not press
+   the key sees. The feature **changes nothing** of what was seen before.
 
-3. **Fuera de `common` no hay línea de prefijo, porque no hay prefijo que
-   declarar.** No es una decisión de la vista: el layout deja de calcular el
-   prefijo común en esos modos, y la lista —que ya solo pintaba la línea si salía
-   no vacío— deja de pintarla sola. La lista recupera esa línea de alto.
+3. **Outside `common` there is no prefix line, because there is no prefix to
+   declare.** It is not a decision of the view: the layout stops computing the
+   common prefix in those modes, and the list —which already only painted the
+   line when it came out non-empty— stops painting it by itself. The list
+   reclaims that line of height.
 
-4. **El ancho de ITEM se recalcula por modo**, con la misma fórmula y el mismo
-   acotado `[6, 34]`: el sufijo más largo en `common`, la referencia completa en
-   `full`, la hoja más larga en `leaf`. Se calcula **una vez por render** (en
-   `listLines`), nunca por fila, para que cabecera y filas midan lo mismo y la
-   tabla no baile al escribir encima.
+4. **The ITEM width is recomputed per mode**, with the same formula and the
+   same `[6, 34]` bound: the longest suffix in `common`, the full reference in
+   `full`, the longest leaf in `leaf`. It is computed **once per render** (in
+   `listLines`), never per row, so that header and rows measure the same and
+   the table does not dance when writing over it.
 
-5. **`common` degrada a `full` cuando la sección no tiene prefijo común** (un solo
-   ítem, o sin nada en común): no inventa un prefijo ni repite la ruta. No es un
-   caso especial sino el comportamiento que ya tenía —sin prefijo, la celda pinta
-   la referencia entera—, y por eso la degradación no necesita código propio.
+5. **`common` degrades to `full` when the section has no common prefix** (a
+   single item, or nothing in common): it does not invent a prefix nor repeat
+   the path. It is not a special case but the behaviour it already had —with
+   no prefix, the cell paints the whole reference—, and that is why the
+   degradation needs no code of its own.
 
-6. **El hint nombra el modo actual** (`p prefix: full`), no la tecla a secas: la
-   información de en qué modo se está tiene que estar en la barra, o habría que
-   contar pulsaciones. Como la etiqueta depende del estado de la vista y la config
-   no la tiene, `Config.Hints` recibe un `HintState` (map por acción) con el
-   fragmento que la TUI compone. `hintOrder` conserva la lista, el orden y la
-   etiqueta por defecto; el rebind de `[keybindings]` sigue siendo genérico.
+6. **The hint names the current mode** (`p prefix: full`), not the bare key:
+   the information about which mode you are in has to be in the bar, or one
+   would have to count keystrokes. Since the label depends on the state of the
+   view and the config does not have it, `Config.Hints` receives a `HintState`
+   (map by action) with the fragment the TUI composes. `hintOrder` keeps the
+   list, the order and the default label; the rebind from `[keybindings]`
+   stays generic.
 
-7. **El modo no se persiste.** Vive en el `Model` y al reabrir el programa vuelve
-   a `common`. No hay campo nuevo en `fileConfig` ni en el schema TOML.
-   - Consecuencia asumida: al registrar la acción en `DefaultKeybindings`, la
-     **tecla** `p` pasa a ser configurable por TOML por el mecanismo genérico que
-     ya existía. El **modo** sigue sin persistir. Si algún día se quiere
-     persistente, es un campo nuevo en `fileConfig` y su test.
+7. **The mode is not persisted.** It lives in the `Model` and reopening the
+   program goes back to `common`. No new field in `fileConfig` nor in the TOML
+   schema.
+   - Accepted consequence: by registering the action in
+     `DefaultKeybindings`, the **key** `p` becomes TOML-configurable through
+     the generic mechanism that already existed. The **mode** still does not
+     persist. If it is ever wanted persistent, it is a new field in
+     `fileConfig` and its test.
 
-8. **`--print` no cambia.** Imprime la referencia completa siempre: no tiene
-   columna ni terminal, así que no tiene el problema que el modo resuelve. Fija
-   su independencia un test (`TestRunPrintNoAplicaElModoDePrefijo`).
+8. **`--print` does not change.** It always prints the full reference: it has
+   no column nor terminal, so it does not have the problem the mode solves. A
+   test pins its independence
+   (`TestRunPrintDoesNotApplyThePrefixMode`).
 
-9. **Seleccionable = elegir qué prefijo se ve**, no a qué ítem se aplica. La
-   columna ya se dimensiona por el contenido de la sección, y "el prefijo de un
-   ítem concreto" es un caso degenerado que `leaf` resuelve mejor.
+9. **Selectable = choosing which prefix is seen**, not which item it applies
+   to. The column is already dimensioned by the content of the section, and
+   "the prefix of one particular item" is a degenerate case that `leaf`
+   resolves better.
 
-## Alternativas consideradas y descartadas
+## Rejected alternatives
 
-- **Prefijo seleccionable por ítem** (elegir un grupo y aplicarlo a un ítem
-  suelto). La columna se dimensiona por el conjunto de la sección; el prefijo de
-  un ítem concreto es `full` si la ruta no tiene grupo, o `common` si lo tiene
-  pero no lo comparten los demás. Ningún caso de uso que `leaf` no cubra.
-- **Más de tres modos** (prefijo de dos niveles, ruta por sotto):
-  multiplica el número de combinaciones de la barra y del ancho sin aportar una
-  lectura que no se pueda lograr cyclando.
-- **Prefijo en la leyenda del borde.** Rompe el formato exacto de la leyenda
-  (que es de conteos) y mezcla conteos con ruta: ya se descartó en el ADR 0004.
-- **Un flag deBool en `[keybindings]` o en `[inbox]` tipo
-  `prefix = "full"`.** Haría el modo persistente, que es justo lo decidido en
-  contra. Se puede añadir después sin tocar esto: el modo ya sale de un solo tipo.
-- **Sustitución de un marcador en la etiqueta** (`label: "prefix: %s"` +
-  `strings.Replace` en la TUI). Toca menos código, pero la barra vista desde la
-  config muestra un `%s` crudo y "la etiqueta la pone la TUI" difumina el
-  invariante de que `hintOrder` es la fuente única de la barra.
-- **Que la TUI componga la entrada de `p` por su cuenta** (como ya hace con la
-  Confirmación de merge). Sacaría el hint de `p` del orden de `hintOrder` y de
-  `Config.Hints()`, que es justo lo que verifica el guard anti-drift
-  `TestHintsCubrenTodosLosKeybindings`.
-- **Persistir el modo en el snapshot** (el modo es puro de la vista, pero el snapshot
-  ya guarda cursor y posición). Se descarta: la posición se recuerda porque es
-  trabajo del usuario en curso; el modo de prefijo es una preferencia de lectura,
-  y hacerlo persistente ata el comportamiento por defecto a una ejecución
-  anterior.
+- **Per-item selectable prefix** (choosing a group and applying it to a single
+  item). The column is dimensioned by the section's set; the prefix of one
+  particular item is `full` if the path has no group, or `common` if it has
+  one but the others do not share it. No use case that `leaf` does not cover.
+- **More than three modes** (two-level prefix, path per subgroup): it multiplies
+  the number of combinations of the bar and of the width without bringing a
+  reading that cannot be achieved by cycling.
+- **Prefix in the border legend.** It breaks the exact format of the legend
+  (which is about counts) and mixes counts with path: it was already rejected
+  in ADR 0004.
+- **A bool flag in `[keybindings]` or in `[inbox]` like
+  `prefix = "full"`.** It would make the mode persistent, which is exactly
+  what was decided against. It can be added later without touching this: the
+  mode already comes from a single type.
+- **Substituting a placeholder in the label** (`label: "prefix: %s"` +
+  `strings.Replace` in the TUI). It touches less code, but the bar seen from
+  the config shows a raw `%s` and "the label is set by the TUI" blurs the
+  invariant that `hintOrder` is the single source of the bar.
+- **The TUI composing the `p` entry on its own** (as it already does with the
+  merge Confirmation). It would take the `p` hint out of `hintOrder`'s order
+  and out of `Config.Hints()`, which is exactly what the anti-drift guard
+  `TestHintsCoverAllKeybindings` verifies.
+- **Persisting the mode in the snapshot** (the mode is purely view state, but
+  the snapshot already stores cursor and position). Rejected: the position is
+  remembered because it is the user's work in progress; the prefix mode is a
+  reading preference, and making it persistent ties the default behaviour to
+  a previous run.
 
-## Consecuencias
+## Consequences
 
-**Positivas**
+**Positive**
 
-- La vista se adapta a las tres lecturas sin cambiar de herramienta: la más
-  densa para escanear, la más explícita para leer o nombrar, la de siempre para
-  quien ya se acostumbró.
-- El prefijo deja de ser un coste fijo: en `full` y `leaf` la lista recupera la
-  línea que ocupaba.
-- La costura que el ADR 0004 dejó abierta queda cerrada **sin tocar** la leyenda,
-  el ciclo de sección, el cursor por sección ni el pipeline de datos.
-- `hintOrder` sigue siendo la única fuente de la barra y el rebind por
-  `[keybindings]` sigue siendo genérico: la feature no deblanda ningún invariante
-  de la barra.
+- The view adapts to the three readings without changing tool: the densest one
+  for scanning, the most explicit one for reading or naming, the usual one for
+  whoever already got used to it.
+- The prefix stops being a fixed cost: in `full` and `leaf` the list
+  reclaims the line it occupied.
+- The seam ADR 0004 left open is closed **without touching** the legend, the
+  section cycle, the per-section cursor nor the data pipeline.
+- `hintOrder` remains the only source of the bar and the rebind via
+  `[keybindings]` stays generic: the feature does not weaken any invariant of
+  the bar.
 
-**Negativas / costes**
+**Negative / costs**
 
-- **La referencia deja de ser única por fila en `leaf`.** Dos repos de grupos
-  distintos con la misma hoja se vuelven indistinguibles
-  (`acme/one#7` y `other/one#8` → `one#7` y `one#8`). Es inherente al modo: su
-  valor es la densidad cuando las hojas **sí** son únicas, que es el caso normal
-  (el prefijo común existe justamente porque las hojas difieren). El detalle y
-  `--print` conservan la ruta completa. **No se promete desambiguación.**
-  - Corrijo aquí la justificación que se manejaba al revés: `leaf` es
-    el modo que **menos** desambigua de los dos que no usan prefijo.
-- **`newRefLayout` exige el modo como parámetro explícito** (16 call sites: 1 de
-  producción y 15 de test). Es un coste deliberado: con un default,
-  `newRefLayout(secs)` significaría "common" en unos sitios y "lo que hubiera" en
-  otros, y el error no lo vería el compilador.
-- **`p` pasa a ser configurable por `[keybindings]`** aunque el modo no se
-  persista. Es la consecuencia de registrar la acción, y es el mecanismo
-  genérico que ya existía; no es plumb nuevo. **Con un coste que conviene decir:
-  `ActionForKey` resuelve por orden alfabético de acciones, así que un usuario que
-  tuviera otra acción en `p` la pierde** —`prefix-mode` va antes que `quit`,
-  `refresh`, `section-next` y `simulate`— sin aviso. No se añade detección de
-  teclas duplicadas porque es una limitación genérica del mapa, anterior a esta
-  feature, y arreglarla excede su alcance. Quien tenga algo en `p`, lo mueva.
-- **`full` es el modo que peor aguanta un terminal estrecho.** Con el ITEM al
-  tope (34) la columna ya no cabe junto a FORGE (14) por debajo de **48 columnas
-  interiores**, así que `fitColumns` la elimina por la derecha y la tabla se queda
-  solo con FORGE —justo se pierde la referencia que fue a elegir—. En `common` y
-  `leaf` el sufijo es corto y sobrevive hasta 38. El tope de 34 lo fijó el ADR
-  0002 para el *sufijo* y la fórmula se conserva; el mecanismo (perder columnas
-  por la derecha antes que información dentro de ellas) también. Se asume, y
-  `TestFullPierdeLaColumnaITEMEnTerminalMuyEstrecho` fija el umbral para que no se
-  mueva en silencio. **Arreglarlo de raíz exigiría acotar ITEM en función del
-  ancho disponible, no con una constante: es una decisión de diseño aparte, no un
-  efecto colateral de esta.**
-- **La referencia completa casi nunca cabe entera.** El texto usable de ITEM es
-  `itemWidthCap - 1 = 33` runes, así que una ruta de subgrupo de 40 sale siempre
-  recortada por la cola (`…/vsocial/backend/api-gateway#100`). `full` no es "la
-  ruta entera" sino "la referencia en la celda, con el mismo recorte que siempre".
-  La doc lo dice así a propósito después de escribirlo mal al revés.
-- **Ciclar el modo cambia el ancho y la altura de la lista.** Resincronizar el
-  scroll en cada ciclo es obligatorio (sin él, una lista desplazada deja el
-  cursor fuera de la ventana). Está hecho y verificado.
-- **El nombre del modo se pierde por debajo de 42 columnas de ancho interior.**
-  La barra se envuelve y se acota a `maxHintLines`; con 38 solo salen tres líneas y
-  el nombre se va con el recorte (`p prefix:` a secas). Afecta solo a `common`,
-  cuyo nombre es el más largo. Es la degradación de la barra que el repo ya acepta
-  (por eso `quit` abre la lista); `prefix-mode` va detrás de `refresh` para
-  perderse lo último posible, y los tres modos se leen enteros desde 42 columnas
-  interiores, es decir desde un terminal de 44
-  (`TestElHintNombraElModoAAnchosUsables`).
-- **Un ciclo más que memorizar**, mitigado por el hint, que nombra el modo.
+- **The reference stops being unique per row in `leaf`.** Two repos from
+  different groups with the same leaf become indistinguishable
+  (`acme/one#7` and `other/one#8` → `one#7` and `one#8`). It is inherent to
+  the mode: its value is density when the leaves **are** unique, which is the
+  normal case (the common prefix exists precisely because the leaves differ).
+  The detail and `--print` keep the full path. **No disambiguation is
+  promised.**
+  - I correct here the justification that was being handled backwards: `leaf`
+    is the mode that disambiguates the **least** of the two that do not use a
+    prefix.
+- **`newRefLayout` requires the mode as an explicit parameter** (16 call
+  sites: 1 in production and 15 in tests). It is a deliberate cost: with a
+  default, `newRefLayout(secs)` would mean "common" in some places and "whatever
+  there was" in others, and the compiler would not catch the error.
+- **`p` becomes configurable via `[keybindings]`** even though the mode is not
+  persisted. It is the consequence of registering the action, and it is the
+  generic mechanism that already existed; it is not new plumbing. **With a
+  cost worth stating: `ActionForKey` resolves by alphabetical order of
+  actions, so a user who had another action on `p` loses it** —`prefix-mode`
+  goes before `quit`, `refresh`, `section-next` and `simulate`— with no
+  warning. Duplicate-key detection is not added because it is a generic
+  limitation of the map, previous to this feature, and fixing it exceeds its
+  scope. Whoever has something on `p`, move it.
+- **`full` is the mode that fares worst on a narrow terminal.** With ITEM at
+  the cap (34) the column no longer fits next to FORGE (14) below **48 inner
+  columns**, so `fitColumns` drops it to the right and the table is left with
+  only FORGE —and precisely the reference you chose is the one lost—. In
+  `common` and `leaf` the suffix is short and survives until 38. The cap of 34
+  was set by ADR 0002 for the *suffix* and the formula is kept; the mechanism
+  (losing columns to the right before information inside them) as well. It is
+  accepted, and `TestFullLosesTheITEMColumnOnVeryNarrowTerminals` pins the
+  threshold so that it does not move silently. **Fixing it at the root would
+  require bounding ITEM as a function of the available width, not with a
+  constant: it is a separate design decision, not a side effect of this
+  one.**
+- **The full reference almost never fits whole.** The usable text of ITEM is
+  `itemWidthCap - 1 = 33` runes, so a 40-char subgroup path always comes out
+  tail-truncated (`…/vsocial/backend/api-gateway#100`). `full` is not "the
+  whole path" but "the reference in the cell, with the same truncation as
+  always". The docs say so on purpose after having written it backwards.
+- **Cycling the mode changes the width and the height of the list.**
+  Re-synchronizing the scroll on every cycle is mandatory (without it, a
+  scrolled list leaves the cursor outside the window). It is done and
+  verified.
+- **The name of the mode is lost below 42 columns of inner width.** The bar
+  wraps and is bounded to `maxHintLines`; with 38 only three lines come out
+  and the name goes with the truncation (bare `p prefix:`). It affects only
+  `common`, whose name is the longest. It is the degradation of the bar the
+  repo already accepts (that is why `quit` opens the list); `prefix-mode`
+  goes behind `refresh` to get lost as late as possible, and the three modes
+  read whole from 42 inner columns, that is, from a 44-column terminal
+  (`TestTheHintNamesTheModeAtUsableWidths`).
+- **One more cycle to memorize**, mitigated by the hint, which names the mode.
 
-**Verificación**
+**Verification**
 
-- `internal/tui/prefixmode_test.go`: `refLeaf` (subgrupo, `owner/repo`, sin
-  subgrupo, varios ítems, proyecto vacío); el ciclo `common → full → leaf →
-  common`; los tres `String()` exactos (son lo que ve el usuario); `prefixOf` no
-  vacío solo en `common`; el ancho por modo con el fixture de
-  `behavior.feature` (24 / 34 topado / 16); la etiqueta por modo y la degradación
-  `common == full` sin prefijo común; el recorte exacto en `full`
-  (`…/vsocial/backend/api-gateway#100`); el caso en que `leaf` **no** desambigua.
-- `internal/tui/prefixmode_list_test.go`: línea de prefijo presente solo en
-  `common` y ausente en `full`/`leaf`; etiqueta de la fila por modo; `full` y
-  `leaf` recuperan exactamente una línea; la lista en `common` sin prefijo común
-  es **idéntica** a la de `full`.
-- `internal/tui/prefixmode_key_test.go`: el ciclo con la tecla pulsada; el rebind
-  (la tecla nueva cicla, la vieja deja de hacerlo); `tab` no reinicia el modo ni
-  al volver a la sección; `p` no arma merge, no refresca, no lanza acción, no
-  deja aviso y no mueve el cursor; el cursor y la ventana sobreviven al ciclo;
-  un modelo nuevo arranca en `common` (no se persiste).
-- `internal/tui/prefixmode_hint_test.go`: el hint nombra el modo y cambia al
-  ciclar; el rebind y el modo se combinan (`P prefix: leaf`); con el merge
-  armado la Confirmación sustituye a la barra y el modo no se cuela en ella.
-- `internal/config/config_test.go`: la entrada `p prefix` sin estado y
-  `p prefix: full` con estado; un estado de una acción ausente no inventa una
-  entrada; el guard anti-drift `TestHintsCubrenTodosLosKeybindings` sigue
-  verde.
-- `internal/tui/refcol_test.go`: 300 rondas aleatorias de los invariantes de la
-  columna, ahora **en los tres modos** (celda no vacía, celda = recorte exacto de
-  la etiqueta, cola intacta al recortar, ancho dentro de `[6, 34]`, prefijo vacío
-  fuera de `common`).
-- `cmd/prdash/print_test.go`: `--print` imprime la ruta completa de un subgrupo
-  largo, sin `…` y sin línea de prefijo.
-- `make test` (build + vet + gofmt + `go test -race`). El repo no tiene CI
-  configurada: la garantía es el runner local.
+- `internal/tui/prefixmode_test.go`: `refLeaf` (subgroup, `owner/repo`, no
+  subgroup, several items, empty project); the `common → full → leaf →
+  common` cycle; the three exact `String()`s (they are what the user sees);
+  `prefixOf` non-empty only in `common`; the width per mode with the
+  `behavior.feature` fixture (24 / 34 capped / 16); the label per mode and the
+  `common == full` degradation with no common prefix; the exact truncation in
+  `full` (`…/vsocial/backend/api-gateway#100`); the case where `leaf` does
+  **not** disambiguate.
+- `internal/tui/prefixmode_list_test.go`: prefix line present only in
+  `common` and absent in `full`/`leaf`; row label per mode; `full` and `leaf`
+  reclaim exactly one line; the list in `common` with no common prefix is
+  **identical** to the one in `full`.
+- `internal/tui/prefixmode_key_test.go`: the cycle with the key pressed; the
+  rebind (the new key cycles, the old one stops doing it); `tab` does not
+  reset the mode nor when returning to the section; `p` does not arm merge, does
+  not refresh, does not launch an action, does not leave a notice and does not
+  move the cursor; the cursor and the window survive the cycle; a fresh model
+  starts in `common` (it is not persisted).
+- `internal/tui/prefixmode_hint_test.go`: the hint names the mode and changes
+  when cycling; the rebind and the mode combine (`P prefix: leaf`); with the
+  merge armed the Confirmation replaces the bar and the mode does not sneak
+  into it.
+- `internal/config/config_test.go`: the `p prefix` entry without state and
+  `p prefix: full` with state; a state for an absent action does not invent an
+  entry; the anti-drift guard `TestHintsCoverAllKeybindings` stays
+  green.
+- `internal/tui/refcol_test.go`: 300 random rounds of the column invariants,
+  now **in the three modes** (non-empty cell, cell = exact truncation of the
+  label, tail intact after truncating, width within `[6, 34]`, empty prefix
+  outside `common`).
+- `cmd/prdash/print_test.go`: `--print` prints the full path of a long
+  subgroup, without `…` and without a prefix line.
+- `make test` (build + vet + gofmt + `go test -race`). The repo has no CI
+  configured: the guarantee is the local runner.
+  **Correction (2026-10-04)**: the repo does have CI now —
+  `.github/workflows/ci.yml` (build, lint, test) and
+  `.github/workflows/mutation.yml` (mutation gate). `make check` is the local
+  equivalent of `ci.yml`.

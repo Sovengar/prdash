@@ -1,45 +1,45 @@
-# Flujo de planning (feature-aware) — 0004 worktrees-cleanup
+# Planning flow (feature-aware) — 0004 worktrees-cleanup
 
-Recorrido real de esta feature por el pipeline `swe`, con las decisiones
-tomadas. Slug: `worktrees-cleanup`. Tipo: `feature`. Rama: `feat/worktrees-cleanup`.
+Real path of this feature through the `swe` pipeline, with the decisions
+taken. Slug: `worktrees-cleanup`. Type: `feature`. Branch: `feat/worktrees-cleanup`.
 
 ```mermaid
 flowchart TD
-  W["orchestrator: worktree + rama feat/worktrees-cleanup<br/>planning_dir 0004-feature-worktrees-cleanup"] --> IDX{"¿índice fresco?"}
-  IDX -- "no: codegraph sin init" --> IDX1["codebase-explorer:<br/>codegraph init + sync<br/>commit 9252700"]
-  IDX -- "sí" --> REF["idea-refiner → issue.md"]
+  W["orchestrator: worktree + branch feat/worktrees-cleanup<br/>planning_dir 0004-feature-worktrees-cleanup"] --> IDX{"is the index fresh?"}
+  IDX -- "no: codegraph not initialized" --> IDX1["codebase-explorer:<br/>codegraph init + sync<br/>commit 9252700"]
+  IDX -- "yes" --> REF["idea-refiner → issue.md"]
   IDX1 --> REF
 
   REF --> C1{"⏸️ CHECKPOINT issue"}
-  C1 -- "APROBADA + decisión B = borrar solo si limpio" --> BA["brainstormer + architect (paralelo)"]
-  BA --> BE["behavior.feature<br/>A: --orphans excluyente<br/>B: limpio borra / sucio conserva<br/>negativos: sin borrado al cerrar"]
+  C1 -- "APPROVED + decision B = delete only if clean" --> BA["brainstormer + architect (parallel)"]
+  BA --> BE["behavior.feature<br/>A: --orphans exclusive<br/>B: clean deletes / dirty keeps<br/>negatives: no deletion on close"]
 
   BE --> C2{"⏸️ CHECKPOINT behavior"}
-  C2 -- "APROBADO" --> PL["plan.md<br/>adr_required: TRUE → ADR 0007"]
+  C2 -- "APPROVED" --> PL["plan.md<br/>adr_required: TRUE → ADR 0007"]
 
-  PL --> PL1["decisiones fijadas:<br/>--orphans excluyente + --dry-run<br/>RemoveIfClean (fail-safe)<br/>puerto ReviewRemover + reviewCleanupMsg"]
+  PL --> PL1["decisions settled:<br/>--orphans exclusive + --dry-run<br/>RemoveIfClean (fail-safe)<br/>ReviewRemover port + reviewCleanupMsg"]
   PL1 --> CTX["codebase-researcher → context.md<br/>codegraph: ready · freshness 9252700"]
-  CTX --> D["diagramas<br/>feature-flow · process-flow"]
+  CTX --> D["diagrams<br/>feature-flow · process-flow"]
 
-  D --> C3{"⏸️ CHECKPOINT plan (estás aquí)"}
-  C3 -- "APROBADO" --> EX["swe-executor<br/>TDD: worktree → cmd → executor → tui → docs"]
+  D --> C3{"⏸️ CHECKPOINT plan (you are here)"}
+  C3 -- "APPROVED" --> EX["swe-executor<br/>TDD: worktree → cmd → executor → tui → docs"]
   EX --> V{"make test"}
-  V -- "verde" --> DONE["review + PR a main"]
+  V -- "green" --> DONE["review + PR to main"]
 
-  C1 -. "iterar" .-> REF
-  C2 -. "iterar" .-> BE
-  C3 -. "iterar" .-> PL
+  C1 -. "iterate" .-> REF
+  C2 -. "iterate" .-> BE
+  C3 -. "iterate" .-> PL
 
-  subgraph CORRECCIONES["Correcciones al enunciado (verificadas)"]
-    K1["remove YA acepta varias rutas<br/>lo único que falta es --orphans (y el README miente)"]
-    K2["prdash NO tiene acción 'close'<br/>B = 'mergeado desde prdash', no 'cerrado'"]
+  subgraph CORRECTIONS["Corrections to the statement (verified)"]
+    K1["remove ALREADY accepts several paths<br/>the only thing missing is --orphans (and the README lies)"]
+    K2["prdash has NO 'close' action<br/>B = 'merged from prdash', not 'closed'"]
   end
-  REF -. "se documentan" .-> CORRECCIONES
+  REF -. "they are documented" .-> CORRECTIONS
 
-  subgraph FUERA["Fuera de alcance (explícito)"]
-    F1["borrado al cerrar la app"]
-    F2["script del orquestador swe-workspace-manager.sh"]
-    F3["artefacto no versionado .codegraph/"]
+  subgraph OUT_OF_SCOPE["Out of scope (explicit)"]
+    F1["deletion on closing the app"]
+    F2["orchestrator's script swe-workspace-manager.sh"]
+    F3["untracked artifact .codegraph/"]
   end
-  PL -. "no entra" .-> FUERA
+  PL -. "does not enter" .-> OUT_OF_SCOPE
 ```

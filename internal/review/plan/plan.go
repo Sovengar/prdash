@@ -176,7 +176,7 @@ func Build(pr model.Item, wt Worktree, tools Tools, env Env) Plan {
 	// `hunk diff` bare reviews the WORKING TREE, which is what a pane sharing a tab with the editor
 	// should show; the PR diff is a fixed target that hides the changes in progress.
 	add(&edit, KindHunk, "Hunk", DirReuse, tools.Hunk, defaultHunkBin, "diff")
-	add(&edit, KindAgent, "Agente", DirRight, tools.Agent, defaultAgentBin)
+	add(&edit, KindAgent, "Agent", DirRight, tools.Agent, defaultAgentBin)
 	p.Tabs = nonEmpty(review, edit)
 	return p
 }

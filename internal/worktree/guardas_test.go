@@ -10,7 +10,7 @@ import (
 	"prdash/internal/testutil"
 )
 
-func repoConRama(t *testing.T, extra ...string) string {
+func repoWithBranch(t *testing.T, extra ...string) string {
 	t.Helper()
 	repo := filepath.Join(t.TempDir(), "repo")
 	testutil.InitRepo(t, repo)
@@ -22,173 +22,173 @@ func repoConRama(t *testing.T, extra ...string) string {
 }
 
 // Create's first guard.
-func TestUnSpecIncompletoNoSeProcesaNiSeTocaNada(t *testing.T) {
-	repo := repoConRama(t)
-	raiz := t.TempDir()
-	g := NewGitDirect(raiz)
+func TestAnIncompleteSpecIsNotProcessedAndNothingIsTouched(t *testing.T) {
+	repo := repoWithBranch(t)
+	root := t.TempDir()
+	g := NewGitDirect(root)
 
 	for _, c := range []struct {
-		nombre string
-		spec   Spec
+		name string
+		spec Spec
 	}{
-		{"sin repo", Spec{Branch: "main", Path: filepath.Join(raiz, "wt")}},
-		{"sin rama", Spec{Repo: repo, Path: filepath.Join(raiz, "wt")}},
-		{"sin destino", Spec{Repo: repo, Branch: "main"}},
-		{"todo vacío", Spec{}},
+		{"without repo", Spec{Branch: "main", Path: filepath.Join(root, "wt")}},
+		{"without branch", Spec{Repo: repo, Path: filepath.Join(root, "wt")}},
+		{"without destination", Spec{Repo: repo, Branch: "main"}},
+		{"all empty", Spec{}},
 	} {
 		_, err := g.Create(context.Background(), c.spec)
 		if err == nil {
-			t.Errorf("%s: Create dio nil", c.nombre)
+			t.Errorf("%s: Create gave nil", c.name)
 			continue
 		}
 		// The message says WHAT is missing, not "incomplete spec": the reader has to know whether
 		// mounting another item's review fixes it.
 		if !strings.Contains(err.Error(), "incomplete spec") {
-			t.Errorf("%s: el error %q no dice que el spec está incompleto", c.nombre, err)
+			t.Errorf("%s: the error %q does not say the spec is incomplete", c.name, err)
 		}
 	}
 
-	entradas, err := os.ReadDir(raiz)
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entradas) != 0 {
-		t.Errorf("un spec incompleto dejó %d entradas en la raíz: %v", len(entradas), entradas)
+	if len(entries) != 0 {
+		t.Errorf("an incomplete spec left %d entries at the root: %v", len(entries), entries)
 	}
 }
 
 // cleanPartial's cleanup.
-func TestUnaRamaQueNoExisteFallaYNoDejaElDirectorioResiduo(t *testing.T) {
-	repo := repoConRama(t)
-	raiz := t.TempDir()
-	g := NewGitDirect(raiz)
-	destino := filepath.Join(raiz, "prdash-pr-7")
+func TestABranchThatDoesNotExistFailsAndLeavesNoResidueDirectory(t *testing.T) {
+	repo := repoWithBranch(t)
+	root := t.TempDir()
+	g := NewGitDirect(root)
+	dest := filepath.Join(root, "prdash-pr-7")
 
 	_, err := g.Create(context.Background(), Spec{
-		Repo: repo, Branch: "feat/no-existe", Path: destino, Label: "prdash-pr-7",
+		Repo: repo, Branch: "feat/no-existe", Path: dest, Label: "prdash-pr-7",
 	})
 	if err == nil {
-		t.Fatal("crear un worktree de una rama que no existe dio nil")
+		t.Fatal("creating a worktree of a branch that does not exist gave nil")
 	}
 	if !strings.Contains(err.Error(), "worktree") {
-		t.Errorf("el error %q no dice que falla el worktree", err)
+		t.Errorf("the error %q does not say the worktree failed", err)
 	}
 
-	if _, err := os.Stat(destino); !os.IsNotExist(err) {
-		t.Errorf("quedó el directorio %s tras un add fallido: el siguiente intento falla con "+
-			"'already exists' y el mensaje no señala el primer fallo", destino)
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Errorf("directory %s was left after a failed add: the next attempt fails with "+
+			"'already exists' and the message does not point at the first failure", dest)
 	}
-	lineas := strings.Split(strings.TrimSpace(
+	lines := strings.Split(strings.TrimSpace(
 		testutil.RunGit(t, repo, "worktree", "list")), "\n")
-	for _, l := range lineas {
+	for _, l := range lines {
 		if strings.Contains(l, "prdash-pr-7") {
-			t.Errorf("el worktree fallido quedó en el registro de git: %q", l)
+			t.Errorf("the failed worktree stayed in git's record: %q", l)
 		}
 	}
 	testutil.RunGit(t, repo, "branch", "otra")
-	ok, err := g.Create(context.Background(), Spec{
-		Repo: repo, Branch: "otra", Path: filepath.Join(raiz, "prdash-pr-8"),
+	wt, err := g.Create(context.Background(), Spec{
+		Repo: repo, Branch: "otra", Path: filepath.Join(root, "prdash-pr-8"),
 		Label: "prdash-pr-8",
 	})
 	if err != nil {
-		t.Fatalf("la raíz no sirve después de un fallo: %v", err)
+		t.Fatalf("the root is no good after a failure: %v", err)
 	}
-	if !Exists(ok.Path) {
-		t.Error("el segundo worktree no existe después de un fallo del primero")
+	if !Exists(wt.Path) {
+		t.Error("the second worktree does not exist after a failure of the first")
 	}
 }
 
-func TestUnDestinoQueYaEsUnRepoNoSePisaNiSeLeeComoWorktree(t *testing.T) {
-	raiz := t.TempDir()
-	repo := filepath.Join(raiz, "prdash-pr-7")
+func TestADestinationThatIsAlreadyARepoIsNeitherOverwrittenNorReadAsAWorktree(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "prdash-pr-7")
 	testutil.InitRepo(t, repo)
-	testutil.CommitFile(t, repo, "trabajo.txt", "importante", "importante")
+	testutil.CommitFile(t, repo, "trabajo.txt", "important", "important")
 
-	g := NewGitDirect(raiz)
+	g := NewGitDirect(root)
 	ctx := context.Background()
 
-	visto, ok, err := g.inspect(ctx, repo)
+	seen, ok, err := g.inspect(ctx, repo)
 	if err == nil {
-		t.Error("inspect de un repo normal dio nil: alguien podría tomarlo por un worktree")
+		t.Error("inspect of a normal repo gave nil: someone could take it for a worktree")
 	}
 	if ok {
-		t.Error("inspect dijo que un repo normal es un worktree enlazado")
+		t.Error("inspect said a normal repo is a linked worktree")
 	}
-	if visto.Path != "" {
-		t.Errorf("inspect devolvió un worktree: %+v", visto)
+	if seen.Path != "" {
+		t.Errorf("inspect returned a worktree: %+v", seen)
 	}
 	if !strings.Contains(err.Error(), "not a linked worktree") {
-		t.Errorf("el error %q no dice que no es un worktree enlazado", err)
+		t.Errorf("the error %q does not say it is not a linked worktree", err)
 	}
 
 	if _, err := g.Create(ctx, Spec{
 		Repo: filepath.Join(t.TempDir(), "otro"), Branch: "main",
 		Path: repo, Label: "prdash-pr-7",
 	}); err == nil {
-		t.Error("Create sobre un repo existente dio nil")
+		t.Error("Create over an existing repo gave nil")
 	}
 	if _, err := os.Stat(filepath.Join(repo, "trabajo.txt")); err != nil {
-		t.Errorf("el repo del usuario perdió su contenido: %v", err)
+		t.Errorf("the user's repo lost its content: %v", err)
 	}
 
 	if err := g.Remove(ctx, repo); err == nil {
-		t.Error("Remove de un repo normal dio nil")
+		t.Error("Remove of a normal repo gave nil")
 	}
 	if _, err := os.Stat(filepath.Join(repo, "trabajo.txt")); err != nil {
-		t.Errorf("Remove se llevó el repo del usuario: %v", err)
+		t.Errorf("Remove took the user's repo with it: %v", err)
 	}
 }
 
 // Skipping .git directories is not an optimisation.
-func TestAuditNoEntraEnLosDirectoriosGit(t *testing.T) {
-	raiz := t.TempDir()
-	repo := repoConRama(t, "feat/x")
-	g := NewGitDirect(raiz)
+func TestAuditDoesNotEnterGitDirectories(t *testing.T) {
+	root := t.TempDir()
+	repo := repoWithBranch(t, "feat/x")
+	g := NewGitDirect(root)
 
 	if _, err := g.Create(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: filepath.Join(raiz, "prdash-pr-7"),
+		Repo: repo, Branch: "feat/x", Path: filepath.Join(root, "prdash-pr-7"),
 		Label: "prdash-pr-7",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	entradas := g.Audit(context.Background())
-	if len(entradas) != 1 {
-		t.Fatalf("Audit devolvió %d entradas, want 1: %+v", len(entradas), entradas)
+	entries := g.Audit(context.Background())
+	if len(entries) != 1 {
+		t.Fatalf("Audit returned %d entries, want 1: %+v", len(entries), entries)
 	}
-	if entradas[0].Path != filepath.Join(raiz, "prdash-pr-7") {
-		t.Errorf("Audit devolvió %q", entradas[0].Path)
+	if entries[0].Path != filepath.Join(root, "prdash-pr-7") {
+		t.Errorf("Audit returned %q", entries[0].Path)
 	}
 
-	for _, e := range entradas {
+	for _, e := range entries {
 		if strings.Contains(e.Path, string(filepath.Separator)+".git"+string(filepath.Separator)) {
-			t.Errorf("Audit listó algo de dentro de un .git: %q", e.Path)
+			t.Errorf("Audit listed something from inside a .git: %q", e.Path)
 		}
 		if !strings.HasPrefix(filepath.Base(e.Path), LabelPrefix) {
-			t.Errorf("Audit listó %q, que no lleva el prefijo de ownership", e.Path)
+			t.Errorf("Audit listed %q, which does not carry the ownership prefix", e.Path)
 		}
 	}
 }
 
 // The lock's last turn.
-func TestRemoveIfCleanPropagaElFalloDeQuitarlo(t *testing.T) {
-	raiz := t.TempDir()
-	repo := repoConRama(t, "feat/x")
-	g := NewGitDirect(raiz)
+func TestRemoveIfCleanPropagatesTheFailureToRemoveIt(t *testing.T) {
+	root := t.TempDir()
+	repo := repoWithBranch(t, "feat/x")
+	g := NewGitDirect(root)
 	wt, err := g.Create(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: filepath.Join(raiz, "prdash-pr-7"),
+		Repo: repo, Branch: "feat/x", Path: filepath.Join(root, "prdash-pr-7"),
 		Label: "prdash-pr-7",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	borrado, motivo, err := g.RemoveIfClean(context.Background(), wt.Path)
-	if err != nil || !borrado || motivo != "" {
-		t.Fatalf("RemoveIfClean de un worktree limpio: (%v, %q, %v)", borrado, motivo, err)
+	removed, reason, err := g.RemoveIfClean(context.Background(), wt.Path)
+	if err != nil || !removed || reason != "" {
+		t.Fatalf("RemoveIfClean of a clean worktree: (%v, %q, %v)", removed, reason, err)
 	}
 
 	if _, _, err := g.RemoveIfClean(context.Background(), filepath.Join(t.TempDir(), "ajeno")); err == nil {
-		t.Error("RemoveIfClean de una ruta ajena dio nil")
+		t.Error("RemoveIfClean of a foreign path gave nil")
 	}
 }

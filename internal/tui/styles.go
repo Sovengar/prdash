@@ -11,14 +11,14 @@ type lipglossStyle = lipgloss.Style
 const (
 	colForge  = 14 // "GLab@umane"
 	colTitle  = 40
-	colRole   = 11 // "review req" (10) + hueco de separación
+	colRole   = 11 // "review req" (10) + separation gap
 	colState  = 18 // "changes requested"
 	colChecks = 8
 	colDiff   = 12
 )
 
 const (
-	itemWidthMin = 6  // "ITEM" (4) + hueco + 1 rune de texto
+	itemWidthMin = 6  // "ITEM" (4) + gap + 1 rune of text
 	itemWidthCap = 34 // "subgrupo/proyecto#1234"
 )
 

@@ -10,26 +10,26 @@ import (
 )
 
 // Text that does not fit has to SAY that something was lost.
-func TestClipRunesMarcaLoQueSePerdio(t *testing.T) {
-	corta := "abcdef"
-	casos := []struct {
+func TestClipRunesMarksWhatWasLost(t *testing.T) {
+	short := "abcdef"
+	cases := []struct {
 		n    int
 		want string
 	}{
-		{6, "abcdef"},   // cabe justo: intacto
-		{7, "abcdef"},   // sobra sitio: intacto
-		{100, "abcdef"}, // mucho de sobra: intacto
-		{1, "…"},        // solo cabe la marca
-		{2, "a…"},       // un carácter y la marca
+		{6, "abcdef"},   // cabe exact: intacto
+		{7, "abcdef"},   // spare room: intact
+		{100, "abcdef"}, // lots of spare: intact
+		{1, "…"},        // only the mark fits
+		{2, "a…"},       // one character and the mark
 		{3, "ab…"},
 		{5, "abcd…"},
-		{0, ""},   // sin sitio, sin marca
-		{-1, ""},  // negativo, sin marca
-		{-50, ""}, // muy negativo, sin marca
+		{0, ""},   // no room, no mark
+		{-1, ""},  // negative, no mark
+		{-50, ""}, // very negative, no mark
 	}
-	for _, c := range casos {
-		if got := clipRunes([]rune(corta), c.n); got != c.want {
-			t.Errorf("clipRunes(%q, %d) = %q, want %q", corta, c.n, got, c.want)
+	for _, c := range cases {
+		if got := clipRunes([]rune(short), c.n); got != c.want {
+			t.Errorf("clipRunes(%q, %d) = %q, want %q", short, c.n, got, c.want)
 		}
 	}
 	for _, n := range []int{-1, 0, 1, 5} {
@@ -40,25 +40,25 @@ func TestClipRunesMarcaLoQueSePerdio(t *testing.T) {
 
 	multibyte := []rune("ñáé")
 	if got := clipRunes(multibyte, 3); got != "ñáé" {
-		t.Errorf("clipRunes con 3 runes dio %q, want el texto entero: la cuenta es en runes, no en bytes", got)
+		t.Errorf("clipRunes with 3 runes gave %q, want the whole text: the count is in runes, not bytes", got)
 	}
 	if got := clipRunes(multibyte, 2); got != "ñ…" {
-		t.Errorf("clipRunes con 2 runes dio %q, want %q", got, "ñ…")
+		t.Errorf("clipRunes with 2 runes gave %q, want %q", got, "ñ…")
 	}
 	// The result can always be printed and measured: a cut in the middle of a utf-8 sequence breaks
 	// the width.
 	for n := 1; n <= 8; n++ {
 		got := clipRunes([]rune("ñáéíóú"), n)
-		if !utf8Valido(got) {
-			t.Errorf("clipRunes a %d dio %q, que no es utf-8 válido", n, got)
+		if !utf8Valid(got) {
+			t.Errorf("clipRunes at %d gave %q, which is not valid utf-8", n, got)
 		}
 		if w := ansi.StringWidth(got); w > max(n, 1) {
-			t.Errorf("clipRunes a %d dio %q de %d columnas, que no caben", n, got, w)
+			t.Errorf("clipRunes at %d gave %q of %d columns, which do not fit", n, got, w)
 		}
 	}
 }
 
-func utf8Valido(s string) bool {
+func utf8Valid(s string) bool {
 	for _, r := range s {
 		if r == '�' {
 			return false
@@ -67,7 +67,7 @@ func utf8Valido(s string) bool {
 	return true
 }
 
-func TestCommentBoxWidthRespetaElSueloYElSangrado(t *testing.T) {
+func TestCommentBoxWidthRespectsTheFloorAndTheIndent(t *testing.T) {
 	for outer := -10; outer <= 60; outer++ {
 		got := commentBoxWidth(outer)
 		want := max(8, outer-2*commentInset)
@@ -78,11 +78,11 @@ func TestCommentBoxWidthRespetaElSueloYElSangrado(t *testing.T) {
 	// The floor is exactly 8, not "almost 8": with 9 of outer width the interior is 7.
 	for _, outer := range []int{0, 5, 9, 10} {
 		if got := commentBoxWidth(outer); got != 8 {
-			t.Errorf("commentBoxWidth(%d) = %d, want el suelo de 8", outer, got)
+			t.Errorf("commentBoxWidth(%d) = %d, want the floor of 8", outer, got)
 		}
 	}
 	if got := commentBoxWidth(11); got != 9 {
-		t.Errorf("commentBoxWidth(11) = %d, want 9: a partir de aquí el sangrado manda sobre el suelo", got)
+		t.Errorf("commentBoxWidth(11) = %d, want 9: from here on the indent rules over the floor", got)
 	}
 	for outer := 10; outer <= 40; outer++ {
 		if got := commentBoxWidth(outer); got != outer-2 {
@@ -92,8 +92,8 @@ func TestCommentBoxWidthRespetaElSueloYElSangrado(t *testing.T) {
 }
 
 // The padding is measured in COLUMNS, not bytes.
-func TestPadRightAlineaPorColumnasNoPorBytes(t *testing.T) {
-	for _, s := range []string{"", "a", "ab", "uno", "a-label largo"} {
+func TestPadRightAlignsByColumnsNotByBytes(t *testing.T) {
+	for _, s := range []string{"", "a", "ab", "one", "a-label long"} {
 		for n := 0; n <= 20; n++ {
 			got := padRight(s, n)
 			if w := ansi.StringWidth(got); w != max(n, ansi.StringWidth(s)) {
@@ -101,108 +101,108 @@ func TestPadRightAlineaPorColumnasNoPorBytes(t *testing.T) {
 			}
 			ifTrimmed := strings.TrimRight(got, " ")
 			if ifTrimmed != s {
-				t.Errorf("padRight(%q, %d) = %q, want el mismo texto con relleno", s, n, got)
+				t.Errorf("padRight(%q, %d) = %q, want the same text with padding", s, n, got)
 			}
 		}
 	}
 	if got := padRight("ñ", 5); ansi.StringWidth(got) != 5 {
-		t.Errorf("padRight(%q, 5) mide %d columnas, want 5: el relleno cuenta columnas, no bytes", "ñ", ansi.StringWidth(got))
+		t.Errorf("padRight(%q, 5) measures %d columns, want 5: padding counts columns, not bytes", "ñ", ansi.StringWidth(got))
 	}
-	conColor := "\x1b[31mrojo\x1b[0m"
-	if got := padRight(conColor, 10); ansi.StringWidth(got) != 10 {
-		t.Errorf("padRight con ANSI mide %d columnas, want 10: los códigos de color no son columnas", ansi.StringWidth(got))
+	withColor := "\x1b[31mrojo\x1b[0m"
+	if got := padRight(withColor, 10); ansi.StringWidth(got) != 10 {
+		t.Errorf("padRight with ANSI measures %d columns, want 10: color codes are not columns", ansi.StringWidth(got))
 	}
-	if !strings.Contains(padRight(conColor, 10), "\x1b[31m") {
-		t.Error("padRight se comió el color del texto")
+	if !strings.Contains(padRight(withColor, 10), "\x1b[31m") {
+		t.Error("padRight ate the texts color")
 	}
 }
 
-func TestAllocateReparteLasFilasSinQueDependaDelOrden(t *testing.T) {
-	casos := []struct {
+func TestAllocateSplitsTheRowsRegardlessOfArrivalOrder(t *testing.T) {
+	cases := []struct {
 		name   string
 		need   []int
 		budget int
 		want   []int
 	}{
 		{
-			"sobra para todos: cada uno pide lo suyo",
+			"spare for all: each one asks for its own",
 			[]int{1, 2, 3}, 10,
 			[]int{1, 2, 3},
 		},
 		{
-			"exacto: nadie recibe de más",
+			"exact: nobody receives more than asked",
 			[]int{2, 2}, 4,
 			[]int{2, 2},
 		},
 		{
 			// The one with least does NOT get it: it goes to whoever has least AND STILL WANTS more.
-			"el que menos tiene no recibe si ya tiene todo su texto",
+			"the one with the least gets nothing if it already has all its text",
 			[]int{3, 1}, 4,
 			[]int{3, 1},
 		},
 		{
 			// The levelling is real: one asking a lot and two asking little all end up the same.
-			"el grande no se come el presupuesto",
+			"the big one does not eat the budget",
 			[]int{4, 2, 2}, 8,
 			[]int{4, 2, 2},
 		},
 		{
-			"nadie absorbe más: sobra presupuesto y no se reparte",
+			"nobody absorbs more: spare budget and it is not distributed",
 			[]int{1, 1}, 10,
 			[]int{1, 1},
 		},
 		{
-			"uno solo, con presupuesto de sobra",
+			"one alone, with spare budget",
 			[]int{4}, 10,
 			[]int{4},
 		},
 		{
-			"uno solo, con presupuesto corto",
+			"one alone, with a short budget",
 			[]int{4}, 3,
 			[]int{3},
 		},
 		{
 			// The budget can be SMALLER than the number of comments, and then everyone gets one row.
-			"el presupuesto es menor que los comentarios: todos a una fila, y se pasa",
+			"the budget is smaller than the comments: all to one row, and it goes past",
 			[]int{5, 5, 5}, 2,
 			[]int{1, 1, 1},
 		},
 		{
-			"presupuesto cero: todos a una fila igualmente",
+			"zero budget: all to one row anyway",
 			[]int{5, 5}, 0,
 			[]int{1, 1},
 		},
 		{
-			"nada que repartir",
+			"nothing to distribute",
 			nil, 10,
 			nil,
 		},
 	}
-	for _, c := range casos {
+	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := allocate(c.need, c.budget)
-			if !mismoInt(got, c.want) {
+			if !sameInt(got, c.want) {
 				t.Errorf("allocate(%v, %d) = %v, want %v", c.need, c.budget, got, c.want)
 			}
 			// The sum never goes over the budget, UNLESS the budget is smaller than the number of comments.
-			suma := 0
+			sum := 0
 			for _, r := range got {
-				suma += r
+				sum += r
 			}
-			if techo := max(c.budget, len(c.need)); suma > techo {
-				t.Errorf("allocate(%v, %d) repartió %d filas, más que el techo de %d",
-					c.need, c.budget, suma, techo)
+			if limit := max(c.budget, len(c.need)); sum > limit {
+				t.Errorf("allocate(%v, %d) distributed %d rows, more than the limit of %d",
+					c.need, c.budget, sum, limit)
 			}
 			// And never less than one row per comment that asked for something.
 			for i, r := range got {
 				if c.need[i] > 0 && r < 1 {
-					t.Errorf("allocate(%v, %d)[%d] = %d: un comentario necesita al menos una fila para verse",
+					t.Errorf("allocate(%v, %d)[%d] = %d: a comment needs at least one row to be seen",
 						c.need, c.budget, i, r)
 				}
 			}
 			for i, r := range got {
 				if r > c.need[i] {
-					t.Errorf("allocate(%v, %d)[%d] = %d, más de lo que pidió", c.need, c.budget, i, r)
+					t.Errorf("allocate(%v, %d)[%d] = %d, more than it asked", c.need, c.budget, i, r)
 				}
 			}
 		})
@@ -217,16 +217,16 @@ func TestAllocateReparteLasFilasSinQueDependaDelOrden(t *testing.T) {
 		{6, 6, 1, 1, 1},
 	} {
 		got := allocate(perm, 12)
-		if !mismoMultiset(base, got) {
-			t.Errorf("allocate con las mismas necesidades en otro orden dio un reparto distinto: %v vs %v", base, got)
+		if !sameMultiset(base, got) {
+			t.Errorf("allocate with the same needs in another order gave a different split: %v vs %v", base, got)
 		}
 	}
 	if base[1] == 1 && base[2] == 1 && base[0] == 6 {
-		t.Error("el reparto concentrations el presupuesto en los primeros: eso solo depende del orden de llegada")
+		t.Error("the split concentrates the budget in the first ones: that only depends on arrival order")
 	}
 }
 
-func mismoInt(a, b []int) bool {
+func sameInt(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -238,14 +238,14 @@ func mismoInt(a, b []int) bool {
 	return true
 }
 
-func mismoMultiset(a, b []int) bool {
+func sameMultiset(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	copia := append([]int(nil), a...)
+	copy := append([]int(nil), a...)
 	for _, v := range b {
 		en := -1
-		for i, c := range copia {
+		for i, c := range copy {
 			if c == v {
 				en = i
 				break
@@ -254,22 +254,22 @@ func mismoMultiset(a, b []int) bool {
 		if en < 0 {
 			return false
 		}
-		copia = append(copia[:en], copia[en+1:]...)
+		copy = append(copy[:en], copy[en+1:]...)
 	}
 	return true
 }
 
 // The kind selector is circular.
-func TestElCursorDelSelectorDaLaVueltaPorLosDosLados(t *testing.T) {
+func TestTheSelectorCursorWrapsAroundBothWays(t *testing.T) {
 	restore := simKinds
-	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase, sim.Kind("otro")}
+	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase, sim.Kind("other")}
 	t.Cleanup(func() { simKinds = restore })
 
 	// THREE kinds on purpose, the third being synthetic: with the two real ones, cursor-1 and
 	//cursor+1 would both land on the only one and the wrap would be untestable.
 	n := len(simKinds)
 	if n < 3 {
-		t.Fatalf("hacen falta 3 kinds para que +1 y -1 se distinguan, hay %d", n)
+		t.Fatalf("3 kinds are needed for +1 and -1 to be distinguishable, there are %d", n)
 	}
 	m := simModel(t, &fakeSimulator{available: true})
 	m = press(t, m, "v")
@@ -278,20 +278,20 @@ func TestElCursorDelSelectorDaLaVueltaPorLosDosLados(t *testing.T) {
 	for i := range n {
 		m = press(t, m, "j")
 		if want := (i + 1) % n; m.sim.cursor != want {
-			t.Fatalf("tras %d pasos abajo el cursor = %d, want %d", i+1, m.sim.cursor, want)
+			t.Fatalf("after %d down steps the cursor = %d, want %d", i+1, m.sim.cursor, want)
 		}
 	}
 
 	m.sim.cursor = 0
 	m = press(t, m, "k")
 	if m.sim.cursor != n-1 {
-		t.Errorf("arriba desde el primero dio %d, want %d (el último): un índice negativo aquí es un panic", m.sim.cursor, n-1)
+		t.Errorf("up from the first gave %d, want %d (the last): a negative index here is a panic", m.sim.cursor, n-1)
 	}
 	m.sim.cursor = 0
 	for i := range n {
 		m = press(t, m, "k")
 		if want := (n - 1 - i) % n; m.sim.cursor != want {
-			t.Fatalf("tras %d pasos arriba el cursor = %d, want %d", i+1, m.sim.cursor, want)
+			t.Fatalf("after %d up steps the cursor = %d, want %d", i+1, m.sim.cursor, want)
 		}
 	}
 
@@ -299,12 +299,12 @@ func TestElCursorDelSelectorDaLaVueltaPorLosDosLados(t *testing.T) {
 		m.sim.cursor = 0
 		m = press(t, m, alias)
 		if m.sim.cursor != 1 {
-			t.Errorf("la tecla %q dio el cursor %d, want 1 (es alias de abajo)", alias, m.sim.cursor)
+			t.Errorf("key %q gave the cursor %d, want 1 (it is an alias of down)", alias, m.sim.cursor)
 		}
 	}
 	m.sim.cursor = 0
 	m = press(t, m, "k")
 	if m.sim.cursor != n-1 {
-		t.Errorf("la tecla k dio el cursor %d, want %d (es alias de arriba)", m.sim.cursor, n-1)
+		t.Errorf("key k gave the cursor %d, want %d (it is an alias of up)", m.sim.cursor, n-1)
 	}
 }

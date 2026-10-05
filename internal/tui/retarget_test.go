@@ -43,54 +43,54 @@ func pressFilter(t *testing.T, m Model, word string) Model {
 }
 
 // `e` opens the popup and what appears are the repository's branches.
-func TestEAbreElBuscadorYTraeLasRamasDelForge(t *testing.T) {
+func TestEOpensTheSearcherAndBringsTheForgesBranches(t *testing.T) {
 	m, a := retargetFixture(t, "main", "develop", "release/2.0")
 
 	if m.retarget.state != retargetChoosing {
-		t.Fatalf("estado del popup = %v, want el buscador", m.retarget.state)
+		t.Fatalf("popup state = %v, want the searcher", m.retarget.state)
 	}
 	if a.BranchCallCount("acme/widget") != 1 {
-		t.Errorf("Branches = %d llamadas, want 1", a.BranchCallCount("acme/widget"))
+		t.Errorf("Branches = %d calls, want 1", a.BranchCallCount("acme/widget"))
 	}
 	if m.retarget.view[0] != "main" {
-		t.Errorf("la primera fila es %q, want la base actual", m.retarget.view[0])
+		t.Errorf("the first row is %q, want the current base", m.retarget.view[0])
 	}
 	if got := strings.Join(m.retarget.view, ","); got != "main,develop,release/2.0" {
-		t.Errorf("view = %q, want las tres ramas", got)
+		t.Errorf("view = %q, want the three branches", got)
 	}
 }
 
 // The filter runs on the whole name, not the last segment.
-func TestElFiltroDejaLasRamasQueLoContienen(t *testing.T) {
+func TestTheFilterKeepsTheBranchesThatContainIt(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "fix/hunk-pane-argv", "release/2.0")
 
 	m = pressFilter(t, m, "hunk")
 	if got := strings.Join(m.retarget.view, ","); got != "fix/hunk-pane-argv" {
-		t.Errorf("view = %q, want solo la rama que contiene el filtro", got)
+		t.Errorf("view = %q, want only the branch that contains the filter", got)
 	}
 
 	m = press(t, m, "backspace")
 	if m.retarget.query != "hun" {
-		t.Errorf("query = %q, want que backspace quite un carácter", m.retarget.query)
+		t.Errorf("query = %q, want backspace to remove one character", m.retarget.query)
 	}
 	m = press(t, m, "ctrl+u")
 	if m.retarget.query != "" {
-		t.Errorf("query = %q, want que ctrl+u la borre entera", m.retarget.query)
+		t.Errorf("query = %q, want ctrl+u to clear it entirely", m.retarget.query)
 	}
 
 	m = pressFilter(t, m, "HUNK")
 	if got := strings.Join(m.retarget.view, ","); got != "fix/hunk-pane-argv" {
-		t.Errorf("view = %q, want el filtro sin distinguir mayúsculas", got)
+		t.Errorf("view = %q, want the filter ignoring case", got)
 	}
 }
 
 // What stops the two halves stepping on each other.
-func TestJYKConFiltroEscribeYNavega(t *testing.T) {
+func TestJAndKWithAFilterWriteAndNavigate(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "develop", "release/2.0", "fix/jj-one")
 
 	m = press(t, m, "j")
 	if m.retarget.cursor != 1 {
-		t.Fatalf("con el filtro vacío, `j` no movió el cursor (cursor=%d)", m.retarget.cursor)
+		t.Fatalf("with an empty filter, `j` did not move the cursor (cursor=%d)", m.retarget.cursor)
 	}
 
 	// As soon as the filter has something, `j` types: otherwise `fix/jj-one` is impossible to
@@ -98,68 +98,68 @@ func TestJYKConFiltroEscribeYNavega(t *testing.T) {
 	m = pressFilter(t, m, "re")
 	m = press(t, m, "j")
 	if m.retarget.query != "rej" {
-		t.Errorf("query = %q, want que `j` escriba con el filtro activo", m.retarget.query)
+		t.Errorf("query = %q, want `j` to type with the filter active", m.retarget.query)
 	}
 	if m.retarget.cursor != 0 {
-		t.Errorf("cursor = %d, want vuelta arriba en cuanto cambia el filtro", m.retarget.cursor)
+		t.Errorf("cursor = %d, want back to the top as soon as the filter changes", m.retarget.cursor)
 	}
 
 	m = press(t, m, "ctrl+u")
 	m = press(t, m, "down")
 	if m.retarget.cursor != 1 {
-		t.Errorf("cursor = %d, want que `down` mueva con el filtro vacío", m.retarget.cursor)
+		t.Errorf("cursor = %d, want `down` to move with an empty filter", m.retarget.cursor)
 	}
 }
 
-func TestElegirLaBaseQueYaTieneNoGastaLlamada(t *testing.T) {
+func TestChoosingTheBaseItAlreadyHasSpendsNoCall(t *testing.T) {
 	m, a := retargetFixture(t, "main", "develop")
 
-	m = press(t, m, "enter") // main es la base actual y sale la primera
+	m = press(t, m, "enter") // main is the current base and the first one out
 	if m.retarget.state != retargetClosed {
-		t.Errorf("estado = %v, want el popup cerrado", m.retarget.state)
+		t.Errorf("state = %v, want the popup closed", m.retarget.state)
 	}
 	if a.RetargetCount() != 0 {
-		t.Errorf("llamó al forge (%v) para no cambiar nada", a.Retargets)
+		t.Errorf("it called the forge (%v) to change nothing", a.Retargets)
 	}
 	assertToast(t, m, "already main")
 }
 
 // The second press is the confirmation.
-func TestElCambioSeConfirmaAntesDeSalir(t *testing.T) {
+func TestTheChangeIsConfirmedBeforeLeaving(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 
 	m = press(t, m, "down")
 	m = press(t, m, "enter")
 	if m.retarget.state != retargetConfirm {
-		t.Fatalf("estado = %v, want la confirmación", m.retarget.state)
+		t.Fatalf("state = %v, want the confirmation", m.retarget.state)
 	}
 	if a.RetargetCount() != 0 {
-		t.Fatalf("la confirmación ya llamó al forge (%v)", a.Retargets)
+		t.Fatalf("the confirmation already called the forge (%v)", a.Retargets)
 	}
 
 	box := stripANSI(m.retargetOverlay2())
 	for _, want := range []string{"main", "→", "release/2.0", "enter apply"} {
 		if !strings.Contains(box, want) {
-			t.Errorf("la confirmación no dice %q:\n%s", want, box)
+			t.Errorf("the confirmation does not say %q:\n%s", want, box)
 		}
 	}
 
 	m = press(t, m, "enter")
 	out := waitOutcome(t, m)
 	if !out.OK {
-		t.Errorf("la acción salió = %+v, want OK", out)
+		t.Errorf("the action came out = %+v, want OK", out)
 	}
 	if out.Base != "release/2.0" {
-		t.Errorf("Outcome.Base = %q, want la rama aplicada para el aviso", out.Base)
+		t.Errorf("Outcome.Base = %q, want the branch applied for the notice", out.Base)
 	}
 	if a.RetargetCount() != 1 || a.Retargets[0] != "release/2.0" {
-		t.Errorf("el adapter recibió %v, want release/2.0", a.Retargets)
+		t.Errorf("the adapter received %v, want release/2.0", a.Retargets)
 	}
 	if m.retarget.state != retargetClosed {
-		t.Errorf("el popup sigue abierto tras aplicar")
+		t.Errorf("the popup is still open after applying")
 	}
 	if !m.actionBusy {
-		t.Error("la acción no quedó marcada como en curso")
+		t.Error("the action was not marked as in flight")
 	}
 }
 
@@ -169,7 +169,7 @@ func (m Model) retargetOverlay2() string {
 }
 
 // The likeliest mistake when confirming is picking the wrong row.
-func TestEscEnLaConfirmacionVuelveALaLista(t *testing.T) {
+func TestEscInTheConfirmationGoesBackToTheList(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 
 	m = press(t, m, "down")
@@ -177,45 +177,45 @@ func TestEscEnLaConfirmacionVuelveALaLista(t *testing.T) {
 	m = press(t, m, "esc")
 
 	if m.retarget.state != retargetChoosing {
-		t.Errorf("estado = %v, want volver al buscador", m.retarget.state)
+		t.Errorf("state = %v, want back to the searcher", m.retarget.state)
 	}
 	if a.BranchCallCount("acme/widget") != 1 {
-		t.Errorf("volvió a pedir las ramas: %d llamadas", a.BranchCallCount("acme/widget"))
+		t.Errorf("it asked for the branches again: %d calls", a.BranchCallCount("acme/widget"))
 	}
 }
 
 // Open, it takes the whole keyboard: a key that leaked through would have `j` approve the
 // PR.
-func TestElPopupNoDejaPasarLasTeclasALaVista(t *testing.T) {
+func TestThePopupDoesNotLetKeysThroughToTheView(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 
 	m = press(t, m, "a")
 	if a.ActionCallCount("approve", mkRef(), 7) != 0 {
-		t.Error("una tecla del popup disparó un approve en la vista")
+		t.Error("a popup key fired an approve on the view")
 	}
 	if m.retarget.state != retargetChoosing {
-		t.Errorf("estado = %v, want el popup abierto", m.retarget.state)
+		t.Errorf("state = %v, want the popup open", m.retarget.state)
 	}
 }
 
-func TestElListadoSeCacheaPorRepositorio(t *testing.T) {
+func TestTheListingIsCachedPerRepository(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	if a.BranchCallCount("acme/widget") != 1 {
-		t.Fatalf("primera apertura = %d llamadas, want 1", a.BranchCallCount("acme/widget"))
+		t.Fatalf("first open = %d calls, want 1", a.BranchCallCount("acme/widget"))
 	}
 
 	m = press(t, m, "esc")
 	m = press(t, m, "e")
 	if m.retarget.state != retargetChoosing {
-		t.Fatalf("estado = %v, want el buscador abierto al instante desde el caché", m.retarget.state)
+		t.Fatalf("state = %v, want the searcher open instantly from the cache", m.retarget.state)
 	}
 	if a.BranchCallCount("acme/widget") != 1 {
-		t.Errorf("la segunda apertura vuelva a pedir las ramas: %d llamadas", a.BranchCallCount("acme/widget"))
+		t.Errorf("the second open asked for the branches again: %d calls", a.BranchCallCount("acme/widget"))
 	}
 }
 
 // A branch created a minute ago has to appear, or the picker lies.
-func TestElCacheCaduca(t *testing.T) {
+func TestTheCacheExpires(t *testing.T) {
 	m, a := retargetFixture(t, "main")
 	key := keyOf(m.retargetItemForTest())
 	m.branchCache[key] = branchCache{names: []string{"main"}, fetchedAt: time.Now().Add(-branchCacheTTL - time.Second)}
@@ -223,15 +223,15 @@ func TestElCacheCaduca(t *testing.T) {
 	m = press(t, m, "esc")
 	m = press(t, m, "e")
 	if m.retarget.state != retargetListing {
-		t.Errorf("estado = %v, want que vuelva a preguntar por un caché caducado", m.retarget.state)
+		t.Errorf("state = %v, want it to ask again for an expired cache", m.retarget.state)
 	}
-	waitMount(t, m) // el segundo pedido sale solo, como el primero
+	waitMount(t, m) // the second request comes out on its own, like the first
 	if a.BranchCallCount("acme/widget") != 2 {
-		t.Errorf("llamadas = %d, want 2: un caché caducado se vuelve a pedir", a.BranchCallCount("acme/widget"))
+		t.Errorf("calls = %d, want 2: an expired cache is requested again", a.BranchCallCount("acme/widget"))
 	}
 }
 
-func TestUnListadoIlegibleSeExplica(t *testing.T) {
+func TestAnUnreadableListingExplainsItself(t *testing.T) {
 	a := ghAdapter()
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 7, "REVIEW_REQUIRED")
 	m := newTestModel(t, a)
@@ -243,47 +243,47 @@ func TestUnListadoIlegibleSeExplica(t *testing.T) {
 
 	box := stripANSI(m.retargetOverlay2())
 	if !strings.Contains(box, "404") {
-		t.Errorf("el popup no explica el fallo del forge:\n%s", box)
+		t.Errorf("the popup does not explain the forges failure:\n%s", box)
 	}
 	if m.retarget.state != retargetListing {
-		t.Errorf("estado = %v, want quedarse esperando con el motivo a la vista", m.retarget.state)
+		t.Errorf("state = %v, want to stay waiting with the reason on the view", m.retarget.state)
 	}
 }
 
-func TestElPopupAplicaSobreElItemQueSeConfirmo(t *testing.T) {
+func TestThePopupAppliesToTheItemThatWasConfirmed(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
-	other := mkItem("github", "github.com", "acme/otro", "Otro PR", 9, "REVIEW_REQUIRED")
+	other := mkItem("github", "github.com", "acme/other", "Other PR", 9, "REVIEW_REQUIRED")
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested,
 		[]model.Item{other}, false))
 	if !m.selectedIs(other) {
-		t.Fatalf("el cursor no está sobre el otro ítem: el test no probaría nada")
+		t.Fatalf("the cursor is not on the other item: the test would prove nothing")
 	}
 
-	m = press(t, m, "down") // el popup sigue con su teclado
+	m = press(t, m, "down") // the popup keeps its keyboard
 	m = press(t, m, "enter")
 	m = press(t, m, "enter")
 	waitOutcome(t, m)
 
 	if a.RetargetCount() != 1 || a.Retargets[0] != "release/2.0" {
-		t.Errorf("el adapter recibió %v, want el cambio del ítem confirmado", a.Retargets)
+		t.Errorf("the adapter received %v, want the change of the confirmed item", a.Retargets)
 	}
 	if n := a.ActionCallCount("retarget", mkRef(), 7); n != 1 {
-		t.Errorf("retarget sobre acme/widget = %d, want 1 (el ítem del popup, no el del cursor)", n)
+		t.Errorf("retarget on acme/widget = %d, want 1 (the popups item, not the cursors)", n)
 	}
 }
 
-func TestUnListadoTardioNoSePinta(t *testing.T) {
+func TestALateListingIsNotPainted(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "release/2.0")
-	m = press(t, m, "esc") // cerrado: el pedido en vuelo queda obsoleto
+	m = press(t, m, "esc") // closed: the in-flight request goes stale
 
 	m = send(t, m, branchesMsg{seq: m.branchSeq, names: []string{"otra/cosa"}})
 
 	if m.retarget.state != retargetClosed {
-		t.Errorf("un listado tardío reabrió el popup: estado = %v", m.retarget.state)
+		t.Errorf("a late listing reopened the popup: state = %v", m.retarget.state)
 	}
 }
 
-func TestElAvisoDiceDeQueBaseAQue(t *testing.T) {
+func TestTheNoticeSaysFromWhichBaseToWhich(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	m, out := applyBranchAndMove(t, m, a)
 	it, _ := m.selected()
@@ -294,12 +294,12 @@ func TestElAvisoDiceDeQueBaseAQue(t *testing.T) {
 		Base: out.Base, FromBase: "main",
 	})
 	if !strings.Contains(lastToast(m), "main") || !strings.Contains(lastToast(m), "release/2.0") {
-		t.Errorf("el aviso = %q, want las dos ramas", lastToast(m))
+		t.Errorf("the notice = %q, want the two branches", lastToast(m))
 	}
 }
 
 // Changing the base does not touch the worktree.
-func TestElAvisoAvisaDelWorktreeDesfasado(t *testing.T) {
+func TestTheNoticeWarnsAboutTheStaleWorktree(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	m.SetReviewLookup(fakeLookup{path: "/tmp/wt/prdash-pr-7"})
 
@@ -311,14 +311,14 @@ func TestElAvisoAvisaDelWorktreeDesfasado(t *testing.T) {
 	})
 
 	if !strings.Contains(lastToast(m), "mounted review") {
-		t.Errorf("el aviso = %q, want que nombre el review desfasado", lastToast(m))
+		t.Errorf("the notice = %q, want it to name the out of sync review", lastToast(m))
 	}
 }
 
 // The warning is for the real case, not decoration on every item.
-func TestSinReviewMontadoNoHayQueAvisar(t *testing.T) {
+func TestWithNoReviewMountedThereIsNothingToWarn(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
-	m.SetReviewLookup(fakeLookup{}) // hay registro, pero no review montado
+	m.SetReviewLookup(fakeLookup{}) // there is a record, but no review mounted
 
 	m, out := applyBranchAndMove(t, m, a)
 	it, _ := m.selected()
@@ -328,15 +328,15 @@ func TestSinReviewMontadoNoHayQueAvisar(t *testing.T) {
 	})
 
 	if strings.Contains(lastToast(m), "mounted review") {
-		t.Errorf("el aviso = %q, want que no hable de un review que no existe", lastToast(m))
+		t.Errorf("the notice = %q, want it not to speak of a review that does not exist", lastToast(m))
 	}
 }
 
 // Without the port injected the action works and only the warning is lost.
-func TestSinRegistroDeReviewsNoHayQueAvisar(t *testing.T) {
+func TestWithNoRecordedReviewsThereIsNothingToWarn(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	if m.reviewLookup != nil {
-		t.Fatal("el test necesita el modelo sin registro: New no lo inyecta")
+		t.Fatal("the test needs the model without a record: New does not inject it")
 	}
 	m, out := applyBranchAndMove(t, m, a)
 	it, _ := m.selected()
@@ -346,12 +346,12 @@ func TestSinRegistroDeReviewsNoHayQueAvisar(t *testing.T) {
 	})
 
 	if !strings.Contains(lastToast(m), "release/2.0") {
-		t.Errorf("el aviso = %q, want el resultado del cambio", lastToast(m))
+		t.Errorf("the notice = %q, want the result of the change", lastToast(m))
 	}
 }
 
 // The base only changes on an item that is still something to integrate.
-func TestUnItemNoAccionableNoAbreElPopup(t *testing.T) {
+func TestANonActionableItemDoesNotOpenThePopup(t *testing.T) {
 	a := ghAdapter()
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 7, "APPROVED")
 	it.State = "MERGED"
@@ -362,33 +362,33 @@ func TestUnItemNoAccionableNoAbreElPopup(t *testing.T) {
 	m = press(t, m, "e")
 
 	if m.retarget.state != retargetClosed {
-		t.Errorf("estado = %v, want que no abra sobre un ítem mergeado", m.retarget.state)
+		t.Errorf("state = %v, want it not to open over a merged item", m.retarget.state)
 	}
 	if a.BranchCallCount("acme/widget") != 0 {
-		t.Error("pidió las ramas de un ítem que no es accionable")
+		t.Error("it asked for the branches of an item that is not actionable")
 	}
 	assertToast(t, m, "already merged")
 }
 
-func TestElPopupNoSeAbreConElMergeArmado(t *testing.T) {
+func TestThePopupDoesNotOpenWithTheMergeArmed(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	m = press(t, m, "esc")
 
-	m = press(t, m, "m") // arma el merge
+	m = press(t, m, "m") // arms the merge
 	if !m.mergeArmed {
-		t.Fatal("el merge no se armó: el test no probaría nada")
+		t.Fatal("the merge did not arm: the test would prove nothing")
 	}
 	m = press(t, m, "e")
 
 	if m.retarget.state != retargetClosed {
-		t.Errorf("estado = %v, want que el popup no se abra con el merge armado", m.retarget.state)
+		t.Errorf("state = %v, want the popup not to open with the merge armed", m.retarget.state)
 	}
 	if a.BranchCallCount("acme/widget") != 1 {
-		t.Errorf("la `e` llegó a pedir ramas: %d llamadas", a.BranchCallCount("acme/widget"))
+		t.Errorf("`e` got to ask for branches: %d calls", a.BranchCallCount("acme/widget"))
 	}
 }
 
-func TestLaTeclaSePuedeRebind(t *testing.T) {
+func TestTheKeyCanBeRebound(t *testing.T) {
 	a := ghAdapter()
 	a.BranchLists = map[string][]string{"acme/widget": {"main", "develop"}}
 	m := newTestModel(t, a)
@@ -400,12 +400,12 @@ func TestLaTeclaSePuedeRebind(t *testing.T) {
 	m = send(t, m, waitMount(t, m).(branchesMsg))
 
 	if m.retarget.state != retargetChoosing {
-		t.Errorf("estado = %v, want que el rebind abra el buscador", m.retarget.state)
+		t.Errorf("state = %v, want the rebind to open the searcher", m.retarget.state)
 	}
 }
 
 // The reason has to be the forge's, not the CLI's line.
-func TestUnRechazoDelForgeSeEnsenaSinElArgv(t *testing.T) {
+func TestAForgesRejectionIsShownWithoutTheArgv(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	a.ActionWarnings = map[string][]model.Warning{
 		"retarget:" + stateKey(m.retarget.item): {{
@@ -418,16 +418,16 @@ func TestUnRechazoDelForgeSeEnsenaSinElArgv(t *testing.T) {
 	m = applyActionResult(t, m, out)
 
 	if out.OK {
-		t.Error("un rechazo del forge no puede salir como OK")
+		t.Error("a forges rejection cannot come out as OK")
 	}
 	if out.Conflict {
-		t.Errorf("salió como conflicto: un refresco no arregla el nombre de la rama")
+		t.Errorf("it came out as a conflict: a refresh does not fix the branch name")
 	}
 	if strings.Contains(lastToast(m), "-X PATCH") {
-		t.Errorf("el aviso = %q, want el motivo del forge y no el argv", lastToast(m))
+		t.Errorf("the notice = %q, want the forges reason and not the argv", lastToast(m))
 	}
 	if !strings.Contains(lastToast(m), "was not found") {
-		t.Errorf("el aviso = %q, want el motivo del forge", lastToast(m))
+		t.Errorf("the notice = %q, want the forges reason", lastToast(m))
 	}
 }
 
@@ -451,7 +451,7 @@ func applyBranchAndMove(t *testing.T, m Model, a *testutil.FakeAdapter) (Model, 
 	m = press(t, m, "enter")
 	out := waitOutcome(t, m)
 	if a.RetargetCount() != 1 {
-		t.Fatalf("el popup no llegó a aplicar: %v", a.Retargets)
+		t.Fatalf("the popup never got to apply: %v", a.Retargets)
 	}
 	return m, out
 }

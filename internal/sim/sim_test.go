@@ -28,10 +28,10 @@ func TestArgsNeverAskForQuietAndThePath(t *testing.T) {
 	for _, kind := range []Kind{KindMerge, KindRebase} {
 		argv := strings.Join(NewRunner().args(Spec{Kind: kind, Ref: "x"}, "/tmp/m"), " ")
 		if strings.Contains(argv, "--quiet") {
-			t.Errorf("%s: el argv pide --quiet, que anula --output-only-path: %s", kind, argv)
+			t.Errorf("%s: the argv asks for --quiet, which voids --output-only-path: %s", kind, argv)
 		}
 		if !strings.Contains(argv, "--output-only-path") {
-			t.Errorf("%s: el argv no pide la ruta de la imagen: %s", kind, argv)
+			t.Errorf("%s: the argv does not ask for the image path: %s", kind, argv)
 		}
 	}
 }
@@ -39,7 +39,7 @@ func TestArgsNeverAskForQuietAndThePath(t *testing.T) {
 func TestArgsCarryTheRefOfEachKind(t *testing.T) {
 	r := NewRunner()
 	if got := r.args(Spec{Kind: KindRebase, Ref: "main"}, "/tmp/m"); got[len(got)-2] != "rebase" {
-		t.Errorf("subcomando = %q, want rebase", got[len(got)-2])
+		t.Errorf("subcommand = %q, want rebase", got[len(got)-2])
 	}
 	if got := r.args(Spec{Kind: KindRebase, Ref: "main"}, "/tmp/m"); got[len(got)-1] != "main" {
 		t.Errorf("ref = %q, want main", got[len(got)-1])
@@ -58,20 +58,20 @@ func TestEnvForcesNoAutoOpen(t *testing.T) {
 		case "git_sim_auto_open=false":
 			seen++
 		case "git_sim_img_format=png":
-			t.Error("env conserva un git_sim_* del usuario; el primero gana y anula el forzado")
+			t.Error("env keeps a user git_sim_*; the first one wins and voids the forcing")
 		}
 	}
 	if seen != 1 {
-		t.Errorf("git_sim_auto_open=false aparece %d veces, want 1", seen)
+		t.Errorf("git_sim_auto_open=false appears %d times, want 1", seen)
 	}
 }
 
 func TestImagePathTakesTheLastNonEmptyLine(t *testing.T) {
-	if got := imagePath("ruido\n/tmp/x.jpg\n\n"); got != "/tmp/x.jpg" {
+	if got := imagePath("noise\n/tmp/x.jpg\n\n"); got != "/tmp/x.jpg" {
 		t.Errorf("imagePath = %q, want /tmp/x.jpg", got)
 	}
 	if got := imagePath("   \n"); got != "" {
-		t.Errorf("imagePath = %q, want vacío", got)
+		t.Errorf("imagePath = %q, want empty", got)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestRenderReturnsTheImagePath(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	if got != "/tmp/media/img.jpg" {
-		t.Errorf("imagen = %q", got)
+		t.Errorf("image = %q", got)
 	}
 }
 
@@ -96,14 +96,14 @@ func TestRenderFailsWithTheStderrOfGitSim(t *testing.T) {
 	r := &Runner{Bin: bin}
 	_, err := r.Render(context.Background(), dir, "/tmp/media", Spec{Kind: KindMerge, Ref: "x"})
 	if err == nil {
-		t.Fatal("Render no falló")
+		t.Fatal("Render did not fail")
 	}
 	var serr *Error
 	if !asError(err, &serr) {
 		t.Fatalf("err = %T, want *sim.Error", err)
 	}
 	if !strings.Contains(serr.Msg, "not a valid Git ref") {
-		t.Errorf("Msg = %q, want el stderr de git-sim", serr.Msg)
+		t.Errorf("Msg = %q, want git-sim's stderr", serr.Msg)
 	}
 	if serr.ExitCode != 1 {
 		t.Errorf("ExitCode = %d, want 1", serr.ExitCode)
@@ -113,24 +113,24 @@ func TestRenderFailsWithTheStderrOfGitSim(t *testing.T) {
 func TestRenderRejectsAnUnknownKind(t *testing.T) {
 	r := NewRunner()
 	if _, err := r.Render(context.Background(), t.TempDir(), "/tmp/m", Spec{Kind: "cherry-pick", Ref: "x"}); err == nil {
-		t.Fatal("Render aceptó un kind desconocido")
+		t.Fatal("Render accepted an unknown kind")
 	}
 	if _, err := r.Render(context.Background(), t.TempDir(), "/tmp/m", Spec{Kind: KindMerge}); err == nil {
-		t.Fatal("Render aceptó un spec sin ref")
+		t.Fatal("Render accepted a spec without ref")
 	}
 }
 
 func TestAvailableFollowsTheBinary(t *testing.T) {
-	missing := &Runner{Bin: "git-sim-que-no-existe", lookPath: func(string) (string, error) {
+	missing := &Runner{Bin: "git-sim-that-does-not-exist", lookPath: func(string) (string, error) {
 		return "", os.ErrNotExist
 	}}
 	if missing.Available() {
-		t.Error("Available = true con un binario ausente")
+		t.Error("Available = true with a missing binary")
 	}
 
 	here := &Runner{Bin: "git-sim", lookPath: func(name string) (string, error) { return "/usr/bin/" + name, nil }}
 	if !here.Available() {
-		t.Error("Available = false con un binario presente")
+		t.Error("Available = false with a present binary")
 	}
 }
 

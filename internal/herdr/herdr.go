@@ -88,7 +88,6 @@ type SplitSpec struct {
 	NoFocus   bool
 }
 
-// PaneInfo identifica un pane.
 type PaneInfo struct {
 	PaneID      string
 	WorkspaceID string
@@ -99,7 +98,7 @@ type PaneInfo struct {
 
 type NotifyOptions struct {
 	Body  string
-	Sound string // none|done|request (vacío = default de Herdr)
+	Sound string // none|done|request (empty = Herdr default)
 }
 
 // Both ids come together because the native provisioning delivers them paired and the layout needs

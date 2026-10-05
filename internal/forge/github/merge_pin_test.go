@@ -19,11 +19,11 @@ func TestMergePinsTheHeadCommit(t *testing.T) {
 
 		warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: mode, HeadSHA: sha})
 		if len(warns) != 0 {
-			t.Fatalf("modo %q: Merge = %+v, want sin warnings", mode, warns)
+			t.Fatalf("mode %q: Merge = %+v, want no warnings", mode, warns)
 		}
 		joined := strings.Join(readArgs(t, argsFile), " ")
 		if !strings.Contains(joined, "--match-head-commit "+sha) {
-			t.Errorf("modo %q: argv = %q, want el pin a %s", mode, joined, sha)
+			t.Errorf("mode %q: argv = %q, want the pin to %s", mode, joined, sha)
 		}
 	}
 }
@@ -35,13 +35,13 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 
 		warns := New("github.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.Rebase, HeadSHA: sha})
 		if len(warns) == 0 {
-			t.Fatalf("sha %q: un merge sin pin debería reportar warning", sha)
+			t.Fatalf("sha %q: a merge without a pin should report a warning", sha)
 		}
 		if warns[0].Kind != "unsupported" {
 			t.Errorf("sha %q: Kind = %q, want unsupported", sha, warns[0].Kind)
 		}
 		if _, err := os.Stat(argsFile); err == nil {
-			t.Errorf("sha %q: no debería haber lanzado la CLI sin poder pinear", sha)
+			t.Errorf("sha %q: it should not have launched the CLI without being able to pin", sha)
 		}
 	}
 }
@@ -55,7 +55,7 @@ func TestMergeRefusesAnUnknownModeBeforePinning(t *testing.T) {
 		t.Fatalf("warnings = %+v, want unsupported", warns)
 	}
 	if _, err := os.Stat(argsFile); err == nil {
-		t.Error("no debería haber lanzado la CLI con un modo desconocido")
+		t.Error("it should not have launched the CLI with an unknown mode")
 	}
 }
 
@@ -68,7 +68,7 @@ func TestPRFieldsAskForThePinAndTheRules(t *testing.T) {
 		"squashMergeAllowed",
 	} {
 		if !strings.Contains(ghPRFields, field) {
-			t.Errorf("ghPRFields no pide %q", field)
+			t.Errorf("ghPRFields does not ask for %q", field)
 		}
 	}
 }

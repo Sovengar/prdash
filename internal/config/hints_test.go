@@ -6,108 +6,108 @@ import (
 )
 
 // The bar is an ORDERED list and the order is hintOrder's.
-func TestLasPistasDeLaBarraSiguenElOrdenYLoUnico(t *testing.T) {
+func TestTheBarHintsFollowTheOrderAndEachOtherOnly(t *testing.T) {
 	cfg := Defaults()
 
 	hints := cfg.Hints(nil)
 	if len(hints) == 0 {
-		t.Fatal("Hints sin estado no dio ninguna pista")
+		t.Fatal("Hints with no state gave no hints")
 	}
 	// A nil state does not change the entry COUNT: state is optional.
 	for _, h := range hints {
 		if strings.TrimSpace(h) == "" {
-			t.Errorf("una pista sale vacía: %q", h)
+			t.Errorf("a hint comes out empty: %q", h)
 		}
 		// The format is "key label": the bar is space-separated, and an assertion that skipped it would
 		// pass on a different bar.
 		if !strings.Contains(h, " ") {
-			t.Errorf("la pista %q no tiene separación entre tecla y etiqueta", h)
+			t.Errorf("the hint %q has no separation between key and label", h)
 		}
 		if strings.HasPrefix(h, " ") || strings.HasSuffix(h, " ") {
-			t.Errorf("la pista %q tiene espacios en los bordes", h)
+			t.Errorf("the hint %q has spaces at the edges", h)
 		}
 	}
 	// Two consecutive calls give the same thing: the bar is recomposed on every render.
-	otro := cfg.Hints(nil)
+	other := cfg.Hints(nil)
 	for i := range hints {
-		if hints[i] != otro[i] {
-			t.Fatalf("Hints no es estable: %q en la llamada %d y %q en la %d",
-				hints[i], i, otro[i], 0)
+		if hints[i] != other[i] {
+			t.Fatalf("Hints is not stable: %q on call %d and %q on call 0",
+				hints[i], i, other[i])
 		}
 	}
 }
 
 // It is what makes the bar say what is happening now instead of repeating the names.
-func TestElEstadoDinamicoSeAnadeALaEtiquetaYSoloALQueLoTiene(t *testing.T) {
+func TestTheDynamicStateIsAddedToTheLabelAndOnlyToTheOneThatHasIt(t *testing.T) {
 	cfg := Defaults()
 
-	estado := HintState{"refresh": "hace 2m"}
-	hints := cfg.Hints(estado)
+	state := HintState{"refresh": "2m ago"}
+	hints := cfg.Hints(state)
 
-	conEstado, sinEstado := 0, 0
+	withState, withoutState := 0, 0
 	for _, h := range hints {
-		if strings.Contains(h, "hace 2m") {
-			conEstado++
+		if strings.Contains(h, "2m ago") {
+			withState++
 			// The state text goes after the label, with a colon: "refresh: did 2m".
 			if !strings.Contains(h, ": ") {
-				t.Errorf("la pista con estado %q no separa la etiqueta del estado", h)
+				t.Errorf("the hint with state %q does not separate label from state", h)
 			}
 		} else {
-			sinEstado++
+			withoutState++
 		}
 	}
-	if conEstado != 1 {
-		t.Errorf("%d pistas llevan el estado, want exactamente 1", conEstado)
+	if withState != 1 {
+		t.Errorf("%d hints carry the state, want exactly 1", withState)
 	}
-	if sinEstado == 0 {
-		t.Error("todas las pistas llevan el estado: se añadió a las que no lo tienen")
+	if withoutState == 0 {
+		t.Error("all hints carry the state: it was added to the ones that do not have it")
 	}
 
 	// An EMPTY state adds nothing: a state of "" is an action with nothing to say.
 	for _, h := range cfg.Hints(HintState{"refresh": ""}) {
 		if strings.HasSuffix(h, ": ") {
-			t.Errorf("una pista con estado vacío quedó en %q", h)
+			t.Errorf("a hint with an empty state ended up as %q", h)
 		}
 	}
 
 	// A state for an action that does not exist invents no entry.
-	conExtra := cfg.Hints(HintState{"accion-que-no-existe": "texto"})
+	extra := cfg.Hints(HintState{"nonexistent-action": "text"})
 	base := cfg.Hints(nil)
-	if len(conExtra) != len(base) {
-		t.Errorf("un estado para una acción inexistente añadió %d pistas",
-			len(conExtra)-len(base))
+	if len(extra) != len(base) {
+		t.Errorf("a state for a nonexistent action added %d hints",
+			len(extra)-len(base))
 	}
 
 	// A hint that already had state does not duplicate it on the next paint.
-	dosVeces := cfg.Hints(estado)
-	if strings.Count(dosVeces[0], "hace 2m") > 1 {
-		t.Errorf("el estado se duplicó: %q", dosVeces[0])
+	twice := cfg.Hints(state)
+	if strings.Count(twice[0], "2m ago") > 1 {
+		t.Errorf("the state was duplicated: %q", twice[0])
 	}
 }
 
 // The whole contract of an override: it changes the action's key, not its label.
-func TestUnOverrideDeTeclaCambiaLaPistaYNoElResto(t *testing.T) {
+func TestAKeyOverrideChangesTheHintAndNothingElse(t *testing.T) {
 	base := Defaults()
-	antes := base.Hints(nil)
+	before := base.Hints(nil)
 
-	cambiada := Defaults()
-	cambiada.Keybindings["refresh"] = "F5"
-	despues := cambiada.Hints(nil)
+	changed := Defaults()
+	changed.Keybindings["refresh"] = "F5"
+	after := changed.Hints(nil)
 
-	if len(antes) != len(despues) {
-		t.Fatalf("un override cambió el número de pistas: %d -> %d", len(antes), len(despues))
+	if len(before) != len(after) {
+		t.Fatalf("an override changed the number of hints: %d -> %d", len(before), len(after))
 	}
-	cambiadas := 0
-	for i := range antes {
-		if antes[i] != despues[i] {
-			cambiadas++
-			if !strings.Contains(despues[i], "F5") {
-				t.Errorf("la pista %d cambió sin llevar el override: %q -> %q",
-					i, antes[i], despues[i])
+	changedCount := 0
+	for i := range before {
+		if before[i] != after[i] {
+			changedCount++
+			if !strings.Contains(after[i], "F5") {
+				t.Errorf("hint %d changed without carrying the override: %q -> %q",
+					i, before[i], after[i])
 			}
 		}
 	}
-	if cambiadas != 1 {
-		t.Errorf("un override cambió %d pistas, want 1", cambiadas)
+	if changedCount != 1 {
+		t.Errorf("an override changed %d hints, want 1", changedCount)
 	}
 }

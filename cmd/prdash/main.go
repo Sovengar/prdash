@@ -60,7 +60,7 @@ func parseOpts(args []string) (opts, error) {
 	// Own FlagSet, not the global singleton: a test using the global would contaminate the rest of the
 	// suite, and test order within a binary is not guaranteed.
 	fs := flag.NewFlagSet("prdash", flag.ContinueOnError)
-	fs.SetOutput(io.Discard) // los errores los formatea `run`, con el stderr del llamador
+	fs.SetOutput(io.Discard) // `run` formats the errors, on the caller's stderr
 	print := fs.Bool("print", false, "print the inbox and exit")
 	if err := fs.Parse(args); err != nil {
 		return opts{}, err
@@ -106,7 +106,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	model := wire(cfg, adapters, ex)
-	if err := arrancaTUI(model); err != nil {
+	if err := startTUI(model); err != nil {
 		_, _ = fmt.Fprintln(stderr, "prdash:", err)
 		return 1
 	}
@@ -115,7 +115,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // Own function so that `run` does not depend on a terminal: `tea.NewProgram(m).Run` needs a TTY, so
 // without this the `return 0` path of a UI that DOES start was untestable while the failure path was.
-var arrancaTUI = func(m tea.Model) error {
+var startTUI = func(m tea.Model) error {
 	_, err := tea.NewProgram(m).Run()
 	return err
 }

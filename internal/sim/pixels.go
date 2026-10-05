@@ -5,8 +5,8 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	_ "image/jpeg" // el registro de jpeg es lo que permite decodificar la imagen
-	_ "image/png"  // git-sim acepta también PNG y el registro no cuesta nada
+	_ "image/jpeg" // the jpeg registration is what makes the image decodable
+	_ "image/png"  // git-sim takes PNG too and the registration costs nothing
 	"os"
 	"strings"
 )

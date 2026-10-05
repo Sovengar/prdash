@@ -1,55 +1,55 @@
-# Flujo de comportamiento — 0004 limpieza de worktrees
+# Behavior flow — 0004 worktree cleanup
 
-Derivado de `../behavior.feature`. No es Cucumber: es una vista del
-comportamiento esperado para revisión humana.
+Derived from `../behavior.feature`. It is not Cucumber: it is a view of the
+expected behavior for human review.
 
 ## A — `prdash worktrees remove --orphans`
 
 ```mermaid
 flowchart TD
-  A0["prdash worktrees remove ..."] --> A1{"uso válido?<br/>--orphans con rutas<br/>--dry-run sin --orphans<br/>flag desconocido"}
-  A1 -- "no" --> A2["stderr + exit 2<br/>NO borra nada"]
-  A1 -- "sí" --> A3["Audit() → filtrar Entry.Orphan<br/>(misma fuente que 'worktrees list')"]
-  A3 --> A4{"¿cuántos huérfanos?"}
-  A4 -- "0" --> A5["stdout: 'no orphaned worktrees'<br/>exit 0 (caso feliz)"]
-  A4 -- "N" --> A6{"¿--dry-run?"}
-  A6 -- "sí" --> A7["imprime el lote exacto<br/>NO borra · exit 0"]
-  A6 -- "no" --> A8["Remove() por huérfano<br/>guardas: Owned + bajo raíz gestionada"]
-  A8 --> A9["exit 0<br/>(1 si falla algún borrado)"]
+  A0["prdash worktrees remove ..."] --> A1{"valid usage?<br/>--orphans with paths<br/>--dry-run without --orphans<br/>unknown flag"}
+  A1 -- "no" --> A2["stderr + exit 2<br/>deletes nothing"]
+  A1 -- "yes" --> A3["Audit() → filter Entry.Orphan<br/>(same source as 'worktrees list')"]
+  A3 --> A4{"how many orphans?"}
+  A4 -- "0" --> A5["stdout: 'no orphaned worktrees'<br/>exit 0 (happy path)"]
+  A4 -- "N" --> A6{"--dry-run?"}
+  A6 -- "yes" --> A7["prints the exact batch<br/>deletes nothing · exit 0"]
+  A6 -- "no" --> A8["Remove() per orphan<br/>guards: Owned + under managed root"]
+  A8 --> A9["exit 0<br/>(1 if any deletion fails)"]
 
-  A8 -. "nunca toca" .-> AX1["worktree propio sano"]
-  A8 -. "nunca toca" .-> AX2["worktree ajeno"]
+  A8 -. "never touches" .-> AX1["healthy own worktree"]
+  A8 -. "never touches" .-> AX2["foreign worktree"]
 ```
 
-## B — auto-borrado al mergear **desde prdash**
+## B — self-deletion on merge **from prdash**
 
 ```mermaid
 flowchart TD
-  B0["acción merge lanzada por prdash"] --> B1{"out.Kind == ActionMerge<br/>&& out.OK"}
-  B1 -- "no: approve, retarget,<br/>fallo, conflicto, permiso,<br/>no-mergeable" --> B2["no toca ningún worktree"]
-  B1 -- "sí" --> B3["ActiveReview(item)<br/>mapea ítem → worktree"]
-  B3 --> B4{"¿hay review montado<br/>y existe la ruta?"}
-  B4 -- "no" --> B5["no-op sin error<br/>el merge sigue ok"]
-  B4 -- "sí" --> B6{"git status --porcelain<br/>¿árbol limpio?"}
-  B6 -- "sucio (incluye untracked)" --> BKEEP["CONSERVA<br/>'merged, but the worktree<br/>has uncommitted changes — kept'"]
-  B6 -- "estado ilegible" --> BKEEP2["CONSERVA (fail-safe)<br/>'could not read the state'"]
-  B6 -- "limpio" --> B7["RemoveIfClean → borra<br/>ForgetReview (olvida el registro)"]
-  B7 --> B8["aviso: 'merge ok · worktree removed'"]
-  BKEEP --> BNOTICE["aviso compuesto:<br/>merge + rama (DeleteMsg) + worktree<br/>sin perder ningún hecho"]
+  B0["merge action launched by prdash"] --> B1{"out.Kind == ActionMerge<br/>&& out.OK"}
+  B1 -- "no: approve, retarget,<br/>failure, conflict, permission,<br/>no-mergeable" --> B2["touches no worktree"]
+  B1 -- "yes" --> B3["ActiveReview(item)<br/>maps item → worktree"]
+  B3 --> B4{"is there a mounted review<br/>and does the path exist?"}
+  B4 -- "no" --> B5["no-op without error<br/>the merge still ok"]
+  B4 -- "yes" --> B6{"git status --porcelain<br/>clean tree?"}
+  B6 -- "dirty (includes untracked)" --> BKEEP["KEEPS<br/>'merged, but the worktree<br/>has uncommitted changes — kept'"]
+  B6 -- "unreadable state" --> BKEEP2["KEEPS (fail-safe)<br/>'could not read the state'"]
+  B6 -- "clean" --> B7["RemoveIfClean → deletes<br/>ForgetReview (forgets the record)"]
+  B7 --> B8["notice: 'merge ok · worktree removed'"]
+  BKEEP --> BNOTICE["composed notice:<br/>merge + branch (DeleteMsg) + worktree<br/>without losing any fact"]
   BKEEP2 --> BNOTICE
   B8 --> BNOTICE
 
-  BQ["cerrar la app (q / ctrl+c)"] --> BQ1["NO borra ningún worktree"]
-  BF["PR mergeado FUERA de prdash"] --> BF1["el refresco lo ve<br/>pero NO dispara limpieza"]
+  BQ["closing the app (q / ctrl+c)"] --> BQ1["deletes no worktree"]
+  BF["PR merged OUTSIDE prdash"] --> BF1["the refresh sees it<br/>but does NOT trigger cleanup"]
 ```
 
-## Guardas comunes a las dos vías
+## Common guards for the two paths
 
 ```mermaid
 flowchart LR
-  G0["cualquier intento de borrado<br/>(ruta explícita · --orphans · B)"] --> G1{"Owned?<br/>label o nombre 'prdash-…'"}
-  G1 -- "no" --> G2["rechazado"]
-  G1 -- "sí" --> G3{"¿bajo la raíz gestionada?"}
+  G0["any deletion attempt<br/>(explicit path · --orphans · B)"] --> G1{"Owned?<br/>label or name 'prdash-…'"}
+  G1 -- "no" --> G2["rejected"]
+  G1 -- "yes" --> G3{"under the managed root?"}
   G3 -- "no" --> G2
-  G3 -- "sí" --> G4["puede borrarse"]
+  G3 -- "yes" --> G4["can be deleted"]
 ```

@@ -9,8 +9,8 @@ import (
 )
 
 // The safety net of the whole suite.
-func TestGitHelpersNoTocanElRepoReal(t *testing.T) {
-	// Un repo de verdad se monta y se consulta en su directorio.
+func TestGitHelpersDoNotTouchTheRealRepo(t *testing.T) {
+	// A real repo is set up and queried in its directory.
 	repo := filepath.Join(t.TempDir(), "repo")
 	InitRepo(t, repo)
 	CommitFile(t, repo, "base.txt", "base", "base")
@@ -18,7 +18,7 @@ func TestGitHelpersNoTocanElRepoReal(t *testing.T) {
 		t.Errorf("HEAD = %q, want main", got)
 	}
 	if !RefExists(t, repo, "refs/heads/main") {
-		t.Error("el fixture debería dejar main en refs/heads/main")
+		t.Error("the fixture should leave main at refs/heads/main")
 	}
 
 	origin := filepath.Join(t.TempDir(), "origin.git")
@@ -30,41 +30,41 @@ func TestGitHelpersNoTocanElRepoReal(t *testing.T) {
 }
 
 // The filter's effect, with real git.
-func TestGitEnvNoDejaQueElGITDirHeredadoRedirijaLasEscrituras(t *testing.T) {
+func TestGitEnvDoesNotLetTheInheritedGITDirRedirectTheWrites(t *testing.T) {
 	// The victim is a WORKING repo, not a bare one: that is the case that really breaks.
-	victima := filepath.Join(t.TempDir(), "victima")
-	if out, err := exec.Command("git", "init", "-b", "main", victima).CombinedOutput(); err != nil {
+	victim := filepath.Join(t.TempDir(), "victim")
+	if out, err := exec.Command("git", "init", "-b", "main", victim).CombinedOutput(); err != nil {
 		t.Fatalf("init: %v\n%s", err, out)
 	}
-	cfg := filepath.Join(victima, ".git", "config")
-	antes, err := os.ReadFile(cfg)
+	cfg := filepath.Join(victim, ".git", "config")
+	before, err := os.ReadFile(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Setenv("GIT_DIR", filepath.Join(victima, ".git"))
-	t.Setenv("GIT_WORK_TREE", victima)
+	t.Setenv("GIT_DIR", filepath.Join(victim, ".git"))
+	t.Setenv("GIT_WORK_TREE", victim)
 
 	repo := filepath.Join(t.TempDir(), "repo")
 	InitRepo(t, repo)
 	CommitFile(t, repo, "base.txt", "base", "base")
 
 	if out, err := cleanGitEnv(t, "-C", repo, "config", "--get", "user.email").CombinedOutput(); err != nil {
-		t.Errorf("user.email no quedó en el repo del fixture: %v\n%s", err, out)
+		t.Errorf("user.email was not left in the fixture repo: %v\n%s", err, out)
 	} else if got := strings.TrimSpace(string(out)); got != "test@prdash.local" {
 		t.Errorf("user.email = %q, want test@prdash.local", got)
 	}
 	if out, _ := cleanGitEnv(t, "-C", repo, "rev-parse", "--is-bare-repository").CombinedOutput(); strings.TrimSpace(string(out)) != "false" {
-		t.Errorf("el fixture no debería ser bare: %q", out)
+		t.Errorf("the fixture should not be bare: %q", out)
 	}
 
 	// The victim's config has to stay byte for byte, so the whole file is compared.
-	despues, err := os.ReadFile(cfg)
+	after, err := os.ReadFile(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(antes) != string(despues) {
-		t.Errorf("la config de la víctima cambió:\n--- antes ---\n%s\n--- después ---\n%s\nGIT_DIR le ganó a cmd.Dir", antes, despues)
+	if string(before) != string(after) {
+		t.Errorf("the victim's config changed:\n--- before ---\n%s\n--- after ---\n%s\nGIT_DIR beat cmd.Dir", before, after)
 	}
 }
 
@@ -78,24 +78,24 @@ func cleanGitEnv(t *testing.T, args ...string) *exec.Cmd {
 }
 
 // The guard has to cut both the empty dir (git would run in the real repo) and the rest.
-func TestRequireDirRechazaLoQueNoEsUnDirectorio(t *testing.T) {
+func TestRequireDirRefusesWhatIsNotADirectory(t *testing.T) {
 	if err := checkDir(""); err == nil {
-		t.Error("un dir vacío debería rechazarse: git correría en el repo real")
+		t.Error("an empty dir should be refused: git would run in the real repo")
 	}
-	if err := checkDir(filepath.Join(t.TempDir(), "no-existe")); err == nil {
-		t.Error("una ruta inexistente debería rechazarse")
+	if err := checkDir(filepath.Join(t.TempDir(), "does-not-exist")); err == nil {
+		t.Error("a nonexistent path should be refused")
 	}
 
-	f := filepath.Join(t.TempDir(), "fichero.txt")
+	f := filepath.Join(t.TempDir(), "file.txt")
 	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkDir(f); err == nil {
-		t.Error("un fichero plano no debería valer como directorio de git")
+		t.Error("a plain file should not serve as a git directory")
 	}
 
-	// Y un directorio de verdad pasa.
+	// And a real directory passes.
 	if err := checkDir(t.TempDir()); err != nil {
-		t.Errorf("un directorio real debería valer: %v", err)
+		t.Errorf("a real directory should serve: %v", err)
 	}
 }

@@ -61,13 +61,13 @@ func (f *fakeRunner) PaneList(_ context.Context, workspaceID string) ([]herdr.Pa
 
 func TestSelectPicksNativeInsideHerdr(t *testing.T) {
 	if _, ok := Select(&fakeRunner{available: true}, t.TempDir()).(*HerdrNative); !ok {
-		t.Fatal("dentro de Herdr debería elegirse la provisión nativa")
+		t.Fatal("inside Herdr the native provisioning should be chosen")
 	}
 	if _, ok := Select(&fakeRunner{available: false}, t.TempDir()).(*GitDirect); !ok {
-		t.Fatal("fuera de Herdr debería elegirse git directo")
+		t.Fatal("outside Herdr plain git should be chosen")
 	}
 	if _, ok := Select(nil, t.TempDir()).(*GitDirect); !ok {
-		t.Fatal("sin cliente de Herdr debería elegirse git directo")
+		t.Fatal("without a Herdr client plain git should be chosen")
 	}
 }
 
@@ -88,7 +88,7 @@ func TestHerdrNativeCreateMapsContainer(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if wt.WorkspaceID != "w18" || wt.RootPaneID != "w18:p1" {
-		t.Fatalf("contenedor = %+v", wt)
+		t.Fatalf("container = %+v", wt)
 	}
 	if wt.Path != dest || wt.Branch != "prdash/pr-7" || wt.Label != "prdash-pr-7" {
 		t.Fatalf("worktree = %+v", wt)
@@ -97,7 +97,7 @@ func TestHerdrNativeCreateMapsContainer(t *testing.T) {
 		t.Fatalf("createCalls = %+v", runner.createCalls)
 	}
 	if got := runner.createCalls[0]; !got.NoFocus || got.Cwd != "/repo" || got.Branch != "prdash/pr-7" || got.Path != dest {
-		t.Fatalf("spec nativo = %+v", got)
+		t.Fatalf("native spec = %+v", got)
 	}
 }
 
@@ -119,7 +119,7 @@ func TestHerdrNativeCreateKeepsOwnershipLabel(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if wt.Label != "prdash-pr-7" {
-		t.Fatalf("Label = %q, quiero la etiqueta de ownership", wt.Label)
+		t.Fatalf("Label = %q, want the ownership label", wt.Label)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
@@ -145,13 +145,13 @@ func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if len(runner.createCalls) != 0 {
-		t.Fatal("un worktree existente no debería volver a crearse")
+		t.Fatal("an existing worktree should not be created again")
 	}
 	if wt.WorkspaceID != "w19" || wt.RootPaneID != "w19:p1" {
-		t.Fatalf("debería resolver el workspace abierto: %+v", wt)
+		t.Fatalf("it should resolve the open workspace: %+v", wt)
 	}
 	if wt.Label != "prdash-pr-1" {
-		t.Fatalf("la etiqueta de ownership no debería pisarse con el nombre del repo: %q", wt.Label)
+		t.Fatalf("the ownership label should not be overwritten with the repo name: %q", wt.Label)
 	}
 	if list := h.List(context.Background()); len(list) != 1 || list[0].Path != dest {
 		t.Fatalf("List = %+v", list)
@@ -167,12 +167,12 @@ func TestHerdrNativeReuseAdoptsCheckoutWithNoOpenWorkspace(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
 		available:  true,
-		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", Label: "origin.git"}}, // sin open_workspace_id
+		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", Label: "origin.git"}}, // without open_workspace_id
 		workspace:  herdr.WorkspaceInfo{WorkspaceID: "w1C", TabID: "w1C:t1", RootPaneID: "w1C:p1"},
 	}
 
@@ -181,16 +181,16 @@ func TestHerdrNativeReuseAdoptsCheckoutWithNoOpenWorkspace(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if len(runner.createCalls) != 0 {
-		t.Fatal("un worktree existente no debería volver a crearse")
+		t.Fatal("an existing worktree should not be created again")
 	}
 	if len(runner.wsCalls) != 1 {
-		t.Fatalf("debería abrir un workspace para el checkout: %+v", runner.wsCalls)
+		t.Fatalf("it should open a workspace for the checkout: %+v", runner.wsCalls)
 	}
 	if got := runner.wsCalls[0]; got.Cwd != dest || !got.NoFocus || got.Label != "prdash-pr-1" {
-		t.Fatalf("spec del workspace = %+v", got)
+		t.Fatalf("workspace spec = %+v", got)
 	}
 	if wt.WorkspaceID != "w1C" || wt.RootPaneID != "w1C:p1" {
-		t.Fatalf("contenedor = %+v", wt)
+		t.Fatalf("container = %+v", wt)
 	}
 }
 
@@ -201,7 +201,7 @@ func TestHerdrNativeReuseFailsWhenWorkspaceCannotBeOpened(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
@@ -211,10 +211,10 @@ func TestHerdrNativeReuseFailsWhenWorkspaceCannotBeOpened(t *testing.T) {
 	}
 	_, err := NewHerdrNative(runner, base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"})
 	if err == nil {
-		t.Fatal("sin workspace no debería devolverse un worktree sin contenedor")
+		t.Fatal("without a workspace no worktree without a container should be returned")
 	}
 	if !strings.Contains(err.Error(), dest) {
-		t.Fatalf("el error debería nombrar la ruta a limpiar: %v", err)
+		t.Fatalf("the error should name the path to clean: %v", err)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestHerdrNativeReuseIgnoresStaleOpenWorkspaceId(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-13")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-13"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
@@ -242,13 +242,13 @@ func TestHerdrNativeReuseIgnoresStaleOpenWorkspaceId(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if len(runner.paneListArgs) == 0 {
-		t.Fatal("un open_workspace_id debería comprobarse antes de confiar en él")
+		t.Fatal("an open_workspace_id should be checked before trusting it")
 	}
 	if len(runner.wsCalls) != 1 || runner.wsCalls[0].Cwd != dest {
-		t.Fatalf("un workspace obsoleto debería cair en la adopción: %+v", runner.wsCalls)
+		t.Fatalf("a stale workspace should fall back to adoption: %+v", runner.wsCalls)
 	}
 	if wt.WorkspaceID != "w1D" || wt.RootPaneID != "w1D:p1" {
-		t.Fatalf("contenedor = %+v", wt)
+		t.Fatalf("container = %+v", wt)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestHerdrNativeReuseUsesRootPaneOfOpenWorkspace(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
@@ -273,10 +273,10 @@ func TestHerdrNativeReuseUsesRootPaneOfOpenWorkspace(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	if len(runner.wsCalls) != 0 {
-		t.Fatalf("un workspace vivo no debería abrir otro: %+v", runner.wsCalls)
+		t.Fatalf("a live workspace should not open another one: %+v", runner.wsCalls)
 	}
 	if wt.WorkspaceID != "w19" || wt.RootPaneID != "w19:p1" {
-		t.Fatalf("contenedor = %+v", wt)
+		t.Fatalf("container = %+v", wt)
 	}
 }
 
@@ -286,7 +286,7 @@ func TestHerdrNativeRemoveUsesWorkspace(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
@@ -312,15 +312,15 @@ func TestHerdrNativeRemoveRefusesPathOutsideBase(t *testing.T) {
 		available:  true,
 		listResult: []herdr.WorktreeInfo{{Path: outside, OpenWorkspaceID: "w99"}},
 	}
-	h := NewHerdrNative(runner, t.TempDir()) // raíz gestionada distinta
+	h := NewHerdrNative(runner, t.TempDir()) // a different managed root
 	if err := h.Remove(context.Background(), outside); err == nil {
-		t.Fatal("no debería borrar fuera de la raíz gestionada")
+		t.Fatal("it should not delete outside the managed root")
 	}
 	if len(runner.removeCalls) != 0 {
-		t.Fatalf("no debería llamar al cliente nativo: %v", runner.removeCalls)
+		t.Fatalf("it should not call the native client: %v", runner.removeCalls)
 	}
 	if _, err := os.Stat(outside); err != nil {
-		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+		t.Fatalf("the worktree outside the root should not be touched: %v", err)
 	}
 }
 
@@ -337,13 +337,13 @@ func TestHerdrNativeRemoveIfCleanRefusesPathOutsideBase(t *testing.T) {
 	h := NewHerdrNative(runner, t.TempDir())
 	removed, _, err := h.RemoveIfClean(context.Background(), outside)
 	if err == nil || removed {
-		t.Fatalf("RemoveIfClean = (%v, _, %v), quiero rechazo", removed, err)
+		t.Fatalf("RemoveIfClean = (%v, _, %v), want refusal", removed, err)
 	}
 	if len(runner.removeCalls) != 0 {
-		t.Fatalf("no debería llamar al cliente nativo: %v", runner.removeCalls)
+		t.Fatalf("it should not call the native client: %v", runner.removeCalls)
 	}
 	if _, err := os.Stat(outside); err != nil {
-		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+		t.Fatalf("the worktree outside the root should not be touched: %v", err)
 	}
 }
 
@@ -355,20 +355,20 @@ func TestHerdrNativeReuseRejectsBranchMismatch(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature-1", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	h := NewHerdrNative(&fakeRunner{available: true}, base)
 	_, err := h.Create(context.Background(), Spec{Repo: repo, Branch: "feature-2", Path: dest, Label: "prdash-pr-1"})
 	if err == nil || !strings.Contains(err.Error(), "feature-1") {
-		t.Fatalf("esperaba error por rama ya presente, got %v", err)
+		t.Fatalf("expected an error for an already-present branch, got %v", err)
 	}
 }
 
 func TestHerdrNativeCreateIncompleteSpecErrors(t *testing.T) {
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	if _, err := h.Create(context.Background(), Spec{Repo: "x"}); err == nil {
-		t.Fatal("spec incompleto debería fallar")
+		t.Fatal("an incomplete spec should fail")
 	}
 }
 
@@ -379,7 +379,7 @@ func herdrCleanWorktree(t *testing.T) (base, dest string) {
 	base = t.TempDir()
 	dest = filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 	return base, dest
 }
@@ -393,16 +393,16 @@ func TestHerdrNativeRemoveIfCleanDeletesViaNativeWorkspace(t *testing.T) {
 
 	removed, reason, err := NewHerdrNative(runner, base).RemoveIfClean(context.Background(), dest)
 	if err != nil || !removed || reason != "" {
-		t.Fatalf("RemoveIfClean = (%v, %q, %v), quiero borrado limpio", removed, reason, err)
+		t.Fatalf("RemoveIfClean = (%v, %q, %v), want clean deletion", removed, reason, err)
 	}
 	if len(runner.removeCalls) != 1 || runner.removeCalls[0] != "w21" {
-		t.Fatalf("removeCalls = %v, quiero el borrado nativo del workspace", runner.removeCalls)
+		t.Fatalf("removeCalls = %v, want the native workspace deletion", runner.removeCalls)
 	}
 }
 
 func TestHerdrNativeRemoveIfCleanKeepsDirty(t *testing.T) {
 	base, dest := herdrCleanWorktree(t)
-	if err := os.WriteFile(filepath.Join(dest, "dirty.txt"), []byte("sin commitear"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dest, "dirty.txt"), []byte("uncommitted"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	runner := &fakeRunner{
@@ -412,13 +412,13 @@ func TestHerdrNativeRemoveIfCleanKeepsDirty(t *testing.T) {
 
 	removed, reason, err := NewHerdrNative(runner, base).RemoveIfClean(context.Background(), dest)
 	if err != nil || removed || reason != KeptUncommitted {
-		t.Fatalf("RemoveIfClean = (%v, %q, %v), quiero conservado por sucio", removed, reason, err)
+		t.Fatalf("RemoveIfClean = (%v, %q, %v), want kept for being dirty", removed, reason, err)
 	}
 	if len(runner.removeCalls) != 0 {
-		t.Fatalf("un checkout sucio no debería llamar al borrado nativo: %v", runner.removeCalls)
+		t.Fatalf("a dirty checkout should not call the native deletion: %v", runner.removeCalls)
 	}
 	if _, err := os.Stat(dest); err != nil {
-		t.Fatalf("el worktree sucio no debería tocarse: %v", err)
+		t.Fatalf("the dirty worktree should not be touched: %v", err)
 	}
 }
 
@@ -432,25 +432,25 @@ func TestHerdrNativeRemoveIfCleanPropagatesRemoveError(t *testing.T) {
 
 	removed, _, err := NewHerdrNative(runner, base).RemoveIfClean(context.Background(), dest)
 	if err == nil || removed {
-		t.Fatalf("RemoveIfClean = (%v, _, %v), quiero error propagado", removed, err)
+		t.Fatalf("RemoveIfClean = (%v, _, %v), want propagated error", removed, err)
 	}
 	if _, err := os.Stat(dest); err != nil {
-		t.Fatalf("un fallo de borrado no debería tocar el checkout: %v", err)
+		t.Fatalf("a deletion failure should not touch the checkout: %v", err)
 	}
 }
 
 // The narrow band of destinations where Exists is true but the destination is not a worktree is
 // what decides between `herdr worktree create` and `reuse`.
-func TestSobreUnDestinoQueNoEsWorktreeNoSeCreaEncimaNiSeAdopta(t *testing.T) {
-	destino := filepath.Join(t.TempDir(), "prdash-pr-7")
-	if err := os.MkdirAll(destino, 0o755); err != nil {
+func TestOnADestinationThatIsNotAWorktreeItDoesNotCreateOnTopNorAdopt(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(destino, ".git"),
+	if err := os.WriteFile(filepath.Join(dest, ".git"),
 		[]byte("gitdir: /no/existe\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(destino, "trabajo.txt"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dest, "trabajo.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -460,201 +460,201 @@ func TestSobreUnDestinoQueNoEsWorktreeNoSeCreaEncimaNiSeAdopta(t *testing.T) {
 	wt, err := h.Create(context.Background(), Spec{
 		Repo:   filepath.Join(t.TempDir(), "repo"),
 		Branch: "feat/x",
-		Path:   destino,
+		Path:   dest,
 		Label:  "prdash-pr-7",
 	})
 	if err == nil {
-		t.Fatalf("un destino que no es worktree dio nil y un worktree: %+v", wt)
+		t.Fatalf("a destination that is not a worktree gave nil and a worktree: %+v", wt)
 	}
 	if len(f.createCalls) != 0 {
-		t.Errorf("se llamo a `worktree create` %d veces sobre un destino que ya existe",
+		t.Errorf("`worktree create` was called %d times over a destination that already exists",
 			len(f.createCalls))
 	}
-	if _, err := os.Stat(filepath.Join(destino, "trabajo.txt")); err != nil {
-		t.Errorf("el directorio del usuario cambio: %v", err)
+	if _, err := os.Stat(filepath.Join(dest, "trabajo.txt")); err != nil {
+		t.Errorf("the user's directory changed: %v", err)
 	}
 }
 
 // Adopting another branch's checkout would mount the review on code nobody chose and present it as
 // if it were the item's.
-func TestAdoptarUnWorktreeDeOtraRamaSeNiegaYLoDice(t *testing.T) {
-	repo := repoConRama(t)
+func TestAdoptingAWorktreeOfAnotherBranchIsRefusedAndSaid(t *testing.T) {
+	repo := repoWithBranch(t)
 	testutil.RunGit(t, repo, "branch", "otra")
 
-	destino := filepath.Join(t.TempDir(), "prdash-pr-7")
-	testutil.RunGit(t, repo, "worktree", "add", "--quiet", destino, "otra")
+	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", dest, "otra")
 
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	_, err := h.Create(context.Background(), Spec{
 		Repo:   repo,
 		Branch: "feat/x",
-		Path:   destino,
+		Path:   dest,
 		Label:  "prdash-pr-7",
 	})
 	if err == nil {
-		t.Fatal("adoptó un worktree de otra rama")
+		t.Fatal("it adopted a worktree of another branch")
 	}
-	for _, quiere := range []string{"otra", "feat/x", destino} {
-		if !strings.Contains(err.Error(), quiere) {
-			t.Errorf("el error %q no dice %q", err, quiere)
+	for _, want := range []string{"otra", "feat/x", dest} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error %q does not say %q", err, want)
 		}
 	}
 }
 
-func TestRemoveDeUnWorktreeSinWorkspaceAbiertoDelegaEnElEscaneoDeGit(t *testing.T) {
-	repo := repoConRama(t)
+func TestRemoveOfAWorktreeWithoutAnOpenWorkspaceDelegatesToTheGitScan(t *testing.T) {
+	repo := repoWithBranch(t)
 	testutil.RunGit(t, repo, "branch", "feat/x")
 
 	base := t.TempDir()
-	raiz := NewGitDirect(base)
-	destino := filepath.Join(base, "prdash-pr-7")
-	if _, err := raiz.Create(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: destino, Label: "prdash-pr-7",
+	direct := NewGitDirect(base)
+	dest := filepath.Join(base, "prdash-pr-7")
+	if _, err := direct.Create(context.Background(), Spec{
+		Repo: repo, Branch: "feat/x", Path: dest, Label: "prdash-pr-7",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	f := &fakeRunner{available: true, listResult: nil}
 	h := NewHerdrNative(f, base)
-	if err := h.Remove(context.Background(), destino); err != nil {
-		t.Fatalf("Remove sin workspace abierto falló: %v", err)
+	if err := h.Remove(context.Background(), dest); err != nil {
+		t.Fatalf("Remove without an open workspace failed: %v", err)
 	}
-	if Exists(destino) {
-		t.Error("el worktree sigue en disco: se quedaría ahí sin que nadie lo supiera")
+	if Exists(dest) {
+		t.Error("the worktree is still on disk: it would stay there without anyone knowing")
 	}
 	if len(f.removeCalls) != 0 {
-		t.Errorf("se llamó a WorktreeRemove %d veces sin workspace abierto", len(f.removeCalls))
+		t.Errorf("WorktreeRemove was called %d times with no open workspace", len(f.removeCalls))
 	}
 }
 
 // reuse has a single caller and that caller already checked Exists(spec.Path), which is exactly
 // ".git is a FILE"; so this branch is unreachable from Create and has to be called directly.
-func TestReuseConUnGitQueEsDirectorioPropagaElErrorDeInspect(t *testing.T) {
-	repo := repoConRama(t)
+func TestReuseWithAGitThatIsADirectoryPropagatesTheInspectError(t *testing.T) {
+	repo := repoWithBranch(t)
 
-	destino := filepath.Join(t.TempDir(), "prdash-pr-7")
-	testutil.InitRepo(t, destino)
-	testutil.CommitFile(t, destino, "a.txt", "a", "a")
+	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
+	testutil.InitRepo(t, dest)
+	testutil.CommitFile(t, dest, "a.txt", "a", "a")
 
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	_, err := h.reuse(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: destino, Label: "prdash-pr-7",
+		Repo: repo, Branch: "feat/x", Path: dest, Label: "prdash-pr-7",
 	})
 	if err == nil {
-		t.Fatal("adoptar un repo normal dio nil: el caller recibiría un Worktree a cero")
+		t.Fatal("adopting a normal repo gave nil: the caller would receive a zeroed Worktree")
 	}
 	if !strings.Contains(err.Error(), "linked worktree") {
-		t.Errorf("el error %q no es el de inspect: reuse lo reescribió y se pierde el motivo", err)
+		t.Errorf("the error %q is not inspect's: reuse rewrote it and the reason is lost", err)
 	}
-	if !strings.Contains(err.Error(), destino) {
-		t.Errorf("el error %q no nombra la ruta ocupada", err)
+	if !strings.Contains(err.Error(), dest) {
+		t.Errorf("the error %q does not name the occupied path", err)
 	}
 }
 
 // `git worktree lock` is how git's record goes corrupt without the repo being gone: someone locks a
 // worktree and the directory disappears.
-func TestUnWorktreeBloqueadoSePodaYSeBorraElResiduoSinTocarElResto(t *testing.T) {
-	repo := repoConRama(t, "feat/x", "feat/y")
+func TestALockedWorktreeIsPrunedAndItsResidueDeletedWithoutTouchingTheRest(t *testing.T) {
+	repo := repoWithBranch(t, "feat/x", "feat/y")
 
 	base := t.TempDir()
-	raiz := NewGitDirect(base)
-	nuestro := filepath.Join(base, "prdash-pr-7")
-	if _, err := raiz.Create(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: nuestro, Label: "prdash-pr-7",
+	direct := NewGitDirect(base)
+	ours := filepath.Join(base, "prdash-pr-7")
+	if _, err := direct.Create(context.Background(), Spec{
+		Repo: repo, Branch: "feat/x", Path: ours, Label: "prdash-pr-7",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	testutil.RunGit(t, repo, "worktree", "lock", nuestro)
+	testutil.RunGit(t, repo, "worktree", "lock", ours)
 
-	ajeno := filepath.Join(base, "mio")
-	testutil.RunGit(t, repo, "worktree", "add", "--quiet", ajeno, "feat/y")
+	foreign := filepath.Join(base, "mio")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "feat/y")
 
-	if err := raiz.Remove(context.Background(), nuestro); err != nil {
-		t.Fatalf("quitar un worktree bloqueado falló: %v", err)
+	if err := direct.Remove(context.Background(), ours); err != nil {
+		t.Fatalf("removing a locked worktree failed: %v", err)
 	}
 
-	if Exists(nuestro) {
-		t.Errorf("%s sigue en disco tras un Remove que sí salió", nuestro)
+	if Exists(ours) {
+		t.Errorf("%s is still on disk after a Remove that did succeed", ours)
 	}
 	// A locked entry stays in git's record with the `locked` mark even when its directory is gone, and
 	//`git worktree prune` does not touch a locked entry.
-	var entradaViva string
-	for _, linea := range strings.Split(
+	var liveEntry string
+	for _, line := range strings.Split(
 		testutil.RunGit(t, repo, "worktree", "list"), "\n") {
-		if strings.Contains(linea, "prdash-pr-7") {
-			entradaViva = linea
+		if strings.Contains(line, "prdash-pr-7") {
+			liveEntry = line
 		}
 	}
-	if entradaViva == "" {
-		t.Error("la entrada del worktree bloqueado desaparecio del registro: el bloqueo no " +
-			"impide la poda, asi que algo mas la esta quitando")
+	if liveEntry == "" {
+		t.Error("the locked worktree's entry disappeared from the record: the lock does not " +
+			"prevent pruning, so something else is removing it")
 	}
-	if !strings.Contains(entradaViva, "locked") {
-		t.Errorf("la entrada que queda no esta marcada como bloqueada: %q. Sin esa marca "+
-			"la poda la habria quitado y el hallazgo seria otro", entradaViva)
+	if !strings.Contains(liveEntry, "locked") {
+		t.Errorf("the entry that remains is not marked as locked: %q. Without that mark the "+
+			"pruning would have removed it and the finding would be another one", liveEntry)
 	}
-	if _, err := os.Stat(nuestro); !os.IsNotExist(err) {
-		t.Errorf("el directorio %s volvio a aparecer: la entrada que queda dice que esta", nuestro)
+	if _, err := os.Stat(ours); !os.IsNotExist(err) {
+		t.Errorf("the directory %s appeared again: the entry that remains says it is there", ours)
 	}
 
-	if !Exists(ajeno) {
-		t.Error("el Remove se llevó un worktree ajeno que no es de prdash")
+	if !Exists(foreign) {
+		t.Error("the Remove took a foreign worktree that is not prdash's")
 	}
-	if _, err := os.Stat(filepath.Join(ajeno, ".git")); err != nil {
-		t.Errorf("el worktree ajeno perdió su .git: %v", err)
+	if _, err := os.Stat(filepath.Join(foreign, ".git")); err != nil {
+		t.Errorf("the foreign worktree lost its .git: %v", err)
 	}
 }
 
 // The sibling of the previous one: `.git` is a file (Exists is true) but git cannot read the branch
 // from it.
-func TestReuseSobreUnDestinoQueYaNoTieneGitSeNiegaYNoInventaUnWorktree(t *testing.T) {
-	repo := repoConRama(t)
-	destino := filepath.Join(t.TempDir(), "prdash-pr-7")
-	if err := os.MkdirAll(destino, 0o755); err != nil {
+func TestReuseOnADestinationThatNoLongerHasGitRefusesAndDoesNotInventAWorktree(t *testing.T) {
+	repo := repoWithBranch(t)
+	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(destino, ".git"),
+	if err := os.WriteFile(filepath.Join(dest, ".git"),
 		[]byte("gitdir: /no/existe\\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !Exists(destino) {
-		t.Fatal("el fixture no sirve: Exists tiene que dar true para entrar en reuse")
+	if !Exists(dest) {
+		t.Fatal("the fixture is no good: Exists has to give true to reach reuse")
 	}
 
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	wt, err := h.reuse(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: destino, Label: "prdash-pr-7",
+		Repo: repo, Branch: "feat/x", Path: dest, Label: "prdash-pr-7",
 	})
 	if err == nil {
-		t.Fatalf("adoptar un huérfano dio nil y un worktree: %+v. Con la rama vacía se "+
-			"montaría el review del ítem sobre un checkout que no es suyo", wt)
+		t.Fatalf("adopting an orphan gave nil and a worktree: %+v. With an empty branch the "+
+			"item's review would mount on a checkout that is not its own", wt)
 	}
-	if !strings.Contains(err.Error(), destino) {
-		t.Errorf("el error %q no nombra el destino que no es un worktree", err)
+	if !strings.Contains(err.Error(), dest) {
+		t.Errorf("the error %q does not name the destination that is not a worktree", err)
 	}
 }
 
 // Both of reuse's guards are literally the negation of what Create checks before calling it, so the
 // test has to jump over Create to reach them.
-func TestReuseSobreUnDestinoSinGitSeNiega(t *testing.T) {
-	repo := repoConRama(t)
-	destino := filepath.Join(t.TempDir(), "prdash-pr-7")
-	if err := os.MkdirAll(destino, 0o755); err != nil {
+func TestReuseOnADestinationWithoutGitRefuses(t *testing.T) {
+	repo := repoWithBranch(t)
+	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	wt, err := h.reuse(context.Background(), Spec{
-		Repo: repo, Branch: "feat/x", Path: destino, Label: "prdash-pr-7",
+		Repo: repo, Branch: "feat/x", Path: dest, Label: "prdash-pr-7",
 	})
 	if err == nil {
-		t.Fatalf("adoptar un directorio sin .git dio nil y un worktree: %+v", wt)
+		t.Fatalf("adopting a directory without .git gave nil and a worktree: %+v", wt)
 	}
 	if !strings.Contains(err.Error(), "linked worktree") {
-		t.Errorf("el error %q no dice que el destino no es un worktree enlazado", err)
+		t.Errorf("the error %q does not say the destination is not a linked worktree", err)
 	}
-	if _, err := os.Stat(destino); err != nil {
-		t.Errorf("reuse quitó el directorio: %v. La guarda rechaza, no limpia", err)
+	if _, err := os.Stat(dest); err != nil {
+		t.Errorf("reuse removed the directory: %v. The guard refuses, it does not clean", err)
 	}
 }

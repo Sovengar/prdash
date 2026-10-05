@@ -546,9 +546,9 @@ func (m *Model) startRetarget(branch string) tea.Cmd {
 
 func retargetProgressNotice(from, to string) string {
 	if from == "" {
-		return string(forge.ActionRetarget) + " (→ " + to + ") en curso…"
+		return string(forge.ActionRetarget) + " (→ " + to + ") in progress…"
 	}
-	return string(forge.ActionRetarget) + " (" + from + " → " + to + ") en curso…"
+	return string(forge.ActionRetarget) + " (" + from + " → " + to + ") in progress…"
 }
 
 func (m Model) staleReviewNotice(it model.Item) string {

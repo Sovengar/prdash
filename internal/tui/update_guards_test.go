@@ -19,153 +19,153 @@ import (
 	"prdash/internal/worktree"
 )
 
-func TestUnTickDelSpinnerSePasaAlSpinnerYDevuelveSuCmd(t *testing.T) {
+func TestASpinnersTickGoesToTheSpinnerAndReturnsItsCmd(t *testing.T) {
 	m := newTestModel(t)
-	antes := m.spinner.View()
+	before := m.spinner.View()
 
-	salida, cmd := m.Update(spinner.TickMsg{})
-	got := salida.(Model)
+	output, cmd := m.Update(spinner.TickMsg{})
+	got := output.(Model)
 
-	if got.spinner.View() == antes {
-		t.Error("el tick no cambió la vista del spinner: dejaría de girar en el primer frame")
+	if got.spinner.View() == before {
+		t.Error("the tick did not change the spinners view: it would stop turning on the first frame")
 	}
 	if cmd == nil {
-		t.Error("el tick no devuelve el Cmd del spinner: el siguiente tick nunca llega y el " +
-			"spinner se queda congelado")
+		t.Error("the tick does not return the spinners Cmd: the next tick never arrives and the " +
+			"spinner stays frozen")
 	}
 }
 
-func TestUnMensajeQueNoEsUnaTeclaNiUnEventoSeIgnoraYNoRompeNada(t *testing.T) {
+func TestAMessageThatIsNeitherAKeyNorAnEventIsIgnoredAndBreaksNothing(t *testing.T) {
 	m := newTestModel(t)
 	m.loading = true
 	m.cursor = 3
-	antes := m
+	before := m
 
 	for _, msg := range []tea.Msg{
-		"una cadena cualquiera",
+		"any random string",
 		struct{ X int }{42},
 		nil,
 	} {
-		salida, cmd := m.Update(msg)
-		got := salida.(Model)
+		output, cmd := m.Update(msg)
+		got := output.(Model)
 		if cmd != nil {
-			t.Errorf("%T: un mensaje desconocido devolvió un comando", msg)
+			t.Errorf("%T: an unknown message returned a command", msg)
 		}
-		if got.loading != antes.loading || got.cursor != antes.cursor {
-			t.Errorf("%T: un mensaje desconocido cambió el estado", msg)
+		if got.loading != before.loading || got.cursor != before.cursor {
+			t.Errorf("%T: an unknown message changed the state", msg)
 		}
 	}
 }
 
 // commentsTickMsg does NOT go through the event bomb (it consumes no channel reader) and still has
 // to re-arm its tick.
-func TestElTickDeComentariosSeRearmaAunqueNoHayaNadaQueConsultar(t *testing.T) {
+func TestTheCommentsTickRearmsEvenWhenThereIsNothingToFetch(t *testing.T) {
 	for _, c := range []struct {
-		nombre  string
+		name    string
 		prepara func(*testing.T) Model
 	}{
-		{"sin selección", func(t *testing.T) Model { return newTestModel(t) }},
-		{"con un ítem sin comentarios", func(t *testing.T) Model {
+		{"no selection", func(t *testing.T) Model { return newTestModel(t) }},
+		{"with an item with no comments", func(t *testing.T) Model {
 			m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
-			m = conSeleccion(t, m, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
+			m = withSelection(t, m, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 			return m
 		}},
 	} {
-		t.Run(c.nombre, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			m := c.prepara(t)
 			if _, cmd := m.Update(commentsTickMsg{}); cmd == nil {
-				t.Error("el tick de comentarios no devolvió comando: la cadena muere y el " +
-					"siguiente cambio de selección ya no se nota")
+				t.Error("the comments tick returned no command: the chain dies and the " +
+					"next selection change goes unnoticed")
 			}
 		})
 	}
 }
 
-func TestUnaAccionSobreUnForgeDesconocidoSeNiegaYLoDice(t *testing.T) {
-	m := newTestModel(t) // sin adapters: el mapa de forges está vacío
-	it := mkItem("github", "github.com", "acme/widget", "uno", 7, "")
+func TestAnActionOnAnUnknownForgeIsRefusedAndSaid(t *testing.T) {
+	m := newTestModel(t) // with no adapters: the forges map is empty
+	it := mkItem("github", "github.com", "acme/widget", "one", 7, "")
 
 	a, ok := m.canActionOn(forge.ActionApprove, it)
 	if ok || a != nil {
-		t.Error("canActionOn de un forge desconocido dio ok")
+		t.Error("canActionOn of an unknown forge gave ok")
 	}
 	av := lastToast(m)
 	if !strings.Contains(av, "unknown forge") {
-		t.Errorf("el aviso %q no dice que el forge no se conoce", av)
+		t.Errorf("the notice %q does not say the forge is unknown", av)
 	}
 	if !strings.Contains(av, "github") {
-		t.Errorf("el aviso %q no nombra el forge: sin el nombre el usuario no sabe cuál", av)
+		t.Errorf("the notice %q does not name the forge: without the name the user does not know which", av)
 	}
 	// The level is error and not a warning: waiting does not fix it. Checked on the rendered text
 	//rather than on the toast's type because that is what the view shows.
-	if nivel := nivelDeAviso(m, "unknown forge"); nivel != "error" {
-		t.Errorf("el aviso sale con nivel %q, want error: un forge que no vuelve no es "+
-			"transitorio y no se arregla esperando", nivel)
+	if level := paintedLevel(m, "unknown forge"); level != "error" {
+		t.Errorf("the notice comes out at level %q, want error: a forge that does not come back is not "+
+			"transient and waiting does not fix it", level)
 	}
 }
 
-func TestUnaAccionConOtraEnCursoSeNiegaYLoDice(t *testing.T) {
+func TestAnActionWithAnotherInFlightIsRefusedAndSaid(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
-	it := mkItem("github", "github.com", "acme/widget", "uno", 7, "APPROVED")
+	it := mkItem("github", "github.com", "acme/widget", "one", 7, "APPROVED")
 	m.actionBusy = true
 
 	if _, ok := m.canActionOn(forge.ActionMerge, it); ok {
-		t.Fatal("canActionOn con una acción en curso dio ok: dos merges a la vez")
+		t.Fatal("canActionOn with an action in flight gave ok: two merges at once")
 	}
 	av := lastToast(m)
 	if !strings.Contains(av, "already running") {
-		t.Errorf("el aviso %q no dice que ya hay una en curso", av)
+		t.Errorf("the notice %q does not say one is already in flight", av)
 	}
-	if nivel := nivelDeAviso(m, "already running"); nivel != "warn" {
-		t.Errorf("el aviso sale con nivel %q, want warn: esperar no es un error", nivel)
+	if level := paintedLevel(m, "already running"); level != "warn" {
+		t.Errorf("the notice comes out at level %q, want warn: waiting is not an error", level)
 	}
 }
 
-func TestMontarSinSeleccionSeNiegaYLoDice(t *testing.T) {
+func TestMountWithNoSelectionIsRefusedAndSaid(t *testing.T) {
 	m := newTestModel(t)
 
-	salida, cmd := m.startMount()
+	output, cmd := m.startMount()
 	if cmd != nil {
-		t.Error("montar sin selección devolvió comando: crearía un worktree de nada")
+		t.Error("mount with no selection returned a command: it would create a worktree for nothing")
 	}
-	got := salida.(Model)
+	got := output.(Model)
 	if got.mountBusy {
-		t.Error("sin selección se marcó el montaje como en curso: el candado se quedaría " +
-			"cerrado y las siguientes pulsaciones no harían nada")
+		t.Error("with no selection the mount was marked as in flight: the latch would stay " +
+			"closed and the following keypresses would do nothing")
 	}
 	av := lastToast(got)
 	if !strings.Contains(av, "select an item") {
-		t.Errorf("el aviso %q no dice que hay que elegir un ítem", av)
+		t.Errorf("the notice %q does not say an item must be chosen", av)
 	}
-	if nivel := nivelDeAviso(got, "select an item"); nivel != "warn" {
-		t.Errorf("el aviso sale con nivel %q, want warn: la solución es elegir, no arreglar", nivel)
+	if level := paintedLevel(got, "select an item"); level != "warn" {
+		t.Errorf("the notice comes out at level %q, want warn: the fix is to choose, not to repair", level)
 	}
 }
 
-func TestMontarConUnMontajeEnCursoSeNiegaYLoDice(t *testing.T) {
+func TestMountWithAMountInFlightIsRefusedAndSaid(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
-	m = conSeleccion(t, m, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
-	m.mounter = &mounterFalso{}
+	m = withSelection(t, m, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
+	m.mounter = &wiringMounter{}
 	m.mountBusy = true
 
-	salida, cmd := m.startMount()
+	output, cmd := m.startMount()
 	if cmd != nil {
-		t.Error("montar con un montaje en curso devolvió comando: dos worktrees en la misma ruta")
+		t.Error("mount with a mount in flight returned a command: two worktrees on the same path")
 	}
-	got := salida.(Model)
+	got := output.(Model)
 	if !got.mountBusy {
-		t.Error("el candado de montaje se soltó: la siguiente pulsación montaría otro")
+		t.Error("the mount latch was released: the next keypress would mount another")
 	}
 	av := lastToast(got)
 	if !strings.Contains(av, "already running") {
-		t.Errorf("el aviso %q no dice que ya hay un montaje en curso", av)
+		t.Errorf("the notice %q does not say a mount is already in flight", av)
 	}
 }
 
-func TestLaAccionDeSalirSeResuelvePorElConfigYElOverlayLaTragaAntes(t *testing.T) {
+func TestTheQuitActionIsResolvedByTheConfigAndTheOverlayEatsItFirst(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Keybindings["quit"] = "0"
-	nuevo := func(t *testing.T) Model {
+	new := func(t *testing.T) Model {
 		t.Helper()
 		m := New(cfg, []forge.Adapter{
 			&testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"},
@@ -176,116 +176,116 @@ func TestLaAccionDeSalirSeResuelvePorElConfigYElOverlayLaTragaAntes(t *testing.T
 		return m
 	}
 
-	m := nuevo(t)
-	m = conSeleccion(t, m, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
-	if _, cmd := pulsar(t, m, "0"); cmd == nil {
-		t.Fatal("la tecla reasignada de salir no pidió salir de la TUI")
+	m := new(t)
+	m = withSelection(t, m, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
+	if _, cmd := pressWithCmd(t, m, "0"); cmd == nil {
+		t.Fatal("the reassigned quit key did not ask to leave the TUI")
 	}
 
-	m2 := nuevo(t)
-	m2 = conSeleccion(t, m2, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
+	m2 := new(t)
+	m2 = withSelection(t, m2, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 	m2.retarget.state = retargetChoosing
 	m2.retarget.all = []string{"main", "feat/x"}
 	m2.retarget.view = m2.retarget.all
 
-	salida, cmd := pulsar(t, m2, "0")
-	got := salida
+	output, cmd := pressWithCmd(t, m2, "0")
+	got := output
 	if cmd != nil {
-		t.Error("con el overlay abierto, la tecla de salir lo cerró: perdería el filtro y " +
-			"cerraría la sesión sin querer")
+		t.Error("with the overlay open, the quit key closed it: it would lose the filter and " +
+			"would close the session unintentionally")
 	}
 	if got.retarget.state != retargetChoosing {
-		t.Errorf("el overlay se cerró con la tecla del filtro (state=%d)", got.retarget.state)
+		t.Errorf("the overlay was closed with the filters key (state=%d)", got.retarget.state)
 	}
 	if !strings.Contains(got.retarget.query, "0") {
-		t.Errorf("la tecla no llegó al filtro: quedó %q", got.retarget.query)
+		t.Errorf("the key did not reach the filter: it is %q", got.retarget.query)
 	}
 
-	for _, tecla := range []string{"q", "ctrl+c"} {
-		m3 := nuevo(t)
-		m3 = conSeleccion(t, m3, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
+	for _, key := range []string{"q", "ctrl+c"} {
+		m3 := new(t)
+		m3 = withSelection(t, m3, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 		m3.retarget.state = retargetChoosing
-		if _, cmd := pulsar(t, m3, tecla); cmd == nil {
-			t.Errorf("%q con el overlay abierto no salió de la TUI", tecla)
+		if _, cmd := pressWithCmd(t, m3, key); cmd == nil {
+			t.Errorf("%q with the overlay open did not leave the TUI", key)
 		}
 	}
 }
 
 // The most useful of the three mount warnings because it gives the next action: the mount worked and
 // the layout did not.
-func TestUnMontajeQueRequiereHerdrSeAviadoConDondeQuedoElWorktree(t *testing.T) {
-	av, nivel := mountNotice(executor.Result{
+func TestAMountThatRequiresHerdrWarnsWithWhereTheWorktreeEndedUp(t *testing.T) {
+	av, level := mountNotice(executor.Result{
 		Worktree: worktree.Worktree{Path: "/wt/prdash-pr-7", Label: "prdash-pr-7"},
 	}, nil)
 	if !strings.Contains(av, "Herdr") {
-		t.Errorf("el aviso %q no dice que hace falta Herdr", av)
+		t.Errorf("the notice %q does not say Herdr is needed", av)
 	}
 	if !strings.Contains(av, "/wt/prdash-pr-7") {
-		t.Errorf("el aviso %q no dice dónde quedó el worktree: sin eso no hay nada que hacer", av)
+		t.Errorf("the notice %q does not say where the worktree ended up: without that there is nothing to do", av)
 	}
-	if nivel != levelWarn {
-		t.Errorf("nivel %v, want aviso: el worktree existe y lo que falta es Herdr", nivel)
+	if level != levelWarn {
+		t.Errorf("level %v, want warn: the worktree exists and what is missing is Herdr", level)
 	}
 
-	ok, okNivel := mountNotice(executor.Result{
+	ok, okLevel := mountNotice(executor.Result{
 		Herdr:    true,
 		Worktree: worktree.Worktree{Path: "/wt/prdash-pr-7", Label: "prdash-pr-7"},
 		Plan:     plan.Plan{Tabs: []plan.Tab{{Label: "Review"}, {Label: "Edit"}}},
 	}, nil)
 	if !strings.Contains(ok, "panes") || !strings.Contains(ok, "tabs") {
-		t.Errorf("el aviso del camino bueno %q no dice cuántos panes ni tabs", ok)
+		t.Errorf("the happy path notice %q does not say how many panes nor tabs", ok)
 	}
 	if !strings.Contains(ok, "/wt/prdash-pr-7") {
-		t.Errorf("el aviso del camino bueno %q no dice la ruta", ok)
+		t.Errorf("the happy path notice %q does not say the path", ok)
 	}
-	if okNivel != levelOK {
-		t.Errorf("nivel %v del camino bueno", okNivel)
+	if okLevel != levelOK {
+		t.Errorf("level %v of the happy path", okLevel)
 	}
 
-	errMsg, errNivel := mountNotice(executor.Result{}, errors.New("no such branch"))
+	errMsg, errLevel := mountNotice(executor.Result{}, errors.New("no such branch"))
 	if !strings.Contains(errMsg, "no such branch") {
-		t.Errorf("el aviso de error %q no trae la causa", errMsg)
+		t.Errorf("the error notice %q does not carry the cause", errMsg)
 	}
-	if errNivel != levelError {
-		t.Errorf("nivel %v del error, want error", errNivel)
+	if errLevel != levelError {
+		t.Errorf("level %v of the error, want error", errLevel)
 	}
 }
 
-func TestElOverlayDeCambioDeBaseSeSuperponeAlContenido(t *testing.T) {
+func TestTheBaseChangeOverlaySitsOnTopOfTheContent(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
-	m = conSeleccion(t, m, mkItem("github", "github.com", "acme/widget", "uno", 7, ""))
+	m = withSelection(t, m, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 	m.width, m.height = 100, 30
 
-	sinPopup := m.View().Content
-	for _, fase := range []retargetState{retargetListing, retargetChoosing, retargetConfirm} {
-		m.retarget.state = fase
-		conPopup := m.View().Content
+	withoutPopup := m.View().Content
+	for _, phase := range []retargetState{retargetListing, retargetChoosing, retargetConfirm} {
+		m.retarget.state = phase
+		withPopup := m.View().Content
 
-		if len(conPopup) <= len(sinPopup) {
-			t.Errorf("fase %d: el popup no añadió nada al render (%d -> %d)",
-				fase, len(sinPopup), len(conPopup))
+		if len(withPopup) <= len(withoutPopup) {
+			t.Errorf("phase %d: the popup added nothing to the render (%d -> %d)",
+				phase, len(withoutPopup), len(withPopup))
 			continue
 		}
-		if !strings.Contains(conPopup, "retarget") {
-			t.Errorf("fase %d: el render no contiene la caja del popup", fase)
+		if !strings.Contains(withPopup, "retarget") {
+			t.Errorf("phase %d: the render does not contain the popup box", phase)
 		}
-		if !strings.Contains(conPopup, "acme/widget") {
-			t.Errorf("fase %d: el overlay tapó el contenido del inbox", fase)
+		if !strings.Contains(withPopup, "acme/widget") {
+			t.Errorf("phase %d: the overlay covered the inbox content", phase)
 		}
 	}
 
 	m.retarget.state = retargetClosed
 	if got := m.View().Content; strings.Contains(got, "retarget ") {
-		t.Error("con el popup cerrado el render trae la caja del popup")
+		t.Error("with the popup closed the render still brings the popup box")
 	}
 }
 
 var _ = time.Second
 
 // The render is inspected rather than the toast's field, because what matters is how it PAINTS.
-func nivelDeAviso(m Model, contiene string) string {
+func paintedLevel(m Model, contains string) string {
 	for _, v := range m.toast.toasts {
-		if !strings.Contains(v.message, contiene) {
+		if !strings.Contains(v.message, contains) {
 			continue
 		}
 		switch v.level {
@@ -300,8 +300,8 @@ func nivelDeAviso(m Model, contiene string) string {
 	return ""
 }
 
-type mounterFalso struct{}
+type wiringMounter struct{}
 
-func (mounterFalso) Mount(context.Context, model.Item) (executor.Result, error) {
+func (wiringMounter) Mount(context.Context, model.Item) (executor.Result, error) {
 	return executor.Result{}, nil
 }

@@ -22,10 +22,10 @@ func TestAuthReasonReachesTheScreen(t *testing.T) {
 	m = press(t, m, "a")
 	toast := lastToast(m)
 	if !strings.Contains(toast, "not implemented") {
-		t.Errorf("toast = %q, want el motivo real del adapter", toast)
+		t.Errorf("toast = %q, want the adapters real reason", toast)
 	}
 	if strings.Contains(toast, "not authenticated") {
-		t.Errorf("toast = %q: la etiqueta genérica manda a la persona a la autenticación", toast)
+		t.Errorf("toast = %q: the generic label sends the person to authentication", toast)
 	}
 }
 

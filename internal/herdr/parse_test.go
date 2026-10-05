@@ -87,21 +87,21 @@ const fixtureNotification = `{
 
 // Herdr's versioning decides whether a capability is usable, so a misplaced `>` disables or
 // enables it wrongly.
-func TestVersionAtLeastComparaPorCascada(t *testing.T) {
+func TestVersionAtLeastComparesCascade(t *testing.T) {
 	min := Version{Major: 0, Minor: 9, Patch: 3}
 	cases := []struct {
 		name string
 		v    Version
 		want bool
 	}{
-		{"la exacta mínima", Version{0, 9, 3, ""}, true},
-		{"patch por encima", Version{0, 9, 4, ""}, true},
-		{"minor por encima, patch por debajo", Version{0, 10, 0, ""}, true},
-		{"major por encima con todo por debajo", Version{1, 0, 0, ""}, true},
-		{"patch por debajo", Version{0, 9, 2, ""}, false},
-		{"minor por debajo", Version{0, 8, 9, ""}, false},
-		{"major por debajo", Version{0, 0, 0, ""}, false},
-		{"todo cero contra todo cero", Version{0, 0, 0, ""}, true},
+		{"the exact minimum", Version{0, 9, 3, ""}, true},
+		{"patch above", Version{0, 9, 4, ""}, true},
+		{"minor above, patch below", Version{0, 10, 0, ""}, true},
+		{"major above with everything below", Version{1, 0, 0, ""}, true},
+		{"patch below", Version{0, 9, 2, ""}, false},
+		{"minor below", Version{0, 8, 9, ""}, false},
+		{"major below", Version{0, 0, 0, ""}, false},
+		{"all zero against all zero", Version{0, 0, 0, ""}, true},
 	}
 	for _, c := range cases[:len(cases)-1] {
 		t.Run(c.name, func(t *testing.T) {
@@ -112,48 +112,48 @@ func TestVersionAtLeastComparaPorCascada(t *testing.T) {
 	}
 	// The 0.0.0 minimum is not a rare case: it is what arrives when the version cannot be read.
 	if !(Version{}).AtLeast(Version{}) {
-		t.Error("0.0.0 debería cumplir el mínimo 0.0.0: es la degradación cuando no se lee la versión")
+		t.Error("0.0.0 should meet the 0.0.0 minimum: it is the degradation when the version is not read")
 	}
 	if (Version{}).AtLeast(min) {
-		t.Error("0.0.0 no debería cumplir un mínimo 0.9.3")
+		t.Error("0.0.0 should not meet a 0.9.3 minimum")
 	}
 	// And a huge version qualifies, which is what makes Herdr's 0.x versioning useless here.
 	if !(Version{99, 0, 0, ""}).AtLeast(min) {
-		t.Error("un major muy alto debería cumplir cualquier mínimo 0.x")
+		t.Error("a very high major should meet any 0.x minimum")
 	}
 }
 
 // Herdr's message is what the TUI shows, and the three added parts are the code, the dir and the
 // exit.
-func TestErrorComponeElMensajeConLoQueHay(t *testing.T) {
+func TestErrorComposesTheMessageWithWhatIsThere(t *testing.T) {
 	cases := []struct {
 		name string
 		err  *Error
 		want string
 	}{
 		{
-			"solo el mensaje",
+			"message only",
 			&Error{Args: []string{"pane", "list"}, Msg: "pane not found"},
 			"herdr [pane list]: pane not found",
 		},
 		{
-			"con código de servidor",
+			"with server code",
 			&Error{Args: []string{"pane", "list"}, Msg: "pane not found", Code: "E_NOENT"},
 			"herdr [pane list]: pane not found [E_NOENT]",
 		},
 		{
-			"con código de salida",
+			"with exit code",
 			&Error{Args: []string{"pane", "list"}, Msg: "pane not found", Exit: 2},
 			"herdr [pane list]: pane not found (exit 2)",
 		},
 		{
-			"con los dos",
+			"with both",
 			&Error{Args: []string{"pane", "list"}, Msg: "pane not found", Exit: 2, Code: "E_NOENT"},
 			"herdr [pane list]: pane not found [E_NOENT] (exit 2)",
 		},
 		{
 			// An exit 0 with a non-zero code is odd but possible when the process is killed.
-			"sin args",
+			"without args",
 			&Error{Msg: "boom"},
 			"herdr []: boom",
 		},
@@ -167,13 +167,13 @@ func TestErrorComponeElMensajeConLoQueHay(t *testing.T) {
 	}
 	// The cause is preserved by Unwrap, which is what allows classifying without depending on the
 	// text.
-	causa := os.ErrNotExist
-	err := &Error{Msg: "x", Err: causa}
-	if !errors.Is(err, causa) {
-		t.Error("errors.Is debería encontrar la causa a través del *Error")
+	cause := os.ErrNotExist
+	err := &Error{Msg: "x", Err: cause}
+	if !errors.Is(err, cause) {
+		t.Error("errors.Is should find the cause through the *Error")
 	}
 	if (&Error{Msg: "x"}).Unwrap() != nil {
-		t.Error("sin causa, Unwrap debería devolver nil")
+		t.Error("without a cause, Unwrap should return nil")
 	}
 }
 
@@ -183,7 +183,7 @@ func TestParseWorktreeCreated(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	if info.WorkspaceID != "w18" || info.TabID != "w18:t1" || info.RootPaneID != "w18:p1" {
-		t.Fatalf("contenedor = %+v", info)
+		t.Fatalf("container = %+v", info)
 	}
 	if info.Path != "/home/u/.herdr/worktrees/prdash/feat-x" || info.Branch != "prdash/pr-7" {
 		t.Fatalf("worktree = %+v", info)
@@ -242,22 +242,22 @@ func TestParseVersion(t *testing.T) {
 		t.Fatalf("version = %+v ok=%v", v, ok)
 	}
 	if !v.AtLeast(MinVersion) {
-		t.Fatalf("%s debería ser >= %s", v, MinVersion)
+		t.Fatalf("%s should be >= %s", v, MinVersion)
 	}
 	if (Version{Major: 0, Minor: 8, Patch: 2}).AtLeast(MinVersion) {
-		t.Fatal("0.8.2 no debería alcanzar el mínimo")
+		t.Fatal("0.8.2 should not reach the minimum")
 	}
 	if _, ok := parseVersion([]byte("nope")); ok {
-		t.Fatal("sin semver no debería haber versión")
+		t.Fatal("without a semver there should be no version")
 	}
 }
 
 func TestParseMalformedResult(t *testing.T) {
 	if _, err := parseWorktreeCreated([]byte("{")); err == nil {
-		t.Fatal("una respuesta ilegible debería fallar, no entrar en pánico")
+		t.Fatal("an unreadable response should fail, not panic")
 	}
 	if _, err := parsePaneSplit([]byte(`{"id":"x"}`)); err == nil {
-		t.Fatal("un sobre sin .result útil debería fallar")
+		t.Fatal("an envelope without a useful .result should fail")
 	}
 }
 
@@ -271,33 +271,33 @@ func TestParseServerErrorVariants(t *testing.T) {
 		t.Fatalf("variant flat = %q %q", code, msg)
 	}
 	if code, msg := parseServerError([]byte("no json")); code != "" || msg != "" {
-		t.Fatalf("texto sin json = %q %q", code, msg)
+		t.Fatalf("text without json = %q %q", code, msg)
 	}
 }
 
-func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testing.T) {
+func TestHerdrErrorThatIsNotJSONGetsNoCodeOrReasonAndInventsNone(t *testing.T) {
 	for _, c := range []struct {
-		nombre string
+		name   string
 		stderr string
 	}{
-		{"texto plano de una CLI", "workspace_limit\n"},
-		{"texto plano con espacios", "pane w18:p1 not found"},
-		{"ayuda de uso", "usage: herdr pane graphics set [--pane ID]"},
+		{"plain CLI text", "workspace_limit\n"},
+		{"plain text with spaces", "pane w18:p1 not found"},
+		{"usage help", "usage: herdr pane graphics set [--pane ID]"},
 		// JSONs that do not carry what is looked for. An `error` with no `message` is NOT here: the code
 		//is still read.
-		{"error que no es un objeto", `{"error":"algo"}`},
-		{"mapa sin error ni code", `{"other":"value"}`},
+		{"error that is not an object", `{"error":"algo"}`},
+		{"map without error or code", `{"other":"value"}`},
 		// JSON-RPC's code is a NUMBER —{"code":-32601,...}.
-		{"code de JSON-RPC, que es numérico", `{"code":-32601,"message":"method not found"}`},
-		{"code numérico suelto", `{"code":42}`},
+		{"JSON-RPC code, which is numeric", `{"code":-32601,"message":"method not found"}`},
+		{"loose numeric code", `{"code":42}`},
 		{"array", `[1,2,3]`},
-		{"json con trailing", `{"code":"x"} basura`},
+		{"json with trailing", `{"code":"x"} basura`},
 	} {
 		code, msg := parseServerError([]byte(c.stderr))
 		if code != "" || msg != "" {
-			t.Errorf("%s: dio code=%q msg=%q, y un texto que no se sabe leer tiene que salir "+
-				"vacío: un código inventado clasifica la operación como algo que no es",
-				c.nombre, code, msg)
+			t.Errorf("%s: it gave code=%q msg=%q, and a text that cannot be read has to come "+
+				"back empty: an invented code classifies the operation as something it is not",
+				c.name, code, msg)
 		}
 	}
 
@@ -313,13 +313,13 @@ func TestUnErrorDeHerdrQueNoEsJSONSeQuedaSinCodigoNiMotivoYNoSeInventa(t *testin
 	} {
 		code, msg := parseServerError([]byte(c.stderr))
 		if code != c.wantCode || msg != c.wantMsg {
-			t.Errorf("%s: dio (%q, %q), want (%q, %q)", c.stderr, code, msg, c.wantCode, c.wantMsg)
+			t.Errorf("%s: gave (%q, %q), want (%q, %q)", c.stderr, code, msg, c.wantCode, c.wantMsg)
 		}
 	}
 
-	for _, vacio := range []string{"", "   ", "\n\n"} {
-		if code, msg := parseServerError([]byte(vacio)); code != "" || msg != "" {
-			t.Errorf("un stderr vacío dio (%q, %q)", code, msg)
+	for _, empty := range []string{"", "   ", "\n\n"} {
+		if code, msg := parseServerError([]byte(empty)); code != "" || msg != "" {
+			t.Errorf("an empty stderr gave (%q, %q)", code, msg)
 		}
 	}
 }

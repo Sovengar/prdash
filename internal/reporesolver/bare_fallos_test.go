@@ -16,18 +16,18 @@ import (
 
 // The asymmetry with the good path is the point: if RemoveAll succeeded, the test would be
 // measuring nothing.
-func TestEnsureBareLimpiaRestosCuandoNoPuedeQuitarlosYLoDice(t *testing.T) {
+func TestEnsureBareCleansLeftoversItCannotRemoveAndSaysSo(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
 	if err := os.MkdirAll(cloneDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	r, ref, dest := resolutorConCloneDir(t, cloneDir)
+	r, ref, dest := resolverWithCloneDir(t, cloneDir)
 
 	if err := os.MkdirAll(filepath.Join(dest, "objects"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if isRepo(dest) {
-		t.Fatal("el fixture no sirve: los restos parecerían un repo")
+		t.Fatal("the fixture is no good: the leftovers would look like a repo")
 	}
 	// The DIRECT parent, and not cloneDir: removing a directory means writing to the one containing it.
 	if err := os.Chmod(filepath.Dir(dest), 0o555); err != nil {
@@ -37,38 +37,38 @@ func TestEnsureBareLimpiaRestosCuandoNoPuedeQuitarlosYLoDice(t *testing.T) {
 
 	_, err := r.EnsureBare(context.Background(), ref)
 	if err == nil {
-		t.Fatal("un resto que no se puede limpiar dio nil")
+		t.Fatal("a leftover that cannot be cleaned gave nil")
 	}
 	if !strings.Contains(err.Error(), "incomplete bare clone") {
-		t.Errorf("el error %q no dice que no pudo limpiar el clon a medias", err)
+		t.Errorf("the error %q does not say it could not clean the half-done clone", err)
 	}
 	if !strings.Contains(err.Error(), dest) {
-		t.Errorf("el error %q no nombra el clon a medias", err)
+		t.Errorf("the error %q does not name the half-done clone", err)
 	}
 }
 
 // CloneDir under a file, which happens when someone points the cache at the wrong path.
-func TestEnsureBarePreparaElPadreYLoPropaga(t *testing.T) {
+func TestEnsureBarePreparesTheParentAndPropagatesIt(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
-	if err := os.WriteFile(cloneDir, []byte("bloqueo"), 0o644); err != nil {
+	if err := os.WriteFile(cloneDir, []byte("blocker"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	r, ref, _ := resolutorConCloneDir(t, cloneDir)
+	r, ref, _ := resolverWithCloneDir(t, cloneDir)
 
 	_, err := r.EnsureBare(context.Background(), ref)
 	if err == nil {
-		t.Fatal("un CloneDir bajo un fichero dio nil")
+		t.Fatal("a CloneDir under a file gave nil")
 	}
 	if !strings.Contains(err.Error(), "bare clone") {
-		t.Errorf("el error %q no dice que falla el clon bare", err)
+		t.Errorf("the error %q does not say the bare clone failed", err)
 	}
 }
 
 // The rarest failure in the chain and the one that slips through: the clone is whole and the publish
 // is what fails.
-func TestElRenombradoDelClonPropagaElFalloYNoDejaElTemporal(t *testing.T) {
+func TestTheCloneRenamePropagatesTheFailureAndLeavesNoTemp(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
-	r, ref, dest := resolutorConCloneDir(t, cloneDir)
+	r, ref, dest := resolverWithCloneDir(t, cloneDir)
 
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		t.Fatal(err)
@@ -77,24 +77,24 @@ func TestElRenombradoDelClonPropagaElFalloYNoDejaElTemporal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if isRepo(dest) {
-		t.Fatal("el fixture no sirve: el destino parecería un repo")
+		t.Fatal("the fixture is no good: the destination would look like a repo")
 	}
 
 	// With a writable parent, EnsureBare clears the leftovers and succeeds — the recovery path, which
 	//has to be checked first.
 	if _, err := r.EnsureBare(context.Background(), ref); err != nil {
-		t.Fatalf("el camino de recuperación falló: %v", err)
+		t.Fatalf("the recovery path failed: %v", err)
 	}
 	if !isRepo(dest) {
-		t.Error("tras la limpieza no hay repo en la ruta final")
+		t.Error("after the cleanup there is no repo at the final path")
 	}
-	temporales := glob(t, cloneDir, "*.tmp-*")
-	if len(temporales) != 0 {
-		t.Errorf("quedaron %d temporales tras un EnsureBare correcto: %v", len(temporales), temporales)
+	temps := glob(t, cloneDir, "*.tmp-*")
+	if len(temps) != 0 {
+		t.Errorf("%d temps left after a successful EnsureBare: %v", len(temps), temps)
 	}
 }
 
-func TestFetchReviewRefNoDejaLaRamaLocalCuandoElBranchFalla(t *testing.T) {
+func TestFetchReviewRefLeavesNoLocalBranchWhenTheBranchFails(t *testing.T) {
 	origin, repo := fixture(t)
 	pushReviewRef(t, origin, "refs/pull/7/head")
 	r := newResolver(t, origin, ghRef())
@@ -103,27 +103,27 @@ func TestFetchReviewRefNoDejaLaRamaLocalCuandoElBranchFalla(t *testing.T) {
 
 	branch, err := r.FetchReviewRef(context.Background(), repo, it)
 	if err != nil {
-		t.Fatalf("el camino bueno falló: %v", err)
+		t.Fatalf("the happy path failed: %v", err)
 	}
 	if branch == "" {
-		t.Fatal("FetchReviewRef devolvió una rama vacía")
+		t.Fatal("FetchReviewRef returned an empty branch")
 	}
 	head := testutil.RunGit(t, repo, "rev-parse", branch)
 	ref := testutil.RunGit(t, repo, "rev-parse", "refs/prdash/github/7")
 	if head != ref {
-		t.Errorf("la rama está en %s y el ref en %s", head, ref)
+		t.Errorf("the branch is at %s and the ref at %s", head, ref)
 	}
 
-	otra, err := r.FetchReviewRef(context.Background(), repo, it)
+	again, err := r.FetchReviewRef(context.Background(), repo, it)
 	if err != nil {
-		t.Fatalf("el segundo intento falló: %v", err)
+		t.Fatalf("the second attempt failed: %v", err)
 	}
-	if otra != branch {
-		t.Errorf("la segunda vez dio la rama %q, want la misma %q", otra, branch)
+	if again != branch {
+		t.Errorf("the second time gave branch %q, want the same %q", again, branch)
 	}
 }
 
-func resolutorConCloneDir(t *testing.T, cloneDir string) (*Resolver, model.RepoRef, string) {
+func resolverWithCloneDir(t *testing.T, cloneDir string) (*Resolver, model.RepoRef, string) {
 	t.Helper()
 	origin, _ := fixture(t)
 	r := New(Options{
@@ -143,89 +143,89 @@ func resolutorConCloneDir(t *testing.T, cloneDir string) (*Resolver, model.RepoR
 
 // The way to provoke it is real and not a double: filepath.Abs of a relative root whose working
 // directory is gone.
-func TestUnaRaizRelativaConElDirectorioDeTrabajoBorradoNoSeTiraElIndiceEntero(t *testing.T) {
-	bueno := filepath.Join(t.TempDir(), "bueno")
-	testutil.InitRepo(t, bueno)
-	testutil.CommitFile(t, bueno, "a.txt", "a", "a")
-	testutil.SetRemote(t, bueno, "origin", "https://github.com/acme/proyecto.git")
+func TestARelativeRootWithADeletedWorkingDirectoryDoesNotDropTheWholeIndex(t *testing.T) {
+	good := filepath.Join(t.TempDir(), "bueno")
+	testutil.InitRepo(t, good)
+	testutil.CommitFile(t, good, "a.txt", "a", "a")
+	testutil.SetRemote(t, good, "origin", "https://github.com/acme/proyecto.git")
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto"}
 
-	desaparecido := filepath.Join(t.TempDir(), "cwd-que-se-va")
-	if err := os.MkdirAll(desaparecido, 0o755); err != nil {
+	vanished := filepath.Join(t.TempDir(), "cwd-que-se-va")
+	if err := os.MkdirAll(vanished, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(desaparecido)
-	if err := os.RemoveAll(desaparecido); err != nil {
+	t.Chdir(vanished)
+	if err := os.RemoveAll(vanished); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := filepath.Abs("repo-que-no-existe"); err == nil {
-		t.Fatal("el cwd sigue vivo: la prueba no está midiendo el fallo de Getwd")
+		t.Fatal("the cwd is still alive: the test is not measuring the Getwd failure")
 	}
 
 	r := New(Options{
-		Roots:    []string{"repo-relativa", bueno},
+		Roots:    []string{"repo-relativa", good},
 		CloneDir: filepath.Join(t.TempDir(), "clones"),
 		MemoPath: filepath.Join(t.TempDir(), "memo.json"),
 		Hosts:    map[string]string{"github.com": "github"},
 	})
 
 	if _, ok := r.buildIndex()[repoKey(ref)]; !ok {
-		t.Error("una raíz relativa sin resolver se llevó el índice entero: perder una raíz " +
-			"que ya no existe no puede hacer que prdash deje de encontrar los repos que sí")
+		t.Error("an unresolvable relative root took down the whole index: losing a root " +
+			"that no longer exists cannot make prdash stop finding the repos that do")
 	}
 }
 
-func TestUnClonQueFallaNoDejaElTemporalYDiceQueClonar(t *testing.T) {
+func TestAFailedCloneLeavesNoTempAndSaysToClone(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
 	if err := os.MkdirAll(cloneDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	noExiste := filepath.Join(t.TempDir(), "repo-que-no-existe.git")
+	missing := filepath.Join(t.TempDir(), "repo-que-no-existe.git")
 	r := New(Options{
 		Roots:    []string{t.TempDir()},
 		CloneDir: cloneDir,
 		MemoPath: filepath.Join(t.TempDir(), "memo.json"),
 		Hosts:    map[string]string{"github.com": "github"},
-		CloneURL: func(model.RepoRef) string { return noExiste },
+		CloneURL: func(model.RepoRef) string { return missing },
 	})
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto"}
 
 	dest, err := r.EnsureBare(context.Background(), ref)
 	if err == nil {
-		t.Fatalf("clonar un repo inexistente dio nil y la ruta %q", dest)
+		t.Fatalf("cloning a nonexistent repo gave nil and path %q", dest)
 	}
 	if dest != "" {
-		t.Errorf("EnsureBare devolvió la ruta %q con el clon fallido: el ejecutor creería que "+
-			"tiene repo local", dest)
+		t.Errorf("EnsureBare returned path %q with the failed clone: the executor would believe it "+
+			"has a local repo", dest)
 	}
-	if !strings.Contains(err.Error(), "clonar") && !strings.Contains(err.Error(), "clone") {
-		t.Errorf("el error %q no dice que falla el clonado", err)
+	if !strings.Contains(err.Error(), "clone") {
+		t.Errorf("the error %q does not say the cloning failed", err)
 	}
-	if !strings.Contains(err.Error(), noExiste) {
-		t.Errorf("el error %q no nombra el repo que no se pudo clonar: sin eso el diagnóstico "+
-			"lleva a mirar el disco en vez del remoto", err)
+	if !strings.Contains(err.Error(), missing) {
+		t.Errorf("the error %q does not name the repo that could not be cloned: without that the "+
+			"diagnosis leads to looking at the disk instead of the remote", err)
 	}
 
 	// NOT "the clone tree is empty": it cannot be, because the parent's MkdirAll creates the host
 	// path before cloning, and removing it would throw away work the next attempt needs.
-	destino := r.barePath(ref)
-	for _, ruta := range []string{destino, destino + ".tmp-"} {
-		if _, err := os.Stat(ruta); !os.IsNotExist(err) {
-			t.Errorf("quedó %s tras un clon fallido: cada intento deja un clon del tamaño "+
-				"del repo en disco, y el siguiente además falla antes por el directorio",
-				ruta)
+	final := r.barePath(ref)
+	for _, p := range []string{final, final + ".tmp-"} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s left after a failed clone: every attempt leaves a clone as big as the "+
+				"repo on disk, and the next one additionally fails earlier because of the directory",
+				p)
 		}
 	}
-	temporales, errGlob := filepath.Glob(filepath.Join(cloneDir, "**", "*.tmp-*"))
+	temps, errGlob := filepath.Glob(filepath.Join(cloneDir, "**", "*.tmp-*"))
 	if errGlob != nil {
 		t.Fatal(errGlob)
 	}
-	if len(temporales) != 0 {
-		t.Errorf("quedaron %d temporales de clon: %v", len(temporales), temporales)
+	if len(temps) != 0 {
+		t.Errorf("%d clone temps left: %v", len(temps), temps)
 	}
 }
 
-func TestUnBranchQueNoSePuedeCrearSeReportaSinDejarLaRamaAMedias(t *testing.T) {
+func TestABranchThatCannotBeCreatedIsReportedWithoutLeavingAHalfBranch(t *testing.T) {
 	origin, repo := fixture(t)
 	pushReviewRef(t, origin, "refs/pull/7/head")
 	r := newResolver(t, origin, ghRef())
@@ -234,7 +234,7 @@ func TestUnBranchQueNoSePuedeCrearSeReportaSinDejarLaRamaAMedias(t *testing.T) {
 
 	branch, err := r.FetchReviewRef(context.Background(), repo, it)
 	if err != nil {
-		t.Fatalf("el camino bueno falló: %v", err)
+		t.Fatalf("the happy path failed: %v", err)
 	}
 	testutil.RunGit(t, repo, "branch", "-D", branch)
 	// The SUBDIRECTORY has to be blocked too, not just refs/heads: the branch is named
@@ -253,17 +253,17 @@ func TestUnBranchQueNoSePuedeCrearSeReportaSinDejarLaRamaAMedias(t *testing.T) {
 
 	_, err = r.FetchReviewRef(context.Background(), repo, it)
 	if err == nil {
-		t.Fatal("crear una rama en un directorio de solo lectura dio nil")
+		t.Fatal("creating a branch in a read-only directory gave nil")
 	}
 	if !strings.Contains(err.Error(), branch) && !strings.Contains(err.Error(), "branch") {
-		t.Errorf("el error %q no dice que falla la creación de la rama local", err)
+		t.Errorf("the error %q does not say the local branch creation failed", err)
 	}
 	if testutil.RefExists(t, repo, branch) {
-		t.Error("la rama se creó pese al fallo del comando: se montaría un review sobre una " +
-			"rama que el forge no tiene")
+		t.Error("the branch was created despite the command failing: a review would be mounted on a " +
+			"branch the forge does not have")
 	}
 	if !testutil.RefExists(t, repo, "refs/prdash/github/7") {
-		t.Error("el ref de seguimiento desapareció: el siguiente intento tendría que volver " +
-			"a traerlo de la red")
+		t.Error("the tracking ref disappeared: the next attempt would have to fetch it " +
+			"from the network again")
 	}
 }

@@ -19,11 +19,11 @@ import (
 
 func newTestModel(t *testing.T, adapters ...forge.Adapter) Model {
 	t.Helper()
-	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // aísla el cache real
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // isolates the real cache
 	m := New(config.Defaults(), adapters)
 	m.width, m.height = 160, 40
 	m.loading = false
-	m.cachePath = "" // aísla el cache real en tests
+	m.cachePath = "" // isolates the real cache in tests
 	return m
 }
 
@@ -70,7 +70,7 @@ func press(t *testing.T, m Model, key string) Model {
 	return out.(Model)
 }
 
-func pulsar(t *testing.T, m Model, key string) (Model, tea.Cmd) {
+func pressWithCmd(t *testing.T, m Model, key string) (Model, tea.Cmd) {
 	t.Helper()
 	out, cmd := m.Update(keyMsg(t, key))
 	return out.(Model), cmd
@@ -124,7 +124,7 @@ func lastToastLevel(m Model) toastLevel {
 func assertToast(t *testing.T, m Model, want string) {
 	t.Helper()
 	if !strings.Contains(lastToast(m), want) {
-		t.Fatalf("toast = %q, want %q (vivos: %q)", lastToast(m), want, toastTexts(m))
+		t.Fatalf("toast = %q, want %q (alive: %q)", lastToast(m), want, toastTexts(m))
 	}
 }
 
@@ -145,18 +145,18 @@ func TestLegendCountsBothForgesAndListShowsActiveOnly(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Add widget", 1, "APPROVED")}, false))
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{reviewReq}, false))
 	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionAuthored, "", []model.Item{mkItem("gitlab", "gitlab.example.com", "grp/proj", "MR propio", 3, "APPROVED")}, false))
-	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionMentions, "", []model.Item{mkItem("gitlab", "gitlab.example.com", "grp/proj", "Mención", 5, "")}, false))
+	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionMentions, "", []model.Item{mkItem("gitlab", "gitlab.example.com", "grp/proj", "Heads up", 5, "")}, false))
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "Mine (2) · Assigned (1) · Mentioned (1)") {
-		t.Errorf("la leyenda no refleja los conteos de las tres secciones de ambos forges:\n%s", view)
+		t.Errorf("the legend does not reflect the counts of the three sections of both forges:\n%s", view)
 	}
 	if !strings.Contains(view, "Review me") {
-		t.Errorf("la lista debería mostrar los ítems de Assigned, la activa:\n%s", view)
+		t.Errorf("the list should show the Assigned items, the active one:\n%s", view)
 	}
-	for _, hidden := range []string{"Add widget", "MR propio", "Mención"} {
+	for _, hidden := range []string{"Add widget", "Own MR", "Heads up"} {
 		if strings.Contains(view, hidden) {
-			t.Errorf("la lista muestra %q, que es de otra sección:\n%s", hidden, view)
+			t.Errorf("the list shows %q, which belongs to another section:\n%s", hidden, view)
 		}
 	}
 }
@@ -167,13 +167,13 @@ func TestSectionEmptyVsError(t *testing.T) {
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "could not be queried") {
-		t.Errorf("la sección fallida debería decirlo\n%s", view)
+		t.Errorf("the failed section should say so\n%s", view)
 	}
 	if strings.Contains(view, "(empty)") {
-		t.Errorf("una sección con aviso no debería decir que está vacía\n%s", view)
+		t.Errorf("a section with a notice should not say it is empty\n%s", view)
 	}
 	if !strings.Contains(view, "Assigned (0)") {
-		t.Errorf("la leyenda debería contar 0 en la sección fallida\n%s", view)
+		t.Errorf("the legend should count 0 on the failed section\n%s", view)
 	}
 }
 
@@ -185,30 +185,30 @@ func TestDegradationKeepsOtherForges(t *testing.T) {
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "Sigue visible") {
-		t.Errorf("los ítems de GitHub deberían seguir visibles\n%s", view)
+		t.Errorf("the GitHub items should stay visible\n%s", view)
 	}
 	if !strings.Contains(view, "gitlab ✗") {
-		t.Errorf("gitlab debería reportarse caído\n%s", view)
+		t.Errorf("gitlab should report itself as down\n%s", view)
 	}
 }
 
 func TestPaginationIndicator(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
+	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{mkItem("github", "github.com", "acme/widget", "One", 1, "")}, true))
 
 	if !m.sectionLoadingMore(model.SectionReview) {
-		t.Fatal("review, la sección activa, debería seguir paginando")
+		t.Fatal("review, the active section, should keep paginating")
 	}
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "loading more…") {
-		t.Errorf("falta el indicador de carga de la activa\n%s", view)
+		t.Errorf("the active sections loading indicator is missing\n%s", view)
 	}
 }
 
 func TestIncrementalPages(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "One", 1, "")}, true))
 
-	next := page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Dos", 2, "")}, true)
+	next := page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Two", 2, "")}, true)
 	next.first = false
 	m = send(t, m, next)
 
@@ -219,7 +219,7 @@ func TestIncrementalPages(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Nuevo", 3, "")}, false))
 	items := m.sectionItems(model.SectionAuthored)
 	if len(items) != 1 || items[0].Title != "Nuevo" {
-		t.Fatalf("authored tras refrescar = %+v", items)
+		t.Fatalf("authored after refreshing = %+v", items)
 	}
 }
 
@@ -231,7 +231,7 @@ func TestManualRefreshIncrementsCycle(t *testing.T) {
 		t.Fatalf("cycle = %d, want %d", m.cycle, before+1)
 	}
 	if !m.loading {
-		t.Fatal("debería quedar en carga")
+		t.Fatal("it should be left loading")
 	}
 }
 
@@ -241,7 +241,7 @@ func TestAutoRefreshTick(t *testing.T) {
 	before := m.cycle
 	m = send(t, m, tickMsg{})
 	if m.cycle != before+1 || !m.loading {
-		t.Fatalf("tick no arrancó refresco: cycle=%d loading=%v", m.cycle, m.loading)
+		t.Fatalf("the tick did not start a refresh: cycle=%d loading=%v", m.cycle, m.loading)
 	}
 }
 
@@ -251,22 +251,22 @@ func TestAutoRefreshPausedDuringAction(t *testing.T) {
 	before := m.cycle
 	m = send(t, m, tickMsg{})
 	if m.cycle != before {
-		t.Fatalf("el tick no debería arrancar refresco con acción en curso (cycle=%d)", m.cycle)
+		t.Fatalf("the tick should not start a refresh with an action in flight (cycle=%d)", m.cycle)
 	}
 	if m.loading {
-		t.Fatal("no debería quedar en carga")
+		t.Fatal("it should not be left loading")
 	}
 	if !m.actionBusy {
-		t.Fatal("la acción en curso no debería cancelarse")
+		t.Fatal("the action in flight should not be cancelled")
 	}
 }
 
 func TestRefreshUpdatesOtherItemsDuringAction(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.actionBusy = true
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Otro", 9, "")}, false))
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Other", 9, "")}, false))
 	if got := len(m.sectionItems(model.SectionAuthored)); got != 1 {
-		t.Fatalf("el refresco debería actualizar el resto de ítems: %d", got)
+		t.Fatalf("the refresh should update the rest of the items: %d", got)
 	}
 }
 
@@ -285,26 +285,26 @@ func TestDetailPanelFollowsCursor(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
 		mkItem("github", "github.com", "acme/widget", "Add widget", 1, "APPROVED"),
-		mkItem("github", "github.com", "acme/widget", "Otro", 2, ""),
+		mkItem("github", "github.com", "acme/widget", "Other", 2, ""),
 	}, false))
 
 	panel := detailPanel(m.View().Content)
 	if panel == "" {
-		t.Fatalf("no hay caja de detalle en la vista:\n%s", m.View().Content)
+		t.Fatalf("there is no detail box in the view:\n%s", m.View().Content)
 	}
 	for _, want := range []string{"Add widget", "Author", "Source", "feat/x", "Target", "main", "#1"} {
 		if !strings.Contains(panel, want) {
-			t.Errorf("el panel no contiene %q\n%s", want, panel)
+			t.Errorf("the panel does not contain %q\n%s", want, panel)
 		}
 	}
 
 	m = press(t, m, "down")
 	panel = detailPanel(m.View().Content)
-	if !strings.Contains(panel, "Otro") || !strings.Contains(panel, "#2") {
-		t.Errorf("el panel no siguió al cursor\n%s", panel)
+	if !strings.Contains(panel, "Other") || !strings.Contains(panel, "#2") {
+		t.Errorf("the panel did not follow the cursor\n%s", panel)
 	}
 	if strings.Contains(panel, "#1") || strings.Contains(panel, "Add widget") {
-		t.Errorf("el panel sigue mostrando el ítem anterior\n%s", panel)
+		t.Errorf("the panel still shows the previous item\n%s", panel)
 	}
 }
 
@@ -318,7 +318,7 @@ func TestApproveOKUpdatesNotice(t *testing.T) {
 		t.Fatalf("toast = %q", lastToast(m))
 	}
 	if m.actionBusy {
-		t.Fatal("la acción debería haber terminado")
+		t.Fatal("the action should have finished")
 	}
 }
 
@@ -331,8 +331,8 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 		login   string
 	}{
 		{"login coincide", model.SectionAuthored, "", "Sovengar", "Sovengar"},
-		{"otro autor con login", model.SectionReview, model.ReviewRequested, "otra", "Sovengar"},
-		{"sin login, seccion propia", model.SectionAuthored, "", "quien sea", ""},
+		{"another author with login", model.SectionReview, model.ReviewRequested, "someone", "Sovengar"},
+		{"no login, own section", model.SectionAuthored, "", "whoever", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -347,23 +347,23 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 			blocked := m.selfDenied[item.ID()] != ""
 			m = press(t, m, "a")
 
-			if tc.author == "otra" {
+			if tc.author == "someone" {
 				if blocked {
-					t.Fatal("un PR de otro autor no debe vetarse")
+					t.Fatal("a PR by another author must not be vetoed")
 				}
 				if !m.actionBusy {
-					t.Fatal("aprobar un PR de otro autor debería lanzar la acción")
+					t.Fatal("approving a PR by another author should launch the action")
 				}
 				return
 			}
 			if !blocked {
-				t.Fatal("un PR propio debería quedar vetado")
+				t.Fatal("a PR of my own should stay vetoed")
 			}
 			if n := fake.ActionCallCount("approve", item.Ref, item.Number); n != 0 {
-				t.Fatalf("Approve se llamó %d veces: el veto debe cortar antes del subproceso", n)
+				t.Fatalf("Approve was called %d times: the veto must cut before the subprocess", n)
 			}
 			if m.actionBusy {
-				t.Fatal("no debería quedar una acción en curso")
+				t.Fatal("no action should be left in flight")
 			}
 			if !strings.Contains(lastToast(m), "you cannot approve your own") {
 				t.Fatalf("toast = %q", lastToast(m))
@@ -373,10 +373,10 @@ func TestApproveOwnPulledBeforeForge(t *testing.T) {
 }
 
 func TestOwnItemShowsRoleAndDetail(t *testing.T) {
-	own := mkItem("github", "github.com", "acme/widget", "Mío", 12, "")
+	own := mkItem("github", "github.com", "acme/widget", "Mine", 12, "")
 	own.Author = "Sovengar"
-	other := mkItem("github", "github.com", "acme/widget", "De otro", 13, "")
-	other.Author = "otra"
+	other := mkItem("github", "github.com", "acme/widget", "From another", 13, "")
+	other.Author = "someone"
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "Sovengar"}})
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{own}, false))
@@ -385,12 +385,12 @@ func TestOwnItemShowsRoleAndDetail(t *testing.T) {
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "own") {
-		t.Errorf("la fila de un PR propio debería marcar el rol:\n%s", view)
+		t.Errorf("the row of my own PR should mark the role:\n%s", view)
 	}
 
-	// El veto no ocupa filas de la ficha.
+	// The veto does not take rows of the card.
 	if view := stripANSI(m.View().Content); strings.Contains(view, "approve unavailable") {
-		t.Errorf("el veto de aprobar lo propio no debería ocupar una fila de la ficha:\n%s", view)
+		t.Errorf("the veto on approving my own should not take a row of the card:\n%s", view)
 	}
 
 	m = press(t, m, "a")
@@ -403,11 +403,11 @@ func TestSelfDenySurvivesRefresh(t *testing.T) {
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
 	m = showSection(m, model.SectionAuthored)
 	if m.selfDenied[item.ID()] == "" {
-		t.Fatal("el ítem propio debería quedar vetado")
+		t.Fatal("my own item should stay vetoed")
 	}
 	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{item}, false))
 	if m.selfDenied[item.ID()] == "" {
-		t.Fatal("un refresco no debe levantar el veto de aprobar lo propio")
+		t.Fatal("a refresh must not lift the veto on approving my own")
 	}
 }
 
@@ -420,7 +420,7 @@ func TestConflictRefreshesItem(t *testing.T) {
 	refreshed.State = "MERGED"
 	m = send(t, m, actionMsg{outcome: forge.Outcome{
 		Kind: forge.ActionMerge, ID: item.ID(),
-		Conflict: true, Msg: "el ítem ya está mergeado",
+		Conflict: true, Msg: "the item is already merged",
 		Item: refreshed, HasItem: true,
 	}})
 
@@ -429,7 +429,7 @@ func TestConflictRefreshesItem(t *testing.T) {
 	}
 	items := m.sectionItems(model.SectionAuthored)
 	if len(items) != 1 || items[0].State != "MERGED" {
-		t.Fatalf("el ítem debería haberse refrescado: %+v", items)
+		t.Fatalf("the item should have been refreshed: %+v", items)
 	}
 }
 
@@ -444,7 +444,7 @@ func TestPermissionRecordsDenial(t *testing.T) {
 		t.Fatalf("toast = %q", lastToast(m))
 	}
 	if m.denied[item.ID()] == "" {
-		t.Fatal("la denegación debería quedar registrada")
+		t.Fatal("the denial should be recorded")
 	}
 
 	m = press(t, m, "a")
@@ -465,14 +465,14 @@ func TestActionDisabledWhenForgeDown(t *testing.T) {
 
 	m = press(t, m, "a")
 	if m.actionBusy {
-		t.Fatal("no debería arrancar la acción con la forge caída")
+		t.Fatal("the action should not start with the forge down")
 	}
 	toast := lastToast(m)
 	if !strings.Contains(toast, "401") {
-		t.Errorf("toast = %q, want el motivo del adapter", toast)
+		t.Errorf("toast = %q, want the adapters reason", toast)
 	}
 	if strings.Contains(toast, "not authenticated") {
-		t.Errorf("toast = %q: la etiqueta genérica tapa el motivo real", toast)
+		t.Errorf("toast = %q: the generic label covers the real reason", toast)
 	}
 }
 
@@ -482,7 +482,7 @@ func TestSnapshotPaintsInstantly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	it := mkItem("github", "github.com", "acme/widget", "Cacheado", 1, "")
+	it := mkItem("github", "github.com", "acme/widget", "Cached", 1, "")
 	if err := cache.Save(path, cache.File{Streams: []cache.Stream{{
 		Forge: "github", Host: "github.com", Section: model.SectionReview, Kind: model.ReviewRequested, Items: []model.Item{it},
 	}}}); err != nil {
@@ -491,40 +491,40 @@ func TestSnapshotPaintsInstantly(t *testing.T) {
 
 	m := New(config.Defaults(), []forge.Adapter{ghAdapter()})
 	if got := len(m.sectionItems(model.SectionReview)); got != 1 {
-		t.Fatalf("review cacheado = %d, want 1", got)
+		t.Fatalf("cached review = %d, want 1", got)
 	}
-	if view := stripANSI(m.View().Content); !strings.Contains(view, "Cacheado") {
-		t.Errorf("la vista debería pintar el cache\n%s", view)
+	if view := stripANSI(m.View().Content); !strings.Contains(view, "Cached") {
+		t.Errorf("the view should paint the cache\n%s", view)
 	}
 }
 
 func TestPerForgeUpdateIndicator(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
-	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, false))
+	m = send(t, m, page(1, "github", "github.com", model.SectionAuthored, "", []model.Item{mkItem("github", "github.com", "acme/widget", "One", 1, "")}, false))
 
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "github ✓ now") {
-		t.Errorf("github debería mostrar su propia hora\n%s", view)
+		t.Errorf("github should show its own time\n%s", view)
 	}
 	if !strings.Contains(view, "gitlab ✓ no data") {
-		t.Errorf("gitlab no debería heredar la hora de github\n%s", view)
+		t.Errorf("gitlab should not inherit githubs time\n%s", view)
 	}
 }
 
 func TestUnsupportedForgeShowsReason(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{
 		ForgeName: "bitbucket", HostName: "bitbucket.org",
-		AuthState: model.AuthState{Forge: "bitbucket", OK: false, Reason: "no soportado en esta versión"},
+		AuthState: model.AuthState{Forge: "bitbucket", OK: false, Reason: "unsupported in this version"},
 	})
-	m = send(t, m, authMsg{cycle: 1, forge: "bitbucket", auth: model.AuthState{Forge: "bitbucket", OK: false, Reason: "no soportado en esta versión"}})
-	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "bitbucket", section: model.SectionReview}, warnings: []model.Warning{{Forge: "bitbucket", Section: model.SectionReview, Kind: "unsupported", Msg: "no soportado"}}})
+	m = send(t, m, authMsg{cycle: 1, forge: "bitbucket", auth: model.AuthState{Forge: "bitbucket", OK: false, Reason: "unsupported in this version"}})
+	m = send(t, m, pageMsg{cycle: 1, key: streamKey{forge: "bitbucket", section: model.SectionReview}, warnings: []model.Warning{{Forge: "bitbucket", Section: model.SectionReview, Kind: "unsupported", Msg: "unsupported"}}})
 
 	view := stripANSI(m.View().Content)
-	if !strings.Contains(view, "no soportado") {
-		t.Errorf("la sección debería decir que no está soportado\n%s", view)
+	if !strings.Contains(view, "unsupported") {
+		t.Errorf("the section should say it is not supported\n%s", view)
 	}
 	if strings.Contains(view, "bitbucket ✓") {
-		t.Errorf("bitbucket no debería reportarse operativo\n%s", view)
+		t.Errorf("bitbucket should not report itself as operational\n%s", view)
 	}
 }
 
@@ -535,10 +535,10 @@ func TestUnchangedHead(t *testing.T) {
 		page forge.Page
 		want bool
 	}{
-		{"cabecera igual", streamHead{cursor: "c1", complete: true}, forge.Page{Next: "c1", More: true}, true},
-		{"no completo aún", streamHead{cursor: "c1", complete: false}, forge.Page{Next: "c1", More: true}, false},
-		{"cabecera distinta", streamHead{cursor: "c1", complete: true}, forge.Page{Next: "c2", More: true}, false},
-		{"una sola página", streamHead{cursor: "", complete: true}, forge.Page{Next: "", More: false}, false},
+		{"same header", streamHead{cursor: "c1", complete: true}, forge.Page{Next: "c1", More: true}, true},
+		{"not complete yet", streamHead{cursor: "c1", complete: false}, forge.Page{Next: "c1", More: true}, false},
+		{"header distinta", streamHead{cursor: "c1", complete: true}, forge.Page{Next: "c2", More: true}, false},
+		{"a single page", streamHead{cursor: "", complete: true}, forge.Page{Next: "", More: false}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -560,12 +560,12 @@ func TestIncrementalUnchangedKeepsItems(t *testing.T) {
 		t.Fatalf("authored = %d, want 2", got)
 	}
 	if m.sectionLoadingMore(model.SectionAuthored) {
-		t.Fatal("no debería quedar paginación pendiente")
+		t.Fatal("no pagination should be left pending")
 	}
 
 	m = send(t, m, pageMsg{cycle: m.cycle, key: streamKey{forge: "github", section: model.SectionAuthored}, unchanged: true})
 	if got := len(m.sectionItems(model.SectionAuthored)); got != 2 {
-		t.Fatalf("el refresco sin cambios debería conservar los ítems: %d", got)
+		t.Fatalf("the refresh with no changes should keep the items: %d", got)
 	}
 }
 
@@ -576,16 +576,16 @@ func TestBackoffOnRateLimit(t *testing.T) {
 	m.statuses["github"].warnings = []model.Warning{{Forge: "github", Kind: "ratelimit", Msg: "429"}}
 	m.recomputeBackoff()
 	if m.backoff <= 0 {
-		t.Fatal("debería aplicar backoff ante rate limit")
+		t.Fatal("it should apply backoff on rate limit")
 	}
 	if m.tickInterval() <= base {
-		t.Fatalf("tickInterval = %v, debería superar %v", m.tickInterval(), base)
+		t.Fatalf("tickInterval = %v, should exceed %v", m.tickInterval(), base)
 	}
 
 	m.statuses["github"].warnings = nil
 	m.recomputeBackoff()
 	if m.backoff != 0 {
-		t.Fatalf("backoff = %v, debería resetearse", m.backoff)
+		t.Fatalf("backoff = %v, should reset", m.backoff)
 	}
 }
 
@@ -593,7 +593,7 @@ func TestManualOnlyRefreshHasNoTick(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.cfg.RefreshInterval = 0
 	if m.tickCmd() != nil {
-		t.Fatal("con intervalo 0 no debería programarse tick")
+		t.Fatal("with interval 0 no tick should be scheduled")
 	}
 	if m.tickInterval() != 0 {
 		t.Fatalf("tickInterval = %v, want 0", m.tickInterval())
@@ -604,30 +604,30 @@ func TestCurrentCycleDrainsLoading(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = press(t, m, "R")
 	if !m.loading {
-		t.Fatal("el refresco debe quedar en carga")
+		t.Fatal("the refresh must be left loading")
 	}
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 	if m.loading {
-		t.Fatal("el ciclo vigente debe bajar loading")
+		t.Fatal("the current cycle must lower loading")
 	}
 	if !m.tickPending {
-		t.Fatal("debe rearmar el tick")
+		t.Fatal("it must rearm the tick")
 	}
 	before := m.cycle
 	m = send(t, m, tickMsg{})
 	if m.cycle == before {
-		t.Fatalf("el tick debe volver a refrescar (cycle=%d)", m.cycle)
+		t.Fatalf("the tick must refresh again (cycle=%d)", m.cycle)
 	}
 }
 
-// TestRefreshDoesNotOverlap cubre M-1: no se solapan ciclos.
+// TestRefreshDoesNotOverlap covers M-1: cycles do not overlap.
 func TestRefreshDoesNotOverlap(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = press(t, m, "R")
 	cycle := m.cycle
-	m = press(t, m, "R") // con el ciclo en vuelo
+	m = press(t, m, "R") // with the cycle in flight
 	if m.cycle != cycle {
-		t.Fatalf("no debe arrancar un ciclo solapado (cycle=%d, want %d)", m.cycle, cycle)
+		t.Fatalf("an overlapping cycle must not start (cycle=%d, want %d)", m.cycle, cycle)
 	}
 }
 
@@ -637,10 +637,10 @@ func TestObsoleteRefreshDoneIsInert(t *testing.T) {
 	m.tickPending = false
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle - 1})
 	if !m.loading {
-		t.Fatal("un refreshDone obsoleto no debe bajar loading")
+		t.Fatal("a stale refreshDone must not lower loading")
 	}
 	if m.tickPending {
-		t.Fatal("un refreshDone obsoleto no debe armar tick")
+		t.Fatal("a stale refreshDone must not arm a tick")
 	}
 }
 
@@ -648,17 +648,17 @@ func TestArmTickSingleChain(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.tickPending = false
 	if m.armTick() == nil {
-		t.Fatal("sin tick pendiente debería armar uno")
+		t.Fatal("with no pending tick it should arm one")
 	}
 	if m.armTick() != nil {
-		t.Fatal("con tick pendiente no debería armar otro")
+		t.Fatal("with a pending tick it should not arm another")
 	}
 }
 
 func TestSingleChannelReader(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	if m.readers != 1 {
-		t.Fatalf("lectores iniciales = %d, want 1", m.readers)
+		t.Fatalf("initial readers = %d, want 1", m.readers)
 	}
 
 	for i := 0; i < 5; i++ {
@@ -672,7 +672,7 @@ func TestSingleChannelReader(t *testing.T) {
 	m = send(t, m, authMsg{cycle: m.cycle, forge: "github", auth: model.AuthState{Forge: "github", OK: true}})
 
 	if m.readers != 1 {
-		t.Fatalf("lectores = %d, want 1 (no deben acumularse)", m.readers)
+		t.Fatalf("readers = %d, want 1 (they must not accumulate)", m.readers)
 	}
 }
 
@@ -685,12 +685,12 @@ func TestDetailReflectsActionUpdate(t *testing.T) {
 	refreshed := item
 	refreshed.State = "MERGED"
 	m = send(t, m, actionMsg{cycle: m.cycle, outcome: forge.Outcome{
-		Kind: forge.ActionMerge, ID: item.ID(), Conflict: true, Msg: "ya mergeado",
+		Kind: forge.ActionMerge, ID: item.ID(), Conflict: true, Msg: "already merged",
 		Item: refreshed, HasItem: true,
 	}})
 
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "merged") {
-		t.Errorf("el detalle debería reflejar el estado nuevo\n%s", view)
+		t.Errorf("the detail should reflect the new state\n%s", view)
 	}
 }
 
@@ -707,7 +707,7 @@ func TestStaleActionAppliesReread(t *testing.T) {
 
 	items := m.sectionItems(model.SectionAuthored)
 	if len(items) != 1 || items[0].State != "MERGED" {
-		t.Fatalf("el estado releído debería aplicarse: %+v", items)
+		t.Fatalf("the reread state should apply: %+v", items)
 	}
 }
 
@@ -718,7 +718,7 @@ func TestRefreshClearsDenied(t *testing.T) {
 
 	m = send(t, m, page(1, "gitlab", "gitlab.example.com", model.SectionAuthored, "", []model.Item{item}, false))
 	if _, ok := m.denied[item.ID()]; ok {
-		t.Fatal("el refresco exitoso debería limpiar la denegación")
+		t.Fatal("a successful refresh should clear the denial")
 	}
 }
 
@@ -730,14 +730,14 @@ func TestDegradedDoesNotComplete(t *testing.T) {
 		items: []model.Item{mkItem("github", "github.com", "acme/widget", "X", 1, "")},
 		first: true,
 		warnings: []model.Warning{
-			{Forge: "github", Section: model.SectionReview, Kind: "degraded", Msg: "datos parciales vía REST"},
+			{Forge: "github", Section: model.SectionReview, Kind: "degraded", Msg: "partial data via REST"},
 		},
 	})
 	if m.streams[streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested}].complete {
-		t.Fatal("un fallback degradado no debe marcarse como completo")
+		t.Fatal("a degraded fallback must not be marked as complete")
 	}
-	if view := stripANSI(m.View().Content); !strings.Contains(view, "datos parciales") {
-		t.Errorf("la sección debería avisar de datos parciales\n%s", view)
+	if view := stripANSI(m.View().Content); !strings.Contains(view, "partial data") {
+		t.Errorf("the section should warn about partial data\n%s", view)
 	}
 }
 

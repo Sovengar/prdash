@@ -49,14 +49,14 @@ func waitSim(t *testing.T, m Model) (Model, simMsg) {
 				return m, msg
 			}
 		case <-deadline:
-			t.Fatal("la simulación no entregó ningún resultado")
+			t.Fatal("the simulation delivered no result")
 		}
 	}
 }
 
 func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	if !sim.NewRunner().Available() {
-		t.Skip("git-sim no está instalado")
+		t.Skip("git-sim is not installed")
 	}
 	place, it := simFixture(t)
 
@@ -78,7 +78,7 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 
 	m, msg := waitSim(t, m)
 	if msg.err != nil {
-		t.Fatalf("la simulación real falló: %v", msg.err)
+		t.Fatalf("the real simulation failed: %v", msg.err)
 	}
 	if m.sim.state != simShowing {
 		t.Fatalf("state = %v, want simShowing", m.sim.state)
@@ -86,22 +86,22 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 
 	view := viewText(m)
 	if !strings.Contains(view, "simulate: merge") {
-		t.Errorf("la vista no muestra el título del popup:\n%s", view)
+		t.Errorf("the view does not show the popups title:\n%s", view)
 	}
 	if !strings.Contains(view, "Assigned (1)") {
-		t.Error("el popup tapó la vista de fondo")
+		t.Error("the popup covered the background view")
 	}
 	if len(m.sim.cells) != m.sim.cellH {
-		t.Errorf("celdas = %d líneas, want %d", len(m.sim.cells), m.sim.cellH)
+		t.Errorf("cells = %d lines, want %d", len(m.sim.cells), m.sim.cellH)
 	}
 	// The cells go to the middle of the box, not the first line: the overlay's arithmetic
 	// owns that.
 	block := strings.Index(view, "▀")
 	if block < 0 {
-		t.Fatalf("la vista no contiene ni un half-block:\n%s", view)
+		t.Fatalf("the view contains no half-block:\n%s", view)
 	}
 	if row := strings.Count(view[:block], "\n"); row < 2 {
-		t.Errorf("el popup se pegó al borde superior (fila %d)", row)
+		t.Errorf("the popup stuck to the top border (row %d)", row)
 	}
 
 	m = press(t, m, "esc")
@@ -109,7 +109,7 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
 	}
 	if strings.Contains(viewText(m), "simulate: merge") {
-		t.Error("el popup siguió en la vista tras cerrarlo")
+		t.Error("the popup stayed in the view after closing it")
 	}
 }
 
@@ -123,7 +123,7 @@ func TestSimulateOverAnArmedMergeDoesNotOpen(t *testing.T) {
 	m = press(t, m, "v")
 
 	if m.mergeArmed {
-		t.Error("el merge sigue armado")
+		t.Error("the merge is still armed")
 	}
 	if m.sim.state != simClosed {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
@@ -134,6 +134,6 @@ func TestSimulatorAvailabilityFollowsTheBinary(t *testing.T) {
 	place, _ := simFixture(t)
 	svc := sim.New(realLocator{place: place})
 	if got := svc.Available(); got != sim.NewRunner().Available() {
-		t.Errorf("Available() = %v, no coincide con el runner", got)
+		t.Errorf("Available() = %v, does not match the runner", got)
 	}
 }

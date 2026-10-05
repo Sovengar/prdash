@@ -17,14 +17,14 @@ import (
 
 type Query struct {
 	Section    model.Section
-	ReviewKind model.ReviewKind // requested/assigned (solo review)
+	ReviewKind model.ReviewKind // requested/assigned (review only)
 	Cursor     string
 }
 
 type Page struct {
 	Items []model.Item
-	Next  string // cursor de la página siguiente
-	More  bool   // quedan páginas
+	Next  string
+	More  bool
 }
 
 var Streams = []Query{
@@ -91,7 +91,7 @@ type PageResult struct {
 	Next     string
 	More     bool
 	Warnings []model.Warning
-	First    bool // primera página de la lista
+	First    bool
 }
 
 // Each page goes out through emit, which must be safe for concurrent use and returns false to stop
@@ -260,14 +260,14 @@ func AllowsMode(rules model.MergeRules, mode MergeMode) bool {
 type Outcome struct {
 	Kind        ActionKind
 	ID          model.ID
-	Mode        MergeMode // estrategia usada; solo tiene sentido en ActionMerge
-	OK          bool      // la acción se aplicó
-	Conflict    bool      // el ítem cambió (cerrado/mergeado/ausente): hay que refrescar
-	Perm        bool      // acción deshabilitada por permisos o por no soportado
+	Mode        MergeMode // strategy used; only meaningful for ActionMerge
+	OK          bool
+	Conflict    bool // the item changed (closed/merged/gone): it needs a refresh
+	Perm        bool // action disabled by permissions or unsupported
 	Unmergeable bool
-	Msg         string // motivo para la UI
+	Msg         string
 	Item        model.Item
-	HasItem     bool // Item trae el estado releído
+	HasItem     bool
 
 	DeleteBranch bool
 	// Separate from Msg because a failed delete is not a failed merge: the item IS merged, and

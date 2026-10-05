@@ -23,7 +23,7 @@ func TestNewItemSyncsForgeAndHost(t *testing.T) {
 	ref := RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grp/proj"}
 	it := NewItem(ref, 7)
 	if it.Forge != "gitlab" || it.Host != "gitlab.example.com" {
-		t.Fatalf("forge/host no sincronizados: %+v", it)
+		t.Fatalf("forge/host not synced: %+v", it)
 	}
 	if it.Ref != ref || it.Number != 7 {
 		t.Fatalf("item = %+v", it)
@@ -45,7 +45,7 @@ func TestSectionLegendKeepsStringIntact(t *testing.T) {
 			t.Errorf("%q: Legend() = %q, want %q", tc.s, got, tc.legend)
 		}
 		if got := tc.s.String(); got != tc.str {
-			t.Errorf("%q: String() = %q, want %q (no debe cambiar)", tc.s, got, tc.str)
+			t.Errorf("%q: String() = %q, want %q (it must not change)", tc.s, got, tc.str)
 		}
 	}
 }

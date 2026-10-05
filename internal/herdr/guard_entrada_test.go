@@ -13,7 +13,7 @@ import (
 //and a timeout.
 
 // A guard that never fires with a real plan, because the plan always brings a command.
-func TestUnArgvVacioSeNiegaAntesDeLlamarAHerdr(t *testing.T) {
+func TestEmptyArgvIsRefusedBeforeCallingHerdr(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}}
 	f.respond = func([]string) ([]byte, []byte, error) {
 		return []byte(`{"id":"x","result":{"type":"ok"}}`), nil, nil
@@ -22,12 +22,12 @@ func TestUnArgvVacioSeNiegaAntesDeLlamarAHerdr(t *testing.T) {
 	for _, argv := range [][]string{nil, {}} {
 		err := f.client().PaneRun(context.Background(), "w1:p1", argv)
 		if err == nil {
-			t.Errorf("un argv %v dio nil: se mandaría una línea en blanco al shell del pane",
+			t.Errorf("an argv of %v gave nil: a blank line would be sent to the pane's shell",
 				argv)
 			continue
 		}
 		if !strings.Contains(err.Error(), "argv") {
-			t.Errorf("el error %q no dice que el argv está vacío", err)
+			t.Errorf("the error %q does not say the argv is empty", err)
 		}
 	}
 
@@ -37,116 +37,116 @@ func TestUnArgvVacioSeNiegaAntesDeLlamarAHerdr(t *testing.T) {
 	}
 	if err := f2.client().PaneRun(context.Background(), "w1:p1",
 		[]string{"tuicr", "pr", "7"}); err != nil {
-		t.Errorf("un argv con contenido dio error: %v", err)
+		t.Errorf("an argv with content gave an error: %v", err)
 	}
 	if !f2.called("pane", "run") {
-		t.Error("un argv con contenido no llegó a la CLI: el guard no es lo que lo paró")
+		t.Error("an argv with content never reached the CLI: the guard is not what stopped it")
 	}
 	// The argv travels as ONE string, not split into arguments, and PaneRun does NOT quote them.
-	argv := []string{"opencode", "run", "con espacios y comillas"}
+	argv := []string{"opencode", "run", "with spaces and quotes"}
 	f3 := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}}
 	f3.respond = func(args []string) ([]byte, []byte, error) {
 		// The first call is `--version`, which leaves the guard when it asks Available().
 		if len(args) == 0 || args[0] == "--version" {
 			return []byte(`{"id":"x","result":{"type":"ok"}}`), nil, nil
 		}
-		unido := strings.Join(argv, " ")
+		joined := strings.Join(argv, " ")
 		found := false
 		for _, a := range args {
-			if a == unido {
+			if a == joined {
 				found = true
 			}
 		}
 		if !found {
-			t.Errorf("el argv llegó partido en %v: se habría perdido la frase con espacios", args)
+			t.Errorf("the argv arrived split as %v: the phrase with spaces would have been lost", args)
 		}
 		return []byte(`{"id":"x","result":{"type":"ok"}}`), nil, nil
 	}
 	if err := f3.client().PaneRun(context.Background(), "w1:p1", argv); err != nil {
-		t.Errorf("el argv con espacios dio error: %v", err)
+		t.Errorf("the argv with spaces gave an error: %v", err)
 	}
 }
 
 // The failure you see as "no worktrees" instead of "the output was not the JSON we expected".
-func TestUnaSalidaQueNoEsElJSONEsperadoNoSeConvierteEnUnaListaVacia(t *testing.T) {
+func TestOutputThatIsNotTheExpectedJSONDoesNotBecomeAnEmptyList(t *testing.T) {
 	for _, c := range []struct {
-		nombre string
-		salida string
+		name   string
+		output string
 	}{
-		{"html de un proxy", "<html>no</html>"},
-		{"json truncado", `{"result":{"worktrees":[`},
-		{"lista en vez de objeto", `[]`},
-		{"vacío", ""},
+		{"proxy HTML", "<html>no</html>"},
+		{"truncated JSON", `{"result":{"worktrees":[`},
+		{"list instead of object", `[]`},
+		{"empty", ""},
 	} {
 		f := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}}
 		f.respond = func([]string) ([]byte, []byte, error) {
-			return []byte(c.salida), nil, nil
+			return []byte(c.output), nil, nil
 		}
 
 		list, err := f.client().WorktreeList(context.Background(), "/repo")
 		if err == nil {
-			t.Errorf("%s: dio nil, y se pintaría como \"no hay worktrees\"", c.nombre)
+			t.Errorf("%s: it gave nil, and it would be painted as \"there are no worktrees\"", c.name)
 			continue
 		}
 		if list != nil {
-			t.Errorf("%s: devolvió %+v además del error", c.nombre, list)
+			t.Errorf("%s: it returned %+v besides the error", c.name, list)
 		}
 	}
 }
 
 // The real binary has to run here, because the timeout branch is the one under test.
-func TestSinTimeoutSeUsaElValorPorDefectoYConTimeoutCortaDeVerdad(t *testing.T) {
-	lento := filepath.Join(t.TempDir(), "herdr-lento")
+func TestWithoutTimeoutTheDefaultIsUsedAndWithTimeoutItReallyCuts(t *testing.T) {
+	slow := filepath.Join(t.TempDir(), "herdr-lento")
 	script := "#!/bin/sh\necho '{\"id\":\"x\",\"result\":{\"type\":\"ok\"}}'\n" +
 		"sleep 30 &\nsleep 30\n"
-	if err := os.WriteFile(lento, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(slow, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	conTimeout := &Client{
-		Bin:     lento,
+	withTimeout := &Client{
+		Bin:     slow,
 		Timeout: 50 * time.Millisecond,
 		getenv:  func(k string) string { return "1" },
 	}
-	empieza := time.Now()
-	_, _, err := conTimeout.run(context.Background(), "pane", "list")
-	siTardó := time.Since(empieza)
+	start := time.Now()
+	_, _, err := withTimeout.run(context.Background(), "pane", "list")
+	took := time.Since(start)
 	if err == nil {
-		t.Error("un binario que se queda vivo dio nil con un timeout de 50ms")
+		t.Error("a binary that stays alive gave nil with a timeout of 50ms")
 	}
-	if siTardó > 3*time.Second {
-		t.Errorf("el timeout tardó %s en cortar: `WaitDelay` no está cortando de verdad y "+
-			"el proceso se queda esperando a los hijos que heredaron los descriptores",
-			siTardó.Round(time.Millisecond))
+	if took > 3*time.Second {
+		t.Errorf("the timeout took %s to cut: `WaitDelay` is not really cutting and "+
+			"the process waits for the children that inherited the descriptors",
+			took.Round(time.Millisecond))
 	}
 
 	// Timeout at ZERO uses DefaultTimeout (30s), and that is checked WITHOUT waiting 30s.
-	rapido := filepath.Join(t.TempDir(), "herdr-rapido")
-	if err := os.WriteFile(rapido,
+	fast := filepath.Join(t.TempDir(), "herdr-rapido")
+	if err := os.WriteFile(fast,
 		[]byte("#!/bin/sh\necho '{\"id\":\"x\",\"result\":{\"type\":\"ok\"}}'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sinTimeout := &Client{Bin: rapido, getenv: func(string) string { return "1" }}
-	if sinTimeout.Timeout != 0 {
-		t.Fatal("el fixture no sirve: el Client debería guardar el cero tal cual")
+	withoutTimeout := &Client{Bin: fast, getenv: func(string) string { return "1" }}
+	if withoutTimeout.Timeout != 0 {
+		t.Fatal("the fixture is useless: the Client should keep the zero as it is")
 	}
 	// The default is applied INSIDE `run`, which is why the field cannot be checked directly.
-	empiezaCero := time.Now()
-	if _, _, err := sinTimeout.run(context.Background(), "pane", "list"); err != nil {
-		t.Errorf("con Timeout a cero `run` falló: %v", err)
+	startZero := time.Now()
+	if _, _, err := withoutTimeout.run(context.Background(), "pane", "list"); err != nil {
+		t.Errorf("with Timeout at zero `run` failed: %v", err)
 	}
-	if siTardó := time.Since(empiezaCero); siTardó > 5*time.Second {
-		t.Errorf("con Timeout a cero `run` tardó %s: el valor por defecto no se aplica y el "+
-			"proceso se queda sin plazo", siTardó.Round(time.Millisecond))
+	if took := time.Since(startZero); took > 5*time.Second {
+		t.Errorf("with Timeout at zero `run` took %s: the default is not applied and the "+
+			"process is left without a deadline", took.Round(time.Millisecond))
 	}
 }
 
 // An empty Bin does NOT mean "run nothing": it means "use the name from the PATH".
-func TestUnBinarioEnBlancoSeBuscaEnElPathYNoDaUnNombreVacio(t *testing.T) {
+func TestBlankBinaryIsLookedUpInPathAndGivesNoEmptyName(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "args.log")
-	guion := "#!/bin/sh\necho \"$@\" > " + log + "\necho 'herdr 0.9.1'\n"
-	if err := os.WriteFile(filepath.Join(dir, "herdr"), []byte(guion), 0o755); err != nil {
+	script := "#!/bin/sh\necho \"$@\" > " + log + "\necho 'herdr 0.9.1'\n"
+	if err := os.WriteFile(filepath.Join(dir, "herdr"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
@@ -156,34 +156,34 @@ func TestUnBinarioEnBlancoSeBuscaEnElPathYNoDaUnNombreVacio(t *testing.T) {
 
 	c := &Client{getenv: func(string) string { return "1" }}
 	if c.Bin != "" {
-		t.Fatal("el fixture no sirve: el Client debería arrancar con el binario vacío")
+		t.Fatal("the fixture is useless: the Client should start with an empty binary")
 	}
 	out, _, err := c.run(context.Background(), "--version")
 	if err != nil {
-		t.Fatalf("sin Bin no se encontró el herdr del PATH: %v", err)
+		t.Fatalf("without Bin the herdr from the PATH was not found: %v", err)
 	}
 	if !strings.Contains(string(out), "0.9.1") {
-		t.Errorf("la salida es %q, no la del binario del PATH", out)
+		t.Errorf("the output is %q, not the PATH binary's one", out)
 	}
-	registrado, err := os.ReadFile(log)
+	logged, err := os.ReadFile(log)
 	if err != nil {
-		t.Fatalf("el herdr del PATH no llegó a ejecutarse: %v", err)
+		t.Fatalf("the herdr from the PATH never got executed: %v", err)
 	}
-	if !strings.Contains(string(registrado), "--version") {
-		t.Errorf("el herdr del PATH recibió %q", registrado)
+	if !strings.Contains(string(logged), "--version") {
+		t.Errorf("the herdr from the PATH received %q", logged)
 	}
 
 	// And with nothing in PATH the error stays readable, which is half the point of resolving the
 	// default.
-	vacio := t.TempDir()
-	t.Setenv("PATH", vacio)
+	empty := t.TempDir()
+	t.Setenv("PATH", empty)
 	t.Setenv("HERDR_BIN_PATH", "")
-	otro := &Client{getenv: func(string) string { return "1" }}
-	if _, _, err := otro.run(context.Background(), "--version"); err == nil {
-		t.Error("sin herdr en el PATH dio nil")
+	another := &Client{getenv: func(string) string { return "1" }}
+	if _, _, err := another.run(context.Background(), "--version"); err == nil {
+		t.Error("with no herdr in the PATH it gave nil")
 	}
 	// The error names the binary it looked for: "exec" with an empty name tells the user nothing.
 	if err != nil && !strings.Contains(err.Error(), "herdr") {
-		t.Errorf("el error %q no nombra el binario que faltaba", err)
+		t.Errorf("the error %q does not name the missing binary", err)
 	}
 }

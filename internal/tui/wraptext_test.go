@@ -8,61 +8,61 @@ import (
 )
 
 // If the text fits it comes out WHOLE, spaces and all.
-func TestWrapTextNoTocaLoQueYaCabe(t *testing.T) {
-	for _, tc := range []struct{ texto, quiere string }{
+func TestWrapTextDoesNotTouchWhatAlreadyFits(t *testing.T) {
+	for _, tc := range []struct{ text, wants string }{
 		{"ab cd", "ab cd"},
 		{"a  b", "a  b"},
 		{"a   b   c", "a   b   c"},
 		{"a\tb", "a\tb"},
-		{"ab  cd", "ab  cd"}, // dos espacios: 6 columnas, y con max 6 cabe
-		{"  con  LEADING  y  final  ", "  con  LEADING  y  final  "},
+		{"ab  cd", "ab  cd"}, // two spaces: 6 columns, and with max 6 it fits
+		{"  with  LEADING  and  tail  ", "  with  LEADING  and  tail  "},
 	} {
 		for _, max := range []int{1, 4, 5, 6, 10, 100} {
-			if ansi.StringWidth(tc.texto) > max {
-				continue // este max no cabe, no es el caso que se afirma
+			if ansi.StringWidth(tc.text) > max {
+				continue // this max does not fit, it is not the case being asserted
 			}
-			got := wrapText(tc.texto, max)
+			got := wrapText(tc.text, max)
 			if len(got) != 1 {
-				t.Errorf("wrapText(%q, %d) devolvió %d líneas, want 1: el texto cabe", tc.texto, max, len(got))
+				t.Errorf("wrapText(%q, %d) returned %d lines, want 1: the text fits", tc.text, max, len(got))
 				continue
 			}
-			if got[0] != tc.quiere {
-				t.Errorf("wrapText(%q, %d) devolvió %q, want %q: un texto que cabe no se toca, ni en un espacio",
-					tc.texto, max, got[0], tc.quiere)
+			if got[0] != tc.wants {
+				t.Errorf("wrapText(%q, %d) returned %q, want %q: text that fits is not touched, not even a space",
+					tc.text, max, got[0], tc.wants)
 			}
 		}
 	}
 
-	const texto = "a  b  c"
-	const ancho = 7
-	if got := wrapText(texto, ancho); len(got) != 1 || got[0] != texto {
-		t.Errorf("un texto de %d columnas con ancho %d dio %q, want la línea intacta",
-			ansi.StringWidth(texto), ancho, got)
+	const text = "a  b  c"
+	const width = 7
+	if got := wrapText(text, width); len(got) != 1 || got[0] != text {
+		t.Errorf("a text of %d columns with width %d gave %q, want the line untouched",
+			ansi.StringWidth(text), width, got)
 	}
 	// One column less and the wrapper starts working, and its work shows.
-	if got := wrapText(texto, ancho-1); len(got) == 1 && got[0] == texto {
-		t.Errorf("un texto de %d columnas con ancho %d volvió intacto: no debería, no cabe",
-			ansi.StringWidth(texto), ancho-1)
+	if got := wrapText(text, width-1); len(got) == 1 && got[0] == text {
+		t.Errorf("a text of %d columns with width %d came back intact: it should not, it does not fit",
+			ansi.StringWidth(text), width-1)
 	}
 }
 
-func TestWrapTextJuntaLaPalabraQueCierraElAncho(t *testing.T) {
+func TestWrapTextJoinsTheWordThatWouldCloseTheWidth(t *testing.T) {
 	const max = 5
 
 	got := wrapText("ab cd ef", max)
 	if len(got) != 2 {
-		t.Fatalf("wrapText(%q, %d) devolvió %q, want 2 líneas: la segunda cierra el ancho justo",
+		t.Fatalf("wrapText(%q, %d) returned %q, want 2 lines: the second closes the exact width",
 			"ab cd ef", max, got)
 	}
 	if got[0] != "ab cd" {
-		t.Errorf("la primera línea es %q, want %q: la palabra que cierra el ancho tiene que juntarse", got[0], "ab cd")
+		t.Errorf("the first line is %q, want %q: the word that closes the width has to be joined", got[0], "ab cd")
 	}
 	if got[1] != "ef" {
-		t.Errorf("la segunda línea es %q, want %q", got[1], "ef")
+		t.Errorf("the second line is %q, want %q", got[1], "ef")
 	}
 
 	if got := wrapText("ab cd ef", max-1); len(got) != 3 {
-		t.Errorf("wrapText(%q, %d) devolvió %q, want 3 líneas: con una columna menos la palabra ya no cierra",
+		t.Errorf("wrapText(%q, %d) returned %q, want 3 lines: one column less and the word no longer closes",
 			"ab cd ef", max-1, got)
 	}
 
@@ -72,65 +72,65 @@ func TestWrapTextJuntaLaPalabraQueCierraElAncho(t *testing.T) {
 	}
 }
 
-func TestWrapTextAnchoNoPositivoNoParte(t *testing.T) {
+func TestWrapTextNonPositiveWidthDoesNotSplit(t *testing.T) {
 	for _, max := range []int{-20, -1, 0} {
-		for _, texto := range []string{"ab cd ef", "una palabra", "a  b  c", ""} {
-			got := wrapText(texto, max)
+		for _, text := range []string{"ab cd ef", "one word", "a  b  c", ""} {
+			got := wrapText(text, max)
 			if len(got) != 1 {
-				t.Errorf("wrapText(%q, %d) devolvió %q, want una sola línea: con un ancho no positivo no se parte",
-					texto, max, got)
+				t.Errorf("wrapText(%q, %d) returned %q, want a single line: with a non-positive width it does not split",
+					text, max, got)
 				continue
 			}
-			if got[0] != texto {
-				t.Errorf("wrapText(%q, %d) devolvió %q: sin partir, el texto tiene que volver tal cual",
-					texto, max, got[0])
+			if got[0] != text {
+				t.Errorf("wrapText(%q, %d) returned %q: without splitting, the text has to come back as given",
+					text, max, got[0])
 			}
 		}
 	}
 	// Empty or spaces only gives ONE line, not none: an empty list would make the caller print
 	// an extra blank line.
-	for _, texto := range []string{"", "   ", "\t"} {
-		if got := wrapText(texto, 10); len(got) != 1 {
-			t.Errorf("wrapText(%q, 10) devolvió %q, want una línea", texto, got)
+	for _, text := range []string{"", "   ", "\t"} {
+		if got := wrapText(text, 10); len(got) != 1 {
+			t.Errorf("wrapText(%q, 10) returned %q, want one line", text, got)
 		}
 	}
 	if got := wrapText("    ", 2); len(got) != 1 || got[0] != "    " {
-		t.Errorf("wrapText(%q, 2) = %q, want el texto intacto en una línea", "    ", got)
+		t.Errorf("wrapText(%q, 2) = %q, want the text intact in one line", "    ", got)
 	}
 }
 
-func TestWrapTextCadaLineaCabeYNoSeParteUnaPalabra(t *testing.T) {
+func TestWrapTextEveryLineFitsAndNoWordIsSplit(t *testing.T) {
 	for max := 1; max <= 40; max++ {
-		for _, texto := range []string{
+		for _, text := range []string{
 			"ab cd ef gh ij",
-			"palabra muy larga que no cabe de ninguna manera en nada",
+			"a very long word that does not fit in any way at all",
 			strings.Repeat("x ", 30) + "y",
-			"corto",
-			"  espacios   al   principio  y   al   final  ",
+			"short",
+			"  spaces   at   the   beginning  and   at   the   end  ",
 		} {
-			for _, linea := range wrapText(texto, max) {
-				if ansi.StringWidth(linea) > max {
-					if len(strings.Fields(linea)) != 1 {
-						t.Errorf("wrapText(%.20q, %d) dio la línea %q, que no cabe y no es una palabra suelta",
-							texto, max, linea)
+			for _, line := range wrapText(text, max) {
+				if ansi.StringWidth(line) > max {
+					if len(strings.Fields(line)) != 1 {
+						t.Errorf("wrapText(%.20q, %d) gave line %q, which does not fit and is not a single word",
+							text, max, line)
 					}
 				}
-				if strings.TrimSpace(linea) == "" && strings.TrimSpace(texto) != "" {
-					t.Errorf("wrapText(%.20q, %d) dio una línea de puros espacios: %q", texto, max, linea)
+				if strings.TrimSpace(line) == "" && strings.TrimSpace(text) != "" {
+					t.Errorf("wrapText(%.20q, %d) gave a line of pure spaces: %q", text, max, line)
 				}
 			}
-			juntas := wrapText(texto, max)
-			for _, palabra := range strings.Fields(texto) {
+			juntas := wrapText(text, max)
+			for _, palabra := range strings.Fields(text) {
 				found := false
-				for _, linea := range juntas {
-					if palabra == linea || strings.Contains(linea, " "+palabra+" ") ||
-						strings.HasPrefix(linea, palabra+" ") || strings.HasSuffix(linea, " "+palabra) {
+				for _, line := range juntas {
+					if palabra == line || strings.Contains(line, " "+palabra+" ") ||
+						strings.HasPrefix(line, palabra+" ") || strings.HasSuffix(line, " "+palabra) {
 						found = true
 						break
 					}
 				}
 				if !found {
-					t.Errorf("wrapText(%.20q, %d) perdió o partió la palabra %q", texto, max, palabra)
+					t.Errorf("wrapText(%.20q, %d) lost or split the word %q", text, max, palabra)
 				}
 			}
 		}

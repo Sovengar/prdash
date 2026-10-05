@@ -14,10 +14,10 @@ import (
 
 // The case that proves it is a failure midway: a half-written destination would offer the popup a broken
 // image under the right name.
-func TestCopyFileATemporalDejaElDestinoIntegroYNoElTemporal(t *testing.T) {
+func TestCopyFileToTempLeavesTheDestinationIntactAndNotTheTemp(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "origen.jpg")
-	if err := os.WriteFile(src, []byte("una imagen cualquiera"), 0o644); err != nil {
+	if err := os.WriteFile(src, []byte("some random image"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	dst := filepath.Join(dir, "destino.jpg")
@@ -27,28 +27,28 @@ func TestCopyFileATemporalDejaElDestinoIntegroYNoElTemporal(t *testing.T) {
 	}
 	got, err := os.ReadFile(dst)
 	if err != nil {
-		t.Fatalf("leer el destino: %v", err)
+		t.Fatalf("reading the destination: %v", err)
 	}
-	if string(got) != "una imagen cualquiera" {
-		t.Errorf("el destino tiene %q, want el contenido de origen", got)
+	if string(got) != "some random image" {
+		t.Errorf("the destination has %q, want the source's content", got)
 	}
 	if _, err := os.Stat(dst + ".part"); !os.IsNotExist(err) {
-		t.Errorf("quedó el temporal %s.part", dst)
+		t.Errorf("the temp %s.part was left behind", dst)
 	}
 
-	if err := os.WriteFile(src, []byte("segunda version"), 0o644); err != nil {
+	if err := os.WriteFile(src, []byte("second version"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := copyFile(src, dst); err != nil {
-		t.Fatalf("sobreescribir el destino: %v", err)
+		t.Fatalf("overwriting the destination: %v", err)
 	}
-	if got, _ := os.ReadFile(dst); string(got) != "segunda version" {
-		t.Errorf("tras la segunda copia hay %q, want la segunda version", got)
+	if got, _ := os.ReadFile(dst); string(got) != "second version" {
+		t.Errorf("after the second copy there is %q, want the second version", got)
 	}
 }
 
 // No simulated cut needed: copying a DIRECTORY as if it were an image fails with EISDIR on the read.
-func TestCopyFileLimpiaElTemporalCuandoLaCopiaSeCorta(t *testing.T) {
+func TestCopyFileCleansTheTempWhenTheCopyIsCut(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "esto-es-un-directorio.jpg")
 	if err := os.MkdirAll(src, 0o755); err != nil {
@@ -58,99 +58,99 @@ func TestCopyFileLimpiaElTemporalCuandoLaCopiaSeCorta(t *testing.T) {
 
 	err := copyFile(src, dst)
 	if err == nil {
-		t.Fatal("copiar un directorio dio nil")
+		t.Fatal("copying a directory gave nil")
 	}
 	if !errors.Is(err, fs.ErrInvalid) && !strings.Contains(err.Error(), "is a directory") {
-		t.Logf("el error del SO no menciona EISDIR: %v", err)
+		t.Logf("the OS error does not mention EISDIR: %v", err)
 	}
 	if _, err := os.Stat(dst); !os.IsNotExist(err) {
-		t.Error("la copia fallida dejó el destino: el popup abriría una imagen rota")
+		t.Error("the failed copy left the destination: the popup would open a broken image")
 	}
 	if _, err := os.Stat(dst + ".part"); !os.IsNotExist(err) {
-		t.Error("la copia fallida dejó el temporal: se acumularía en el caché sin que nada lo borre")
+		t.Error("the failed copy left the temp: it would pile up in the cache with nothing deleting it")
 	}
 }
 
-func TestCopyFileNombraElFalloDeCadaPunto(t *testing.T) {
+func TestCopyFileNamesTheFailureAtEachPoint(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "origen.jpg")
-	if err := os.WriteFile(src, []byte("contenido"), 0o644); err != nil {
+	if err := os.WriteFile(src, []byte("content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, c := range []struct {
-		nombre   string
+		name     string
 		src, dst string
 	}{
-		{"origen que no existe", filepath.Join(dir, "no-existe.jpg"),
+		{"source does not exist", filepath.Join(dir, "no-existe.jpg"),
 			filepath.Join(dir, "d1.jpg")},
-		{"padre del destino inexistente", src, filepath.Join(dir, "no-existe", "d2.jpg")},
-		{"destino que es un directorio", src, dir},
+		{"destination's parent missing", src, filepath.Join(dir, "no-existe", "d2.jpg")},
+		{"destination is a directory", src, dir},
 	} {
 		err := copyFile(c.src, c.dst)
 		if err == nil {
-			t.Errorf("%s: copyFile dio nil", c.nombre)
+			t.Errorf("%s: copyFile gave nil", c.name)
 			continue
 		}
 		// The message names the file involved. os already puts the path in its error, so this checks that
 		//keep's wrap does not swallow it.
 		base := c.dst
-		if c.nombre == "origen que no existe" {
+		if c.name == "source does not exist" {
 			base = c.src
 		}
 		if !strings.Contains(err.Error(), filepath.Base(base)) {
-			t.Errorf("%s: el error %q no nombra el fichero implicante", c.nombre, err)
+			t.Errorf("%s: the error %q does not name the file involved", c.name, err)
 		}
 		if _, err := os.Stat(c.dst + ".part"); !os.IsNotExist(err) {
-			t.Errorf("%s: dejó el temporal", c.nombre)
+			t.Errorf("%s: it left the temp", c.name)
 		}
 	}
 }
 
 // "By date" is what a table test would miss: the filename carries a UnixNano and makes it look like
 // name order is date order.
-func TestPruneConservaLasMasRecientesYPorFechaNoPorNombre(t *testing.T) {
+func TestPruneKeepsTheNewestByDateNotByName(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 
 	// The names run opposite to the dates on purpose, so a prune sorting by name would keep exactly the
 	//three it must not.
 	for i := 9; i >= 1; i-- {
-		nombre := itoa(i) + ".jpg"
-		if err := os.WriteFile(filepath.Join(dir, nombre), []byte("x"), 0o644); err != nil {
+		name := itoa(i) + ".jpg"
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		cuando := base.AddDate(0, 0, i)
-		if err := os.Chtimes(filepath.Join(dir, nombre), cuando, cuando); err != nil {
+		when := base.AddDate(0, 0, i)
+		if err := os.Chtimes(filepath.Join(dir, name), when, when); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	prune(dir, 3)
 
-	restantes := nombresDe(t, dir)
-	quiere := []string{"9.jpg", "8.jpg", "7.jpg"}
-	if len(restantes) != len(quiere) {
-		t.Fatalf("quedan %v, want %v", restantes, quiere)
+	remaining := namesIn(t, dir)
+	want := []string{"9.jpg", "8.jpg", "7.jpg"}
+	if len(remaining) != len(want) {
+		t.Fatalf("%v left, want %v", remaining, want)
 	}
-	for _, n := range quiere {
-		if !contains(restantes, n) {
-			t.Errorf("%s no se conservó: quedan %v", n, restantes)
+	for _, n := range want {
+		if !contains(remaining, n) {
+			t.Errorf("%s was not kept: there are %v", n, remaining)
 		}
 	}
 	for _, n := range []string{"1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg", "6.jpg"} {
-		if contains(restantes, n) {
-			t.Errorf("%s se conservó y es de las más antiguas: quedan %v", n, restantes)
+		if contains(remaining, n) {
+			t.Errorf("%s was kept and it is one of the oldest: there are %v", n, remaining)
 		}
 	}
 }
 
-func TestPruneIgnoraLoQueNoEsUnaImagenYNoBorraElCacheEntero(t *testing.T) {
+func TestPruneIgnoresWhatIsNotAnImageAndDoesNotWipeTheWholeCache(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 
-	tocables := []string{"a.jpg", "b.jpg", "c.jpg", "d.jpg"}
-	for _, n := range tocables {
+	touchable := []string{"a.jpg", "b.jpg", "c.jpg", "d.jpg"}
+	for _, n := range touchable {
 		p := filepath.Join(dir, n)
 		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
@@ -159,22 +159,22 @@ func TestPruneIgnoraLoQueNoEsUnaImagenYNoBorraElCacheEntero(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	intocables := map[string]string{
-		"backup.jpg":     "directorio",
-		"notas.txt":      "texto",
-		"HEAD":           "fichero",
-		"candidata.JPEG": "imagen en mayusculas",
+	untouchable := map[string]string{
+		"backup.jpg":     "directory",
+		"notas.txt":      "text",
+		"HEAD":           "file",
+		"candidata.JPEG": "image in uppercase",
 	}
-	for n, clase := range intocables {
+	for n, class := range untouchable {
 		p := filepath.Join(dir, n)
 		var err error
-		if clase == "directorio" {
+		if class == "directory" {
 			err = os.MkdirAll(filepath.Join(p, "contenido"), 0o755)
 		} else {
 			err = os.WriteFile(p, []byte("x"), 0o644)
 		}
 		if err != nil {
-			t.Fatalf("preparar %s: %v", n, err)
+			t.Fatalf("preparing %s: %v", n, err)
 		}
 		if err := os.Chtimes(p, base, base); err != nil {
 			t.Fatal(err)
@@ -183,41 +183,41 @@ func TestPruneIgnoraLoQueNoEsUnaImagenYNoBorraElCacheEntero(t *testing.T) {
 
 	// A file named exactly `.jpg` IS pruned, because prune decides by suffix and HasSuffix(".jpg",".jpg")
 	//is true. It was on the untouchable list, which is what broke the count below.
-	conNombreDeExtension := filepath.Join(dir, ".jpg")
-	if err := os.WriteFile(conNombreDeExtension, []byte("x"), 0o644); err != nil {
+	extensionOnlyName := filepath.Join(dir, ".jpg")
+	if err := os.WriteFile(extensionOnlyName, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	masViejo := base.AddDate(0, 0, -1)
-	if err := os.Chtimes(conNombreDeExtension, masViejo, masViejo); err != nil {
+	oldest := base.AddDate(0, 0, -1)
+	if err := os.Chtimes(extensionOnlyName, oldest, oldest); err != nil {
 		t.Fatal(err)
 	}
 
 	prune(dir, 1)
 
-	if _, err := os.Stat(conNombreDeExtension); err == nil {
-		t.Errorf("el fichero %q sobrevivió a la poda: prune decide por sufijo", ".jpg")
+	if _, err := os.Stat(extensionOnlyName); err == nil {
+		t.Errorf("the file %q survived the prune: prune decides by suffix", ".jpg")
 	}
-	for n := range intocables {
+	for n := range untouchable {
 		if _, err := os.Stat(filepath.Join(dir, n)); err != nil {
-			t.Errorf("prune borró %s (%s): %v", n, intocables[n], err)
+			t.Errorf("prune deleted %s (%s): %v", n, untouchable[n], err)
 		}
 	}
-	quedan := 0
-	for _, n := range tocables {
+	remain := 0
+	for _, n := range touchable {
 		if _, err := os.Stat(filepath.Join(dir, n)); err == nil {
-			quedan++
+			remain++
 		}
 	}
-	if quedan != 1 {
-		t.Errorf("quedan %d imágenes de 4, want 1", quedan)
+	if remain != 1 {
+		t.Errorf("%d images are left of 4, want 1", remain)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, "backup.jpg", "contenido")); err != nil {
-		t.Errorf("prune vació el subdirectorio: %v", err)
+		t.Errorf("prune emptied the subdirectory: %v", err)
 	}
 }
 
-func TestPruneConMenosDeLosQueHayQueConservarNoHaceNadaYConCeroLosBorraTodos(t *testing.T) {
+func TestPruneWithFewerThanToKeepDoesNothingAndWithZeroDeletesAll(t *testing.T) {
 	dir := t.TempDir()
 	for _, n := range []string{"a.jpg", "b.jpg"} {
 		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644); err != nil {
@@ -226,126 +226,126 @@ func TestPruneConMenosDeLosQueHayQueConservarNoHaceNadaYConCeroLosBorraTodos(t *
 	}
 
 	prune(dir, 10)
-	if len(nombresDe(t, dir)) != 2 {
-		t.Errorf("prune con keep=10 quitó ficheros: %v", nombresDe(t, dir))
+	if len(namesIn(t, dir)) != 2 {
+		t.Errorf("prune with keep=10 removed files: %v", namesIn(t, dir))
 	}
 	// A NEGATIVE keep is clamped to zero instead of panicking: `files[-1:]` gave "slice bounds out
 	// of range [-1:]". My first version asserted it did not panic; now I check it the other way.
 	prune(dir, -1)
-	if quedan := len(nombresDe(t, dir)); quedan != 0 {
-		t.Errorf("con keep=-1 quedan %d ficheros, want 0 (negativo se lee como cero)", quedan)
+	if remain := len(namesIn(t, dir)); remain != 0 {
+		t.Errorf("with keep=-1 %d files are left, want 0 (negative reads as zero)", remain)
 	}
 
 	prune(dir, 0)
-	if quedan := nombresDe(t, dir); len(quedan) != 0 {
-		t.Errorf("prune con keep=0 dejó %v", quedan)
+	if remain := namesIn(t, dir); len(remain) != 0 {
+		t.Errorf("prune with keep=0 left %v", remain)
 	}
 }
 
-func TestPruneSobreUnDirectorioQueNoExisteNoRevienta(t *testing.T) {
+func TestPruneOnMissingDirectoryDoesNotBlowUp(t *testing.T) {
 	prune(filepath.Join(t.TempDir(), "no-existe"), 3)
 
-	fichero := filepath.Join(t.TempDir(), "soy-un-fichero")
-	if err := os.WriteFile(fichero, []byte("x"), 0o644); err != nil {
+	file := filepath.Join(t.TempDir(), "soy-un-fichero")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	prune(fichero, 3)
-	if _, err := os.Stat(fichero); err != nil {
-		t.Errorf("prune se llevó un fichero que no era directorio: %v", err)
+	prune(file, 3)
+	if _, err := os.Stat(file); err != nil {
+		t.Errorf("prune took a file that was not a directory: %v", err)
 	}
 }
 
-func TestKeepCopiaAlCacheConElNombreDelItemYPodaLoQueSobra(t *testing.T) {
+func TestKeepCopiesToCacheWithTheItemNameAndPrunesTheRest(t *testing.T) {
 	cache := t.TempDir()
-	origen := writeJPEG(t)
+	source := writeJPEG(t)
 
 	s := &Service{CacheDir: cache}
-	it := itemDePrueba()
+	it := testItem()
 	it.Number = 42
 
-	dst, err := s.keep(origen, it, KindMerge)
+	dst, err := s.keep(source, it, KindMerge)
 	if err != nil {
 		t.Fatalf("keep: %v", err)
 	}
-	a, err := os.ReadFile(origen)
+	a, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(dst)
 	if err != nil {
-		t.Fatalf("leer la copia del caché: %v", err)
+		t.Fatalf("reading the cache copy: %v", err)
 	}
 	if len(a) != len(b) {
-		t.Fatalf("la copia pesa %d y el original %d", len(b), len(a))
+		t.Fatalf("the copy weighs %d and the original %d", len(b), len(a))
 	}
 	for i := range a {
 		if a[i] != b[i] {
-			t.Fatalf("la copia difiere del original en el byte %d", i)
+			t.Fatalf("the copy differs from the original at byte %d", i)
 		}
 	}
-	nombre := filepath.Base(dst)
-	if !strings.HasPrefix(nombre, "github-") {
-		t.Errorf("el nombre %q no empieza por el forge", nombre)
+	name := filepath.Base(dst)
+	if !strings.HasPrefix(name, "github-") {
+		t.Errorf("the name %q does not start with the forge", name)
 	}
-	if !strings.Contains(nombre, "-42-") {
-		t.Errorf("el nombre %q no lleva el número del ítem", nombre)
+	if !strings.Contains(name, "-42-") {
+		t.Errorf("the name %q does not carry the item's number", name)
 	}
-	if strings.ContainsAny(nombre, "/ #") {
-		t.Errorf("el nombre %q lleva caracteres que un visor no abarca", nombre)
+	if strings.ContainsAny(name, "/ #") {
+		t.Errorf("the name %q carries characters a viewer cannot handle", name)
 	}
 
 	for i := 0; i < keepImages+1; i++ {
 		p := filepath.Join(cache, "github-extra-"+itoa(i)+"-1.jpg")
-		if err := os.WriteFile(p, []byte("basura"), 0o644); err != nil {
+		if err := os.WriteFile(p, []byte("garbage"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	ultima, err := s.keep(origen, it, KindMerge)
+	last, err := s.keep(source, it, KindMerge)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The image just saved cannot be deleted. My first version looked at `dst`, the image from the FIRST
 	//keep call, which is the oldest, and failed intermittently.
-	if _, err := os.Stat(ultima); err != nil {
-		t.Errorf("la poda borró la imagen que se acaba de guardar: %v", err)
+	if _, err := os.Stat(last); err != nil {
+		t.Errorf("the prune deleted the image that was just saved: %v", err)
 	}
-	if ultima == dst {
-		t.Error("las dos llamadas a keep dieron el mismo nombre: el UnixNano del nombre se " +
-			"repite y una sobrescribiría a la otra")
+	if last == dst {
+		t.Error("the two keep calls gave the same name: the name's UnixNano repeats and " +
+			"one would overwrite the other")
 	}
-	quedan := 0
-	for _, n := range nombresDe(t, cache) {
+	remain := 0
+	for _, n := range namesIn(t, cache) {
 		if strings.HasSuffix(n, ".jpg") {
-			quedan++
+			remain++
 		}
 	}
-	if quedan != keepImages {
-		t.Errorf("quedan %d imágenes tras la poda, want %d", quedan, keepImages)
+	if remain != keepImages {
+		t.Errorf("%d images are left after the prune, want %d", remain, keepImages)
 	}
 }
 
-func itemDePrueba() model.Item {
+func testItem() model.Item {
 	return model.NewItem(model.RepoRef{
 		Forge: "github", Host: "github.com", Project: "acme/widget",
 	}, 7)
 }
 
-func nombresDe(t *testing.T, dir string) []string {
+func namesIn(t *testing.T, dir string) []string {
 	t.Helper()
-	entradas, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("listar %s: %v", dir, err)
+		t.Fatalf("listing %s: %v", dir, err)
 	}
-	salida := make([]string, 0, len(entradas))
-	for _, e := range entradas {
-		salida = append(salida, e.Name())
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Name())
 	}
-	return salida
+	return out
 }
 
-func contains(lista []string, n string) bool {
-	for _, e := range lista {
-		if e == n {
+func contains(list []string, s string) bool {
+	for _, e := range list {
+		if e == s {
 			return true
 		}
 	}

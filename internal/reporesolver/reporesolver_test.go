@@ -39,19 +39,19 @@ func TestParseRemoteURL(t *testing.T) {
 		{"scp", "git@github.com:acme/widget.git", model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}, true},
 		{"https", "https://github.com/acme/widget.git", model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}, true},
 		{"ssh", "ssh://git@github.com/acme/widget", model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}, true},
-		{"gitlab subgrupo", "https://gitlab.example.com/grupo/sub/proy.git", model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grupo/sub/proy", Owner: "sub", Name: "proy"}, true},
-		{"host desconocido", "https://bitbucket.org/acme/widget.git", model.RepoRef{}, false},
-		{"ruta local", "/home/u/dev/widget", model.RepoRef{}, false},
-		{"vacío", "", model.RepoRef{}, false},
+		{"gitlab subgroup", "https://gitlab.example.com/grupo/sub/proy.git", model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grupo/sub/proy", Owner: "sub", Name: "proy"}, true},
+		{"unknown host", "https://bitbucket.org/acme/widget.git", model.RepoRef{}, false},
+		{"local path", "/home/u/dev/widget", model.RepoRef{}, false},
+		{"empty", "", model.RepoRef{}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := ParseRemoteURL(tc.raw, hosts, nil)
 			if ok != tc.wantOK {
-				t.Fatalf("ok = %v, quiero %v", ok, tc.wantOK)
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}
 			if ok && got != tc.want {
-				t.Fatalf("ref = %+v, quiero %+v", got, tc.want)
+				t.Fatalf("ref = %+v, want %+v", got, tc.want)
 			}
 		})
 	}
@@ -66,19 +66,19 @@ func TestParseRemoteURLStripsClonePrefix(t *testing.T) {
 		name string
 		raw  string
 	}{
-		{"sin prefijo", "https://gitlab.example.com/grupo/sub/proy.git"},
-		{"con prefijo", "https://gitlab.example.com/git/grupo/sub/proy.git"},
-		{"con prefijo y barra final", "https://gitlab.example.com/git/grupo/sub/proy/"},
-		{"scp con prefijo", "git@gitlab.example.com:git/grupo/sub/proy.git"},
+		{"without prefix", "https://gitlab.example.com/grupo/sub/proy.git"},
+		{"with prefix", "https://gitlab.example.com/git/grupo/sub/proy.git"},
+		{"with prefix and trailing slash", "https://gitlab.example.com/git/grupo/sub/proy/"},
+		{"scp with prefix", "git@gitlab.example.com:git/grupo/sub/proy.git"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := ParseRemoteURL(tc.raw, hosts, prefixes)
 			if !ok {
-				t.Fatalf("no parseó %q", tc.raw)
+				t.Fatalf("did not parse %q", tc.raw)
 			}
 			if got != want {
-				t.Fatalf("ref = %+v, quiero %+v", got, want)
+				t.Fatalf("ref = %+v, want %+v", got, want)
 			}
 		})
 	}
@@ -92,15 +92,15 @@ func TestCloneURL(t *testing.T) {
 		prefix string
 		want   string
 	}{
-		{"github raíz", ghRef(), "", "https://github.com/acme/widget.git"},
-		{"gitlab raíz", glRef("gitlab.example.com", "grupo/proy"), "", "https://gitlab.example.com/grupo/proy.git"},
-		{"gitlab subcarpeta", glRef("gitlab.example.com", "grupo/proy"), "/git/", "https://gitlab.example.com/git/grupo/proy.git"},
-		{"github enterprise subcarpeta", ghEnt, "git", "https://github.enterprise.com/git/acme/widget.git"},
+		{"github root", ghRef(), "", "https://github.com/acme/widget.git"},
+		{"gitlab root", glRef("gitlab.example.com", "grupo/proy"), "", "https://gitlab.example.com/grupo/proy.git"},
+		{"gitlab subfolder", glRef("gitlab.example.com", "grupo/proy"), "/git/", "https://gitlab.example.com/git/grupo/proy.git"},
+		{"github enterprise subfolder", ghEnt, "git", "https://github.enterprise.com/git/acme/widget.git"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := CloneURL(tc.ref, tc.prefix); got != tc.want {
-				t.Fatalf("CloneURL = %q, quiero %q", got, tc.want)
+				t.Fatalf("CloneURL = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -113,7 +113,7 @@ func TestCloneURLParseRemoteRoundTrip(t *testing.T) {
 	raw := CloneURL(ref, prefixes[ref.Host])
 	got, ok := ParseRemoteURL(raw, hosts, prefixes)
 	if !ok || got != ref {
-		t.Fatalf("round trip = %+v, %v; quiero %+v", got, ok, ref)
+		t.Fatalf("round trip = %+v, %v; want %+v", got, ok, ref)
 	}
 }
 
@@ -133,7 +133,7 @@ func pushReviewRef(t *testing.T, origin, srcRef string) {
 	t.Helper()
 	work := filepath.Join(t.TempDir(), "work")
 	testutil.InitRepo(t, work)
-	testutil.CommitFile(t, work, "pr.txt", "contenido del PR", "pr")
+	testutil.CommitFile(t, work, "pr.txt", "PR content", "pr")
 	testutil.Push(t, work, origin, "HEAD:"+srcRef)
 }
 
@@ -161,7 +161,7 @@ func TestResolveLocalIndexesRoots(t *testing.T) {
 
 	got, ok := r.ResolveLocal(ref)
 	if !ok || got != repo {
-		t.Fatalf("ResolveLocal = %q, %v; quiero %q", got, ok, repo)
+		t.Fatalf("ResolveLocal = %q, %v; want %q", got, ok, repo)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestResolveLocalIndexesRemoteWithClonePrefix(t *testing.T) {
 
 	got, ok := r.ResolveLocal(glRef("gitlab.example.com", "grupo/proy"))
 	if !ok || got != repo {
-		t.Fatalf("ResolveLocal = %q, %v; quiero %q", got, ok, repo)
+		t.Fatalf("ResolveLocal = %q, %v; want %q", got, ok, repo)
 	}
 }
 
@@ -197,14 +197,14 @@ func TestResolveLocalUsesRememberedRoute(t *testing.T) {
 	r2 := New(Options{MemoPath: memoPath})
 	got, ok := r2.ResolveLocal(ref)
 	if !ok || got != repo {
-		t.Fatalf("ResolveLocal por memoria = %q, %v", got, ok)
+		t.Fatalf("ResolveLocal from the memo = %q, %v", got, ok)
 	}
 }
 
 func TestResolveLocalMissing(t *testing.T) {
 	r := New(Options{Roots: []string{t.TempDir()}, MemoPath: filepath.Join(t.TempDir(), "m.json")})
 	if _, ok := r.ResolveLocal(ghRef()); ok {
-		t.Fatal("no debería resolver un repo inexistente")
+		t.Fatal("it should not resolve a nonexistent repo")
 	}
 }
 
@@ -220,21 +220,21 @@ func TestEnsureBareClonesAndIsIdempotent(t *testing.T) {
 	}
 	want := filepath.Join(cloneDir, "github", "github.com", "acme", "widget")
 	if dest != want {
-		t.Fatalf("dest = %q, quiero %q", dest, want)
+		t.Fatalf("dest = %q, want %q", dest, want)
 	}
 	if !r.HasBare(ref) {
-		t.Fatal("HasBare debería ser true tras clonar")
+		t.Fatal("HasBare should be true after cloning")
 	}
 	if out := testutil.RunGit(t, dest, "rev-parse", "--is-bare-repository"); out != "true" {
-		t.Fatalf("el clon no es bare: %q", out)
+		t.Fatalf("the clone is not bare: %q", out)
 	}
 	if leftovers := glob(t, cloneDir, "*.tmp-*"); len(leftovers) != 0 {
-		t.Fatalf("quedaron temporales: %v", leftovers)
+		t.Fatalf("temps left: %v", leftovers)
 	}
 
 	again, err := r.EnsureBare(context.Background(), ref)
 	if err != nil || again != dest {
-		t.Fatalf("EnsureBare idempotente = %q, %v", again, err)
+		t.Fatalf("idempotent EnsureBare = %q, %v", again, err)
 	}
 }
 
@@ -264,10 +264,10 @@ func TestEnsureBareClonesWithPrefixedCloneURL(t *testing.T) {
 	}
 	want := filepath.Join(cloneDir, "gitlab", "gitlab.example.com", "grupo", "proy")
 	if dest != want {
-		t.Fatalf("dest = %q, quiero %q", dest, want)
+		t.Fatalf("dest = %q, want %q", dest, want)
 	}
 	if out := testutil.RunGit(t, dest, "rev-parse", "--is-bare-repository"); out != "true" {
-		t.Fatalf("el clon no es bare: %q", out)
+		t.Fatalf("the clone is not bare: %q", out)
 	}
 }
 
@@ -278,14 +278,14 @@ func TestEnsureBareFailureLeavesNoGarbage(t *testing.T) {
 	}})
 
 	if _, err := r.EnsureBare(context.Background(), ghRef()); err == nil {
-		t.Fatal("esperaba error al clonar un remoto inexistente")
+		t.Fatal("expected an error cloning a nonexistent remote")
 	}
 	dest := filepath.Join(cloneDir, "github", "github.com", "acme", "widget")
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("no debería quedar clon bare: %v", err)
+		t.Fatalf("no bare clone should remain: %v", err)
 	}
 	if leftovers := glob(t, cloneDir, "*.tmp-*"); len(leftovers) != 0 {
-		t.Fatalf("quedaron temporales: %v", leftovers)
+		t.Fatalf("temps left: %v", leftovers)
 	}
 }
 
@@ -303,10 +303,10 @@ func TestFetchReviewRefGitHub(t *testing.T) {
 		t.Fatalf("branch = %q", branch)
 	}
 	if !testutil.RefExists(t, repo, "refs/heads/prdash/pr-7") {
-		t.Fatal("falta la rama local de review")
+		t.Fatal("the local review branch is missing")
 	}
 	if _, err := os.Stat(filepath.Join(repo, "pr.txt")); err == nil {
-		t.Fatal("el fetch no debe tocar el working tree")
+		t.Fatal("the fetch must not touch the working tree")
 	}
 }
 
@@ -322,7 +322,7 @@ func TestFetchReviewRefGitLab(t *testing.T) {
 		t.Fatalf("FetchReviewRef GL: %v", err)
 	}
 	if branch != "prdash/pr-3" || !testutil.RefExists(t, repo, "refs/heads/prdash/pr-3") {
-		t.Fatalf("rama GL = %q", branch)
+		t.Fatalf("GL branch = %q", branch)
 	}
 }
 
@@ -330,7 +330,7 @@ func TestFetchReviewRefMissingRefErrors(t *testing.T) {
 	_, repo := fixture(t)
 	r := New(Options{CloneDir: t.TempDir()})
 	if _, err := r.FetchReviewRef(context.Background(), repo, model.NewItem(ghRef(), 99)); err == nil {
-		t.Fatal("esperaba error con un ref de review inexistente")
+		t.Fatal("expected an error with a nonexistent review ref")
 	}
 }
 
@@ -338,7 +338,7 @@ func TestFetchReviewRefUnknownForgeErrors(t *testing.T) {
 	ref := model.RepoRef{Forge: "bitbucket", Host: "bitbucket.org", Project: "acme/widget"}
 	r := New(Options{CloneDir: t.TempDir()})
 	if _, err := r.FetchReviewRef(context.Background(), t.TempDir(), model.NewItem(ref, 1)); err == nil {
-		t.Fatal("esperaba error para un forge sin ref de review")
+		t.Fatal("expected an error for a forge with no review ref")
 	}
 }
 
@@ -347,7 +347,7 @@ func TestWorktreePathIsOwnedHere(t *testing.T) {
 	got := r.WorktreePath(ghRef(), 7)
 	want := filepath.Join("/data/worktrees", "github", "github.com", "acme", "widget", "prdash-pr-7")
 	if got != want {
-		t.Fatalf("WorktreePath = %q, quiero %q", got, want)
+		t.Fatalf("WorktreePath = %q, want %q", got, want)
 	}
 }
 
@@ -377,11 +377,11 @@ func TestForgetReviewRemovesRecord(t *testing.T) {
 		t.Fatalf("ForgetReview: %v", err)
 	}
 	if _, ok := r.ActiveReview(it.ID()); ok {
-		t.Fatal("ActiveReview no debería reportar un review olvidado")
+		t.Fatal("ActiveReview should not report a forgotten review")
 	}
 	r2 := New(Options{MemoPath: memoPath})
 	if _, ok := r2.ActiveReview(it.ID()); ok {
-		t.Fatal("el olvido debería persistir en la memoria")
+		t.Fatal("the forgetting should persist in the memo")
 	}
 }
 

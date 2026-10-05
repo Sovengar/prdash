@@ -17,83 +17,83 @@ import (
 
 // The ORDER of the timestamps is checked, not just how many files are left: a count alone would pass
 // with the newest pruned and the oldest kept.
-func TestLaPodaDejaLoRecienteYBorraLoViejo(t *testing.T) {
+func TestPruneKeepsTheRecentAndDeletesTheOld(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-time.Hour)
 
-	nombres := []string{"a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg"}
-	for i, n := range nombres {
-		ruta := filepath.Join(dir, n)
-		if err := os.WriteFile(ruta, []byte("x"), 0o644); err != nil {
+	names := []string{"a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg"}
+	for i, n := range names {
+		path := filepath.Join(dir, n)
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		mod := base.Add(time.Duration(i) * time.Minute)
-		if err := os.Chtimes(ruta, mod, mod); err != nil {
+		if err := os.Chtimes(path, mod, mod); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	prune(dir, 2)
 
-	for _, n := range nombres {
+	for _, n := range names {
 		_, err := os.Stat(filepath.Join(dir, n))
-		sobrevive := err == nil
-		queria := n == "d.jpg" || n == "e.jpg"
-		if sobrevive != queria {
-			if sobrevive {
-				t.Errorf("%s sobrevive, pero debía borrarse por ser más antigua", n)
+		survives := err == nil
+		wanted := n == "d.jpg" || n == "e.jpg"
+		if survives != wanted {
+			if survives {
+				t.Errorf("%s survives, but it had to be deleted for being older", n)
 			} else {
-				t.Errorf("%s se borró, pero debía sobrevivir por ser más reciente", n)
+				t.Errorf("%s was deleted, but it had to survive for being more recent", n)
 			}
 		}
 	}
-	vivos := 0
+	alive := 0
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".jpg") {
-			vivos++
+			alive++
 		}
 	}
-	if vivos != 2 {
-		t.Errorf("quedaron %d imágenes, want 2", vivos)
+	if alive != 2 {
+		t.Errorf("%d images are left, want 2", alive)
 	}
 }
 
 // The cache lives under the user's home and prune deletes by directory, not by list.
-func TestLaPodaIgnoraLoQueNoSonImagenesYLosDirectorios(t *testing.T) {
+func TestPruneIgnoresWhatAreNotImagesAndTheDirectories(t *testing.T) {
 	dir := t.TempDir()
 
 	for _, n := range []string{"vieja.jpg", "nueva.jpg"} {
-		ruta := filepath.Join(dir, n)
-		if err := os.WriteFile(ruta, []byte("x"), 0o644); err != nil {
+		path := filepath.Join(dir, n)
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	extras := map[string]string{
-		"a-medias.jpg.part": "temporal de copyFile",
-		"nota.txt":          "no es una imagen",
-		"sin-extension":     "no tiene extensión",
+		"a-medias.jpg.part": "copyFile's temp",
+		"nota.txt":          "not an image",
+		"sin-extension":     "has no extension",
 	}
 	for n := range extras {
 		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	sub := filepath.Join(dir, "sub.jpg") // directorio con nombre de imagen
+	sub := filepath.Join(dir, "sub.jpg") // directory with an image name
 	if err := os.Mkdir(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	viejo := time.Now().Add(-time.Hour)
+	old := time.Now().Add(-time.Hour)
 	mod := time.Now()
-	if err := os.Chtimes(filepath.Join(dir, "vieja.jpg"), viejo, viejo); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, "vieja.jpg"), old, old); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range append(keys(extras), "sub.jpg") {
 		p := filepath.Join(dir, n)
-		if err := os.Chtimes(p, viejo, viejo); err != nil {
+		if err := os.Chtimes(p, old, old); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -102,238 +102,238 @@ func TestLaPodaIgnoraLoQueNoSonImagenesYLosDirectorios(t *testing.T) {
 	prune(dir, 1)
 
 	if _, err := os.Stat(filepath.Join(dir, "nueva.jpg")); err != nil {
-		t.Error("la imagen más reciente no sobrevivió a la poda")
+		t.Error("the most recent image did not survive the prune")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "vieja.jpg")); err == nil {
-		t.Error("la imagen más antigua sobrevivió a la poda")
+		t.Error("the oldest image survived the prune")
 	}
 	for n := range extras {
 		if _, err := os.Stat(filepath.Join(dir, n)); err != nil {
-			t.Errorf("%s (%s) no sobrevivió a la poda", n, extras[n])
+			t.Errorf("%s (%s) did not survive the prune", n, extras[n])
 		}
 	}
 	if _, err := os.Stat(sub); err != nil {
-		t.Error("la poda se comió un directorio con nombre de imagen")
+		t.Error("the prune ate a directory with an image name")
 	}
 }
 
-func TestLaPodaConMenosQueElLimiteNoTocaNada(t *testing.T) {
-	vacio := t.TempDir()
-	prune(vacio, 5)
-	entries, err := os.ReadDir(vacio)
+func TestPruneWithLessThanTheLimitTouchesNothing(t *testing.T) {
+	empty := t.TempDir()
+	prune(empty, 5)
+	entries, err := os.ReadDir(empty)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 0 {
-		t.Errorf("podar un directorio vacío dio %d entradas", len(entries))
+		t.Errorf("pruning an empty directory gave %d entries", len(entries))
 	}
 
-	uno := t.TempDir()
-	ruta := filepath.Join(uno, "a.jpg")
-	if err := os.WriteFile(ruta, []byte("x"), 0o644); err != nil {
+	one := t.TempDir()
+	path := filepath.Join(one, "a.jpg")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	prune(uno, 5)
-	if _, err := os.Stat(ruta); err != nil {
-		t.Error("una imagen por debajo del límite se borró")
+	prune(one, 5)
+	if _, err := os.Stat(path); err != nil {
+		t.Error("an image below the limit was deleted")
 	}
 
 	prune(filepath.Join(t.TempDir(), "no-existe"), 5)
 }
 
 // The name is the deduplication key: forge, project, number, kind and a UnixNano.
-func TestKeepCopiaLaImagenYLaPodaDespues(t *testing.T) {
+func TestKeepCopiesTheImageAndPrunesAfterwards(t *testing.T) {
 	dir := t.TempDir()
-	origen := filepath.Join(dir, "render.jpg")
-	if err := os.WriteFile(origen, []byte("contenido"), 0o644); err != nil {
+	source := filepath.Join(dir, "render.jpg")
+	if err := os.WriteFile(source, []byte("content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	s := &Service{CacheDir: filepath.Join(dir, "cache")}
 	it := model.Item{Forge: "github", Number: 42, Ref: model.RepoRef{Project: "grupo/proyecto"}}
 
-	dst, err := s.keep(origen, it, KindMerge)
+	dst, err := s.keep(source, it, KindMerge)
 	if err != nil {
 		t.Fatalf("keep: %v", err)
 	}
 
-	contenido, err := os.ReadFile(dst)
+	content, err := os.ReadFile(dst)
 	if err != nil {
-		t.Fatalf("la imagen guardada no está: %v", err)
+		t.Fatalf("the saved image is not there: %v", err)
 	}
-	if string(contenido) != "contenido" {
-		t.Errorf("la copia tiene %q", contenido)
+	if string(content) != "content" {
+		t.Errorf("the copy has %q", content)
 	}
 	if _, err := os.Stat(dst + ".part"); err == nil {
-		t.Error("el temporal de la copia sigue en el caché")
+		t.Error("the copy's temp is still in the cache")
 	}
-	nombre := filepath.Base(dst)
-	if !strings.HasPrefix(nombre, "github-") || !strings.Contains(nombre, "proyecto") {
-		t.Errorf("el nombre %q no lleva forge ni proyecto", nombre)
+	name := filepath.Base(dst)
+	if !strings.HasPrefix(name, "github-") || !strings.Contains(name, "proyecto") {
+		t.Errorf("the name %q carries neither forge nor project", name)
 	}
-	if !strings.Contains(nombre, "-42-") {
-		t.Errorf("el nombre %q no lleva el número", nombre)
+	if !strings.Contains(name, "-42-") {
+		t.Errorf("the name %q does not carry the number", name)
 	}
-	if !strings.HasSuffix(nombre, ".jpg") {
-		t.Errorf("el nombre %q no acaba en .jpg", nombre)
+	if !strings.HasSuffix(name, ".jpg") {
+		t.Errorf("the name %q does not end in .jpg", name)
 	}
 	if _, err := os.Stat(s.CacheDir); err != nil {
-		t.Errorf("keep no creó el directorio del caché: %v", err)
+		t.Errorf("keep did not create the cache directory: %v", err)
 	}
 
-	if _, err := os.Stat(origen); err != nil {
-		t.Error("keep borró el original, que el visor necesita")
+	if _, err := os.Stat(source); err != nil {
+		t.Error("keep deleted the original, which the viewer needs")
 	}
 }
 
 // Both must surface as errors and not as an empty dst: an empty dst with the error ignored would
 // have the popup open nothing.
-func TestKeepFallaConOrigenQueNoExisteYConDestinoImposible(t *testing.T) {
+func TestKeepFailsWithMissingSourceAndImpossibleDestination(t *testing.T) {
 	dir := t.TempDir()
 	it := model.Item{Forge: "github", Number: 1, Ref: model.RepoRef{Project: "p"}}
 
 	s := &Service{CacheDir: filepath.Join(dir, "c1")}
 	dst, err := s.keep(filepath.Join(dir, "no-existe.jpg"), it, KindMerge)
 	if err == nil {
-		t.Fatal("keep con un origen inexistente dio nil")
+		t.Fatal("keep with a missing source gave nil")
 	}
 	if dst != "" {
-		t.Errorf("keep devolvió %q con error", dst)
+		t.Errorf("keep returned %q with an error", dst)
 	}
 
-	bloque := filepath.Join(dir, "bloque")
-	if err := os.WriteFile(bloque, nil, 0o644); err != nil {
+	block := filepath.Join(dir, "bloque")
+	if err := os.WriteFile(block, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s = &Service{CacheDir: bloque}
-	if _, err := s.keep(origenDePrueba(t), it, KindMerge); err == nil {
-		t.Error("keep con un CacheDir que es un fichero dio nil")
+	s = &Service{CacheDir: block}
+	if _, err := s.keep(testSource(t), it, KindMerge); err == nil {
+		t.Error("keep with a CacheDir that is a file gave nil")
 	}
 }
 
 // The memo matters: cacheDir stores the result so os.UserCacheDir is not asked on every image.
-func TestElDirectorioDelCacheCaeAlDefaultYSeMemoriza(t *testing.T) {
+func TestCacheDirFallsBackToDefaultAndIsMemoized(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", dir)
 
-	ruta, err := DefaultCacheDir()
+	path, err := DefaultCacheDir()
 	if err != nil {
 		t.Fatalf("DefaultCacheDir: %v", err)
 	}
-	if filepath.Dir(ruta) != filepath.Join(dir, "prdash") || filepath.Base(ruta) != "sim" {
-		t.Errorf("DefaultCacheDir dio %q", ruta)
+	if filepath.Dir(path) != filepath.Join(dir, "prdash") || filepath.Base(path) != "sim" {
+		t.Errorf("DefaultCacheDir gave %q", path)
 	}
 
 	s := &Service{}
-	obtenido, err := s.cacheDir()
+	obtained, err := s.cacheDir()
 	if err != nil {
 		t.Fatalf("cacheDir: %v", err)
 	}
-	if obtenido != ruta {
-		t.Errorf("cacheDir dio %q, want el default %q", obtenido, ruta)
+	if obtained != path {
+		t.Errorf("cacheDir gave %q, want the default %q", obtained, path)
 	}
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	if otra, _ := s.cacheDir(); otra != ruta {
-		t.Errorf("la segunda llamada dio %q, want el memoizado %q", otra, ruta)
+	if other, _ := s.cacheDir(); other != path {
+		t.Errorf("the second call gave %q, want the memoized %q", other, path)
 	}
 
-	explicito := filepath.Join(dir, "otro")
-	puesto := &Service{CacheDir: explicito}
-	if g, _ := puesto.cacheDir(); g != explicito {
-		t.Errorf("con CacheDir puesto dio %q, want %q", g, explicito)
+	explicit := filepath.Join(dir, "otro")
+	withField := &Service{CacheDir: explicit}
+	if g, _ := withField.cacheDir(); g != explicit {
+		t.Errorf("with CacheDir set it gave %q, want %q", g, explicit)
 	}
-	if puesto.CacheDir != explicito {
-		t.Errorf("cacheDir alteró el CacheDir: %q", puesto.CacheDir)
+	if withField.CacheDir != explicit {
+		t.Errorf("cacheDir altered the CacheDir: %q", withField.CacheDir)
 	}
 }
 
 // The order matters: without a Locator there is nowhere to look, and with a Locator but no clone
 // there is nothing to take refs from.
-func TestSimulateNiegaSinLocatorYSinClon(t *testing.T) {
+func TestSimulateRefusesWithoutLocatorAndWithoutClone(t *testing.T) {
 	it := model.Item{Forge: "github", Number: 1, Ref: model.RepoRef{Project: "p"}}
 
 	s := &Service{}
 	if _, err := s.Simulate(context.Background(), it, KindMerge); err == nil {
-		t.Error("sin Locator dio nil")
+		t.Error("without a Locator it gave nil")
 	} else if !strings.Contains(err.Error(), "local repository") {
-		t.Errorf("el error %q no dice que falta el repo local", err)
+		t.Errorf("the error %q does not say the local repo is missing", err)
 	}
 
-	s = &Service{Locator: locatorFalso{ok: false}}
+	s = &Service{Locator: fakeLocator{ok: false}}
 	if _, err := s.Simulate(context.Background(), it, KindMerge); err == nil {
-		t.Error("con un locator que no encuentra dio nil")
+		t.Error("with a locator that finds nothing it gave nil")
 	} else if !strings.Contains(err.Error(), "mounted") {
-		t.Errorf("el error %q no dice que falta montar el review", err)
+		t.Errorf("the error %q does not say the review is not mounted", err)
 	}
 
-	s = &Service{Locator: locatorFalso{ok: true, place: Place{}}}
+	s = &Service{Locator: fakeLocator{ok: true, place: Place{}}}
 	if _, err := s.Simulate(context.Background(), it, KindMerge); err == nil {
-		t.Error("con un Place sin Repo dio nil")
+		t.Error("with a Place without Repo it gave nil")
 	}
 
-	s = &Service{Locator: locatorFalso{ok: true, place: Place{Repo: dirDePrueba(t), Branch: "b"}}}
+	s = &Service{Locator: fakeLocator{ok: true, place: Place{Repo: testDir(t), Branch: "b"}}}
 	_, err := s.Simulate(context.Background(), it, KindMerge)
 	if err == nil {
-		t.Error("con un repo presente dio nil sin llegar a renderizar")
+		t.Error("with a repo present it gave nil without getting to render")
 	}
 }
 
 // A Service with Runner nil recovers by itself, which happens when someone composes one by hand.
-func TestAvailableYRunnerNoRevientanConElServicioVacio(t *testing.T) {
+func TestAvailableAndRunnerDoNotBreakWithAnEmptyService(t *testing.T) {
 	s := &Service{}
 	_ = s.Available()
 	if s.Runner == nil {
-		t.Error("runner() no rellenó el Runner de un servicio construido a mano")
+		t.Error("runner() did not fill in the Runner of a hand-built service")
 	}
-	nuevo := New(locatorFalso{})
-	if nuevo == nil || nuevo.Runner == nil || nuevo.Git == nil {
-		t.Errorf("New devolvió %+v con piezas a nil", nuevo)
+	fresh := New(fakeLocator{})
+	if fresh == nil || fresh.Runner == nil || fresh.Git == nil {
+		t.Errorf("New returned %+v with nil parts", fresh)
 	}
-	manuales := &Service{Locator: locatorFalso{}}
-	if manuales.gitRunner() == nil || manuales.Git == nil {
-		t.Error("gitRunner() no rellenó el Git de un servicio construido a mano")
+	manual := &Service{Locator: fakeLocator{}}
+	if manual.gitRunner() == nil || manual.Git == nil {
+		t.Error("gitRunner() did not fill in the Git of a hand-built service")
 	}
 }
 
 // The decision is whether the process complained or hung, which is what separates two completely
 // different diagnoses.
-func TestElMensajeDeUnErrorDeSimSeparaQuejarseDeColgarse(t *testing.T) {
-	got := message("primera\nsegunda\ntercera", errors.New("exit status 1"))
-	if !strings.Contains(got, "primera") {
-		t.Errorf("el mensaje %q no trae la primera línea de stderr", got)
+func TestSimErrorMessageTellsComplainingFromHanging(t *testing.T) {
+	got := message("first\nsecond\nthird", errors.New("exit status 1"))
+	if !strings.Contains(got, "first") {
+		t.Errorf("the message %q does not bring stderr's first line", got)
 	}
-	if strings.Contains(got, "segunda") {
-		t.Errorf("el mensaje %q trae más de una línea", got)
+	if strings.Contains(got, "second") {
+		t.Errorf("the message %q brings more than one line", got)
 	}
 
 	got = message("   \n  ", errors.New("exit status 137"))
 	if strings.TrimSpace(got) == "" {
-		t.Error("sin stderr el mensaje quedó vacío")
+		t.Error("without stderr the message ended up empty")
 	}
 	if !strings.Contains(got, "137") {
-		t.Errorf("el mensaje %q perdió el código de salida", got)
+		t.Errorf("the message %q lost the exit code", got)
 	}
 
 	if got := message("", nil); strings.TrimSpace(got) == "" {
-		t.Error("sin stderr ni error el mensaje quedó vacío")
+		t.Error("without stderr nor error the message ended up empty")
 	}
 }
 
 // My first version assumed bin read an environment variable so a test could point it elsewhere:
 // it does not, and the test now checks the field.
-func TestElBinarioDeSimEsElCampoOElCanónicoYNadaMás(t *testing.T) {
+func TestSimBinaryIsTheFieldOrTheCanonicalOneAndNothingElse(t *testing.T) {
 	if got := (&Runner{}).bin(); got != DefaultBin {
-		t.Errorf("con Bin vacío dio %q, want %q", got, DefaultBin)
+		t.Errorf("with Bin empty it gave %q, want %q", got, DefaultBin)
 	}
 	if DefaultBin != "git-sim" {
-		t.Errorf("DefaultBin es %q, want git-sim", DefaultBin)
+		t.Errorf("DefaultBin is %q, want git-sim", DefaultBin)
 	}
 	if got := (&Runner{Bin: "/opt/git-sim-mio"}).bin(); got != "/opt/git-sim-mio" {
-		t.Errorf("con Bin puesto dio %q", got)
+		t.Errorf("with Bin set it gave %q", got)
 	}
 	t.Setenv("GIT_SIM_BIN", "/opt/otro")
 	if got := (&Runner{}).bin(); got != DefaultBin {
-		t.Errorf("con GIT_SIM_BIN en el entorno dio %q, want el canónico", got)
+		t.Errorf("with GIT_SIM_BIN in the environment it gave %q, want the canonical one", got)
 	}
 	if got := NewRunner().Bin; got != DefaultBin {
 		t.Errorf("NewRunner().Bin = %q", got)
@@ -343,39 +343,39 @@ func TestElBinarioDeSimEsElCampoOElCanónicoYNadaMás(t *testing.T) {
 
 // The path and arguments are what make the failure reproducible without guessing which invocation
 // hit it.
-func TestElErrorDeSimTraeLoQueSeEjecuto(t *testing.T) {
+func TestSimErrorBringsWhatWasExecuted(t *testing.T) {
 	e := &Error{Args: []string{"config", "user.email"}, Dir: "/repos/proy", Msg: "no such repository", ExitCode: 128}
 	msg := e.Error()
-	for _, quiere := range []string{"config", "user.email", "/repos/proy", "no such repository", "128"} {
-		if !strings.Contains(msg, quiere) {
-			t.Errorf("el mensaje %q no trae %q", msg, quiere)
+	for _, want := range []string{"config", "user.email", "/repos/proy", "no such repository", "128"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the message %q does not bring %q", msg, want)
 		}
 	}
 	if strings.Contains((&Error{Args: []string{"a"}, Msg: "m"}).Error(), "exit") {
-		t.Error("un error sin código de salida lo pone entre paréntesis")
+		t.Error("an error without an exit code puts it in parentheses")
 	}
 	if e.Unwrap() != nil {
-		_ = e // Unwrap sin causa devuelve nil; aquí solo se comprueba que no revienta
+		_ = e // Unwrap without a cause returns nil; here it only checks it does not blow up
 	}
 }
 
-type locatorFalso struct {
+type fakeLocator struct {
 	ok    bool
 	place Place
 }
 
-func (l locatorFalso) Locate(model.Item) (Place, bool) { return l.place, l.ok }
+func (l fakeLocator) Locate(model.Item) (Place, bool) { return l.place, l.ok }
 
-func origenDePrueba(t *testing.T) string {
+func testSource(t *testing.T) string {
 	t.Helper()
-	ruta := filepath.Join(t.TempDir(), "render.jpg")
-	if err := os.WriteFile(ruta, []byte("x"), 0o644); err != nil {
+	path := filepath.Join(t.TempDir(), "render.jpg")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return ruta
+	return path
 }
 
-func dirDePrueba(t *testing.T) string {
+func testDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	testutil.InitRepo(t, dir)

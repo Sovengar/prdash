@@ -34,7 +34,7 @@ const headSHA = "9f1c0de"
 func TestMergePassesTheStrategyFlag(t *testing.T) {
 	for _, tc := range []struct {
 		mode forge.MergeMode
-		want string // "" = no debe aparecer flag de estrategia
+		want string // "" = no strategy flag must appear
 	}{
 		{forge.MergeCommit, ""},
 		{forge.Rebase, "--rebase"},
@@ -46,21 +46,21 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 
 			warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: tc.mode, HeadSHA: headSHA})
 			if len(warns) != 0 {
-				t.Fatalf("Merge = %+v, want sin warnings", warns)
+				t.Fatalf("Merge = %+v, want no warnings", warns)
 			}
 			args := readArgs(t, argsFile)
 			joined := strings.Join(args, " ")
 			if !strings.Contains(joined, "mr merge 7") {
-				t.Errorf("argv = %q, want la forma de mr merge", joined)
+				t.Errorf("argv = %q, want the mr merge shape", joined)
 			}
 			if tc.want == "" {
 				for _, forbidden := range []string{"--squash", "--rebase"} {
 					if strings.Contains(joined, forbidden) {
-						t.Errorf("argv = %q; merge commit no debe llevar %q", joined, forbidden)
+						t.Errorf("argv = %q; merge commit must not carry %q", joined, forbidden)
 					}
 				}
 			} else if !strings.Contains(joined, tc.want) {
-				t.Errorf("argv = %q, want el flag %q", joined, tc.want)
+				t.Errorf("argv = %q, want the flag %q", joined, tc.want)
 			}
 		})
 	}
@@ -77,10 +77,10 @@ func TestMergeDisablesAutoMerge(t *testing.T) {
 
 		joined := strings.Join(readArgs(t, argsFile), " ")
 		if !strings.Contains(joined, "--auto-merge=false") {
-			t.Errorf("modo %q: argv = %q, want --auto-merge=false", mode, joined)
+			t.Errorf("mode %q: argv = %q, want --auto-merge=false", mode, joined)
 		}
 		if !strings.Contains(joined, "--yes") {
-			t.Errorf("modo %q: argv = %q, want --yes", mode, joined)
+			t.Errorf("mode %q: argv = %q, want --yes", mode, joined)
 		}
 	}
 }
@@ -91,12 +91,12 @@ func TestMergeRefusesUnknownMode(t *testing.T) {
 
 	warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.MergeMode("cherry-pick"), HeadSHA: headSHA})
 	if len(warns) == 0 {
-		t.Fatal("un modo desconocido debería reportar warning")
+		t.Fatal("an unknown mode should report a warning")
 	}
 	if warns[0].Kind != "unsupported" {
 		t.Errorf("Kind = %q, want unsupported", warns[0].Kind)
 	}
 	if _, err := os.Stat(argsFile); err == nil {
-		t.Error("no debería haber lanzado la CLI con un modo desconocido")
+		t.Error("it should not have launched the CLI with an unknown mode")
 	}
 }

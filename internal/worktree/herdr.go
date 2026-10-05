@@ -8,7 +8,6 @@ import (
 	"prdash/internal/herdr"
 )
 
-// nativa. *herdr.Client lo implementa.
 type HerdrRunner interface {
 	Available() bool
 	WorktreeCreate(ctx context.Context, spec herdr.WorktreeSpec) (herdr.WorktreeInfo, error)
@@ -125,7 +124,7 @@ func (h *HerdrNative) attach(ctx context.Context, wt *Worktree, spec Spec) error
 				wt.RootPaneID = panes[0].PaneID
 				return nil
 			}
-			break // el id no es fiable: se cae a la adopción
+			break // the id is not reliable: fall back to adoption
 		}
 	}
 	info, err := h.client.WorkspaceCreate(ctx, herdr.WorkspaceSpec{

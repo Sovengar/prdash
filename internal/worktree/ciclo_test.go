@@ -10,7 +10,7 @@ import (
 	"prdash/internal/testutil"
 )
 
-func wtConRamaMonta(t *testing.T, raiz, etiqueta, rama string) Worktree {
+func mountWorktreeWithBranch(t *testing.T, root, label, branch string) Worktree {
 	t.Helper()
 	repo := filepath.Join(t.TempDir(), "repo")
 	testutil.InitRepo(t, repo)
@@ -18,280 +18,280 @@ func wtConRamaMonta(t *testing.T, raiz, etiqueta, rama string) Worktree {
 
 	// The branch has to exist and must NOT be main: git does not allow two worktrees on the same
 	//branch and the main repo already has it.
-	if rama == "main" {
-		rama = "pr-" + etiqueta
+	if branch == "main" {
+		branch = "pr-" + label
 	}
-	testutil.RunGit(t, repo, "branch", rama)
+	testutil.RunGit(t, repo, "branch", branch)
 	spec := Spec{
 		Repo:   repo,
-		Branch: rama,
-		Path:   filepath.Join(raiz, etiqueta),
-		Label:  etiqueta,
+		Branch: branch,
+		Path:   filepath.Join(root, label),
+		Label:  label,
 	}
-	wt, err := NewGitDirect(raiz).Create(context.Background(), spec)
+	wt, err := NewGitDirect(root).Create(context.Background(), spec)
 	if err != nil {
-		t.Fatalf("crear el worktree %s: %v", etiqueta, err)
+		t.Fatalf("creating the worktree %s: %v", label, err)
 	}
 	return wt
 }
 
 // The asymmetry is the point: the SAME branch reuses, a DIFFERENT one does not.
-func TestCrearSobreUnWorktreeQueYaEstaEnLaMismaRamaLoReutiliza(t *testing.T) {
-	raiz := t.TempDir()
-	primero := wtConRamaMonta(t, raiz, "prdash-pr-1", "feat/x")
+func TestCreatingOverAWorktreeAlreadyOnTheSameBranchReusesIt(t *testing.T) {
+	root := t.TempDir()
+	first := mountWorktreeWithBranch(t, root, "prdash-pr-1", "feat/x")
 
-	g := NewGitDirect(raiz)
-	segundo, err := g.Create(context.Background(), Spec{
-		Repo: primero.Repo, Branch: "feat/x",
-		Path: primero.Path, Label: "prdash-pr-1",
+	g := NewGitDirect(root)
+	second, err := g.Create(context.Background(), Spec{
+		Repo: first.Repo, Branch: "feat/x",
+		Path: first.Path, Label: "prdash-pr-1",
 	})
 	if err != nil {
-		t.Fatalf("volver a crear sobre la misma rama dio error: %v", err)
+		t.Fatalf("creating again over the same branch gave an error: %v", err)
 	}
-	if segundo.Path != primero.Path || segundo.Branch != "feat/x" {
-		t.Errorf("el worktree reutilizado no es el mismo: %+v", segundo)
+	if second.Path != first.Path || second.Branch != "feat/x" {
+		t.Errorf("the reused worktree is not the same one: %+v", second)
 	}
 	if n := len(strings.Split(strings.TrimSpace(
-		testutil.RunGit(t, primero.Repo, "worktree", "list")), "\n")); n != 2 {
-		t.Errorf("hay %d líneas en worktree list, want 2", n)
+		testutil.RunGit(t, first.Repo, "worktree", "list")), "\n")); n != 2 {
+		t.Errorf("there are %d lines in worktree list, want 2", n)
 	}
 
-	testutil.RunGit(t, primero.Repo, "branch", "otra")
+	testutil.RunGit(t, first.Repo, "branch", "otra")
 	_, err = g.Create(context.Background(), Spec{
-		Repo: primero.Repo, Branch: "otra",
-		Path: primero.Path, Label: "prdash-pr-1",
+		Repo: first.Repo, Branch: "otra",
+		Path: first.Path, Label: "prdash-pr-1",
 	})
 	if err == nil {
-		t.Fatal("crear con otra rama sobre el mismo worktree dio nil")
+		t.Fatal("creating with another branch over the same worktree gave nil")
 	}
-	for _, quiere := range []string{"feat/x", "otra"} {
-		if !strings.Contains(err.Error(), quiere) {
-			t.Errorf("el error %q no menciona %q", err, quiere)
+	for _, want := range []string{"feat/x", "otra"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error %q does not mention %q", err, want)
 		}
 	}
-	if got := testutil.RunGit(t, primero.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != "feat/x" {
-		t.Errorf("tras el rechazo la rama quedó en %q, want feat/x", got)
+	if got := testutil.RunGit(t, first.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != "feat/x" {
+		t.Errorf("after the rejection the branch ended up at %q, want feat/x", got)
 	}
 }
 
-func TestLaEtiquetaDelWorktreeLaPoneElNombreDelDirectorioSiNoViene(t *testing.T) {
-	raiz := t.TempDir()
+func TestTheWorktreeLabelComesFromTheDirectoryNameWhenNotGiven(t *testing.T) {
+	root := t.TempDir()
 	repo := filepath.Join(t.TempDir(), "repo")
 	testutil.InitRepo(t, repo)
 	testutil.CommitFile(t, repo, "a.txt", "a", "a")
 
-	g := NewGitDirect(raiz)
+	g := NewGitDirect(root)
 
 	testutil.RunGit(t, repo, "branch", "pr-7")
 	wt, err := g.Create(context.Background(), Spec{
-		Repo: repo, Branch: "pr-7", Path: filepath.Join(raiz, "prdash-pr-7"),
+		Repo: repo, Branch: "pr-7", Path: filepath.Join(root, "prdash-pr-7"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if wt.Label != "prdash-pr-7" {
-		t.Errorf("sin etiqueta salió %q, want el nombre del directorio", wt.Label)
+		t.Errorf("with no label it gave %q, want the directory name", wt.Label)
 	}
 	if !Owned(wt.Label, wt.Path) {
-		t.Errorf("la etiqueta por defecto %q no la reconoce Owned", wt.Label)
+		t.Errorf("the default label %q is not recognised by Owned", wt.Label)
 	}
 
 	testutil.RunGit(t, repo, "branch", "pr-9")
-	conEtiqueta, err := g.Create(context.Background(), Spec{
+	withLabel, err := g.Create(context.Background(), Spec{
 		Repo: repo, Branch: "pr-9",
-		Path: filepath.Join(raiz, "sin-prefijo"), Label: "prdash-pr-9",
+		Path: filepath.Join(root, "sin-prefijo"), Label: "prdash-pr-9",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if conEtiqueta.Label != "prdash-pr-9" {
-		t.Errorf("con etiqueta salió %q", conEtiqueta.Label)
+	if withLabel.Label != "prdash-pr-9" {
+		t.Errorf("with a label it gave %q", withLabel.Label)
 	}
-	if !Owned(conEtiqueta.Label, conEtiqueta.Path) {
-		t.Errorf("con etiqueta %q en un directorio sin prefijo, Owned no lo reconoce",
-			conEtiqueta.Label)
+	if !Owned(withLabel.Label, withLabel.Path) {
+		t.Errorf("with label %q in a directory without the prefix, Owned does not recognise it",
+			withLabel.Label)
 	}
-	if conEtiqueta.ID != conEtiqueta.Path || conEtiqueta.Path == "" {
-		t.Errorf("ID/Path no son la ruta: %+v", conEtiqueta)
+	if withLabel.ID != withLabel.Path || withLabel.Path == "" {
+		t.Errorf("ID/Path are not the path: %+v", withLabel)
 	}
-	if conEtiqueta.Repo != repo {
-		t.Errorf("Repo = %q, want %q", conEtiqueta.Repo, repo)
+	if withLabel.Repo != repo {
+		t.Errorf("Repo = %q, want %q", withLabel.Repo, repo)
 	}
 }
 
-func TestRemoveIfCleanNoBorraUnWorktreeSucioYExplicaPorQue(t *testing.T) {
-	raiz := t.TempDir()
-	wt := wtConRamaMonta(t, raiz, "prdash-pr-1", "main")
-	g := NewGitDirect(raiz)
+func TestRemoveIfCleanDoesNotDeleteADirtyWorktreeAndExplainsWhy(t *testing.T) {
+	root := t.TempDir()
+	wt := mountWorktreeWithBranch(t, root, "prdash-pr-1", "main")
+	g := NewGitDirect(root)
 	ctx := context.Background()
 
-	borrado, motivo, err := g.RemoveIfClean(ctx, wt.Path)
+	removed, reason, err := g.RemoveIfClean(ctx, wt.Path)
 	if err != nil {
-		t.Fatalf("RemoveIfClean de un worktree limpio: %v", err)
+		t.Fatalf("RemoveIfClean of a clean worktree: %v", err)
 	}
-	if !borrado {
-		t.Errorf("un worktree limpio no se borró: %q", motivo)
+	if !removed {
+		t.Errorf("a clean worktree was not deleted: %q", reason)
 	}
-	if motivo != "" {
-		t.Errorf("tras borrar quedó el motivo %q, y no hay motivo de nada", motivo)
+	if reason != "" {
+		t.Errorf("after deleting, reason %q was left, and there is no reason for anything", reason)
 	}
-	registro := testutil.RunGit(t, wt.Repo, "worktree", "list")
-	if strings.Contains(registro, "prdash-pr-1") {
-		t.Errorf("tras Remove el worktree sigue en el registro de git: %q", registro)
+	record := testutil.RunGit(t, wt.Repo, "worktree", "list")
+	if strings.Contains(record, "prdash-pr-1") {
+		t.Errorf("after Remove the worktree is still in git's record: %q", record)
 	}
 
-	sucio := wtConRamaMonta(t, raiz, "prdash-pr-2", "main")
-	if err := os.WriteFile(filepath.Join(sucio.Path, "cambiado.txt"), []byte("x"), 0o644); err != nil {
+	dirty := mountWorktreeWithBranch(t, root, "prdash-pr-2", "main")
+	if err := os.WriteFile(filepath.Join(dirty.Path, "cambiado.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	borrado, motivo, err = g.RemoveIfClean(ctx, sucio.Path)
+	removed, reason, err = g.RemoveIfClean(ctx, dirty.Path)
 	if err != nil {
-		t.Fatalf("RemoveIfClean de un worktree sucio: %v", err)
+		t.Fatalf("RemoveIfClean of a dirty worktree: %v", err)
 	}
-	if borrado {
-		t.Error("un worktree con cambios sin commitear se borró: se perdieron las ediciones")
+	if removed {
+		t.Error("a worktree with uncommitted changes was deleted: the edits were lost")
 	}
-	if !exists(t, sucio.Path) {
-		t.Error("el worktree sucio desapareció igualmente")
+	if !exists(t, dirty.Path) {
+		t.Error("the dirty worktree disappeared anyway")
 	}
-	if strings.TrimSpace(motivo) == "" {
-		t.Fatal("no se borró y no hay motivo: el usuario no tiene forma de saber por qué")
+	if strings.TrimSpace(reason) == "" {
+		t.Fatal("it was not deleted and there is no reason: the user has no way to know why")
 	}
-	if !strings.Contains(strings.ToLower(motivo), "uncommitted") &&
-		!strings.Contains(strings.ToLower(motivo), "changes") {
-		t.Logf("el motivo no menciona los cambios: %q", motivo)
+	if !strings.Contains(strings.ToLower(reason), "uncommitted") &&
+		!strings.Contains(strings.ToLower(reason), "changes") {
+		t.Logf("the reason does not mention the changes: %q", reason)
 	}
 }
 
 // Why `diff` is not enough: an untracked file is uncommitted work and diff ignores it.
-func TestDirtyCuentaLosFicherosSinTrackear(t *testing.T) {
-	raiz := t.TempDir()
-	wt := wtConRamaMonta(t, raiz, "prdash-pr-1", "main")
-	g := NewGitDirect(raiz)
+func TestDirtyCountsUntrackedFiles(t *testing.T) {
+	root := t.TempDir()
+	wt := mountWorktreeWithBranch(t, root, "prdash-pr-1", "main")
+	g := NewGitDirect(root)
 	ctx := context.Background()
 
-	sucio, err := g.dirty(ctx, wt.Path)
+	dirty, err := g.dirty(ctx, wt.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sucio {
-		t.Error("un worktree recién creado salió sucio")
+	if dirty {
+		t.Error("a freshly created worktree came back dirty")
 	}
 
-	nuevo := filepath.Join(wt.Path, "nuevo.txt")
-	if err := os.WriteFile(nuevo, []byte("trabajo sin commitear"), 0o644); err != nil {
+	fresh := filepath.Join(wt.Path, "nuevo.txt")
+	if err := os.WriteFile(fresh, []byte("uncommitted work"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	sucio, err = g.dirty(ctx, wt.Path)
+	dirty, err = g.dirty(ctx, wt.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sucio {
-		t.Error("un fichero sin trackear no cuenta como trabajo: diff lo ignora y el " +
-			"borrado lo tiraría")
+	if !dirty {
+		t.Error("an untracked file does not count as work: diff ignores it and the " +
+			"deletion would throw it away")
 	}
 
-	if err := os.WriteFile(nuevo, []byte("cambiado otra vez"), 0o644); err != nil {
+	if err := os.WriteFile(fresh, []byte("changed again"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	testutil.RunGit(t, wt.Path, "add", "nuevo.txt")
-	sucio, err = g.dirty(ctx, wt.Path)
+	dirty, err = g.dirty(ctx, wt.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sucio {
-		t.Error("cambios en el índice sin commitear no cuentan como trabajo")
+	if !dirty {
+		t.Error("uncommitted changes in the index do not count as work")
 	}
 
-	testutil.RunGit(t, wt.Path, "commit", "-m", "lo que sea")
-	sucio, err = g.dirty(ctx, wt.Path)
+	testutil.RunGit(t, wt.Path, "commit", "-m", "whatever")
+	dirty, err = g.dirty(ctx, wt.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sucio {
-		t.Error("tras commitear sigue salido sucio")
+	if dirty {
+		t.Error("after committing it still comes back dirty")
 	}
 }
 
 // Three refusals, each preventing a different damage.
-func TestRemoveSeNiegaATocarLoQueNoEsPropio(t *testing.T) {
-	raiz := t.TempDir()
-	wt := wtConRamaMonta(t, raiz, "prdash-pr-1", "main")
-	g := NewGitDirect(raiz)
+func TestRemoveRefusesToTouchWhatItDoesNotOwn(t *testing.T) {
+	root := t.TempDir()
+	wt := mountWorktreeWithBranch(t, root, "prdash-pr-1", "main")
+	g := NewGitDirect(root)
 	ctx := context.Background()
 
-	ajeno := filepath.Join(t.TempDir(), "prdash-mio")
-	testutil.InitRepo(t, ajeno)
-	testutil.CommitFile(t, ajeno, "importante.txt", "no me borres", "importante")
+	foreign := filepath.Join(t.TempDir(), "prdash-mio")
+	testutil.InitRepo(t, foreign)
+	testutil.CommitFile(t, foreign, "importante.txt", "do not delete me", "important")
 
-	// debeSeguir says what has to happen to the path afterwards, because it is not the same in the three
+	// shouldRemain says what has to happen to the path afterwards, because it is not the same in the three
 	//cases: a path that does not exist cannot "stay there".
-	carpeta := filepath.Join(raiz, "prdash-carpeta-vacia")
-	if err := os.MkdirAll(carpeta, 0o755); err != nil {
+	dir := filepath.Join(root, "prdash-carpeta-vacia")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []struct {
-		nombre     string
-		ruta       string
-		debeSeguir bool
+		name         string
+		path         string
+		shouldRemain bool
 	}{
-		{"fuera de la raiz", ajeno, true},
-		{"inexistente", filepath.Join(raiz, "prdash-no-existe"), false},
-		{"no es worktree", carpeta, true},
+		{"outside the root", foreign, true},
+		{"nonexistent", filepath.Join(root, "prdash-no-existe"), false},
+		{"not a worktree", dir, true},
 	} {
-		err := g.Remove(ctx, c.ruta)
+		err := g.Remove(ctx, c.path)
 		if err == nil {
-			t.Errorf("%s: Remove dio nil, y tiene que negar", c.nombre)
+			t.Errorf("%s: Remove gave nil, and it has to refuse", c.name)
 			continue
 		}
-		if c.debeSeguir && !exists(t, c.ruta) {
-			t.Errorf("%s: Remove borró %s, que no es suyo", c.nombre, c.ruta)
+		if c.shouldRemain && !exists(t, c.path) {
+			t.Errorf("%s: Remove deleted %s, which is not its own", c.name, c.path)
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(ajeno, "importante.txt")); err != nil {
-		t.Errorf("el repo ajeno perdió su contenido: %v", err)
+	if _, err := os.Stat(filepath.Join(foreign, "importante.txt")); err != nil {
+		t.Errorf("the foreign repo lost its content: %v", err)
 	}
 
 	if err := g.Remove(ctx, wt.Path); err != nil {
-		t.Fatalf("Remove del worktree propio: %v", err)
+		t.Fatalf("Remove of our own worktree: %v", err)
 	}
 	if strings.Contains(testutil.RunGit(t, wt.Repo, "worktree", "list"), "prdash-pr-1") {
-		t.Error("el worktree propio sigue en el registro tras Remove")
+		t.Error("our own worktree is still in the record after Remove")
 	}
 }
 
 // inspect exists to avoid creating the worktree just to read it.
-func TestInspeccionarTraeElEstadoDelWorktreeSinMontarNada(t *testing.T) {
-	raiz := t.TempDir()
-	wt := wtConRamaMonta(t, raiz, "prdash-pr-1", "main")
-	g := NewGitDirect(raiz)
+func TestInspectBringsTheWorktreeStateWithoutMountingAnything(t *testing.T) {
+	root := t.TempDir()
+	wt := mountWorktreeWithBranch(t, root, "prdash-pr-1", "main")
+	g := NewGitDirect(root)
 
-	visto, ok, err := g.inspect(context.Background(), wt.Path)
+	seen, ok, err := g.inspect(context.Background(), wt.Path)
 	if err != nil {
 		t.Fatalf("inspect: %v", err)
 	}
 	if !ok {
-		t.Fatal("inspect no vio un worktree que existe")
+		t.Fatal("inspect did not see a worktree that exists")
 	}
-	if visto.Branch == "" {
-		t.Error("inspect no leyó la rama del worktree")
+	if seen.Branch == "" {
+		t.Error("inspect did not read the worktree's branch")
 	}
-	if visto.Path != wt.Path {
-		t.Errorf("Path = %q, want %q", visto.Path, wt.Path)
+	if seen.Path != wt.Path {
+		t.Errorf("Path = %q, want %q", seen.Path, wt.Path)
 	}
 
-	carpeta := filepath.Join(raiz, "prdash-carpeta")
-	if err := os.MkdirAll(carpeta, 0o755); err != nil {
+	dir := filepath.Join(root, "prdash-carpeta")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := g.inspect(context.Background(), carpeta); ok || err != nil {
-		t.Errorf("una carpeta suelta dio (ok=%v, err=%v), want (false, nil)", ok, err)
+	if _, ok, err := g.inspect(context.Background(), dir); ok || err != nil {
+		t.Errorf("a loose directory gave (ok=%v, err=%v), want (false, nil)", ok, err)
 	}
-	lineas := strings.Split(strings.TrimSpace(
+	lines := strings.Split(strings.TrimSpace(
 		testutil.RunGit(t, wt.Repo, "worktree", "list")), "\n")
-	if len(lineas) != 2 {
-		t.Errorf("inspect dejó %d líneas en worktree list, want 2", len(lineas))
+	if len(lines) != 2 {
+		t.Errorf("inspect left %d lines in worktree list, want 2", len(lines))
 	}
 }
 

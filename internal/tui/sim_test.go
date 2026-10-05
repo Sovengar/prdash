@@ -82,7 +82,7 @@ func TestSimulateWithoutGitSimInforms(t *testing.T) {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
 	}
 	if !strings.Contains(lastToast(m), "git-sim") {
-		t.Errorf("notice = %q, want un aviso sobre git-sim", lastToast(m))
+		t.Errorf("notice = %q, want a notice about git-sim", lastToast(m))
 	}
 }
 
@@ -94,12 +94,12 @@ func TestSimulateOpensTheChooser(t *testing.T) {
 		t.Fatalf("state = %v, want simChoosing", m.sim.state)
 	}
 	if m.sim.item.Number != 7 {
-		t.Errorf("ítem = %d, want 7", m.sim.item.Number)
+		t.Errorf("item = %d, want 7", m.sim.item.Number)
 	}
 	text := viewText(m)
 	for _, want := range []string{"simulate", "merge", "main ← feat/x", "enter render"} {
 		if !strings.Contains(text, want) {
-			t.Errorf("la vista no menciona %q:\n%s", want, text)
+			t.Errorf("the view does not mention %q:\n%s", want, text)
 		}
 	}
 }
@@ -110,10 +110,10 @@ func TestChooserOnlyOffersWhatGitSimCanRender(t *testing.T) {
 	m = press(t, m, "v")
 
 	if len(simKinds) != 1 || simKinds[0] != sim.KindMerge {
-		t.Fatalf("simKinds = %v, want solo merge", simKinds)
+		t.Fatalf("simKinds = %v, want only merge", simKinds)
 	}
 	if text := viewText(m); strings.Contains(text, "rebase") {
-		t.Errorf("el selector ofrece rebase, que git-sim no sabe dibujar:\n%s", text)
+		t.Errorf("the selector offers rebase, which git-sim cannot draw:\n%s", text)
 	}
 }
 
@@ -123,13 +123,13 @@ func TestChooserLeavesNothingToAccidentallyConfirm(t *testing.T) {
 	m = press(t, m, "v")
 
 	if m.sim.cursor != 0 {
-		t.Errorf("cursor = %d, want el primero", m.sim.cursor)
+		t.Errorf("cursor = %d, want the first one", m.sim.cursor)
 	}
 	if m.sim.kind != "" {
-		t.Errorf("kind = %q, want ninguno hasta que se confirme", m.sim.kind)
+		t.Errorf("kind = %q, want none until it is confirmed", m.sim.kind)
 	}
 	if len(f.kinds) != 0 {
-		t.Errorf("abriendo el selector ya se renderizó: %v", f.kinds)
+		t.Errorf("opening the selector it had already rendered: %v", f.kinds)
 	}
 }
 
@@ -146,7 +146,7 @@ func TestEnterStartsTheChosenStrategy(t *testing.T) {
 		t.Errorf("kind = %q, want merge", m.sim.kind)
 	}
 	if !strings.Contains(viewText(m), "rendering") {
-		t.Errorf("la vista no dice que está renderizando:\n%s", viewText(m))
+		t.Errorf("the view does not say it is rendering:\n%s", viewText(m))
 	}
 }
 
@@ -160,10 +160,10 @@ func TestAPressedWhileChoosingDoesNotFallThrough(t *testing.T) {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
 	}
 	if lastToast(m) != "" {
-		t.Errorf("notice = %q, want vacío: la `a` no debe haber aprobado nada", lastToast(m))
+		t.Errorf("notice = %q, want empty: the `a` must not have approved anything", lastToast(m))
 	}
 	if m.actionBusy {
-		t.Error("la `a` lanzó una acción del forge")
+		t.Error("the `a` launched a forge action")
 	}
 }
 
@@ -176,7 +176,7 @@ func TestEscClosesThePopup(t *testing.T) {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
 	}
 	if strings.Contains(viewText(m), "simulate acme/widget") {
-		t.Error("el popup sigue en la vista tras cerrarlo")
+		t.Error("the popup is still in the view after closing it")
 	}
 }
 
@@ -185,7 +185,7 @@ func TestQuittingStillQuitsWithThePopupOpen(t *testing.T) {
 	m = press(t, m, "v")
 	m = press(t, m, "v")
 	if m.sim.state != simClosed {
-		t.Errorf("state = %v, want cerrado: la segunda `v` no es una elección", m.sim.state)
+		t.Errorf("state = %v, want closed: the second `v` is not a choice", m.sim.state)
 	}
 }
 
@@ -201,17 +201,17 @@ func TestResultShowsTheImage(t *testing.T) {
 		t.Fatalf("state = %v, want simShowing", m.sim.state)
 	}
 	if len(m.sim.cells) == 0 {
-		t.Fatal("el popup no pintó ninguna celda de la imagen")
+		t.Fatal("the popup painted no cell of the image")
 	}
 	if m.sim.cellW <= 0 || m.sim.cellH <= 0 {
-		t.Errorf("geometría de la imagen = %dx%d", m.sim.cellW, m.sim.cellH)
+		t.Errorf("the image geometry = %dx%d", m.sim.cellW, m.sim.cellH)
 	}
 	text := viewText(m)
 	if !strings.Contains(text, "o open image") {
-		t.Errorf("la vista no ofrece abrir la imagen:\n%s", text)
+		t.Errorf("the view does not offer to open the image:\n%s", text)
 	}
 	if !strings.Contains(text, "Assigned (1)") {
-		t.Error("el popup tapó la vista de fondo entera")
+		t.Error("the popup covered the whole background view")
 	}
 }
 
@@ -225,16 +225,16 @@ func TestTheImageFillsTheBox(t *testing.T) {
 
 	boxW, boxH := m.simBox()
 	if m.sim.cellW != boxW-2 {
-		t.Errorf("celdas de %d columnas en una caja de %d: la imagen no llena la caja", m.sim.cellW, boxW)
+		t.Errorf("cells of %d columns in a box of %d: the image does not fill the box", m.sim.cellW, boxW)
 	}
 	if len(m.sim.cells) != boxH-simChrome {
-		t.Errorf("celdas en %d líneas para una caja de %d", len(m.sim.cells), boxH)
+		t.Errorf("cells in %d lines for a box of %d", len(m.sim.cells), boxH)
 	}
 	if boxW > m.contentWidth() {
-		t.Errorf("caja de %d columnas en una vista de %d", boxW, m.contentWidth())
+		t.Errorf("box of %d columns in a view of %d", boxW, m.contentWidth())
 	}
 	if boxH > m.height {
-		t.Errorf("caja de %d líneas en una terminal de %d", boxH, m.height)
+		t.Errorf("box of %d lines in a terminal of %d", boxH, m.height)
 	}
 }
 
@@ -249,16 +249,16 @@ func TestThePopupGrowsWithTheTerminal(t *testing.T) {
 
 	wide, rows := m.simBox()
 	if wide < 100 {
-		t.Errorf("caja de %d columnas en una terminal de 240: no aprovecha el ancho", wide)
+		t.Errorf("box of %d columns in a terminal of 240: it does not use the width", wide)
 	}
 	if rows < 20 {
-		t.Errorf("caja de %d líneas en una terminal de 70: no aprovecha el alto", rows)
+		t.Errorf("box of %d lines in a terminal of 70: it does not use the height", rows)
 	}
 	if rows >= m.height {
-		t.Errorf("la caja (%d) tapa la terminal entera (%d)", rows, m.height)
+		t.Errorf("the box (%d) covers the whole terminal (%d)", rows, m.height)
 	}
 	if wide >= m.contentWidth() {
-		t.Errorf("la caja (%d) ocupa la vista entera (%d)", wide, m.contentWidth())
+		t.Errorf("the box (%d) takes the whole view (%d)", wide, m.contentWidth())
 	}
 }
 
@@ -288,7 +288,7 @@ func TestTheImageIsNotStretched(t *testing.T) {
 	m = send(t, m, simMsg{seq: m.simSeq, kind: sim.KindMerge, res: sim1.res})
 
 	if ratio := float64(m.sim.cellW) / float64(m.sim.cellH); ratio < 3.0 || ratio > 4.1 {
-		t.Errorf("la imagen ocupa %d×%d celdas (ratio %.2f), want ~3,56: está deformada",
+		t.Errorf("the image takes %d×%d cells (ratio %.2f), want ~3.56: it is deformed",
 			m.sim.cellW, m.sim.cellH, ratio)
 	}
 }
@@ -307,19 +307,19 @@ func TestTheChooserNavigatesWhenThereIsSomethingToNavigate(t *testing.T) {
 		t.Fatalf("cursor = %d, want 1", m.sim.cursor)
 	}
 	if len(f.kinds) != 0 {
-		t.Fatalf("una flecha confirmó el render: %v", f.kinds)
+		t.Fatalf("an arrow confirmed the render: %v", f.kinds)
 	}
 	m = press(t, m, "j")
 	if m.sim.cursor != 0 {
-		t.Errorf("cursor = %d, want 0 al dar la vuelta", m.sim.cursor)
+		t.Errorf("cursor = %d, want 0 after wrapping around", m.sim.cursor)
 	}
 	m = press(t, m, "k")
 	if m.sim.cursor != 1 {
-		t.Errorf("cursor = %d, want 1 al llegar por arriba", m.sim.cursor)
+		t.Errorf("cursor = %d, want 1 when arriving from above", m.sim.cursor)
 	}
 	m = press(t, m, "enter")
 	if m.sim.kind != sim.KindRebase {
-		t.Errorf("kind = %q, want la opción elegida (rebase)", m.sim.kind)
+		t.Errorf("kind = %q, want the chosen option (rebase)", m.sim.kind)
 	}
 }
 
@@ -332,10 +332,10 @@ func TestLeftArrowDoesNotStartTheRender(t *testing.T) {
 		m = press(t, m, "v")
 		m = press(t, m, key)
 		if m.sim.state != simClosed {
-			t.Errorf("la tecla %q dejó el popup en %v; cualquier flecha debe cerrarlo", key, m.sim.state)
+			t.Errorf("key %q left the popup at %v; any arrow should close it", key, m.sim.state)
 		}
 		if len(f.kinds) != 0 {
-			t.Fatalf("la tecla %q lanzó un render: %v", key, f.kinds)
+			t.Fatalf("key %q launched a render: %v", key, f.kinds)
 		}
 	}
 }
@@ -348,11 +348,11 @@ func TestStaleResultIsDiscarded(t *testing.T) {
 	m = press(t, m, "enter")
 	stale := m.simSeq
 
-	m = press(t, m, "esc") // el popup se cierra
+	m = press(t, m, "esc") // the popup closes
 	m = send(t, m, simMsg{seq: stale, kind: sim.KindMerge, res: f.res})
 
 	if m.sim.state != simClosed {
-		t.Errorf("state = %v, want cerrado: un resultado obsoleto no debe abrir el popup", m.sim.state)
+		t.Errorf("state = %v, want closed: a stale result must not open the popup", m.sim.state)
 	}
 }
 
@@ -367,13 +367,13 @@ func TestFailureClosesThePopupAndNotices(t *testing.T) {
 		t.Errorf("state = %v, want cerrado", m.sim.state)
 	}
 	if !strings.Contains(lastToast(m), "simulate merge") {
-		t.Errorf("notice = %q, want el motivo del fallo", lastToast(m))
+		t.Errorf("notice = %q, want the reason of the failure", lastToast(m))
 	}
 }
 
 func TestUnreadableImageNotices(t *testing.T) {
 	broken := filepath.Join(t.TempDir(), "broken.jpg")
-	if err := os.WriteFile(broken, []byte("no soy una imagen"), 0o644); err != nil {
+	if err := os.WriteFile(broken, []byte("I am not an image"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	f := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: broken}}
@@ -402,10 +402,10 @@ func TestResizeRescalesTheImage(t *testing.T) {
 
 	m = send(t, m, tea.WindowSizeMsg{Width: 60, Height: 20})
 	if m.sim.cellW == before {
-		t.Errorf("la imagen no se reescaló al nuevo ancho (sigue en %d)", m.sim.cellW)
+		t.Errorf("the image was not rescaled to the new width (it is still %d)", m.sim.cellW)
 	}
 	if m.sim.cellW >= 60 {
-		t.Errorf("la imagen mide %d columnas en una terminal de 60", m.sim.cellW)
+		t.Errorf("the image measures %d columns on a terminal of 60", m.sim.cellW)
 	}
 }
 
@@ -430,22 +430,22 @@ func TestSimulateNeedsATargetBranch(t *testing.T) {
 
 func TestAnArmedMergeSwallowsTheSimulateKey(t *testing.T) {
 	m := simModel(t, &fakeSimulator{available: true})
-	m = press(t, m, "m") // arma el merge
+	m = press(t, m, "m") // arms the merge
 	if !m.mergeArmed {
-		t.Fatal("el merge no se armó")
+		t.Fatal("the merge did not arm")
 	}
 	m = press(t, m, "v")
 
 	if m.mergeArmed {
-		t.Error("el merge sigue armado")
+		t.Error("the merge is still armed")
 	}
 	if m.sim.state != simClosed {
-		t.Errorf("state = %v, want cerrado: la `v` no abre nada con el merge armado", m.sim.state)
+		t.Errorf("state = %v, want closed: the `v` opens nothing with the merge armed", m.sim.state)
 	}
 
 	m = press(t, m, "v")
 	if m.sim.state != simChoosing {
-		t.Errorf("state = %v, want simChoosing en la segunda `v`", m.sim.state)
+		t.Errorf("state = %v, want simChoosing on the second `v`", m.sim.state)
 	}
 }
 

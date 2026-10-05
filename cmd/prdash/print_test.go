@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildAdaptersWiring(t *testing.T) {
-	cfg := config.Defaults() // github + gitlab habilitados, bitbucket no
+	cfg := config.Defaults() // github + gitlab enabled, bitbucket not
 	got := names(buildAdapters(cfg))
 	if strings.Join(got, ",") != "github,gitlab" {
 		t.Fatalf("adapters = %v", got)
@@ -24,14 +24,14 @@ func TestBuildAdaptersWiring(t *testing.T) {
 	cfg.Forges.Bitbucket.Enabled = true
 	got = names(buildAdapters(cfg))
 	if strings.Join(got, ",") != "github,gitlab,bitbucket" {
-		t.Fatalf("adapters con bitbucket = %v", got)
+		t.Fatalf("adapters with bitbucket = %v", got)
 	}
 
 	cfg = config.Defaults()
 	cfg.Forges.GitHub.Enabled = false
 	cfg.Forges.GitLab.Enabled = false
 	if got := buildAdapters(cfg); len(got) != 0 {
-		t.Fatalf("sin forges habilitados no debería haber adapters: %v", names(got))
+		t.Fatalf("with no forges enabled there should be no adapters: %v", names(got))
 	}
 }
 
@@ -46,11 +46,11 @@ func TestRunPrint(t *testing.T) {
 		},
 	}
 
-	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
+	out := printToBuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
 	for _, want := range []string{"Created by me", "github@github.com", "acme/widget#7", "Add widget"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("la salida no contiene %q:\n%s", want, out)
+			t.Errorf("the output does not contain %q:\n%s", want, out)
 		}
 	}
 }
@@ -67,11 +67,11 @@ func TestRunPrintKeepsOrder(t *testing.T) {
 			},
 		}
 	}
-	out := imprimeABuffer(t, func(w io.Writer) {
+	out := printToBuffer(t, func(w io.Writer) {
 		runPrintTo(w, w, []forge.Adapter{mk("github"), mk("gitlab")}, nil)
 	})
 	if strings.Index(out, "T-github") > strings.Index(out, "T-gitlab") {
-		t.Errorf("el orden de impresión debe seguir el de los adapters:\n%s", out)
+		t.Errorf("the print order must follow the adapter order:\n%s", out)
 	}
 }
 
@@ -93,10 +93,10 @@ func TestRunPrintShowsActiveReview(t *testing.T) {
 		return worktree.Worktree{}, false
 	}
 
-	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, lookup) })
+	out := printToBuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, lookup) })
 
 	if !strings.Contains(out, "review:"+wtPath) {
-		t.Errorf("la salida no integra la ruta del review activo:\n%s", out)
+		t.Errorf("the output does not integrate the active review path:\n%s", out)
 	}
 }
 
@@ -111,13 +111,13 @@ func TestRunPrintWithoutReviewsKeepsF1(t *testing.T) {
 		},
 	}
 
-	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
+	out := printToBuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
 	if strings.Contains(out, "review:") {
-		t.Errorf("sin reviews activos no debería aparecer la marca de F2:\n%s", out)
+		t.Errorf("without active reviews the F2 marker should not appear:\n%s", out)
 	}
 	if !strings.Contains(out, "Created by me") || !strings.Contains(out, "Add widget") {
-		t.Errorf("la salida de F1 no debería cambiar:\n%s", out)
+		t.Errorf("the F1 output should not change:\n%s", out)
 	}
 }
 
@@ -131,15 +131,15 @@ func names(adapters []forge.Adapter) []string {
 
 // --print is independent of the TUI's prefix mode by design: the TUI splits the path and --print
 // does not.
-func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
+func TestRunPrintDoesNotApplyThePrefixMode(t *testing.T) {
 	const (
-		largo  = "APPCITTI/vsocial/backend/api-gateway"
-		corto  = "APPCITTI/vsocial/backend/web-app"
-		numUno = 100
+		longPath    = "APPCITTI/vsocial/backend/api-gateway"
+		shortPath   = "APPCITTI/vsocial/backend/web-app"
+		firstNumber = 100
 	)
 	items := []model.Item{}
-	for i, project := range []string{largo, corto} {
-		it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: project}, numUno+i)
+	for i, project := range []string{longPath, shortPath} {
+		it := model.NewItem(model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: project}, firstNumber+i)
 		it.Title = "T"
 		items = append(items, it)
 	}
@@ -151,31 +151,31 @@ func TestRunPrintNoAplicaElModoDePrefijo(t *testing.T) {
 		},
 	}
 
-	out := imprimeABuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
+	out := printToBuffer(t, func(w io.Writer) { runPrintTo(w, w, []forge.Adapter{fake}, nil) })
 
 	for _, want := range []string{
-		largo + "#100",
-		corto + "#101",
+		longPath + "#100",
+		shortPath + "#101",
 		"Review / assigned",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("la salida no contiene %q:\n%s", want, out)
+			t.Errorf("the output does not contain %q:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "…") {
-		t.Errorf("--print recortó una referencia, y no debe: la TUI es la que recorta:\n%s", out)
+		t.Errorf("--print truncated a reference, and it must not: the TUI is the one that truncates:\n%s", out)
 	}
 	// The TUI's dimmed prefix line does not exist here: --print composes no list and declares no common
 	// prefix.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(strings.TrimLeft(line, " "), "· ") {
-			t.Errorf("--print pintó una línea de prefijo: %q", line)
+			t.Errorf("--print painted a prefix line: %q", line)
 		}
 	}
 }
 
 // It replaces the two fd captures that were there before.
-func imprimeABuffer(t *testing.T, fn func(w io.Writer)) string {
+func printToBuffer(t *testing.T, fn func(w io.Writer)) string {
 	t.Helper()
 	var buf bytes.Buffer
 	fn(&buf)

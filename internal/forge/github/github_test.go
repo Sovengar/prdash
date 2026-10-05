@@ -36,25 +36,25 @@ func TestAuthLoginEmptyWhenUnknown(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho 'github.com'\n")
 	if login := New("github.com", script).Auth(context.Background()).Login; login != "" {
-		t.Errorf("Login = %q, want vacío", login)
+		t.Errorf("Login = %q, want empty", login)
 	}
 }
 
 func TestSearchQueryPagination(t *testing.T) {
 	first := searchQuery("author:@me", "")
 	if !strings.Contains(first, "is:pr is:open author:@me") {
-		t.Errorf("searchQuery no contiene el qualifier:\n%s", first)
+		t.Errorf("searchQuery does not contain the qualifier:\n%s", first)
 	}
 	if strings.Contains(first, "after:") {
-		t.Errorf("la primera página no debería llevar cursor:\n%s", first)
+		t.Errorf("the first page should not carry a cursor:\n%s", first)
 	}
 	if !strings.Contains(first, "pageInfo") || !strings.Contains(first, "reviewDecision") {
-		t.Errorf("searchQuery debería pedir pageInfo y reviewDecision:\n%s", first)
+		t.Errorf("searchQuery should ask for pageInfo and reviewDecision:\n%s", first)
 	}
 
 	next := searchQuery("mentions:@me", "CURSOR9")
 	if !strings.Contains(next, `after: "CURSOR9"`) {
-		t.Errorf("la página siguiente debería llevar el cursor:\n%s", next)
+		t.Errorf("the next page should carry the cursor:\n%s", next)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestQualifierFor(t *testing.T) {
 		}
 	}
 	if _, ok := qualifierFor(forge.Query{Section: "nope"}); ok {
-		t.Error("una sección desconocida no debería tener qualifier")
+		t.Error("an unknown section should not have a qualifier")
 	}
 }
 
@@ -83,7 +83,7 @@ func TestPrQuery(t *testing.T) {
 	q := prQuery("acme", "widget", 42)
 	for _, want := range []string{`repository(owner: "acme", name: "widget")`, "pullRequest(number: 42)", "reviewDecision"} {
 		if !strings.Contains(q, want) {
-			t.Errorf("prQuery no contiene %q:\n%s", want, q)
+			t.Errorf("prQuery does not contain %q:\n%s", want, q)
 		}
 	}
 }
@@ -102,7 +102,7 @@ func TestConformanceMissingBinary(t *testing.T) {
 
 func TestListUnknownSectionReportsUnsupported(t *testing.T) {
 	a := New("github.com", filepath.Join(t.TempDir(), "no-gh"))
-	_, warns := a.List(context.Background(), forge.Query{Section: "desconocida"})
+	_, warns := a.List(context.Background(), forge.Query{Section: "unknown"})
 	if len(warns) == 0 || warns[0].Kind != "unsupported" {
 		t.Fatalf("warnings = %+v", warns)
 	}
@@ -112,11 +112,11 @@ func TestSearchQueryUsesUnionFragments(t *testing.T) {
 	q := searchQuery("author:@me", "")
 	for _, want := range []string{"... on PullRequest", "... on CheckRun", "... on StatusContext", "reviewDecision", "statusCheckRollup"} {
 		if !strings.Contains(q, want) {
-			t.Errorf("searchQuery no contiene %q:\n%s", want, q)
+			t.Errorf("searchQuery does not contain %q:\n%s", want, q)
 		}
 	}
 	if p := prQuery("o", "r", 1); !strings.Contains(p, "statusCheckRollup") {
-		t.Errorf("prQuery debería pedir los checks:\n%s", p)
+		t.Errorf("prQuery should ask for the checks:\n%s", p)
 	}
 }
 
@@ -138,7 +138,7 @@ exit 1
 		t.Fatalf("items = %+v", page.Items)
 	}
 	if page.Items[0].SourceBranch != "" {
-		t.Errorf("el fallback REST no trae ramas: %+v", page.Items[0])
+		t.Errorf("the REST fallback does not bring branches: %+v", page.Items[0])
 	}
 	if len(warns) == 0 || warns[0].Kind != "degraded" {
 		t.Fatalf("warnings = %+v", warns)
@@ -183,29 +183,29 @@ func TestCommentsQueryShape(t *testing.T) {
 		"createdAt",
 	} {
 		if !strings.Contains(q, want) {
-			t.Errorf("commentsQuery no contiene %q:\n%s", want, q)
+			t.Errorf("commentsQuery does not contain %q:\n%s", want, q)
 		}
 	}
 	if strings.Contains(q, "first:") {
-		t.Errorf("commentsQuery no debería pedir el principio de la conversación:\n%s", q)
+		t.Errorf("commentsQuery should not ask for the start of the conversation:\n%s", q)
 	}
 	// The margin over the card's limit is what keeps a PR full of bot boilerplate out.
 	if commentFetch <= forge.CommentLimit {
-		t.Errorf("commentFetch = %d, want > %d para absorber el ruido", commentFetch, forge.CommentLimit)
+		t.Errorf("commentFetch = %d, want > %d to absorb the noise", commentFetch, forge.CommentLimit)
 	}
 }
 
 func TestCommentsEscapesRepoNames(t *testing.T) {
 	if q := commentsQuery(`ac"me`, "wid\\get", 1, 5); !strings.Contains(q, `owner: "ac\"me"`) {
-		t.Errorf("no escapó el owner:\n%s", q)
+		t.Errorf("the owner was not escaped:\n%s", q)
 	}
 	if q := commentsQuery("acme", "wid\\get", 1, 5); !strings.Contains(q, `name: "wid\\get"`) {
-		t.Errorf("no escapó el name:\n%s", q)
+		t.Errorf("the name was not escaped:\n%s", q)
 	}
 }
 
 // The query brings more than the card shows and it is trimmed to CommentLimit, by the TAIL.
-func TestCommentsCapsAtFichaLimitKeepingTotal(t *testing.T) {
+func TestCommentsCapsAtCardLimitKeepingTotal(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, dir, "gh", `#!/bin/sh
 cat <<'OUT'
@@ -229,13 +229,13 @@ OUT
 		t.Errorf("comments = %d, want %d", len(page.Comments), forge.CommentLimit)
 	}
 	if page.Total != 23 {
-		t.Errorf("total = %d, want 23 (no se recorta)", page.Total)
+		t.Errorf("total = %d, want 23 (it is not trimmed)", page.Total)
 	}
 	// The connection returns all 7 in chronological order and the trim keeps the LAST 5.
 	want := []string{"c2", "c3", "c4", "c5", "c6"}
 	for i, w := range want {
 		if page.Comments[i].Body != w {
-			t.Errorf("comments[%d] = %q, want %q (los últimos, en orden)", i, page.Comments[i].Body, w)
+			t.Errorf("comments[%d] = %q, want %q (the last ones, in order)", i, page.Comments[i].Body, w)
 		}
 	}
 }
@@ -253,9 +253,9 @@ func TestCommentsFailureIsWarning(t *testing.T) {
 	page, warns := New("github.com", script).Comments(context.Background(),
 		model.RepoRef{Project: "acme/widget"}, 42)
 	if len(page.Comments) != 0 {
-		t.Errorf("un fallo no debe devolver comentarios: %+v", page.Comments)
+		t.Errorf("a failure must not return comments: %+v", page.Comments)
 	}
 	if len(warns) == 0 {
-		t.Fatal("un fallo debería avisar")
+		t.Fatal("a failure should warn")
 	}
 }

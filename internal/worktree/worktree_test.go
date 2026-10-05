@@ -35,10 +35,10 @@ func TestCreateListRemove(t *testing.T) {
 		t.Fatalf("worktree = %+v", wt)
 	}
 	if !Exists(dest) {
-		t.Fatal("el worktree debería existir")
+		t.Fatal("the worktree should exist")
 	}
 	if _, err := os.Stat(filepath.Join(dest, "base.txt")); err != nil {
-		t.Fatalf("el worktree no trae el contenido de la rama: %v", err)
+		t.Fatalf("the worktree does not bring the branch content: %v", err)
 	}
 
 	list := g.List(ctx)
@@ -50,10 +50,10 @@ func TestCreateListRemove(t *testing.T) {
 		t.Fatalf("Remove: %v", err)
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("el worktree debería haberse quitado: %v", err)
+		t.Fatalf("the worktree should have been removed: %v", err)
 	}
 	if got := g.List(ctx); len(got) != 0 {
-		t.Fatalf("List tras Remove = %+v", got)
+		t.Fatalf("List after Remove = %+v", got)
 	}
 }
 
@@ -75,10 +75,10 @@ func TestCreateReusesExistingWorktree(t *testing.T) {
 		t.Fatalf("Create 2: %v", err)
 	}
 	if first.Path != second.Path {
-		t.Fatalf("rutas distintas: %q vs %q", first.Path, second.Path)
+		t.Fatalf("different paths: %q vs %q", first.Path, second.Path)
 	}
 	if got := g.List(ctx); len(got) != 1 {
-		t.Fatalf("no debería duplicar el worktree: %+v", got)
+		t.Fatalf("it should not duplicate the worktree: %+v", got)
 	}
 }
 
@@ -100,13 +100,13 @@ func TestCoexistingWorktreesSameRepo(t *testing.T) {
 		t.Fatalf("Create 2: %v", err)
 	}
 	if w1.Path == w2.Path {
-		t.Fatal("dos ítems del mismo repo deben tener worktrees distintos")
+		t.Fatal("two items of the same repo must have different worktrees")
 	}
 	if !Exists(w1.Path) || !Exists(w2.Path) {
-		t.Fatal("ambos worktrees deben coexistir")
+		t.Fatal("both worktrees must coexist")
 	}
 	if got := g.List(ctx); len(got) != 2 {
-		t.Fatalf("List = %+v, quiero 2", got)
+		t.Fatalf("List = %+v, want 2", got)
 	}
 }
 
@@ -125,14 +125,14 @@ func TestCreateBranchMismatchErrors(t *testing.T) {
 	}
 	_, err := g.Create(ctx, Spec{Repo: repo, Branch: "feature-2", Path: dest, Label: "prdash-pr-1"})
 	if err == nil || !strings.Contains(err.Error(), "feature-1") {
-		t.Fatalf("esperaba error por rama ya presente, got %v", err)
+		t.Fatalf("expected an error for an already-present branch, got %v", err)
 	}
 }
 
 func TestCreateIncompleteSpecErrors(t *testing.T) {
 	g := NewGitDirect(t.TempDir())
 	if _, err := g.Create(context.Background(), Spec{Repo: "x"}); err == nil {
-		t.Fatal("spec incompleto debería fallar")
+		t.Fatal("an incomplete spec should fail")
 	}
 }
 
@@ -143,10 +143,10 @@ func TestCreateFailureLeavesNoPartialDir(t *testing.T) {
 	g := NewGitDirect(base)
 
 	if _, err := g.Create(context.Background(), Spec{Repo: repo, Branch: "no-existe", Path: dest, Label: "prdash-pr-1"}); err == nil {
-		t.Fatal("esperaba error al sacar una rama inexistente")
+		t.Fatal("expected an error checking out a nonexistent branch")
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("no debería quedar un worktree a medias: %v", err)
+		t.Fatalf("no half-done worktree should remain: %v", err)
 	}
 }
 
@@ -157,7 +157,7 @@ func newCleanWorktree(t *testing.T) (base, dest, repo string) {
 	base = t.TempDir()
 	dest = filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree limpio: %v", err)
+		t.Fatalf("preparing a clean worktree: %v", err)
 	}
 	return base, dest, repo
 }
@@ -169,16 +169,16 @@ func TestRemoveIfCleanRemovesCleanWorktree(t *testing.T) {
 		t.Fatalf("RemoveIfClean: %v", err)
 	}
 	if !removed || reason != "" {
-		t.Fatalf("removed=%v reason=%q, quiero borrado y sin motivo", removed, reason)
+		t.Fatalf("removed=%v reason=%q, want deleted with no reason", removed, reason)
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("el worktree limpio debería haberse borrado: %v", err)
+		t.Fatalf("the clean worktree should have been deleted: %v", err)
 	}
 }
 
 func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
-	if err := os.WriteFile(filepath.Join(dest, "base.txt"), []byte("editado"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dest, "base.txt"), []byte("edited"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,10 +187,10 @@ func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 		t.Fatalf("RemoveIfClean: %v", err)
 	}
 	if removed || reason != KeptUncommitted {
-		t.Fatalf("removed=%v reason=%q, quiero conservado por sucio", removed, reason)
+		t.Fatalf("removed=%v reason=%q, want kept for being dirty", removed, reason)
 	}
 	if _, err := os.Stat(dest); err != nil {
-		t.Fatalf("el worktree sucio no debería tocarse: %v", err)
+		t.Fatalf("the dirty worktree should not be touched: %v", err)
 	}
 }
 
@@ -198,7 +198,7 @@ func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 // --porcelain` does not.
 func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
-	if err := os.WriteFile(filepath.Join(dest, "nuevo.txt"), []byte("sin trackear"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dest, "nuevo.txt"), []byte("untracked"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,10 +207,10 @@ func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
 		t.Fatalf("RemoveIfClean: %v", err)
 	}
 	if removed || reason != KeptUncommitted {
-		t.Fatalf("removed=%v reason=%q, quiero conservado por untracked", removed, reason)
+		t.Fatalf("removed=%v reason=%q, want kept for untracked", removed, reason)
 	}
 	if _, err := os.Stat(dest); err != nil {
-		t.Fatalf("el worktree con untracked no debería tocarse: %v", err)
+		t.Fatalf("the worktree with untracked files should not be touched: %v", err)
 	}
 }
 
@@ -226,10 +226,10 @@ func TestRemoveIfCleanKeepsOnUnreadableStatus(t *testing.T) {
 		t.Fatalf("RemoveIfClean: %v", err)
 	}
 	if removed || reason != KeptUnreadable {
-		t.Fatalf("removed=%v reason=%q, quiero conservado por estado ilegible", removed, reason)
+		t.Fatalf("removed=%v reason=%q, want kept for unreadable status", removed, reason)
 	}
 	if _, err := os.Stat(dest); err != nil {
-		t.Fatalf("el worktree con estado ilegible no debería tocarse: %v", err)
+		t.Fatalf("the worktree with unreadable status should not be touched: %v", err)
 	}
 }
 
@@ -239,7 +239,7 @@ func TestRemoveIfCleanAbsentPathIsNoop(t *testing.T) {
 	dest := filepath.Join(base, "prdash-pr-1")
 	removed, reason, err := NewGitDirect(base).RemoveIfClean(context.Background(), dest)
 	if err != nil || removed || reason != "" {
-		t.Fatalf("removed=%v reason=%q err=%v, quiero no-op sin error", removed, reason, err)
+		t.Fatalf("removed=%v reason=%q err=%v, want no-op without error", removed, reason, err)
 	}
 }
 
@@ -252,13 +252,13 @@ func TestRemoveIfCleanRefusesForeign(t *testing.T) {
 
 	removed, _, err := NewGitDirect(base).RemoveIfClean(context.Background(), foreign)
 	if err == nil {
-		t.Fatal("no debería aceptar borrar un worktree ajeno")
+		t.Fatal("it should not accept deleting a foreign worktree")
 	}
 	if removed {
-		t.Fatal("removed debería ser false")
+		t.Fatal("removed should be false")
 	}
 	if _, err := os.Stat(foreign); err != nil {
-		t.Fatalf("el worktree ajeno no debería tocarse: %v", err)
+		t.Fatalf("the foreign worktree should not be touched: %v", err)
 	}
 }
 
@@ -270,12 +270,12 @@ func TestRemoveIfCleanRefusesPathOutsideBase(t *testing.T) {
 
 	removed, _, err := NewGitDirect(t.TempDir()).RemoveIfClean(context.Background(), outside)
 	if err == nil {
-		t.Fatal("no debería aceptar borrar fuera de la raíz gestionada")
+		t.Fatal("it should not accept deleting outside the managed root")
 	}
 	if removed {
-		t.Fatal("removed debería ser false")
+		t.Fatal("removed should be false")
 	}
 	if _, err := os.Stat(outside); err != nil {
-		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+		t.Fatalf("the worktree outside the root should not be touched: %v", err)
 	}
 }

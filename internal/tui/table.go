@@ -144,7 +144,7 @@ var forgePublicHosts = map[string]string{
 func forgeBadge(it model.Item) string {
 	short := forgeShortNames[it.Forge]
 	if short == "" {
-		short = it.Forge // forge sin abreviatura conocida: se muestra tal cual
+		short = it.Forge // forge with no known abbreviation: shown as is
 	}
 	if short == "" || it.Host == "" {
 		return short

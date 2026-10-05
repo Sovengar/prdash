@@ -1,50 +1,52 @@
-# Flujo de comportamiento — prdash MVP
+# Behavior flow — prdash MVP
 
-Derivado de `behavior.feature`. Recorrido del usuario: inbox (F1), orquestador de review (F2),
-degradación y gate de F3.
+Derived from `behavior.feature`. User path: inbox (F1), review orchestrator
+(F2), degradation and the F3 gate.
 
 ```mermaid
 flowchart TD
-    A["Arranca prdash"] --> B{"¿HERDR_ENV=1?"}
-    B -->|No| C["F1 inbox operativo<br/>F2 muestra aviso: requiere Herdr"]
-    B -->|Sí| D["F1 inbox + F2 disponible"]
+    A["prdash starts"] --> B{"HERDR_ENV=1?"}
+    B -->|No| C["F1 inbox operational<br/>F2 shows a warning: requires Herdr"]
+    B -->|Yes| D["F1 inbox + F2 available"]
 
-    C --> E["Inbox: Creados por mí · Review/asignados · Menciones"]
+    C --> E["Inbox: Created by me · Review/assigned · Mentions"]
     D --> E
-    E --> E1["Refresco manual r / automático 60s<br/>indicador última actualización por forge"]
-    E1 --> E2{"¿Alguna forge falla?"}
-    E2 -->|Sí| E3["Estado de error explícito por forge<br/>el resto sigue visible"]
-    E2 -->|No| E4["Secciones vacías vs con datos"]
+    E --> E1["Manual refresh r / automatic 60s<br/>last update indicator per forge"]
+    E1 --> E2{"Does any forge fail?"}
+    E2 -->|Yes| E3["Explicit error state per forge<br/>the rest stays visible"]
+    E2 -->|No| E4["Empty sections vs with data"]
 
     E3 --> G
     E4 --> G
-    G{"Selección de ítem"} -->|detalle| H["Detalle: título, autor, ramas, nº, URL, estado"]
-    G -->|approve / merge| I["Acción vía gh/glab o delegada en tuicr"]
-    G -->|montar review| J{"¿Repo local resuelto?"}
+    G{"Item selection"} -->|detail| H["Detail: title, author, branches, number, URL, state"]
+    G -->|approve / merge| I["Action via gh/glab or delegated to tuicr"]
+    G -->|mount review| J{"Local repo resolved?"}
 
-    I --> I1{"¿Ítem cambió en el forge?"}
-    I1 -->|Sí| I2["Error claro + refresco del ítem"]
-    I1 -->|No| I3["Estado actualizado"]
+    I --> I1{"Did the item change on the forge?"}
+    I1 -->|Yes| I2["Clear error + item refresh"]
+    I1 -->|No| I3["Updated state"]
 
-    J -->|No| K["Clon bare en XDG data<br/>repos/forge/host/owner/repo"]
-    J -->|Sí| L["Fetch del ref de review<br/>refs/pull/N/head · refs/merge-requests/N/head"]
+    J -->|No| K["Bare clone in XDG data<br/>repos/forge/host/owner/repo"]
+    J -->|Yes| L["Review ref fetch<br/>refs/pull/N/head · refs/merge-requests/N/head"]
     K --> L
-    L --> M["Crear rama local de trabajo + provisionar worktree"]
-    M --> N["Layout Herdr: TUICR + Hunk + agente opencode"]
-    N --> O["Loop: comento en TUICR/Hunk → el agente los lee y aplica"]
-    O --> P["Al cerrar: worktree se conserva<br/>limpieza por comando explícito"]
+    L --> M["Create local working branch + provision worktree"]
+    M --> N["Herdr layout: TUICR + Hunk + opencode agent"]
+    N --> O["Loop: I comment in TUICR/Hunk → the agent reads and applies them"]
+    O --> P["On close: worktree is kept<br/>cleanup by explicit command"]
 
-    P --> Q{"F3 activado y repo en allowlist?"}
-    Q -->|No| R["No auto-aprueba · deja constancia del motivo"]
-    Q -->|Sí| S{"¿0 findings críticos y análisis concluyente?"}
+    P --> Q{"F3 enabled and repo on the allowlist?"}
+    Q -->|No| R["No self-approval · the reason is recorded"]
+    Q -->|Yes| S{"0 critical findings and conclusive analysis?"}
     S -->|No| R
-    S -->|Sí| T["Aprueba vía forge + notifica por Herdr"]
+    S -->|Yes| T["Approves via forge + notifies via Herdr"]
 
-    M -.->|sin permisos de clon/fetch| X["Error claro, sin dejar clon ni worktree a medias"]
-    N -.->|herramienta ausente| Y["Pane omitido con aviso, el layout sigue vivo"]
+    M -.->|no clone/fetch permissions| X["Clear error, leaving no half-done clone nor worktree"]
+    N -.->|missing tool| Y["Pane skipped with a warning, the layout stays alive"]
 ```
 
-**Notas de comportamiento**
-- "Vacío" y "error" nunca se confunden (falla explícita por forge/sección).
-- Sin tope por sección: el inbox pagina hasta agotar, con carga progresiva.
-- Fuera de Herdr, F1 no se degrada; solo F2 se informa.
+**Behavior notes**
+- "Empty" and "error" are never confused (explicit failure per
+  forge/section).
+- No per-section cap: the inbox paginates until exhausted, with progressive
+  loading.
+- Outside Herdr, F1 does not degrade; only F2 is reported.

@@ -2,70 +2,70 @@ package reporesolver
 
 import "testing"
 
-func hostsDePrueba() map[string]string {
+func testHosts() map[string]string {
 	return map[string]string{"github.com": "github"}
 }
 
 // An entry starting with `://` is neither a schemed URL nor SCP, and is not normalised as if it
 // were.
-func TestUnEsquemaAusenteNoSeCuelaPorLaRamaDeSCP(t *testing.T) {
-	casos := []struct {
+func TestAMissingSchemeDoesNotSlipThroughTheSCPBranch(t *testing.T) {
+	cases := []struct {
 		raw  string
-		nota string
+		note string
 	}{
-		{"://git@github.com:acme/widget.git", "esquema ausente y forma SCP detrás: el caso " +
-			"que la condición en `>= 0` estaba puesta para cerrar"},
-		{"://github.com/acme/widget", "esquema ausente, sin SCP detrás"},
-		{"://git@gitlab.com:grupo/proy", "otro host, para que no sea cosa de github"},
+		{"://git@github.com:acme/widget.git", "missing scheme with an SCP shape behind it: the case " +
+			"the `>= 0` condition was put there to close"},
+		{"://github.com/acme/widget", "missing scheme, no SCP behind it"},
+		{"://git@gitlab.com:grupo/proy", "another host, so it is not a github-only thing"},
 	}
-	for _, c := range casos {
-		ref, ok := ParseRemoteURL(c.raw, hostsDePrueba(), nil)
+	for _, c := range cases {
+		ref, ok := ParseRemoteURL(c.raw, testHosts(), nil)
 		if ok {
-			t.Errorf("%q se normalizó a %+v: no debería. Sin esquema no es un URL de git, "+
-				"y dejarlo pasar por la rama de SCP produce un repo que EXISTE y sobre el "+
-				"que se trabajaría. %s", c.raw, ref, c.nota)
+			t.Errorf("%q normalised to %+v: it should not. Without a scheme it is not a git URL, "+
+				"and letting it through the SCP branch produces a repo that EXISTS and on which "+
+				"work would be done. %s", c.raw, ref, c.note)
 		}
 	}
 
 	// The good side of the same boundary: a scheme at position one or more goes through the URL branch
 	//and is normalised. With `> 0` this would also work, which is why it is pinned.
 	for _, raw := range []string{"https://github.com/acme/widget", "ssh://git@github.com/acme/widget.git"} {
-		ref, ok := ParseRemoteURL(raw, hostsDePrueba(), nil)
+		ref, ok := ParseRemoteURL(raw, testHosts(), nil)
 		if !ok {
-			t.Errorf("%q no se normalizó y debería: tiene esquema", raw)
+			t.Errorf("%q did not normalise and should have: it has a scheme", raw)
 			continue
 		}
 		if ref.Host != "github.com" {
-			t.Errorf("%q dio host %q, want github.com", raw, ref.Host)
+			t.Errorf("%q gave host %q, want github.com", raw, ref.Host)
 		}
 	}
 }
 
 // The condition is `at > 0`, which demands something before the @.
-func TestUnSCPConElUsuarioVacioNoEsUnRemoto(t *testing.T) {
-	casos := []string{
+func TestAnSCPWithAnEmptyUserIsNotARemote(t *testing.T) {
+	cases := []string{
 		"@github.com:acme/widget",
 		"@github.com",
-		"git@github.com",       // sin ruta detrás
-		"git@github.com:acme",  // un solo segmento de ruta
-		"git@github.com:acme/", // segmento vacío al final
-		"git@github.com:/acme", // segmento vacío al principio
+		"git@github.com",       // no path behind it
+		"git@github.com:acme",  // a single path segment
+		"git@github.com:acme/", // empty segment at the end
+		"git@github.com:/acme", // empty segment at the start
 	}
-	for _, raw := range casos {
-		if ref, ok := ParseRemoteURL(raw, hostsDePrueba(), nil); ok {
-			t.Errorf("%q se normalizó a %+v y no debería: sin usuario, sin dos puntos o con "+
-				"una ruta de un solo segmento no es un repo", raw, ref)
+	for _, raw := range cases {
+		if ref, ok := ParseRemoteURL(raw, testHosts(), nil); ok {
+			t.Errorf("%q normalised to %+v and should not: without a user, without a colon or with a "+
+				"single-segment path it is not a repo", raw, ref)
 		}
 	}
 
 	for _, raw := range []string{"git@github.com:acme/widget", "git@github.com:acme/widget.git"} {
-		ref, ok := ParseRemoteURL(raw, hostsDePrueba(), nil)
+		ref, ok := ParseRemoteURL(raw, testHosts(), nil)
 		if !ok {
-			t.Errorf("%q no se normalizó y debería", raw)
+			t.Errorf("%q did not normalise and should have", raw)
 			continue
 		}
 		if ref.Host != "github.com" || ref.Project != "acme/widget" {
-			t.Errorf("%q dio %+v", raw, ref)
+			t.Errorf("%q gave %+v", raw, ref)
 		}
 	}
 }

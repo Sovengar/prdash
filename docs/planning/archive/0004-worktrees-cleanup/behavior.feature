@@ -1,264 +1,264 @@
-# prdash — comportamiento esperado: limpieza de worktrees de review.
+# prdash — expected behavior: review worktree cleanup.
 #
-# Fuente ÚNICA del comportamiento esperado de esta feature. No es Cucumber (sin
-# step definitions ni runner). El executor derivará de aquí tests reales
-# (unit/integration) estilo BDD/ATDD.
+# The UNIQUE source of the expected behavior of this feature. It is not Cucumber
+# (no step definitions nor runner). The executor will derive real tests from
+# here (unit/integration) in BDD/ATDD style.
 #
-# Gherkin en inglés; las descripciones van en español.
+# Gherkin in English; the descriptions are in English too.
 #
-# Contexto de diseño: los worktrees de review son del usuario y prdash los
-# conserva a propósito — NO hay borrado al cerrar la app (restricción dura en
-# cmd/prdash/worktrees.go). Esta feature abre dos caminos de limpieza, y solo
-# dos, ambos justificados por un hecho observable:
+# Design context: the review worktrees belong to the user and prdash keeps them
+# on purpose — there is NO deletion on closing the app (hard restriction in
+# cmd/prdash/worktrees.go). This feature opens two cleanup paths, and only two,
+# both justified by an observable fact:
 #
-#   A) `prdash worktrees remove --orphans`: borra en lote SOLO los worktrees que
-#      el propio `Audit` marca como huérfanos (repo de origen inalcanzable). Es
-#      excluyente con las rutas explícitas. La fuente de verdad de "huérfano" es
-#      la misma que ya usa `worktrees list`: aquí no se reimplementa.
+#   A) `prdash worktrees remove --orphans`: deletes in batch ONLY the worktrees
+#      that `Audit` itself marks as orphaned (source repo unreachable). It is
+#      exclusive with explicit paths. The source of truth of "orphan" is the
+#      one `worktrees list` already uses: nothing is reimplemented here.
 #
-#   B) Auto-borrado al mergear DESDE prdash: cuando una acción de merge lanzada
-#      por prdash termina bien, el worktree de ese ítem ya es basura. Pero el
-#      checkout puede tener trabajo sin commitear, así que se borra SOLO si está
-#      limpio; si está sucio, se CONSERVA y se avisa con
-#      "merged, but the worktree has uncommitted changes — kept". Un merge que no
-#      salió bien (fallo, conflicto, permiso, no mergeable), o cualquier otra
-#      acción (approve, retarget), NO dispara nada.
+#   B) Self-deletion on merge FROM prdash: when a merge action launched by
+#      prdash finishes well, the worktree of that item is already trash. But
+#      the checkout can have uncommitted work, so it is deleted ONLY if it is
+#      clean; if it is dirty, it is KEPT and a warning is issued with
+#      "merged, but the worktree has uncommitted changes — kept". A merge that
+#      did not go well (failure, conflict, permission, not mergeable), or any
+#      other action (approve, retarget), triggers NOTHING.
 #
-# Invariante que cruza A y B: toda limpieza pasa por los guardas de ownership
-# (`worktree.Owned`: label o nombre de ruta con prefijo `prdash-`) y por la
-# exigencia de que la ruta viva bajo la raíz gestionada. Un worktree ajeno es
-# intocable en todos los caminos.
+# Invariant crossing A and B: every cleanup goes through the ownership guards
+# (`worktree.Owned`: label or path name with the `prdash-` prefix) and through
+# the requirement that the path lives under the managed root. A foreign
+# worktree is untouchable on every path.
 
-Feature: Limpieza de worktrees de review en prdash
+Feature: Review worktree cleanup in prdash
 
   Background:
-    Given una raíz gestionada de worktrees donde prdash provisiona los suyos
-    And hay worktrees propios de prdash (nombre "prdash-…") y worktrees ajenos conviviendo bajo esa raíz
-    And un worktree es "huérfano" cuando el repo de origen al que apunta su enlace ya no es accesible
+    Given a managed worktree root where prdash provisions its own ones
+    And there are prdash's own worktrees (name "prdash-…") and foreign worktrees coexisting under that root
+    And a worktree is "orphaned" when the source repo its link points at is no longer accessible
 
-  # ═══════════════════ A — limpieza en lote de huérfanos ═══════════════════
-
-  @cli @worktrees @orphans
-  Scenario: --orphans borra todos los huérfanos y solo los huérfanos
-    Given la raíz tiene dos worktrees propios huérfanos y un worktree propio sano
-    When ejecuto "prdash worktrees remove --orphans"
-    Then los dos huérfanos desaparecen del disco
-    And el worktree propio sano sigue en disco
-    And la salida nombra cada worktree que se borró
-    And el comando termina con código de salida 0
+  # ═══════════════════ A — batch cleanup of orphans ═══════════════════
 
   @cli @worktrees @orphans
-  Scenario: --orphans borra exactamente lo que "worktrees list" marca como huérfano
-    Given "prdash worktrees list" reporta N worktrees con estado "orphaned"
-    When ejecuto "prdash worktrees remove --orphans"
-    Then borra exactamente esos N
-    And no borra ninguno de los reportados con estado "ok"
-
-  @cli @worktrees @orphans @seguridad
-  Scenario: --orphans nunca toca un worktree ajeno
-    Given la raíz tiene un worktree ajeno junto a un huérfano propio
-    When ejecuto "prdash worktrees remove --orphans"
-    Then el worktree ajeno sigue intacto en disco
-    And el huérfano propio desaparece
-
-  @cli @worktrees @orphans @seguridad
-  Scenario: un worktree propio sano nunca se borra con --orphans
-    Given un worktree propio cuyo repo de origen sigue siendo accesible
-    When ejecuto "prdash worktrees remove --orphans"
-    Then ese worktree sigue en disco
-    And sigue listándose con estado "ok"
+  Scenario: --orphans deletes all the orphans and only the orphans
+    Given the root has two orphaned own worktrees and one healthy own worktree
+    When I run "prdash worktrees remove --orphans"
+    Then the two orphans disappear from disk
+    And the healthy own worktree stays on disk
+    And the output names every worktree that was deleted
+    And the command finishes with exit code 0
 
   @cli @worktrees @orphans
-  Scenario: --orphans con cero huérfanos es el caso feliz, no un error
-    Given la raíz no tiene ningún worktree huérfano
-    When ejecuto "prdash worktrees remove --orphans"
-    Then no borra nada
-    And informa de que no hay huérfanos
-    And el comando termina con código de salida 0
-    And no escribe nada en stderr
+  Scenario: --orphans deletes exactly what "worktrees list" marks as orphaned
+    Given "prdash worktrees list" reports N worktrees with state "orphaned"
+    When I run "prdash worktrees remove --orphans"
+    Then it deletes exactly those N
+    And it deletes none of the ones reported with state "ok"
+
+  @cli @worktrees @orphans @security
+  Scenario: --orphans never touches a foreign worktree
+    Given the root has a foreign worktree next to an own orphan
+    When I run "prdash worktrees remove --orphans"
+    Then the foreign worktree is still intact on disk
+    And the own orphan disappears
+
+  @cli @worktrees @orphans @security
+  Scenario: a healthy own worktree is never deleted with --orphans
+    Given an own worktree whose source repo is still accessible
+    When I run "prdash worktrees remove --orphans"
+    Then that worktree stays on disk
+    And it keeps being listed with state "ok"
+
+  @cli @worktrees @orphans
+  Scenario: --orphans with zero orphans is the happy path, not an error
+    Given the root has no orphaned worktree
+    When I run "prdash worktrees remove --orphans"
+    Then it deletes nothing
+    And it reports that there are no orphans
+    And the command finishes with exit code 0
+    And it writes nothing to stderr
 
   @cli @worktrees @orphans @dry-run
-  Scenario: --dry-run muestra el lote exacto que borraría y no borra nada
-    Given la raíz tiene dos worktrees propios huérfanos, un worktree propio sano y un worktree ajeno
-    When ejecuto "prdash worktrees remove --orphans --dry-run"
-    Then imprime las rutas de exactamente los dos huérfanos (el mismo lote que borraría sin --dry-run)
-    And no borra ningún worktree
-    And el worktree propio sano y el ajeno siguen intactos
-    And el comando termina con código de salida 0
+  Scenario: --dry-run shows the exact batch it would delete and deletes nothing
+    Given the root has two orphaned own worktrees, one healthy own worktree and one foreign worktree
+    When I run "prdash worktrees remove --orphans --dry-run"
+    Then it prints the paths of exactly the two orphans (the same batch it would delete without --dry-run)
+    And it deletes no worktree
+    And the healthy own worktree and the foreign one stay intact
+    And the command finishes with exit code 0
 
   @cli @worktrees @orphans @dry-run
-  Scenario: --dry-run con cero huérfanos sigue siendo el caso feliz
-    Given la raíz no tiene ningún worktree huérfano
-    When ejecuto "prdash worktrees remove --orphans --dry-run"
-    Then no imprime ningún huérfano
-    And no borra nada
-    And el comando termina con código de salida 0
-    And no escribe nada en stderr
+  Scenario: --dry-run with zero orphans is still the happy path
+    Given the root has no orphaned worktree
+    When I run "prdash worktrees remove --orphans --dry-run"
+    Then it prints no orphan
+    And it deletes nothing
+    And the command finishes with exit code 0
+    And it writes nothing to stderr
 
-  @cli @worktrees @orphans @dry-run @uso
-  Scenario: --dry-run sin --orphans es un error de uso
-    Given un huérfano propio y un worktree propio sano
-    When ejecuto "prdash worktrees remove --dry-run"
-    Then explica por stderr que --dry-run requiere --orphans
-    And el comando termina con código de salida 2
-    And no borra nada, ni el huérfano ni ningún worktree
+  @cli @worktrees @orphans @dry-run @usage
+  Scenario: --dry-run without --orphans is a usage error
+    Given an own orphan and a healthy own worktree
+    When I run "prdash worktrees remove --dry-run"
+    Then it explains on stderr that --dry-run requires --orphans
+    And the command finishes with exit code 2
+    And it deletes nothing, neither the orphan nor any worktree
 
-  @cli @worktrees @orphans @uso
-  Scenario: --orphans es excluyente con las rutas explícitas
-    Given un huérfano propio y un worktree propio sano
-    When ejecuto "prdash worktrees remove --orphans <ruta>"
-    Then no borra nada, ni el huérfano ni la ruta nombrada
-    And explica por stderr que los dos modos no se mezclan
-    And el comando termina con código de salida 2
+  @cli @worktrees @orphans @usage
+  Scenario: --orphans is exclusive with explicit paths
+    Given an own orphan and a healthy own worktree
+    When I run "prdash worktrees remove --orphans <path>"
+    Then it deletes nothing, neither the orphan nor the named path
+    And it explains on stderr that the two modes do not mix
+    And the command finishes with exit code 2
 
-  @cli @worktrees @orphans @uso
-  Scenario: un flag desconocido en remove es un error de uso
-    When ejecuto "prdash worktrees remove --bogus"
-    Then no borra nada
-    And explica por stderr que el flag no se reconoce
-    And el comando termina con código de salida 2
+  @cli @worktrees @orphans @usage
+  Scenario: an unknown flag in remove is a usage error
+    When I run "prdash worktrees remove --bogus"
+    Then it deletes nothing
+    And it explains on stderr that the flag is not recognized
+    And the command finishes with exit code 2
 
-  @cli @worktrees @uso
-  Scenario: un token con guion inicial es un flag, nunca una ruta
-    Given un worktree propio sano
-    When ejecuto "prdash worktrees remove --orphan"
-    Then no borra nada
-    And explica por stderr que no reconoce el flag
-    And el comando termina con código de salida 2
+  @cli @worktrees @usage
+  Scenario: a dash-leading token is a flag, never a path
+    Given a healthy own worktree
+    When I run "prdash worktrees remove --orphan"
+    Then it deletes nothing
+    And it explains on stderr that it does not recognize the flag
+    And the command finishes with exit code 2
 
   @cli @worktrees
-  Scenario: remove con rutas explícitas sigue comportándose como antes
-    Given un worktree propio sano y un worktree ajeno
-    When ejecuto "prdash worktrees remove <ruta-del-propio> <ruta-del-propio-2>"
-    Then borra las rutas propias nombradas
-    And el worktree ajeno sigue intacto
-    And un rechazo (ruta ajena o inexistente) no toca nada y sale con 1
+  Scenario: remove with explicit paths keeps behaving as before
+    Given a healthy own worktree and a foreign worktree
+    When I run "prdash worktrees remove <own-path> <own-path-2>"
+    Then it deletes the named own paths
+    And the foreign worktree stays intact
+    And a rejection (foreign or nonexistent path) touches nothing and exits with 1
 
-  @cli @worktrees @limpieza
-  Scenario: un huérfano con un enlace .git irresoluble se borra por ruta explícita
-    Given un worktree propio cuyo fichero .git no declara un gitdir y cuyo repo de origen ya no existe
-    When ejecuto "prdash worktrees remove <su-ruta>"
-    Then lo borra igualmente: no hay repo que resolver y solo queda borrar su checkout
-    And el comando termina con código de salida 0
+  @cli @worktrees @cleanup
+  Scenario: an orphan with an unresolvable .git link is deleted by explicit path
+    Given an own worktree whose .git file declares no gitdir and whose source repo no longer exists
+    When I run "prdash worktrees remove <its-path>"
+    Then it deletes it anyway: there is no repo to resolve and only its checkout is left to delete
+    And the command finishes with exit code 0
 
-  @cli @worktrees @orphans @limpieza
-  Scenario: un huérfano con .git irresoluble no tumba el lote de --orphans
-    Given la raíz tiene un huérfano con el .git irresoluble y otro huérfano con el .git bien formado
-    When ejecuto "prdash worktrees remove --orphans"
-    Then borra los dos huérfanos
-    And el comando termina con código de salida 0
+  @cli @worktrees @orphans @cleanup
+  Scenario: an orphan with an unresolvable .git does not take down the --orphans batch
+    Given the root has an orphan with the unresolvable .git and another orphan with a well-formed .git
+    When I run "prdash worktrees remove --orphans"
+    Then it deletes both orphans
+    And the command finishes with exit code 0
 
-  @cli @worktrees @uso
-  Scenario: remove sin rutas ni --orphans sigue siendo error de uso
-    When ejecuto "prdash worktrees remove"
-    Then explica por stderr que falta al menos una ruta
-    And el comando termina con código de salida 2
-    And no borra nada
+  @cli @worktrees @usage
+  Scenario: remove without paths nor --orphans is still a usage error
+    When I run "prdash worktrees remove"
+    Then it explains on stderr that at least one path is missing
+    And the command finishes with exit code 2
+    And it deletes nothing
 
-  # ═══════════════ B — auto-borrado del worktree al mergear desde prdash ═══════════════
+  # ═══════════════ B — self-deletion of the worktree on merge from prdash ═══════════════
 
-  @tui @merge @limpieza
-  Scenario: un merge OK desde prdash borra el worktree limpio del ítem
-    Given un ítem con su worktree de review montado y sin cambios sin commitear
-    When mergeo ese ítem desde prdash y el merge termina bien
-    Then el worktree de ese ítem desaparece del disco
-    And el aviso dice a la vez que el merge salió bien y que se borró el worktree
-    And ese ítem deja de tener review montado
+  @tui @merge @cleanup
+  Scenario: an OK merge from prdash deletes the item's clean worktree
+    Given an item with its review worktree mounted and no uncommitted changes
+    When I merge that item from prdash and the merge finishes well
+    Then the worktree of that item disappears from disk
+    And the notice says both that the merge went well and that the worktree was deleted
+    And that item stops having a mounted review
 
-  @tui @merge @limpieza
-  Scenario: un merge OK con el worktree sucio lo conserva y lo dice
-    Given un ítem con su worktree de review montado y con cambios sin commitear
-    When mergeo ese ítem desde prdash y el merge termina bien
-    Then el worktree sigue en disco
-    And el aviso dice "merged, but the worktree has uncommitted changes — kept"
-    And ese ítem sigue con su review montado
+  @tui @merge @cleanup
+  Scenario: an OK merge with a dirty worktree keeps it and says so
+    Given an item with its review worktree mounted and with uncommitted changes
+    When I merge that item from prdash and the merge finishes well
+    Then the worktree stays on disk
+    And the notice says "merged, but the worktree has uncommitted changes — kept"
+    And that item still has its mounted review
 
-  @tui @merge @limpieza
-  Scenario: un archivo nuevo sin trackear también cuenta como sucio
-    Given un ítem con su worktree montado cuyo único cambio es un archivo no trackeado
-    When mergeo ese ítem desde prdash y el merge termina bien
-    Then el worktree se conserva (un archivo nuevo es trabajo sin commitear)
-    And el aviso lo dice
+  @tui @merge @cleanup
+  Scenario: a new untracked file also counts as dirty
+    Given an item with its mounted worktree whose only change is an untracked file
+    When I merge that item from prdash and the merge finishes well
+    Then the worktree is kept (a new file is uncommitted work)
+    And the notice says so
 
-  @tui @merge @limpieza
-  Scenario: ante un estado de git ilegible se conserva el worktree
-    Given un ítem con su worktree montado cuyo estado de git no se puede leer
-    When mergeo ese ítem desde prdash y el merge termina bien
-    Then el worktree se conserva (ante la duda, no se borra)
-    And el aviso dice que no se pudo comprobar su estado
+  @tui @merge @cleanup
+  Scenario: on an unreadable git state the worktree is kept
+    Given an item with its mounted worktree whose git state cannot be read
+    When I merge that item from prdash and the merge finishes well
+    Then the worktree is kept (when in doubt, it is not deleted)
+    And the notice says that its state could not be checked
 
-  @tui @merge @limpieza
-  Scenario: un merge OK sin worktree montado no reporta error
-    Given un ítem sin ningún worktree de review montado
-    When mergeo ese ítem desde prdash y el merge termina bien
-    Then el merge termina igual
-    And no se reporta ningún error de limpieza
+  @tui @merge @cleanup
+  Scenario: an OK merge without a mounted worktree reports no error
+    Given an item with no mounted review worktree
+    When I merge that item from prdash and the merge finishes well
+    Then the merge finishes the same way
+    And no cleanup error is reported
 
-  @tui @merge @limpieza
-  Scenario: si el worktree ya no está en disco, es un no-op sin error
-    Given un ítem cuyo review montado apunta a una ruta que ya no existe
-    When mergeo ese ítem desde prdash y el merge termina bien
-    Then el merge termina igual
-    And no se reporta ningún error
+  @tui @merge @cleanup
+  Scenario: if the worktree is no longer on disk, it is a no-op without error
+    Given an item whose mounted review points at a path that no longer exists
+    When I merge that item from prdash and the merge finishes well
+    Then the merge finishes the same way
+    And no error is reported
 
-  @tui @merge @limpieza
-  Scenario: el aviso del merge conserva todas las verdades a la vez
-    Given un ítem con un worktree sucio cuyo merge sale bien pero la rama no se borró
-    When mergeo ese ítem desde prdash
-    Then el aviso dice a la vez: merge ok, rama no borrada, y worktree conservado
-    And no se pierde ningún hecho por mostrar solo el último
+  @tui @merge @cleanup
+  Scenario: the merge notice keeps all the truths at once
+    Given an item with a dirty worktree whose merge goes well but the branch was not deleted
+    When I merge that item from prdash
+    Then the notice says all of the following at once: merge ok, branch not deleted, and worktree kept
+    And no fact is lost by showing only the last one
 
-  @tui @merge @limpieza @negativo
-  Scenario: approve no borra ningún worktree
-    Given un ítem con su worktree de review montado
-    When apruebo ese ítem desde prdash
-    Then el worktree sigue en disco
+  @tui @merge @cleanup @negative
+  Scenario: approve deletes no worktree
+    Given an item with its review worktree mounted
+    When I approve that item from prdash
+    Then the worktree stays on disk
 
-  @tui @retarget @limpieza @negativo
-  Scenario: retarget no borra ningún worktree
-    Given un ítem con su worktree de review montado
-    When cambio su rama destino desde prdash
-    Then el worktree sigue en disco
+  @tui @retarget @cleanup @negative
+  Scenario: retarget deletes no worktree
+    Given an item with its review worktree mounted
+    When I change its target branch from prdash
+    Then the worktree stays on disk
 
-  @tui @merge @limpieza @negativo
-  Scenario: un merge que no sale bien no borra ningún worktree
-    Given un ítem con su worktree de review montado
-    When intento mergearlo y el merge falla, se bloquea, da conflicto o no es mergeable
-    Then el worktree sigue en disco
-    And no aparece ningún aviso de borrado
+  @tui @merge @cleanup @negative
+  Scenario: a merge that does not go well deletes no worktree
+    Given an item with its review worktree mounted
+    When I try to merge it and the merge fails, is blocked, conflicts or is not mergeable
+    Then the worktree stays on disk
+    And no deletion notice appears
 
-  @tui @quit @limpieza @negativo
-  Scenario: cerrar la app no borra ningún worktree
-    Given hay worktrees de review montados
-    When cierro la TUI con "q" o "ctrl+c"
-    Then todos los worktrees siguen en disco
-    And no se ejecuta ningún borrado al salir
+  @tui @quit @cleanup @negative
+  Scenario: closing the app deletes no worktree
+    Given there are mounted review worktrees
+    When I close the TUI with "q" or "ctrl+c"
+    Then all the worktrees stay on disk
+    And no deletion runs on exit
 
-  @tui @merge @limpieza @negativo
-  Scenario: un PR mergeado directamente en el forge no dispara la limpieza
-    Given un ítem cuyo PR fue mergeado fuera de prdash
-    When prdash refresca el inbox y lo ve mergeado
-    Then su worktree NO se borra de forma implícita
-    And sigue disponible para limpiarlo a mano o con --orphans si quedara huérfano
+  @tui @merge @cleanup @negative
+  Scenario: a PR merged directly on the forge does not trigger the cleanup
+    Given an item whose PR was merged outside prdash
+    When prdash refreshes the inbox and sees it merged
+    Then its worktree is NOT deleted implicitly
+    And it stays available to clean up by hand or with --orphans if it became an orphan
 
-  # ═══════════════════ Guardas comunes a las dos vías ═══════════════════
+  # ═══════════════════ Common guards for the two paths ═══════════════════
 
-  @cli @tui @seguridad
-  Scenario: ninguna vía de limpieza toca un worktree ajeno o fuera de la raíz
-    Given un worktree ajeno y un worktree propio situado fuera de la raíz gestionada
-    When se intenta borrar cualquiera de los dos por ruta explícita, por --orphans o por B
-    Then ninguno de los dos se borra
-    And solo puede borrarse lo propio que además vive dentro de la raíz gestionada
+  @cli @tui @security
+  Scenario: no cleanup path touches a foreign worktree or one outside the root
+    Given a foreign worktree and an own worktree located outside the managed root
+    When either of the two is deleted by explicit path, by --orphans or by B
+    Then neither of the two is deleted
+    And only the own one that also lives inside the managed root can be deleted
 
-  @cli @worktrees @seguridad
-  Scenario: la guarda de raíz gestionada aplica en las dos provisiones
-    Given un worktree propio situado fuera de la raíz gestionada
-    When intento borrarlo por ruta explícita, con git directo o con la provisión nativa de Herdr
-    Then no se borra
-    And el rechazo es un error y no toca nada, ni con el borrado nativo
+  @cli @worktrees @security
+  Scenario: the managed-root guard applies on both provisionings
+    Given an own worktree located outside the managed root
+    When I try to delete it by explicit path, with direct git or with the Herdr native provisioning
+    Then it is not deleted
+    And the rejection is an error that touches nothing, not even with native deletion
 
-  @cli @tui @seguridad
-  Scenario: una ruta inexistente se rechaza sin tocar nada
-    When pido borrar una ruta que no existe, por cualquier vía
-    Then no se borra nada
-    And no se crea ni se modifica ningún otro worktree
+  @cli @tui @security
+  Scenario: a nonexistent path is rejected without touching anything
+    When I ask to delete a path that does not exist, through any path
+    Then nothing is deleted
+    And no other worktree is created nor modified

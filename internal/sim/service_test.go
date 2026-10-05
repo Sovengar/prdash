@@ -104,20 +104,20 @@ func TestSimulateLeavesNoTraceInTheLocalRepo(t *testing.T) {
 		t.Errorf("Result = %+v", res)
 	}
 	if _, err := os.Stat(res.Path); err != nil {
-		t.Errorf("la imagen no se conservó en %s: %v", res.Path, err)
+		t.Errorf("the image was not kept at %s: %v", res.Path, err)
 	}
 
 	if after := testutil.RunGit(t, repo, "branch", "--format=%(refname)"); after != before {
-		t.Errorf("el repo ganó o perdió ramas:\n%s\nwant\n%s", after, before)
+		t.Errorf("the repo gained or lost branches:\n%s\nwant\n%s", after, before)
 	}
 	if n := strings.Count(testutil.RunGit(t, repo, "worktree", "list"), "\n"); n != 0 {
-		t.Errorf("quedan %d worktrees en el repo", n)
+		t.Errorf("%d worktrees are left in the repo", n)
 	}
 	if got := strings.TrimSpace(testutil.RunGit(t, review, "rev-parse", "--abbrev-ref", "HEAD")); got != "prdash/pr-7" {
-		t.Errorf("el worktree del review quedó en %q", got)
+		t.Errorf("the review's worktree ended up at %q", got)
 	}
 	if out := testutil.RunGit(t, review, "status", "--porcelain"); strings.TrimSpace(out) != "" {
-		t.Errorf("el render dejó cambios sin commitear en el worktree del review:\n%s", out)
+		t.Errorf("the render left uncommitted changes in the review's worktree:\n%s", out)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestRebaseRunsFromTheItemBranch(t *testing.T) {
 		t.Fatalf("Simulate: %v", err)
 	}
 	if res.Ref != "main" {
-		t.Errorf("Ref = %q, want main: el rebase se hace contra la base", res.Ref)
+		t.Errorf("Ref = %q, want main: the rebase is done against the base", res.Ref)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(dir, "cwd"))
@@ -145,11 +145,11 @@ func TestRebaseRunsFromTheItemBranch(t *testing.T) {
 	}
 	cwd, rest, _ := strings.Cut(strings.TrimSpace(string(raw)), "|")
 	if cwd == repo {
-		t.Fatal("el render corrió en el repo de origen en vez del clon temporal")
+		t.Fatal("the render ran in the source repo instead of the temporary clone")
 	}
 	args, head, _ := strings.Cut(rest, "|")
 	if !strings.HasSuffix(args, " rebase main") {
-		t.Errorf("argv = %q, want un rebase contra main", args)
+		t.Errorf("argv = %q, want a rebase against main", args)
 	}
 	// The active branch has to be the item's: that is what is rebased from.
 	if head != "prdash/pr-7" {
@@ -163,7 +163,7 @@ func TestSimulateNeedsAMountedReview(t *testing.T) {
 
 	_, err := svc.Simulate(context.Background(), it, KindMerge)
 	if err == nil || !strings.Contains(err.Error(), "mounted") {
-		t.Fatalf("err = %v, want un aviso de que falta montar la review", err)
+		t.Fatalf("err = %v, want a warning that the review is not mounted", err)
 	}
 }
 
@@ -173,7 +173,7 @@ func TestSimulateNeedsATargetBranch(t *testing.T) {
 	svc := newService(t, stubLocator{place: Place{Repo: repo, Branch: "prdash/pr-7"}, ok: true}, fakeSim(t, writeJPEG(t)))
 
 	if _, err := svc.Simulate(context.Background(), it, KindMerge); err == nil {
-		t.Fatal("Simulate aceptó un ítem sin rama base")
+		t.Fatal("Simulate accepted an item with no base branch")
 	}
 }
 
@@ -185,7 +185,7 @@ func TestSimulateFailsWhenTheBaseIsNotInTheClone(t *testing.T) {
 
 	_, err := svc.Simulate(context.Background(), it, KindMerge)
 	if err == nil || !strings.Contains(err.Error(), "release/9") {
-		t.Fatalf("err = %v, want que nombre la base que no encuentra", err)
+		t.Fatalf("err = %v, want it to name the base it cannot find", err)
 	}
 }
 
@@ -201,7 +201,7 @@ func TestMaterializeFallsBackToTheRemoteRef(t *testing.T) {
 		t.Fatalf("materialize: %v", err)
 	}
 	if !testutil.RefExists(t, clone, "refs/heads/main") {
-		t.Error("materialize no creó la rama local a partir del ref remoto")
+		t.Error("materialize did not create the local branch from the remote ref")
 	}
 }
 
@@ -215,7 +215,7 @@ func TestMaterializePrefersTheLocalBranch(t *testing.T) {
 	localSHA := strings.TrimSpace(testutil.RunGit(t, clone, "rev-parse", "main"))
 	remoteSHA := strings.TrimSpace(testutil.RunGit(t, repo, "rev-parse", "main"))
 	if localSHA == remoteSHA {
-		t.Skip("el clon y el remoto apuntan al mismo commit; no hay divergencia que probar")
+		t.Skip("the clone and the remote point at the same commit; there is no divergence to test")
 	}
 
 	svc := newService(t, stubLocator{place: Place{Repo: clone, Branch: "prdash/pr-7"}, ok: true}, fakeSim(t, writeJPEG(t)))
@@ -223,7 +223,7 @@ func TestMaterializePrefersTheLocalBranch(t *testing.T) {
 		t.Fatalf("materialize: %v", err)
 	}
 	if got := strings.TrimSpace(testutil.RunGit(t, clone, "rev-parse", "main")); got != localSHA {
-		t.Errorf("main = %s, want la local %s (el remoto es %s)", got, localSHA, remoteSHA)
+		t.Errorf("main = %s, want the local %s (the remote is %s)", got, localSHA, remoteSHA)
 	}
 }
 
@@ -244,13 +244,13 @@ func TestPruneKeepsTheNewest(t *testing.T) {
 	prune(dir, 2)
 
 	if _, err := os.Stat(filepath.Join(dir, "a.jpg")); !os.IsNotExist(err) {
-		t.Error("no podó la imagen más antigua")
+		t.Error("it did not prune the oldest image")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "c.jpg")); err != nil {
-		t.Errorf("podó una imagen reciente: %v", err)
+		t.Errorf("it pruned a recent image: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "notimage.txt")); err != nil {
-		t.Errorf("tocó un fichero que no es una imagen: %v", err)
+		t.Errorf("it touched a file that is not an image: %v", err)
 	}
 }
 

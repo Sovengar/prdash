@@ -7,35 +7,35 @@ import (
 	"testing"
 )
 
-type medidas struct{ w, h int }
+type measures struct{ w, h int }
 
 // Two invariants and both matter: the box is NEVER exceeded, and the aspect ratio is respected.
-func TestFitCellsRespetaLaCajaYUsaLaDimensionQueManda(t *testing.T) {
-	formas := []medidas{{16, 9}, {9, 16}, {10, 10}, {100, 3}, {3, 100}, {1, 1}, {1920, 1080}}
-	celdas := []medidas{{1, 2}, {9, 19}, {1, 1}, {2, 1}, {8, 16}}
-	areas := []medidas{{40, 10}, {10, 40}, {20, 20}, {1, 1}, {200, 60}, {5, 3}, {3, 5}}
+func TestFitCellsRespectsTheBoxAndUsesTheDimensionThatRules(t *testing.T) {
+	shapes := []measures{{16, 9}, {9, 16}, {10, 10}, {100, 3}, {3, 100}, {1, 1}, {1920, 1080}}
+	cells := []measures{{1, 2}, {9, 19}, {1, 1}, {2, 1}, {8, 16}}
+	areas := []measures{{40, 10}, {10, 40}, {20, 20}, {1, 1}, {200, 60}, {5, 3}, {3, 5}}
 
-	for _, f := range formas {
+	for _, f := range shapes {
 		img := solid(f.w, f.h, color.RGBA{R: 1, G: 2, B: 3, A: 255})
-		for _, c := range celdas {
+		for _, c := range cells {
 			for _, a := range areas {
 				cols, rows := FitCells(img, c.w, c.h, a.w, a.h)
-				nombre := "img " + itoa(f.w) + "x" + itoa(f.h) + ", celda " + itoa(c.w) + "x" + itoa(c.h) +
+				label := "img " + itoa(f.w) + "x" + itoa(f.h) + ", cell " + itoa(c.w) + "x" + itoa(c.h) +
 					", area " + itoa(a.w) + "x" + itoa(a.h)
 
 				if cols > a.w || rows > a.h {
-					t.Errorf("%s: dio %dx%d, want <= %dx%d: se sale del popup",
-						nombre, cols, rows, a.w, a.h)
+					t.Errorf("%s: it gave %dx%d, want <= %dx%d: it goes out of the popup",
+						label, cols, rows, a.w, a.h)
 					continue
 				}
 				if cols < 1 || rows < 1 {
-					t.Errorf("%s: dio %dx%d, want al menos 1x1: un popup de cero celdas no enseña nada",
-						nombre, cols, rows)
+					t.Errorf("%s: it gave %dx%d, want at least 1x1: a zero-cell popup shows nothing",
+						label, cols, rows)
 					continue
 				}
 				if cols < a.w && rows < a.h {
-					t.Errorf("%s: dio %dx%d y el área es %dx%d: sobró sitio en las dos dimensiones, "+
-						"y se eligió el mayor tamaño que cabe", nombre, cols, rows, a.w, a.h)
+					t.Errorf("%s: it gave %dx%d and the area is %dx%d: space was left in both "+
+						"dimensions, and the largest size that fits was to be chosen", label, cols, rows, a.w, a.h)
 				}
 			}
 		}
@@ -44,81 +44,81 @@ func TestFitCellsRespetaLaCajaYUsaLaDimensionQueManda(t *testing.T) {
 
 // The ratio that decides how many columns per row the image needs is the image's OVER the cell's,
 // not the reverse.
-func TestFitCellsConservaLaRelacionDeAspecto(t *testing.T) {
-	cuadrada := solid(100, 100, black)
-	cols, rows := FitCells(cuadrada, 1, 2, 100, 10)
+func TestFitCellsPreservesTheAspectRatio(t *testing.T) {
+	square := solid(100, 100, black)
+	cols, rows := FitCells(square, 1, 2, 100, 10)
 	if cols != 20 || rows != 10 {
-		t.Errorf("cuadrada en celdas 1x2 dio %dx%d, want 20x10: el alto manda (10 líneas) y cada línea necesita 2 columnas", cols, rows)
+		t.Errorf("square in 1x2 cells gave %dx%d, want 20x10: the height rules (10 lines) and each line needs 2 columns", cols, rows)
 	}
 	// Square image, 9x19 cells: one cell is much taller than wide, so it takes 19/9 = 2.11 columns per
 	//row for the image to come out square.
-	cols, rows = FitCells(cuadrada, 9, 19, 100, 10)
+	cols, rows = FitCells(square, 9, 19, 100, 10)
 	if cols != 21 || rows != 10 {
-		t.Errorf("cuadrada en celdas 9x19 dio %dx%d, want 21x10: 19/9 = 2,11 columnas por línea", cols, rows)
+		t.Errorf("square in 9x19 cells gave %dx%d, want 21x10: 19/9 = 2.11 columns per line", cols, rows)
 	}
-	panoramica := solid(160, 90, black)
-	cols, rows = FitCells(panoramica, 1, 2, 80, 20)
+	wide := solid(160, 90, black)
+	cols, rows = FitCells(wide, 1, 2, 80, 20)
 	if cols != 71 || rows != 20 {
-		t.Errorf("16:9 en celdas 1x2 dio %dx%d, want 71x20: 3,56 columnas por línea x 20 líneas = 71, que cabe en 80", cols, rows)
+		t.Errorf("16:9 in 1x2 cells gave %dx%d, want 71x20: 3.56 columns per line x 20 lines = 71, which fits in 80", cols, rows)
 	}
 	// With fewer rows the WIDTH takes over: the same calculation from the other side, which is why both
 	//cuts have to be right.
-	cols, rows = FitCells(panoramica, 1, 2, 80, 30)
+	cols, rows = FitCells(wide, 1, 2, 80, 30)
 	if cols != 80 || rows != 22 {
-		t.Errorf("16:9 en celdas 1x2 con 30 filas dio %dx%d, want 80x22: ya no caben las 107 columnas y manda el ancho", cols, rows)
+		t.Errorf("16:9 in 1x2 cells with 30 rows gave %dx%d, want 80x22: the 107 columns no longer fit and the width rules", cols, rows)
 	}
-	vertical := solid(90, 160, black)
-	cols, rows = FitCells(vertical, 1, 2, 80, 20)
+	tall := solid(90, 160, black)
+	cols, rows = FitCells(tall, 1, 2, 80, 20)
 	if rows != 20 || cols != 22 {
-		t.Errorf("9:16 en celdas 1x2 dio %dx%d, want 22x20: manda el alto y cada línea necesita 1,125 columnas", cols, rows)
+		t.Errorf("9:16 in 1x2 cells gave %dx%d, want 22x20: the height rules and each line needs 1.125 columns", cols, rows)
 	}
 }
 
 // The three degradations. None may break the fit, and each has a reason.
-func TestFitCellsCaeADefaultsSinRomper(t *testing.T) {
+func TestFitCellsFallsBackToDefaultsWithoutBreaking(t *testing.T) {
 	img := solid(16, 9, black)
 
-	for _, a := range []medidas{{40, 10}, {0, 10}, {40, 0}, {0, 0}, {-5, -7}} {
+	for _, a := range []measures{{40, 10}, {0, 10}, {40, 0}, {0, 0}, {-5, -7}} {
 		cols, rows := FitCells(nil, 1, 2, a.w, a.h)
 		if want, wantR := max(a.w, 0), max(a.h, 0); cols != want || rows != wantR {
-			t.Errorf("sin imagen y área %dx%d dio %dx%d, want %dx%d: un tamaño negativo se cuela en el layout",
+			t.Errorf("without an image and a %dx%d area it gave %dx%d, want %dx%d: a negative size sneaks into the layout",
 				a.w, a.h, cols, rows, want, wantR)
 		}
 	}
 
-	vacia := image.NewRGBA(image.Rect(0, 0, 0, 0))
-	for _, a := range []medidas{{40, 10}, {1, 1}} {
-		if cols, rows := FitCells(vacia, 1, 2, a.w, a.h); cols != a.w || rows != a.h {
-			t.Errorf("imagen de 0x0 con área %dx%d dio %dx%d, want el área entera", a.w, a.h, cols, rows)
+	empty := image.NewRGBA(image.Rect(0, 0, 0, 0))
+	for _, a := range []measures{{40, 10}, {1, 1}} {
+		if cols, rows := FitCells(empty, 1, 2, a.w, a.h); cols != a.w || rows != a.h {
+			t.Errorf("a 0x0 image with a %dx%d area gave %dx%d, want the whole area", a.w, a.h, cols, rows)
 		}
 	}
 
 	wantCols, wantRows := FitCells(img, 1, 2, 40, 10)
-	for _, c := range []medidas{{0, 0}, {0, 2}, {1, 0}, {-1, -1}} {
+	for _, c := range []measures{{0, 0}, {0, 2}, {1, 0}, {-1, -1}} {
 		cols, rows := FitCells(img, c.w, c.h, 40, 10)
 		if cols != wantCols || rows != wantRows {
-			t.Errorf("celda %dx%d dio %dx%d, want %dx%d (el default 1x2): sin medida de celda no se puede dividir",
+			t.Errorf("cell %dx%d gave %dx%d, want %dx%d (the 1x2 default): without a cell size there is no dividing",
 				c.w, c.h, cols, rows, wantCols, wantRows)
 		}
 	}
 	// A zero in ONE of the two does not drag the other: 0x5 is 1x5, not 1x2.
 	wantC5, wantR5 := FitCells(img, 1, 5, 40, 10)
 	if c0, r0 := FitCells(img, 0, 5, 40, 10); c0 != wantC5 || r0 != wantR5 {
-		t.Errorf("celda 0x5 dio %dx%d, want %dx%d (1x5): un cero en el ancho no toca el alto declarado", c0, r0, wantC5, wantR5)
+		t.Errorf("cell 0x5 gave %dx%d, want %dx%d (1x5): a zero in the width does not touch the declared height", c0, r0, wantC5, wantR5)
 	}
 	if wantC5 == wantCols && wantR5 == wantRows {
-		t.Error("1x5 y 1x2 dieron el mismo tamaño: el alto de celda no entra en la relación, que es justo lo que se afirma")
+		t.Error("1x5 and 1x2 gave the same size: the cell height does not enter the ratio, which is exactly what is asserted")
 	}
 }
 
-func TestFitEsFitCellsConLaCeldaDeSiempre(t *testing.T) {
-	for _, f := range []medidas{{16, 9}, {9, 16}, {10, 10}, {1920, 1080}} {
+func TestFitIsFitCellsWithTheUsualCell(t *testing.T) {
+	for _, f := range []measures{{16, 9}, {9, 16}, {10, 10}, {1920, 1080}} {
 		img := solid(f.w, f.h, black)
-		for _, a := range []medidas{{40, 10}, {10, 40}, {1, 1}} {
+		for _, a := range []measures{{40, 10}, {10, 40}, {1, 1}} {
 			gotC, gotR := Fit(img, a.w, a.h)
 			wantC, wantR := FitCells(img, 1, 2, a.w, a.h)
 			if gotC != wantC || gotR != wantR {
-				t.Errorf("Fit y FitCells(1,2) difieren con img %dx%d y área %dx%d: %dx%d vs %dx%d",
+				t.Errorf("Fit and FitCells(1,2) differ with img %dx%d and area %dx%d: %dx%d vs %dx%d",
 					f.w, f.h, a.w, a.h, gotC, gotR, wantC, wantR)
 			}
 		}
@@ -126,23 +126,23 @@ func TestFitEsFitCellsConLaCeldaDeSiempre(t *testing.T) {
 }
 
 // Box average, and in the one case where the truth is known without arithmetic the result equals it.
-func TestResizePrometeElColorDeUnColorUnico(t *testing.T) {
-	rojo := color.RGBA{R: 200, G: 10, B: 20, A: 255}
-	for _, f := range []medidas{{1, 1}, {2, 2}, {64, 64}, {640, 480}} {
-		for _, d := range []medidas{{1, 1}, {2, 3}, {16, 9}, {100, 100}, {3, 1}} {
-			out := Resize(solid(f.w, f.h, rojo), d.w, d.h)
+func TestResizePromisesTheColorOfASingleColor(t *testing.T) {
+	red := color.RGBA{R: 200, G: 10, B: 20, A: 255}
+	for _, f := range []measures{{1, 1}, {2, 2}, {64, 64}, {640, 480}} {
+		for _, d := range []measures{{1, 1}, {2, 3}, {16, 9}, {100, 100}, {3, 1}} {
+			out := Resize(solid(f.w, f.h, red), d.w, d.h)
 			if out == nil {
-				t.Fatalf("Resize(%dx%d -> %dx%d) devolvió nil", f.w, f.h, d.w, d.h)
+				t.Fatalf("Resize(%dx%d -> %dx%d) returned nil", f.w, f.h, d.w, d.h)
 			}
 			if got := out.Bounds(); got.Dx() != d.w || got.Dy() != d.h {
-				t.Errorf("Resize(%dx%d -> %dx%d) dio un mapa de %dx%d", f.w, f.h, d.w, d.h, got.Dx(), got.Dy())
+				t.Errorf("Resize(%dx%d -> %dx%d) gave a map of %dx%d", f.w, f.h, d.w, d.h, got.Dx(), got.Dy())
 				continue
 			}
 			for y := range d.h {
 				for x := range d.w {
-					if got := out.RGBAAt(x, y); got != rojo {
-						t.Fatalf("Resize(%dx%d -> %dx%d): el píxel (%d,%d) = %+v, want %+v",
-							f.w, f.h, d.w, d.h, x, y, got, rojo)
+					if got := out.RGBAAt(x, y); got != red {
+						t.Fatalf("Resize(%dx%d -> %dx%d): pixel (%d,%d) = %+v, want %+v",
+							f.w, f.h, d.w, d.h, x, y, got, red)
 					}
 				}
 			}
@@ -151,7 +151,7 @@ func TestResizePrometeElColorDeUnColorUnico(t *testing.T) {
 }
 
 // A rescale that averages red well and blue badly yields a colour that is not in the source image.
-func TestResizePromediaLosCanalesYNoSoloUno(t *testing.T) {
+func TestResizeAveragesTheChannelsAndNotJustOne(t *testing.T) {
 	cols := []color.RGBA{
 		{R: 0, G: 0, B: 0, A: 255},
 		{R: 100, G: 0, B: 0, A: 255},
@@ -165,7 +165,7 @@ func TestResizePromediaLosCanalesYNoSoloUno(t *testing.T) {
 
 	out := Resize(img, 1, 1)
 	if out == nil {
-		t.Fatal("Resize devolvió nil")
+		t.Fatal("Resize returned nil")
 	}
 	got := out.RGBAAt(0, 0)
 	want := color.RGBA{
@@ -175,84 +175,84 @@ func TestResizePromediaLosCanalesYNoSoloUno(t *testing.T) {
 		A: 255,
 	}
 	if got != want {
-		t.Errorf("promedio de 2x2 a 1x1 = %+v, want %+v (cada canal entre el mismo número de píxeles)", got, want)
+		t.Errorf("average of 2x2 to 1x1 = %+v, want %+v (each channel between the same number of pixels)", got, want)
 	}
 
 	out = Resize(img, 2, 1)
 	if out == nil {
-		t.Fatal("Resize devolvió nil")
+		t.Fatal("Resize returned nil")
 	}
-	if izq := out.RGBAAt(0, 0); izq != (color.RGBA{R: 0, G: 0, B: 50, A: 255}) {
-		t.Errorf("la mitad izquierda = %+v, want el promedio de los dos píxeles de la columna 0 (negro y azul)", izq)
+	if left := out.RGBAAt(0, 0); left != (color.RGBA{R: 0, G: 0, B: 50, A: 255}) {
+		t.Errorf("the left half = %+v, want the average of the two pixels of column 0 (black and blue)", left)
 	}
-	if der := out.RGBAAt(1, 0); der != (color.RGBA{R: 150, G: 100, B: 100, A: 255}) {
-		t.Errorf("la mitad derecha = %+v, want el promedio de los dos píxeles de la columna 1 (rojo y gris)", der)
+	if right := out.RGBAAt(1, 0); right != (color.RGBA{R: 150, G: 100, B: 100, A: 255}) {
+		t.Errorf("the right half = %+v, want the average of the two pixels of column 1 (red and grey)", right)
 	}
 }
 
-func TestResizeSinSalidaNiSinImagenDevuelveNil(t *testing.T) {
+func TestResizeWithoutOutputOrWithoutImageReturnsNil(t *testing.T) {
 	img := solid(4, 4, color.RGBA{R: 1, A: 255})
-	for _, d := range []medidas{{0, 4}, {4, 0}, {0, 0}, {-1, 4}, {4, -1}} {
+	for _, d := range []measures{{0, 4}, {4, 0}, {0, 0}, {-1, 4}, {4, -1}} {
 		if out := Resize(img, d.w, d.h); out != nil {
-			t.Errorf("Resize a %dx%d devolvió una imagen de %v, want nil", d.w, d.h, out.Bounds())
+			t.Errorf("Resize to %dx%d returned an image of %v, want nil", d.w, d.h, out.Bounds())
 		}
 	}
-	for _, d := range []medidas{{4, 4}, {1, 1}} {
+	for _, d := range []measures{{4, 4}, {1, 1}} {
 		if out := Resize(nil, d.w, d.h); out != nil {
-			t.Errorf("Resize(nil, %dx%d) devolvió una imagen, want nil", d.w, d.h)
+			t.Errorf("Resize(nil, %dx%d) returned an image, want nil", d.w, d.h)
 		}
 	}
 }
 
 // Bounds does not only say the size, it says WHERE the image starts: a cropped PNG is half an
 // image returned by git-sim.
-func TestResizeRespetaElOrigenDeLosBounds(t *testing.T) {
+func TestResizeRespectsTheBoundsOrigin(t *testing.T) {
 	// A big image with two very different halves and a crop that falls EXACTLY between them: an
 	//absolute-coordinate reader would take only one.
-	rojo := color.RGBA{R: 250, G: 0, B: 0, A: 255}
-	verde := color.RGBA{R: 0, G: 250, B: 0, A: 255}
-	fondo := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	red := color.RGBA{R: 250, G: 0, B: 0, A: 255}
+	green := color.RGBA{R: 0, G: 250, B: 0, A: 255}
+	background := image.NewRGBA(image.Rect(0, 0, 100, 100))
 	for y := range 100 {
 		for x := range 100 {
 			if x < 50 {
-				fondo.SetRGBA(x, y, rojo)
+				background.SetRGBA(x, y, red)
 			} else {
-				fondo.SetRGBA(x, y, verde)
+				background.SetRGBA(x, y, green)
 			}
 		}
 	}
-	recorte := fondo.SubImage(image.Rect(30, 30, 70, 70))
-	if got := recorte.Bounds().Min; got.X != 30 || got.Y != 30 {
-		t.Fatalf("el recorte debería tener Min = (30,30), dio %v", got)
+	crop := background.SubImage(image.Rect(30, 30, 70, 70))
+	if got := crop.Bounds().Min; got.X != 30 || got.Y != 30 {
+		t.Fatalf("the crop should have Min = (30,30), it gave %v", got)
 	}
 
 	want := color.RGBA{R: 125, G: 125, B: 0, A: 255}
-	if got := Resize(recorte, 1, 1).RGBAAt(0, 0); got != want {
-		t.Errorf("el recorte a caballo a 1x1 dio %+v, want %+v: leyó la imagen original en vez del recorte", got, want)
+	if got := Resize(crop, 1, 1).RGBAAt(0, 0); got != want {
+		t.Errorf("the straddling crop to 1x1 gave %+v, want %+v: it read the original image instead of the crop", got, want)
 	}
-	out := Resize(recorte, 40, 10)
+	out := Resize(crop, 40, 10)
 	if out == nil {
-		t.Fatal("Resize devolvió nil")
+		t.Fatal("Resize returned nil")
 	}
 	if got := out.RGBAAt(0, 0); got.R < got.G {
-		t.Errorf("la izquierda del recorte dio %+v, want más rojo que verde", got)
+		t.Errorf("the crop's left gave %+v, want more red than green", got)
 	}
 	if got := out.RGBAAt(39, 0); got.G < got.R {
-		t.Errorf("la derecha del recorte dio %+v, want más verde que rojo", got)
+		t.Errorf("the crop's right gave %+v, want more green than red", got)
 	}
 
-	plano := solid(100, 100, verde)
-	sub := plano.SubImage(image.Rect(30, 30, 70, 70))
-	for _, d := range []medidas{{1, 1}, {8, 6}, {40, 10}} {
+	flat := solid(100, 100, green)
+	sub := flat.SubImage(image.Rect(30, 30, 70, 70))
+	for _, d := range []measures{{1, 1}, {8, 6}, {40, 10}} {
 		got := Resize(sub, d.w, d.h)
 		if got == nil {
-			t.Fatalf("Resize devolvió nil")
+			t.Fatalf("Resize returned nil")
 		}
 		for y := range d.h {
 			for x := range d.w {
-				if c := got.RGBAAt(x, y); c != verde {
-					t.Fatalf("el recorte sólido a %dx%d dio %+v en (%d,%d), want %+v: leyó la imagen original en vez del recorte",
-						d.w, d.h, c, x, y, verde)
+				if c := got.RGBAAt(x, y); c != green {
+					t.Fatalf("the solid crop to %dx%d gave %+v at (%d,%d), want %+v: it read the original image instead of the crop",
+						d.w, d.h, c, x, y, green)
 				}
 			}
 		}

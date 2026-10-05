@@ -25,21 +25,21 @@ func TestOverlayKeepsTheBackgroundAroundThePopup(t *testing.T) {
 	got := plain(overlayCentered(content, box, 20))
 	lines := strings.Split(got, "\n")
 	if len(lines) != 9 {
-		t.Fatalf("la vista cambió de alto: %d líneas, want 9", len(lines))
+		t.Fatalf("the view changed height: %d lines, want 9", len(lines))
 	}
 	for i, l := range lines {
 		want := "···" + string(rune('0'+i)) + strings.Repeat("·", 16)
 		if l == want {
-			continue // fila intacta
+			continue // row intacta
 		}
 		if i >= 3 && i <= 5 {
-			continue // las que tapa el popup
+			continue // the ones the popup covers
 		}
-		t.Errorf("fila %d = %q, want %q", i, l, want)
+		t.Errorf("row %d = %q, want %q", i, l, want)
 	}
 	for i, want := range []string{"AAA", "BBB", "CCC"} {
 		if row := strings.Split(got, "\n")[3+i]; !strings.Contains(row, want) {
-			t.Errorf("fila %d = %q, no contiene %q", 3+i, row, want)
+			t.Errorf("row %d = %q, no contains %q", 3+i, row, want)
 		}
 	}
 }
@@ -48,10 +48,10 @@ func TestOverlayCentersHorizontally(t *testing.T) {
 	got := plain(overlayCentered(strings.Repeat("x", 21), "MID", 21))
 	row := strings.Split(got, "\n")[0]
 	if !strings.HasPrefix(row, "xxxx") || !strings.HasSuffix(row, "xxxx") {
-		t.Errorf("fila = %q, want el popup centrado", row)
+		t.Errorf("row = %q, want the popup centered", row)
 	}
 	if !strings.Contains(row, "MID") {
-		t.Errorf("fila = %q, no contiene el popup", row)
+		t.Errorf("row = %q, does not contain the popup", row)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestOverlayPreservesLineWidth(t *testing.T) {
 		got := overlayCentered(content, box, 20)
 		for i, l := range strings.Split(got, "\n") {
 			if w := ansi.StringWidth(l); w != 20 {
-				t.Errorf("caja %q: fila %d mide %d, want 20", box, i, w)
+				t.Errorf("box %q: row %d mide %d, want 20", box, i, w)
 			}
 		}
 	}
@@ -73,17 +73,17 @@ func TestOverlayCropsABoxTallerThanTheView(t *testing.T) {
 
 	got := plain(overlayCentered(content, box, 20))
 	if lines := strings.Split(got, "\n"); len(lines) != 3 {
-		t.Fatalf("líneas = %d, want 3", len(lines))
+		t.Fatalf("lines = %d, want 3", len(lines))
 	}
 	if !strings.Contains(got, "3") || strings.Contains(got, "4") {
-		t.Errorf("no recortó por abajo:\n%s", got)
+		t.Errorf("it did not clip at the bottom:\n%s", got)
 	}
 }
 
 func TestOverlayWithoutBoxIsIdentity(t *testing.T) {
 	content := viewOf(5, 20)
 	if got := overlayCentered(content, "", 20); got != content {
-		t.Error("un popup vacío alteró la vista")
+		t.Error("an empty popup altered the view")
 	}
 }
 
@@ -93,9 +93,9 @@ func TestOverlayKeepsBaseColorsRightOfThePopup(t *testing.T) {
 	got := overlayCentered(base, "PP", 20)
 
 	if !strings.Contains(got, "\x1b[31m") {
-		t.Error("la línea de base perdió su secuencia de color")
+		t.Error("the base line lost its color sequence")
 	}
 	if !strings.HasSuffix(got, "\x1b[0m") {
-		t.Errorf("la línea no conserva el cierre de estilo: %q", got)
+		t.Errorf("the line does not keep the style close: %q", got)
 	}
 }

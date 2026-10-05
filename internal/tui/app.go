@@ -120,9 +120,9 @@ type streamKey struct {
 
 type stream struct {
 	items      []model.Item
-	cursor     string // cursor de la última página recibida
-	headCursor string // cursor "next" de la primera página del último ciclo completo
-	complete   bool   // la lista se paginó entera en el último ciclo
+	cursor     string // cursor of the last page received
+	headCursor string // "next" cursor of the first page of the last complete cycle
+	complete   bool   // the list paginated fully in the last cycle
 	more       bool
 }
 
@@ -284,8 +284,8 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		ctx:         ctx,
 		cancel:      cancel,
 		loading:     true,
-		cycle:       1, // el primer ciclo lo lanza Init
-		readers:     1, // Init arma el primer lector del canal
+		cycle:       1, // Init fires the first cycle
+		readers:     1, // Init arms the first channel reader
 		// Assigned is the section shown on open: it carries the assigned work and the rest is one `tab` away.
 		activeSection: model.SectionReview,
 		pos:           map[model.Section]sectionPos{},
@@ -738,11 +738,11 @@ func problemLabel(kind string) string {
 	case "ratelimit":
 		return "rate limited"
 	case "parse":
-		return "respuesta ilegible"
+		return "unreadable response"
 	case "unsupported":
-		return "no soportado"
+		return "unsupported"
 	case "validation":
-		return "rechazado"
+		return "rejected"
 	case "network":
 		return "no connection"
 	default:

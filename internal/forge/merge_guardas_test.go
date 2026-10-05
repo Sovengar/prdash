@@ -14,187 +14,187 @@ import (
 // The two branches that are the boundary between forge and the TUI.
 
 // The HeadSHA that travels is the one from the re-read, not the card's.
-func TestRunActionDelMergePasaElHeadSHAReleidoYNoElDeLaFicha(t *testing.T) {
-	visto := mkItem("github", "github.com", "acme/widget", 3)
-	visto.State = "OPEN"
-	visto.HeadSHA = "sha-que-el-usuario-vio"
+func TestMergeActionsPassTheReReadHeadSHAAndNotTheCards(t *testing.T) {
+	seen := mkItem("github", "github.com", "acme/widget", 3)
+	seen.State = "OPEN"
+	seen.HeadSHA = "sha-the-user-saw"
 
-	releido := visto
-	releido.HeadSHA = "sha-nuevo-del-refresco"
+	reread := seen
+	reread.HeadSHA = "fresh-sha-from-the-refresh"
 
-	fake := adapterQuePideElEstado(releido)
+	fake := stateReadingAdapter(reread)
 	req := forge.MergeRequest{Mode: forge.Squash, DeleteBranch: true}
-	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, visto.Ref, 3, req)
+	out := forge.RunAction(context.Background(), fake, forge.ActionMerge, seen.Ref, 3, req)
 
-	if !fake.seLlamo {
-		t.Error("el merge no llegó a Merge: no hay caso bueno contra el que comparar")
+	if !fake.mergeCalled {
+		t.Error("the merge did not reach Merge: there is no good case to compare against")
 	}
 	if out.OK {
-		t.Errorf("el fake no fusiona y el resultado salió bien: %+v", out)
+		t.Errorf("the fake does not merge and the result came out fine: %+v", out)
 	}
 	if out.Mode != forge.Squash || !out.DeleteBranch {
-		t.Errorf("la petición salió con modo %q y borrado %v: son lo que el usuario eligió",
+		t.Errorf("the request went out with mode %q and delete %v: they are what the user chose",
 			out.Mode, out.DeleteBranch)
 	}
 	if !out.HasItem {
-		t.Error("el resultado no trae el estado releído: la TUI no puede refrescar la fila")
+		t.Error("the result does not bring the re-read state: the TUI cannot refresh the row")
 	}
-	if out.Item.HeadSHA != "sha-nuevo-del-refresco" {
-		t.Errorf("el estado releído trae SHA %q: se aplicaría sobre una ficha vieja",
+	if out.Item.HeadSHA != "fresh-sha-from-the-refresh" {
+		t.Errorf("the re-read state brings SHA %q: it would be applied over a stale card",
 			out.Item.HeadSHA)
 	}
 }
 
 // The two states that really block, and it is convenient that they are only two.
-func TestUnPRYaFusionadoOCerradoBloqueaElMergeSinLlamarAlForge(t *testing.T) {
+func TestAnAlreadyMergedOrClosedPRBlocksTheMergeWithoutCallingTheForge(t *testing.T) {
 	for _, c := range []struct {
-		nombre string
-		estado string
+		name  string
+		state string
 	}{
-		{"ya fusionado", "MERGED"},
-		{"ya cerrado", "CLOSED"},
+		{"already merged", "MERGED"},
+		{"already closed", "CLOSED"},
 	} {
 		it := mkItem("github", "github.com", "acme/widget", 4)
-		it.State = c.estado
+		it.State = c.state
 		it.HeadSHA = "abc123"
-		fake := adapterQuePideElEstado(it)
+		fake := stateReadingAdapter(it)
 
 		out := forge.RunAction(context.Background(), fake, forge.ActionMerge, it.Ref, 4,
 			forge.MergeRequest{Mode: forge.MergeCommit})
 
 		if out.OK {
-			t.Errorf("%s: el merge salió bien sobre un PR %q", c.nombre, c.estado)
+			t.Errorf("%s: the merge went through over a %q PR", c.name, c.state)
 		}
-		if fake.seLlamo {
-			t.Errorf("%s: se llamó a Merge: un merge lanzado sobre un PR %q puede "+
-				"integrar medio sin que nadie lo sepa", c.nombre, c.estado)
+		if fake.mergeCalled {
+			t.Errorf("%s: Merge was called: a merge launched over a %q PR can "+
+				"integrate halfway without anyone knowing", c.name, c.state)
 		}
 		if !out.Conflict {
-			t.Errorf("%s: no se marcó como conflicto (%+v): la TUI no ofrecería refrescar",
-				c.nombre, out)
+			t.Errorf("%s: it was not marked as conflict (%+v): the TUI would not offer a refresh",
+				c.name, out)
 		}
 		// The reason IS the reason: "already merged", not a generic "something failed".
 		if !strings.Contains(out.Msg, "already") {
-			t.Errorf("%s: el motivo %q no dice que el PR ya está %s", c.nombre, out.Msg, c.estado)
+			t.Errorf("%s: the reason %q does not say that the PR is already %s", c.name, out.Msg, c.state)
 		}
 		if !out.HasItem || out.Item.Number != 4 {
-			t.Errorf("%s: el resultado no trae el ítem re-leído", c.nombre)
+			t.Errorf("%s: the result does not bring the re-read item", c.name)
 		}
 	}
 
 	it := mkItem("github", "github.com", "acme/widget", 40)
 	it.State = "DIRTY"
 	it.HeadSHA = "abc123"
-	fake := adapterQuePideElEstado(it)
+	fake := stateReadingAdapter(it)
 	if out := forge.RunAction(context.Background(), fake, forge.ActionMerge, it.Ref, 40,
-		forge.MergeRequest{Mode: forge.MergeCommit}); !fake.seLlamo || out.OK {
-		t.Errorf("un PR con las ramas en conflicto no llegó a Merge, o salió bien: "+
-			"llamado=%v out=%+v. El bloqueo blando lo aplica MergeBlock, no RunAction",
-			fake.seLlamo, out)
+		forge.MergeRequest{Mode: forge.MergeCommit}); !fake.mergeCalled || out.OK {
+		t.Errorf("a PR whose branches conflict did not reach Merge, or it went through: "+
+			"called=%v out=%+v. The soft block is applied by MergeBlock, not RunAction",
+			fake.mergeCalled, out)
 	}
 }
 
 // The test documenting a bug: an unknown action returned OK:true without doing anything.
-func TestUnaAccionQueNoEsNiApproveNiMergeNoSeDespachaYNoSeLeeElItem(t *testing.T) {
+func TestAnActionThatIsNeitherApproveNorMergeIsNotDispatchedAndDoesNotReadTheItem(t *testing.T) {
 	for _, kind := range []forge.ActionKind{
-		forge.ActionRetarget, forge.ActionKind("inventado"), forge.ActionKind(""),
+		forge.ActionRetarget, forge.ActionKind("invented"), forge.ActionKind(""),
 	} {
 		it := mkItem("github", "github.com", "acme/widget", 8)
 		it.State = "OPEN"
 		it.HeadSHA = "abc123"
-		fake := adapterQuePideElEstado(it)
-		fake.leeStates = 0
+		fake := stateReadingAdapter(it)
+		fake.stateReads = 0
 
 		out := forge.RunAction(context.Background(), fake, kind, it.Ref, 8,
 			forge.MergeRequest{Mode: forge.MergeCommit})
 
 		if out.OK {
-			t.Errorf("la acción %q salió bien sin hacerse: el aviso de la cabecera diría "+
-				"que la operación funcionó", kind)
+			t.Errorf("action %q came out fine without being done: the header's warning would say "+
+				"the operation worked", kind)
 		}
-		if fake.seLlamo {
-			t.Errorf("la acción %q llegó a Merge", kind)
+		if fake.mergeCalled {
+			t.Errorf("action %q reached Merge", kind)
 		}
-		if fake.leeStates != 0 {
-			t.Errorf("la acción %q releyó el ítem %d veces: una acción imposible no debe "+
-				"gastar un viaje al forge", kind, fake.leeStates)
+		if fake.stateReads != 0 {
+			t.Errorf("action %q re-read the item %d times: an impossible action must not "+
+				"spend a trip to the forge", kind, fake.stateReads)
 		}
 		// The reason is canonical and NAMES the action, so whoever debugs does not have to guess.
 		if !strings.Contains(out.Msg, "does not implement") {
-			t.Errorf("la acción %q dio el motivo %q, que no dice que no está implementada", kind, out.Msg)
+			t.Errorf("action %q gave the reason %q, which does not say it is not implemented", kind, out.Msg)
 		}
 		if !strings.Contains(out.Msg, string(kind)) {
-			t.Errorf("la acción %q dio el motivo %q, que no la nombra", kind, out.Msg)
+			t.Errorf("action %q gave the reason %q, which does not name it", kind, out.Msg)
 		}
 		// Neither a conflict ("the item changed, refresh") nor a permission.
 		if out.Conflict || out.Perm || out.Unmergeable {
-			t.Errorf("la acción %q se clasificó como %+v: no es un conflicto ni un permiso, "+
-				"es un fallo de quién llamó", kind, out)
+			t.Errorf("action %q was classified as %+v: it is neither a conflict nor a permission, "+
+				"it is a failure of whoever called", kind, out)
 		}
 		if out.Kind != kind {
-			t.Errorf("el Kind del resultado es %q, want %q", out.Kind, kind)
+			t.Errorf("the result Kind is %q, want %q", out.Kind, kind)
 		}
 		if out.ID.Project != "acme/widget" || out.ID.Number != 8 {
-			t.Errorf("el ID del resultado es %+v: el aviso no se podría atribuir al ítem", out.ID)
+			t.Errorf("the result ID is %+v: the warning could not be attributed to the item", out.ID)
 		}
 	}
 
 	it := mkItem("github", "github.com", "acme/widget", 9)
 	it.State = "OPEN"
-	bueno := adapterQuePideElEstado(it)
-	bueno.leeStates = 0
-	forge.RunAction(context.Background(), bueno, forge.ActionApprove, it.Ref, 9,
+	good := stateReadingAdapter(it)
+	good.stateReads = 0
+	forge.RunAction(context.Background(), good, forge.ActionApprove, it.Ref, 9,
 		forge.MergeRequest{})
-	if bueno.leeStates == 0 {
-		t.Error("con approve no se releyó el ítem: el guard no es lo que cortó, y el estado " +
-			"del inbox se quedaría sin refrescar")
+	if good.stateReads == 0 {
+		t.Error("with approve the item was not re-read: the guard is not what cut, and the inbox " +
+			"state would stay unrefreshed")
 	}
 }
 
 // A veto that does not depend on the forge: nobody can approve their own.
-func TestAprobarLoPropioSeRechazaConMotivo(t *testing.T) {
+func TestApprovingYourOwnIsRefusedWithAReason(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", 7)
 	it.State = "OPEN"
 	it.HeadSHA = "abc123"
-	it.Author = "yo-mismo"
-	fake := adapterQuePideElEstado(it)
+	it.Author = "myself"
+	fake := stateReadingAdapter(it)
 	fake.approveVeto = true
 
 	out := forge.RunAction(context.Background(), fake, forge.ActionApprove, it.Ref, 7,
 		forge.MergeRequest{})
 	if out.OK {
-		t.Fatal("se aprobó el propio PR")
+		t.Fatal("it approved its own PR")
 	}
 	if strings.TrimSpace(out.Msg) == "" {
-		t.Fatal("sin motivo: el usuario ve que la tecla no hace nada")
+		t.Fatal("with no reason: the user sees that the key does nothing")
 	}
 	// The reason is the CANONICAL one, not the CLI's text: the adapter may say whatever it wants
 	// —the text changes between versions—.
 	if out.Msg != state.SelfReviewReason {
-		t.Errorf("el motivo es %q, want el canónico %q", out.Msg, state.SelfReviewReason)
+		t.Errorf("the reason is %q, want the canonical %q", out.Msg, state.SelfReviewReason)
 	}
 	// Classified as PERMISSION and not as a conflict, which is what stops the TUI from asking for
 	// a refresh that fixes nothing.
 	if !out.Perm {
-		t.Errorf("el veto salió como %+v: sin la marca de permiso la TUI lo reintentaría "+
-			"en cada refresco", out)
+		t.Errorf("the veto came out as %+v: without the permission mark the TUI would retry it "+
+			"on every refresh", out)
 	}
 	if out.Conflict {
-		t.Error("el veto salió además como conflicto: dos clases a la vez y la TUI no sabe " +
-			"cuál ofrecer")
+		t.Error("the veto additionally came out as conflict: two kinds at once and the TUI does " +
+			"not know which to offer")
 	}
 }
 
 // It embeds the project's FakeAdapter and only records whether a merge was asked for.
 // Embedding over a struct means the real methods still work.
-type adapterQueCuestaSiSeMergeo struct {
+type mergeRecordingAdapter struct {
 	testutil.FakeAdapter
-	seLlamo     bool
-	leeStates   int
+	mergeCalled bool
+	stateReads  int
 	approveVeto bool
 }
 
-func (a *adapterQueCuestaSiSeMergeo) Approve(
+func (a *mergeRecordingAdapter) Approve(
 	_ context.Context, _ model.RepoRef, _ int,
 ) []model.Warning {
 	if a.approveVeto {
@@ -203,22 +203,22 @@ func (a *adapterQueCuestaSiSeMergeo) Approve(
 	return a.FakeAdapter.Approve(context.Background(), model.RepoRef{}, 0)
 }
 
-func (a *adapterQueCuestaSiSeMergeo) ItemState(
+func (a *mergeRecordingAdapter) ItemState(
 	ctx context.Context, ref model.RepoRef, number int,
 ) (model.Item, []model.Warning) {
-	a.leeStates++
+	a.stateReads++
 	return a.FakeAdapter.ItemState(ctx, ref, number)
 }
 
-func (a *adapterQueCuestaSiSeMergeo) Merge(
+func (a *mergeRecordingAdapter) Merge(
 	_ context.Context, _ model.RepoRef, _ int, _ forge.MergeRequest,
 ) []model.Warning {
-	a.seLlamo = true
-	return []model.Warning{{Forge: a.ForgeName, Kind: "denegado", Msg: "el fake no fusiona"}}
+	a.mergeCalled = true
+	return []model.Warning{{Forge: a.ForgeName, Kind: "denied", Msg: "the fake does not merge"}}
 }
 
-func adapterQuePideElEstado(it model.Item) *adapterQueCuestaSiSeMergeo {
-	return &adapterQueCuestaSiSeMergeo{
+func stateReadingAdapter(it model.Item) *mergeRecordingAdapter {
+	return &mergeRecordingAdapter{
 		FakeAdapter: testutil.FakeAdapter{
 			ForgeName:  it.Forge,
 			HostName:   it.Host,

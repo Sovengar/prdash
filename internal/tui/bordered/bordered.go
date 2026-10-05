@@ -18,7 +18,6 @@ const (
 
 func Rounded() lipgloss.Border { return lipgloss.RoundedBorder() }
 
-// sin leyenda inferior.
 func RenderWithTitle(border lipgloss.Border, borderFg color.Color, title, content string, width int) string {
 	return RenderWithTitles(border, borderFg, title, AlignLeft, "", AlignLeft, content, width)
 }

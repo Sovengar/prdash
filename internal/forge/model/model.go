@@ -95,7 +95,7 @@ type RepoRef struct {
 	Host    string // "github.com" | "gitlab.example.com" | ...
 	Project string // ruta completa: "owner/repo" (GH) o "grupo/sub/proy" (GL)
 	Owner   string // propietario/grupo inmediato
-	Name    string // nombre del repositorio
+	Name    string
 }
 
 type ID struct {
@@ -121,14 +121,14 @@ type Item struct {
 	SourceBranch string
 	TargetBranch string
 	URL          string
-	State        string // estado crudo del forge: open/merged/closed…
+	State        string // raw forge state: open/merged/closed…
 	// A field of its own rather than a State value: State is the forge's enum (OPEN in GitHub, opened
 	// in GitLab) and a derived "draft" there forced every adapter to translate it exactly.
 	IsDraft bool
 	// Matters for one concrete thing: deleting the branch when merging a fork PR deletes nothing, so a
 	// warning saying otherwise is lying on the items most closely watched.
 	IsFork         bool
-	ReviewDecision string // decisión de review del forge: APPROVED/…
+	ReviewDecision string // forge review decision: APPROVED/…
 	Checks         Checks
 	Diff           DiffStat
 	// Empty means "the forge did not report it", not "there is none": a merge that needs it refuses

@@ -14,7 +14,7 @@ func listModelWithItems(t *testing.T, projects ...string) Model {
 		mkItems(projects...), false))
 }
 
-func listaDe(m Model) []string {
+func listOf(m Model) []string {
 	lines := make([]string, 0, 8)
 	for _, l := range m.listLines(m.contentWidth()) {
 		lines = append(lines, stripANSI(l.text))
@@ -23,91 +23,91 @@ func listaDe(m Model) []string {
 }
 
 // The prefix line per mode: in common there is one, in the other two there is not.
-func TestListLinesPintanElPrefijoSoloEnCommon(t *testing.T) {
+func TestListLinesPaintThePrefixOnlyInCommon(t *testing.T) {
 	for _, mode := range []prefixMode{prefixFull, prefixLeaf} {
 		m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 		m.prefixMode = mode
-		for _, line := range listaDe(m) {
+		for _, line := range listOf(m) {
 			if strings.Contains(line, "APPCITTI/vsocial/backend/") {
-				t.Errorf("en %v se pintó una línea de prefijo: %q", mode, line)
+				t.Errorf("in %v a prefix line was painted: %q", mode, line)
 			}
 		}
 	}
 
 	m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
-	joined := strings.Join(listaDe(m), "\n")
+	joined := strings.Join(listOf(m), "\n")
 	if !strings.Contains(joined, "APPCITTI/vsocial/backend/") {
-		t.Errorf("en common falta la línea de prefijo:\n%s", joined)
+		t.Errorf("in common the prefix line is missing:\n%s", joined)
 	}
 	if got := strings.Count(joined, "APPCITTI/vsocial/backend/"); got != 1 {
-		t.Errorf("el prefijo aparece %d veces, want 1:\n%s", got, joined)
+		t.Errorf("the prefix appears %d times, want 1:\n%s", got, joined)
 	}
 }
 
-func TestFullYLeafPintanLaReferenciaCompletaOLaHoja(t *testing.T) {
+func TestFullAndLeafPaintTheWholeReferenceOrTheLeaf(t *testing.T) {
 	m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 
 	m.prefixMode = prefixFull
-	full := strings.Join(listaDe(m), "\n")
+	full := strings.Join(listOf(m), "\n")
 	if !strings.Contains(full, "api-gateway#100") {
-		t.Errorf("full no pintó la referencia del ítem:\n%s", full)
+		t.Errorf("full did not paint the item reference:\n%s", full)
 	}
 	if !strings.Contains(full, "vsocial") {
-		t.Errorf("full no pintó el grupo en la celda:\n%s", full)
+		t.Errorf("full did not paint the group in the cell:\n%s", full)
 	}
 
 	m.prefixMode = prefixLeaf
-	leaf := strings.Join(listaDe(m), "\n")
+	leaf := strings.Join(listOf(m), "\n")
 	if !strings.Contains(leaf, "api-gateway#100") {
-		t.Errorf("leaf no pintó la hoja con su número:\n%s", leaf)
+		t.Errorf("leaf did not paint the sheet with its number:\n%s", leaf)
 	}
 	if strings.Contains(leaf, "vsocial") {
-		t.Errorf("leaf still muestra el grupo del proyecto:\n%s", leaf)
+		t.Errorf("leaf still shows the projects group:\n%s", leaf)
 	}
 }
 
 // Removing the prefix line returns that height to the list.
-func TestFullYLeafRecuperanLaLineaDelPrefijo(t *testing.T) {
+func TestFullAndLeafRecoverThePrefixLine(t *testing.T) {
 	m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 
 	m.prefixMode = prefixCommon
-	conPrefijo := len(m.listLines(m.contentWidth()))
+	withPrefix := len(m.listLines(m.contentWidth()))
 	for _, mode := range []prefixMode{prefixFull, prefixLeaf} {
 		m.prefixMode = mode
-		sinPrefijo := len(m.listLines(m.contentWidth()))
-		if sinPrefijo != conPrefijo-1 {
-			t.Errorf("en %v la lista tiene %d líneas, want %d (una menos que en common, %d)",
-				mode, sinPrefijo, conPrefijo-1, conPrefijo)
+		withoutPrefix := len(m.listLines(m.contentWidth()))
+		if withoutPrefix != withPrefix-1 {
+			t.Errorf("in %v the list has %d lines, want %d (one less than in common, %d)",
+				mode, withoutPrefix, withPrefix-1, withPrefix)
 		}
 	}
 }
 
-func TestCommonSinPrefijoComunSeVeIgualQueFull(t *testing.T) {
+func TestCommonWithNoCommonPrefixLooksLikeFull(t *testing.T) {
 	m := listModelWithItems(t, "acme/one", "other/one")
 
 	m.prefixMode = prefixCommon
-	common := strings.Join(listaDe(m), "\n")
+	common := strings.Join(listOf(m), "\n")
 	m.prefixMode = prefixFull
-	full := strings.Join(listaDe(m), "\n")
+	full := strings.Join(listOf(m), "\n")
 
 	if common != full {
-		t.Errorf("sin prefijo común, common y full deberían verse igual:\ncommon:\n%s\nfull:\n%s", common, full)
+		t.Errorf("without a common prefix, common and full should look the same:\ncommon:\n%s\nfull:\n%s", common, full)
 	}
 	if !strings.Contains(common, "acme/one#100") {
-		t.Errorf("la celda no pintó la ruta completa:\n%s", common)
+		t.Errorf("the cell did not paint the full path:\n%s", common)
 	}
 	if got := strings.Count(common, "acme"); got != 1 {
-		t.Errorf("el grupo aparece %d veces, want 1:\n%s", got, common)
+		t.Errorf("the group appears %d times, want 1:\n%s", got, common)
 	}
 }
 
 // Degrading to common must not repeat the path in two places.
-func TestCommonSinPrefijoComunNoRepiteLaRutaEnDosSitios(t *testing.T) {
+func TestCommonWithNoCommonPrefixDoesNotRepeatThePathTwice(t *testing.T) {
 	m := listModelWithItems(t, "acme/one", "other/one")
 	m.prefixMode = prefixCommon
-	for _, line := range listaDe(m) {
+	for _, line := range listOf(m) {
 		if strings.TrimSpace(line) == "·" || strings.HasPrefix(strings.TrimSpace(line), "· /") {
-			t.Errorf("se pintó una línea de prefijo sin contenido: %q", line)
+			t.Errorf("a prefix line was painted without content: %q", line)
 		}
 	}
 }

@@ -11,16 +11,16 @@ func TestDeleteBranchShowsInTheArmedConfirm(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 
 	if view := stripANSI(f.m.View().Content); strings.Contains(view, "delete branch") {
-		t.Errorf("sin merge armado el borrado no debería aparecer\n%s", view)
+		t.Errorf("with no merge armed the delete should not appear\n%s", view)
 	}
 
 	m := press(t, f.m, "m")
 	view := stripANSI(m.View().Content)
 	if !strings.Contains(view, "delete branch: yes") {
-		t.Errorf("la confirmación no muestra el valor por defecto\n%s", view)
+		t.Errorf("the confirmation does not show the default value\n%s", view)
 	}
 	if !strings.Contains(view, "tab") {
-		t.Errorf("la confirmación no dice cómo se cambia\n%s", view)
+		t.Errorf("the confirmation does not say how to change it\n%s", view)
 	}
 }
 
@@ -35,10 +35,10 @@ func TestDeleteBranchIsOnByDefault(t *testing.T) {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if !out.DeleteBranch {
-		t.Error("el merge debería pedir borrar la rama por defecto")
+		t.Error("the merge should ask to delete the branch by default")
 	}
 	if got := f.adp.MergeDeleteCount(true); got != 1 {
-		t.Errorf("el adapter recibió %d merge(s) con borrado, want 1", got)
+		t.Errorf("the adapter received %d merge(s) with delete, want 1", got)
 	}
 }
 
@@ -49,16 +49,16 @@ func TestTabTogglesTheDeleteWithoutDisarming(t *testing.T) {
 	m = press(t, m, "tab")
 
 	if !m.mergeArmed {
-		t.Fatal("`tab` no debería desarmar el merge")
+		t.Fatal("`tab` should not disarm the merge")
 	}
 	if m.actionBusy {
-		t.Fatal("`tab` no debería lanzar la acción")
+		t.Fatal("`tab` should not fire the action")
 	}
 	if m.deleteBranch {
-		t.Error("`tab` debería haber apagado el borrado")
+		t.Error("`tab` should have turned the delete off")
 	}
 	if view := stripANSI(m.View().Content); !strings.Contains(view, "delete branch: no") {
-		t.Errorf("la caja no refleja el valor nuevo\n%s", view)
+		t.Errorf("the box does not reflect the new value\n%s", view)
 	}
 }
 
@@ -70,13 +70,13 @@ func TestTabToggleReachesTheAdapter(t *testing.T) {
 	out := waitOutcome(t, m)
 
 	if out.DeleteBranch {
-		t.Error("el merge no debería pedir borrar la rama tras apagarla")
+		t.Error("the merge should not ask to delete the branch after turning it off")
 	}
 	if got := f.adp.MergeDeleteCount(false); got != 1 {
-		t.Errorf("el adapter recibió %d merge(s) sin borrado, want 1", got)
+		t.Errorf("the adapter received %d merge(s) without delete, want 1", got)
 	}
 	if got := f.adp.MergeDeleteCount(true); got != 0 {
-		t.Errorf("el adapter recibió %d merge(s) con borrado, want 0", got)
+		t.Errorf("the adapter received %d merge(s) with delete, want 0", got)
 	}
 }
 
@@ -90,18 +90,18 @@ func TestDeleteToggleStaysForTheSession(t *testing.T) {
 	m = send(t, m, actionMsg{cycle: m.cycle, outcome: waitOutcome(t, m)})
 
 	if got := f.adp.MergeDeleteCount(false); got != 1 {
-		t.Fatalf("el primer merge: %d sin borrado, want 1", got)
+		t.Fatalf("the first merge: %d without delete, want 1", got)
 	}
 
 	m = press(t, m, "m")
 	if m.deleteBranch {
-		t.Error("el valor debería seguir apagado en el siguiente merge")
+		t.Error("the value should stay off on the next merge")
 	}
 	m = press(t, m, "s")
 	_ = waitOutcome(t, m)
 
 	if got := f.adp.MergeDeleteCount(false); got != 2 {
-		t.Errorf("el adapter recibió %d merge(s) sin borrado, want 2", got)
+		t.Errorf("the adapter received %d merge(s) without delete, want 2", got)
 	}
 }
 
@@ -113,10 +113,10 @@ func TestTabOutsideTheArmedMergeCyclesSections(t *testing.T) {
 	m := press(t, f.m, "tab")
 
 	if m.activeSection == before {
-		t.Error("`tab` sin merge armado debería cambiar de sección")
+		t.Error("`tab` with no merge armed should change section")
 	}
 	if m.deleteBranch != f.m.deleteBranch {
-		t.Error("`tab` fuera del armado no debería tocar el borrado")
+		t.Error("`tab` outside the armed state should not touch the delete")
 	}
 }
 
@@ -129,7 +129,7 @@ func TestDeleteOnlyTravelsWithAMerge(t *testing.T) {
 		t.Fatalf("Kind = %q, want approve", out.Kind)
 	}
 	if out.DeleteBranch {
-		t.Error("approve no debería pedir borrar la rama")
+		t.Error("approve should not ask to delete the branch")
 	}
 }
 
@@ -143,7 +143,7 @@ func TestMergeNoticeNamesTheBranch(t *testing.T) {
 
 	notice := lastToast(m)
 	if !strings.Contains(notice, "branch deleted") {
-		t.Errorf("el aviso debería confirmar el borrado: %q", notice)
+		t.Errorf("the notice should confirm the delete: %q", notice)
 	}
 }
 
@@ -157,12 +157,12 @@ func TestMergeNoticeSaysWhenTheBranchSurvived(t *testing.T) {
 
 	notice := lastToast(m)
 	if !strings.Contains(notice, "branch not deleted") {
-		t.Errorf("el aviso debería decir que la rama sigue ahí: %q", notice)
+		t.Errorf("the notice should say the branch is still there: %q", notice)
 	}
 	if !strings.Contains(notice, "Resource not accessible") {
-		t.Errorf("el aviso debería dar el motivo del forge: %q", notice)
+		t.Errorf("the notice should give the forges reason: %q", notice)
 	}
 	if strings.Contains(notice, "error:") {
-		t.Errorf("un merge que salió no es un error: %q", notice)
+		t.Errorf("a merge that walked away is not an error: %q", notice)
 	}
 }

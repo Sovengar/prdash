@@ -1,43 +1,43 @@
-# ADR 0001 — Provisión del worktree de review
+# ADR 0001 — Review worktree provisioning
 
-- **Estado**: Accepted
-- **Fecha**: 2026-09-24
-- **Decisor**: usuario (buble)
-- **Alcance**: prdash MVP, fase F2 (ver `docs/planning/archive/0001-mvp/`)
-- **Patrón de nombres**: `docs/adr/NNNN-slug.md`
+- **Status**: Accepted
+- **Date**: 2026-09-24
+- **Decider**: user (buble)
+- **Scope**: prdash MVP, phase F2 (see `docs/planning/archive/0001-mvp/`)
+- **Naming pattern**: `docs/adr/NNNN-slug.md`
 
-## Contexto
+## Context
 
-prdash (F2) debe, al elegir un PR/MR, obtener su código y montar un layout de review en Herdr sobre un worktree de la rama del PR/MR. Restricciones de partida:
+prdash (F2) must, when a PR/MR is picked, get its code and assemble a review layout in Herdr on top of a worktree of the PR/MR branch. Starting constraints:
 
-- Herdr 0.9.x expone `herdr worktree create` (con `--cwd`, `--branch`, `--base`, `--path`, `--label`, `--no-focus`) y **liga el worktree a un workspace** de Herdr.
-- El repo del PR puede no estar clonado; se decidió clonarlo en **bare** bajo el directorio de datos XDG del proyecto.
-- Las ramas de PRs de forks **no existen necesariamente** como branch de origin, así que hay que traer el ref de review (`refs/pull/N/head` en GitHub, `refs/merge-requests/N/head` en GitLab).
-- Fuera de Herdr la aplicación debe degradar de forma limpia.
-- Se necesitan **varios worktrees coexistentes** (uno por PR), también del mismo repo.
+- Herdr 0.9.x exposes `herdr worktree create` (with `--cwd`, `--branch`, `--base`, `--path`, `--label`, `--no-focus`) and **binds the worktree to a Herdr workspace**.
+- The PR's repo may not be cloned; it was decided to clone it **bare** under the project's XDG data directory.
+- Fork PR branches **do not necessarily exist** as a branch of origin, so the review ref has to be brought in (`refs/pull/N/head` on GitHub, `refs/merge-requests/N/head` on GitLab).
+- Outside Herdr the application must degrade cleanly.
+- **Several coexisting worktrees** are needed (one per PR), also from the same repo.
 
-## Decisión
+## Decision
 
-1. **prdash hace siempre** la resolución del repo local (roots + índice remoto→local + memoria de rutas; clon bare si falta), el **fetch del ref de review** y la **creación de una rama local de trabajo**. Nunca delega el fetch ni la resolución del ref.
-2. **Dentro de Herdr** (`HERDR_ENV=1`), la provisión del worktree se delega en el nativo: `herdr worktree create --cwd <repo> --branch <rama-local> --path <destino> --label <prdash-…> --no-focus`.
-3. **Fuera de Herdr**, la provisión cae a `git worktree add` directo y el layout se reporta como no disponible (F1 sigue operativo).
+1. **prdash always does** the local repo resolution (roots + remote→local index + path memory; bare clone if missing), the **fetch of the review ref** and the **creation of a local working branch**. It never delegates the fetch nor the ref resolution.
+2. **Inside Herdr** (`HERDR_ENV=1`), worktree provisioning is delegated to the native: `herdr worktree create --cwd <repo> --branch <local-branch> --path <dest> --label <prdash-…> --no-focus`.
+3. **Outside Herdr**, provisioning falls back to a direct `git worktree add` and the layout is reported as unavailable (F1 stays operative).
 
-## Alternativas consideradas y descartadas
+## Rejected alternatives
 
-- **Solo `git worktree add`.** Obliga a crear el workspace/tab/pane de Herdr a mano y pierde el vínculo worktree↔workspace (restore de sesión, IDs estables, cierre por grupo), que el layout usa como contenedor.
-- **Delegar todo a `herdr worktree create`, incluido el fetch.** El nativo recibiría una rama remota que aún no existe localmente (riesgo abierto del plan) y no cubre el caso de forks ni el clon bare previo.
-- **Clonar siempre desde cero con `git clone` normal.** No permite múltiples worktrees desde un mismo clon; el clon bare es el punto de partida correcto para N worktrees.
+- **`git worktree add` only.** Forces creating the Herdr workspace/tab/pane by hand and loses the worktree↔workspace link (session restore, stable IDs, closing by group), which the layout uses as a container.
+- **Delegating everything to `herdr worktree create`, the fetch included.** The native would receive a remote branch that does not exist locally yet (open risk of the plan) and it covers neither the fork case nor the previous bare clone.
+- **Always cloning from scratch with a plain `git clone`.** It does not allow multiple worktrees from a single clone; the bare clone is the right starting point for N worktrees.
 
-## Consecuencias
+## Consequences
 
-**Positivas**
-- El riesgo "`--branch` con rama remota no local" desaparece por diseño: el nativo recibe siempre una **rama local ya existente**.
-- Un único dueño del namespace de rutas (`reporesolver`) y worktrees múltiples coexistentes sobre un clon bare.
-- El acoplamiento a Herdr queda confinado a un solo puerto: solo ese módulo conoce el nativo y aloja el fallback.
+**Positive**
+- The "`--branch` with a non-local remote branch" risk disappears by design: the native always receives an **existing local branch**.
+- A single owner of the path namespace (`reporesolver`) and multiple coexisting worktrees on top of a bare clone.
+- The coupling to Herdr is confined to a single port: only that module knows the native and hosts the fallback.
 
-**Negativas / costes**
-- prdash debe implementar y mantener su propio fetch y resolución de refs por forge (dos rutas de ref distintas).
-- Dependencia de la CLI de Herdr 0.9.x (drift): se mitiga con parseo aislado por comando, versión mínima declarada en el manifiesto y fallback localizado.
+**Negative / costs**
+- prdash must implement and maintain its own fetch and per-forge ref resolution (two distinct ref paths).
+- Dependency on the Herdr 0.9.x CLI (drift): mitigated with isolated parsing per command, a minimum version declared in the manifest and a localized fallback.
 
-**Verificación (cerrada)**
-- **OK** `herdr worktree create` desde un **clon bare** con rama local ya creada y `--path` destino, contra `herdr 0.9.1-preview.2026-09-21-0ff0f27e2226`. Evidencia y hallazgos asociados (semántica de `--label`) en `docs/research/herdr-0.9.1-contract.md` §Verificación local.
+**Verification (closed)**
+- **OK** `herdr worktree create` from a **bare clone** with an already created local branch and a `--path` destination, against `herdr 0.9.1-preview.2026-09-21-0ff0f27e2226`. Evidence and associated findings (semantics of `--label`) in `docs/research/herdr-0.9.1-contract.md` §Local verification.

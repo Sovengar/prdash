@@ -173,7 +173,7 @@ func (c *Client) WorkspaceCreate(ctx context.Context, spec WorkspaceSpec) (Works
 	return parseWorkspaceCreated(out)
 }
 
-// worktrees vinculados (algunas versiones lo exigen).
+// linked worktrees (some versions require it).
 func (c *Client) WorkspaceClose(ctx context.Context, workspaceID string, group bool) error {
 	if err := c.guard("workspace", "close"); err != nil {
 		return err

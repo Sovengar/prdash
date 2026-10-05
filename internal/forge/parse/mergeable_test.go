@@ -27,7 +27,7 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			name:      "github graphql: MERGEABLE no avisa",
+			name:      "github graphql: MERGEABLE gives no warning",
 			wantKnown: true,
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items := mustSearch(t, ghSearchMergeableFixture, 1)
@@ -37,14 +37,14 @@ func TestMergeableFromEveryPath(t *testing.T) {
 		{
 			// UNKNOWN is "I do not know yet", not a "yes": with no Known there is no warning either, because a
 			// false warning is worse.
-			name: "github graphql: UNKNOWN no avisa",
+			name: "github graphql: UNKNOWN gives no warning",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items := mustSearch(t, ghSearchUnknownFixture, 1)
 				return items[0].Mergeable, state.MergeBlock(items[0])
 			},
 		},
 		{
-			name: "github rest: la búsqueda no trae el dato",
+			name: "github rest: the search does not bring the datum",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items, err := ParseGHAuthored(ghAuthoredDraftFixture)
 				if err != nil {
@@ -87,7 +87,7 @@ func TestMergeableFromEveryPath(t *testing.T) {
 		},
 		{
 			// NEED_REBASE is not a conflict: the branch is behind but integrates without touching anything.
-			name:      "gitlab graphql: NEED_REBASE no es conflicto",
+			name:      "gitlab graphql: NEED_REBASE is not a conflict",
 			wantKnown: true,
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items, _, err := ParseGLGraphQL(glNeedRebaseFixture)
@@ -98,7 +98,7 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			name: "gitlab todos: el target no trae el dato",
+			name: "gitlab todos: the target does not bring the datum",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items, _, err := ParseGLTodos(glTodosMRFixture)
 				if err != nil {
@@ -120,7 +120,7 @@ func TestMergeableFromEveryPath(t *testing.T) {
 				t.Errorf("Conflicted = %v, want %v", m.Conflicted, tc.wantConflicted)
 			}
 			if blocked := block.Reason != "" && strings.Contains(block.Reason, "conflicts"); blocked != tc.wantBlocked {
-				t.Errorf("el gate avisa del conflicto = %v (%q), want %v", blocked, block.Reason, tc.wantBlocked)
+				t.Errorf("the gate warns about the conflict = %v (%q), want %v", blocked, block.Reason, tc.wantBlocked)
 			}
 		})
 	}
@@ -133,7 +133,7 @@ func mustSearch(t *testing.T, raw string, n int) []model.Item {
 		t.Fatalf("parse: %v", err)
 	}
 	if len(items) < n {
-		t.Fatalf("items = %d, want al menos %d", len(items), n)
+		t.Fatalf("items = %d, want at least %d", len(items), n)
 	}
 	return items[:n]
 }

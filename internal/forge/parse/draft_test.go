@@ -65,16 +65,16 @@ func TestDraftFlagFromEveryPath(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			draft, rawState, block := tc.got(t)
 			if !draft {
-				t.Error("IsDraft = false, want true: el forge lo marcó como borrador")
+				t.Error("IsDraft = false, want true: the forge marked it as a draft")
 			}
 			// The forge's enum stays the forge's, and normalisation is what decides the state.
 			switch rawState {
 			case "OPEN", "open", "opened":
 			default:
-				t.Errorf("State = %q, want el enum crudo del forge (OPEN/open/opened)", rawState)
+				t.Errorf("State = %q, want the forge's raw enum (OPEN/open/opened)", rawState)
 			}
 			if !block.Hard || block.Reason == "" {
-				t.Errorf("MergeBlock = %+v, want un bloqueo duro que mencione el borrador", block)
+				t.Errorf("MergeBlock = %+v, want a hard block that mentions the draft", block)
 			}
 		})
 	}

@@ -8,10 +8,10 @@ import (
 )
 
 // The merge confirmation is the warning that has to list the modes.
-func TestMergeConfirmNombraLosModosQueElRepoAdmite(t *testing.T) {
+func TestMergeConfirmNamesTheModesTheRepoAllows(t *testing.T) {
 	base := func(t *testing.T, rules model.MergeRules) Model {
 		m2 := newTestModel(t, ghAdapter())
-		it := mkItem("github", "github.com", "acme/widget", "Uno", 1, "")
+		it := mkItem("github", "github.com", "acme/widget", "One", 1, "")
 		it.Merge = rules
 		m2 = send(t, m2, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{it}, false))
 		return m2
@@ -21,27 +21,27 @@ func TestMergeConfirmNombraLosModosQueElRepoAdmite(t *testing.T) {
 	txt := stripANSI(m.mergeConfirmText())
 	for _, want := range []string{"press the mode", "esc cancel"} {
 		if !strings.Contains(txt, want) {
-			t.Errorf("la caja debería decir %q: %q", want, txt)
+			t.Errorf("the box should say %q: %q", want, txt)
 		}
 	}
 	for _, want := range []string{"r rebase", "m merge commit", "s squash"} {
 		if !strings.Contains(txt, want) {
-			t.Errorf("con los tres modos debería salir %q: %q", want, txt)
+			t.Errorf("with the three modes it should come out %q: %q", want, txt)
 		}
 	}
 	if n := strings.Count(txt, "·"); n != 3 {
-		t.Errorf("con tres modos hay tres separadores, hay %d: %q", n, txt)
+		t.Errorf("with three modes there are three separators, got %d: %q", n, txt)
 	}
 
 	// One known mode: ONLY that one.
 	m = base(t, model.MergeRules{Known: true, MergeCommit: true})
 	txt = stripANSI(m.mergeConfirmText())
 	if !strings.Contains(txt, "m merge commit") {
-		t.Errorf("con un solo modo conocido debería salir ese: %q", txt)
+		t.Errorf("with a single known mode that one should come out: %q", txt)
 	}
 	for _, no := range []string{"rebase", "squash"} {
 		if strings.Contains(txt, no) {
-			t.Errorf("un repositorio que solo admite merge commit no debería ofrecer %q: %q", no, txt)
+			t.Errorf("a repository that only allows merge commit should not offer %q: %q", no, txt)
 		}
 	}
 
@@ -50,67 +50,67 @@ func TestMergeConfirmNombraLosModosQueElRepoAdmite(t *testing.T) {
 	txt = stripANSI(m.mergeConfirmText())
 	for _, want := range []string{"rebase", "merge commit", "squash"} {
 		if !strings.Contains(txt, want) {
-			t.Errorf("sin reglas conocidas deberían ofrecerse las tres: %q", txt)
+			t.Errorf("with no known rules the three should be offered: %q", txt)
 		}
 	}
 
 	m = base(t, model.MergeRules{Known: true})
 	txt = stripANSI(m.mergeConfirmText())
 	if !strings.Contains(txt, "the repository allows no merge strategy") {
-		t.Errorf("un repo sin estrategias debería decirlo: %q", txt)
+		t.Errorf("a repo with no strategies should say so: %q", txt)
 	}
 	m = base(t, model.MergeRulesAll())
 	txt = stripANSI(m.mergeConfirmText())
 	if !strings.Contains(txt, "merge acme") {
-		t.Errorf("la caja debería nombrar el ítem: %q", txt)
+		t.Errorf("the box should name the item: %q", txt)
 	}
 	if !strings.Contains(txt, "delete") {
-		t.Errorf("la caja debería decir si se borra la rama: %q", txt)
+		t.Errorf("the box should say whether the branch is deleted: %q", txt)
 	}
 }
 
-func TestMergeConfirmConBloqueoBlandoLoDiceAntes(t *testing.T) {
+func TestMergeConfirmSaysSoftBlockBeforehand(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
-	it := mkItem("github", "github.com", "acme/widget", "Uno", 1, "")
+	it := mkItem("github", "github.com", "acme/widget", "One", 1, "")
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{it}, false))
 
-	sinBloqueo := stripANSI(m.mergeConfirmText())
-	if strings.Contains(sinBloqueo, "anyway") {
-		t.Errorf("sin bloqueo no debería decir \"anyway\": %q", sinBloqueo)
+	withoutBlock := stripANSI(m.mergeConfirmText())
+	if strings.Contains(withoutBlock, "anyway") {
+		t.Errorf("with no block it should not say \"anyway\": %q", withoutBlock)
 	}
 
 	m.mergeBlockReason = "CI is failing (2 of 5 checks)"
-	conBloqueo := stripANSI(m.mergeConfirmText())
-	if !strings.Contains(conBloqueo, "CI is failing (2 of 5 checks)") {
-		t.Errorf("el aviso del bloqueo debería salir: %q", conBloqueo)
+	withBlock := stripANSI(m.mergeConfirmText())
+	if !strings.Contains(withBlock, "CI is failing (2 of 5 checks)") {
+		t.Errorf("the block notice should come out: %q", withBlock)
 	}
-	if !strings.Contains(conBloqueo, "anyway") {
-		t.Errorf("con bloqueo blando debería decir que se puede pulsar igual: %q", conBloqueo)
+	if !strings.Contains(withBlock, "anyway") {
+		t.Errorf("with a soft block it should say you can still press: %q", withBlock)
 	}
-	if !strings.Contains(conBloqueo, "esc cancel") {
-		t.Errorf("con bloqueo sigue habiendo salida: %q", conBloqueo)
+	if !strings.Contains(withBlock, "esc cancel") {
+		t.Errorf("with a block there is still output: %q", withBlock)
 	}
-	if strings.Index(conBloqueo, "CI is failing") > strings.Index(conBloqueo, "press the mode") {
-		t.Errorf("el aviso debería ir antes de las teclas: %q", conBloqueo)
+	if strings.Index(withBlock, "CI is failing") > strings.Index(withBlock, "press the mode") {
+		t.Errorf("the notice should come before the keys: %q", withBlock)
 	}
 }
 
 // The ITEM column's prefix is the last directory component's parent.
-func TestSectionPrefixNoSeComeLaUltimaParteDeLaRuta(t *testing.T) {
+func TestSectionPrefixDoesNotEatTheLastPathPart(t *testing.T) {
 	cases := []struct {
 		name  string
 		projs []string
 		want  string
 	}{
-		{"mismo repo", []string{"acme/widget", "acme/widget"}, "acme"},
-		{"grupo comun", []string{"grp/proj", "grp/otro"}, "grp"},
-		{"grupo comun de tres", []string{"a/b", "a/c", "a/d"}, "a"},
-		{"subgrupos distintos", []string{"grp/sub/proj", "grp/otro/proj"}, "grp"},
-		{"grupos distintos", []string{"acme/widget", "otro/widget"}, ""},
-		{"uno sin barra", []string{"widget", "acme/widget"}, ""},
-		{"solo uno", []string{"acme/widget"}, ""},
-		{"nada en comun con tres", []string{"a/x", "b/y", "c/z"}, ""},
-		{"solo la hoja igual", []string{"x/widget", "y/widget"}, ""},
+		{"same repo", []string{"acme/widget", "acme/widget"}, "acme"},
+		{"common group", []string{"grp/proj", "grp/other"}, "grp"},
+		{"common group of three", []string{"a/b", "a/c", "a/d"}, "a"},
+		{"subgrupos distintos", []string{"grp/sub/proj", "grp/other/proj"}, "grp"},
+		{"different groups", []string{"acme/widget", "other/widget"}, ""},
+		{"one without slash", []string{"widget", "acme/widget"}, ""},
+		{"only one", []string{"acme/widget"}, ""},
+		{"nothing in common among three", []string{"a/x", "b/y", "c/z"}, ""},
+		{"only the sheet is equal", []string{"x/widget", "y/widget"}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -132,40 +132,40 @@ func TestSectionPrefixNoSeComeLaUltimaParteDeLaRuta(t *testing.T) {
 }
 
 // The hints are the help and cannot take over the screen.
-func TestWrapHintAcotaElNumeroDeLineas(t *testing.T) {
-	plano := func(s string) string { return stripANSI(s) }
+func TestWrapHintBoundsTheNumberOfLines(t *testing.T) {
+	plain := func(s string) string { return stripANSI(s) }
 
-	got := wrapHint("uno", 80, plano)
-	if len(got) != 1 || got[0] != "uno" {
-		t.Errorf("un hint dio %q, want [\"uno\"]", got)
+	got := wrapHint("one", 80, plain)
+	if len(got) != 1 || got[0] != "one" {
+		t.Errorf("a hint gave %q, want [\"one\"]", got)
 	}
 
 	for _, w := range []int{3, 4, 10} {
-		got = wrapHint("uno dos", w, plano)
+		got = wrapHint("one two", w, plain)
 		for _, l := range got {
 			if len(l) > w {
-				t.Errorf("ancho %d: la línea %q se pasa", w, l)
+				t.Errorf("width %d: the line %q overflows", w, l)
 			}
 		}
 	}
 
-	largo := strings.TrimSpace(strings.Repeat("palabra ", 200))
-	got = wrapHint(largo, 400, plano)
+	long := strings.TrimSpace(strings.Repeat("palabra ", 200))
+	got = wrapHint(long, 400, plain)
 	if len(got) > maxHintLines {
-		t.Errorf("un hint enorme dio %d líneas, want <= %d", len(got), maxHintLines)
+		t.Errorf("a huge hint gave %d lines, want <= %d", len(got), maxHintLines)
 	}
-	if len(got) > 0 && !strings.HasPrefix(largo, got[0]) {
-		t.Errorf("el recorte debería tirar por el final, la primera línea es %q", got[0])
+	if len(got) > 0 && !strings.HasPrefix(long, got[0]) {
+		t.Errorf("the clipping should cut from the end, the first line is %q", got[0])
 	}
 
-	got = wrapHint("uno dos tres", 4, func(s string) string { return "[" + s + "]" })
+	got = wrapHint("one two three", 4, func(s string) string { return "[" + s + "]" })
 	for _, l := range got {
 		if !strings.HasPrefix(l, "[") || !strings.HasSuffix(l, "]") {
-			t.Errorf("la línea no está vestida: %q", l)
+			t.Errorf("the line is not dressed: %q", l)
 		}
 	}
 
-	if got = wrapHint("", 20, plano); len(got) != 1 {
-		t.Errorf("texto vacío dio %q, want una línea", got)
+	if got = wrapHint("", 20, plain); len(got) != 1 {
+		t.Errorf("empty text gave %q, want one line", got)
 	}
 }

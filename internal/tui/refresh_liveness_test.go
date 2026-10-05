@@ -11,34 +11,34 @@ import (
 func TestAutoRefreshSurvivesStalePagination(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "",
-		[]model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
+		[]model.Item{mkItem("github", "github.com", "acme/widget", "One", 1, "")}, true))
 
 	// The cycle ends with `more` still pending: the page that closed it never arrived.
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 	if m.loading {
-		t.Fatal("el ciclo debería haber terminado")
+		t.Fatal("the cycle should have finished")
 	}
 	if !m.sectionLoadingMore(model.SectionAuthored) {
-		t.Fatal("precondición: se esperaba un `more` colgado tras el ciclo")
+		t.Fatal("precondition: a hung `more` was expected after the cycle")
 	}
 
 	before := m.cycle
 	m = send(t, m, tickMsg{})
 	if m.cycle == before {
-		t.Fatal("el tick quedó bloqueado por una paginación colgada")
+		t.Fatal("the tick was blocked by a hung pagination")
 	}
 }
 
 func TestBeginRefreshResetsStalePagination(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "",
-		[]model.Item{mkItem("github", "github.com", "acme/widget", "Uno", 1, "")}, true))
+		[]model.Item{mkItem("github", "github.com", "acme/widget", "One", 1, "")}, true))
 	if !m.sectionLoadingMore(model.SectionAuthored) {
-		t.Fatal("precondición: debería haber paginación pendiente")
+		t.Fatal("precondition: there should be pending pagination")
 	}
 
 	updated, _ := m.beginRefresh()
 	if updated.sectionLoadingMore(model.SectionAuthored) {
-		t.Fatal("un ciclo nuevo no debe arrastrar la paginación del anterior")
+		t.Fatal("a new cycle must not drag the previous cycle pagination")
 	}
 }

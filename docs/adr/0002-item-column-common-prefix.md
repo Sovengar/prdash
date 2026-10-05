@@ -1,106 +1,111 @@
-# ADR 0002 — Columna ITEM con prefijo de ruta común por sección
+# ADR 0002 — ITEM column with a common path prefix per section
 
-- **Estado**: Accepted
-- **Fecha**: 2026-09-26
-- **Decisor**: usuario (buble)
-- **Alcance**: inbox de la TUI, columna ITEM
-- **Patrón de nombres**: `docs/adr/NNNN-slug.md`
+- **Status**: Accepted
+- **Date**: 2026-09-26
+- **Decider**: user (buble)
+- **Scope**: the TUI inbox, the ITEM column
+- **Naming pattern**: `docs/adr/NNNN-slug.md`
 
-## Contexto
+## Context
 
-La columna ITEM pintaba `proyecto#número` con un ancho fijo de 30 runes
-(`colRef`) y recorte **por la cabeza**. Las rutas de proyecto de GitLab con
-subgrupos no encajan: `APPCITTI/vsocial/backend/api-gateway#1234` son 41 runes y
-salía `APPCITTI/vsocial/backend/api-…`.
+The ITEM column painted `project#number` with a fixed width of 30 runes
+(`colRef`) and truncated **from the head**. GitLab project paths with
+subgroups did not fit: `APPCITTI/vsocial/backend/api-gateway#1234` is 41
+runes and it printed `APPCITTI/vsocial/backend/api-…`.
 
-El recorte por la cabeza se come exactamente lo que distingue un ítem de otro:
-el nombre del repo (la hoja de la ruta) y el `#número`. Dos filas de proyectos
-distintos quedaban visualmente idénticas, que es la peor forma de perder
-información: no se nota que falta.
+Head truncation eats exactly what distinguishes one item from another: the
+repo name (the leaf of the path) and the `#number`. Two rows from different
+projects ended up visually identical, which is the worst way to lose
+information: you do not notice it is missing.
 
-No era pérdida de dato: el detalle (`enter`) y `--print` ya mostraban la ruta
-completa. El problema era de legibilidad en la tabla, y la convención ya
-establecida en el repo para la columna FORGE era «corto en tabla, completo en
-detalle».
+It was not data loss: the detail (`enter`) and `--print` already showed the
+full path. The problem was legibility in the table, and the convention already
+established in the repo for the FORGE column was "short in the table, full in
+the detail".
 
-Restricciones de partida:
+Starting constraints:
 
-- La columna debe alinearse entre secciones y entre líneas, o la tabla baila al
-  escribir encima.
-- STATE y CHECKS no se recortan nunca; en anchos estrechos se pierden columnas
-  por la derecha, no información dentro de ellas.
-- No se puede perder la posibilidad de referenciar un ítem por su número, que es
-  lo que se usa al hablar de él y al verificar un check.
+- The column must line up across sections and across rows, or the table dances
+  when writing over it.
+- STATE and CHECKS are never truncated; at narrow widths columns are lost to
+  the right, not information inside them.
+- The ability to reference an item by its number must not be lost, which is
+  what is used when talking about it and when verifying a check.
 
-## Decisión
+## Decision
 
-1. **El prefijo de ruta común de cada sección se declara en su cabecera** y las
-   celdas de ITEM solo pintan el sufijo. El prefijo se calcula sobre la
-   intersección de segmentos completa de todos los ítems de la sección, alineado
-   en fronteras `/` y **nunca comiéndose el segmento final**: la celda siempre
-   conserva la hoja y el número.
-2. **El ancho de ITEM sale del contenido**, no de una constante: el sufijo más
-   largo de todas las secciones más el hueco de separación, acotado a `[6, 34]`
-   runes de ranura. El mínimo mantiene la separación con la columna vecina; el
-   techo evita que ITEM se coma TITLE.
-3. **El ancho de una columna incluye su hueco de separación** (el texto usable es
-   un rune menos, `textWidth`), así que el texto se recorta al hueco y nunca
-   llena la ranura. No era un caso hipotético: ROLE con `"review req"` medía
-   exactamente el ancho de su columna, así que STATE salía pegada, y lo mismo
-   pasaba con ITEM, cuyo ancho dinámico lo calcula el propio contenido.
-4. **Lo que aun así no quepa se recorta por la cola**, no por la cabeza, para que
-   el `#número` sobreviva. El frente perdido es el grupo, que la cabecera ya
-   declara.
-5. Una sección de un solo ítem no declara prefijo (no hay nada que compartir) y
-   su celda lleva la ruta sola: entera si cabe, recortada por la cola si no.
+1. **Each section's common path prefix is declared in its header** and the
+   ITEM cells only paint the suffix. The prefix is computed over the full
+   segment intersection of all the items of the section, aligned on `/`
+   boundaries and **never eating the final segment**: the cell always keeps
+   the leaf and the number.
+2. **The ITEM width comes from the content**, not from a constant: the longest
+   suffix of all the sections plus the separating gap, bounded to `[6, 34]`
+   runes of slot. The minimum keeps the separation from the neighbouring
+   column; the ceiling keeps ITEM from eating TITLE.
+3. **The width of a column includes its separating gap** (the usable text is
+   one rune shorter, `textWidth`), so the text is truncated to the gap and
+   never fills the slot. It was not a hypothetical case: ROLE with
+   `"review req"` measured exactly its column width, so STATE came out glued
+   to it, and the same happened with ITEM, whose dynamic width is computed by
+   the content itself.
+4. **Whatever still does not fit is truncated by the tail**, not by the head,
+   so that the `#number` survives. The part lost at the front is the group,
+   which the header already declares.
+5. A single-item section declares no prefix (there is nothing to share) and
+   its cell carries the path alone: in full if it fits, tail-truncated if not.
 
-## Alternativas consideradas y descartadas
+## Rejected alternatives
 
-- **Recorte por la cola en la celda completa** (`APPCITTI/vs…/api-gateway#1234`).
-  Es lo más barato y arregla la pérdida del número, pero cada fila repite el
-  grupo completo: se sigue comiendo el espacio que el prefijo común libera.
-- **Hoja del proyecto en ITEM y grupo en la columna FORGE** (`GLab@app` +
-  `api-gateway#1234`). Máxima compacidad, pero mezcla semántica: FORGE deja de
-  ser legible de un vistazo; y con ítems de grupos distintos se pierde el grupo.
-- **Anchos dinámicos de todas las columnas** midiendo el contenido. Resuelve el
-  síntoma genérico, pero es más invasivo (obliga a redimensionar `fitColumns`) y
-  no arregla que la ruta larga repita el grupo en cada fila.
-- **Ítem en dos líneas** cuando la ruta no cabe. Rompe la compacidad de la tabla
-  y la aritmética del cursor, que es la parte más frágil de la vista con scroll.
+- **Tail truncation on the whole cell** (`APPCITTI/vs…/api-gateway#1234`).
+  It is the cheapest fix and it repairs the lost number, but every row repeats
+  the whole group: it still eats the space that the common prefix frees up.
+- **Project leaf in ITEM and group in the FORGE column** (`GLab@app` +
+  `api-gateway#1234`). Maximum compactness, but mixed semantics: FORGE stops
+  being readable at a glance; and with items from different groups the group
+  is lost.
+- **Dynamic widths for all columns** measuring the content. It solves the
+  generic symptom, but it is more invasive (it forces `fitColumns` to be
+  resized) and it does not fix the long path repeating the group on every row.
+- **Item on two lines** when the path does not fit. It breaks the compactness
+  of the table and the arithmetic of the cursor, which is the most fragile
+  part of the scrolled view.
 
-## Consecuencias
+## Consequences
 
-**Positivas**
+**Positive**
 
-- Con subgrupos largos la fila dice qué proyecto y qué número es, sin truncar:
-  `mobile-frontend#1198` en vez de `APPCITTI/vsocial/backend/mobile-…`.
-- La columna se ajusta al inbox real: con rutas cortas se estrecha y TITLE gana
-  espacio; con rutas largas no se ensancha más del tope.
-- Es determinista: sale solo del conjunto de ítems actual, sin estado extra ni
-  claves que puedan divergir de lo pintado.
+- With long subgroups the row says which project and which number it is,
+  without truncating: `mobile-frontend#1198` instead of
+  `APPCITTI/vsocial/backend/mobile-…`.
+- The column adapts to the real inbox: with short paths it narrows and TITLE
+  gains space; with long paths it does not widen past the cap.
+- It is deterministic: it comes only from the current item set, with no extra
+  state nor keys that could diverge from what is painted.
 
-**Negativas / costes**
+**Negative / costs**
 
-- El ancho de ITEM depende del contenido: al terminar una paginación, más ítems
-  pueden reducir el prefijo común y ensanchar la columna **una vez**. Acotado por
-  el tope de 34, y es un reflow único.
-- Una sección de un solo ítem con ruta larga no tiene prefijo que compense el
-  recorte: se ve `…social/backend/api-gateway#100`, sin `APPCITTI/`. El detalle
-  sigue siendo la red de seguridad.
-- `refLayout` indexa el prefijo por `model.Section`: dos secciones con el mismo
-  `Kind` se pisarían. Hoy es imposible (`inbox.Build` garantiza una por kind) y
-  el modo de fallo es seguro (la celda cae a la ruta completa), pero es un
-  invariante a respetar si alguna vez hay secciones duplicadas.
-- El ancho de ITEM se calcula una vez por render, en `listLines`. Con muchas
-  secciones e ítems es O(ítems × segmentos) en cada frame; despreciable a esta
-  escala, y evita que cabecera y filas midan distinto.
+- The ITEM width depends on the content: when a page finishes loading, more
+  items can shrink the common prefix and widen the column **once**. Bounded by
+  the cap of 34, and it is a single reflow.
+- A single-item section with a long path has no prefix to offset the
+  truncation: you see `…social/backend/api-gateway#100`, without `APPCITTI/`.
+  The detail keeps being the safety net.
+- `refLayout` indexes the prefix by `model.Section`: two sections with the
+  same `Kind` would overwrite each other. Today it is impossible
+  (`inbox.Build` guarantees one per kind) and the failure mode is safe (the
+  cell falls back to the full path), but it is an invariant to respect if
+  there are ever duplicate sections.
+- The ITEM width is computed once per render, in `listLines`. With many
+  sections and items it is O(items × segments) on every frame; negligible at
+  this scale, and it prevents header and rows from measuring differently.
 
-**Verificación**
+**Verification**
 
-- `internal/tui/refcol_test.go`: 10 casos dirigidos de prefijo (subgrupo largo,
-  corte a media ruta, sin nada en común, `owner/repo`, proyectos idénticos,
-  sección de un ítem, prefijos parciales, proyecto vacío, misma ruta en hosts
-  distintos), más los de sufijo, recorte y ancho; dos de integración sobre
-  `listLines`; y 300 rondas aleatorias sobre los invariantes (celda no vacía,
-  celda = recorte exacto del sufijo, cola intacta al recortar, ancho dentro de
-  los límites).
+- `internal/tui/refcol_test.go`: 10 targeted prefix cases (long subgroup, cut
+  mid-path, nothing in common, `owner/repo`, identical projects, single-item
+  section, partial prefixes, empty project, same path on different hosts),
+  plus the suffix, truncation and width ones; two integration ones over
+  `listLines`; and 300 random rounds over the invariants (non-empty cell, cell
+  = exact truncation of the suffix, tail intact after truncating, width
+  within bounds).

@@ -1,176 +1,176 @@
-# prdash — comportamiento esperado: Inbox de una sola sección.
+# prdash — expected behavior: single-section Inbox.
 #
-# Fuente ÚNICA del comportamiento esperado de esta feature. Sirve para que el
-# usuario confirme que capturamos lo que quiere; NO es Cucumber (sin step
-# definitions ni runner). El executor derivará de aquí tests reales
-# (unit/integration) estilo BDD/ATDD.
+# The UNIQUE source of the expected behavior of this feature. It serves for the
+# user to confirm that we captured what they want; it is NOT Cucumber (no step
+# definitions nor runner). The executor will derive real tests from here
+# (unit/integration) in BDD/ATDD style.
 #
-# Gherkin en inglés; las descripciones van en español.
+# Gherkin in English; the descriptions are in English too.
 #
-# Contexto del diseño (ADR 0002): el motivo de mostrar una sola sección a la vez
-# es conservar y aprovechar el prefijo de ruta común. Con una única sección
-# visible todas las filas comparten sección, así que el prefijo se calcula sobre
-# la sección activa y se sigue mostrando, aunque desaparezca el header interno
-# con título y conteo.
+# Design context (ADR 0002): the reason for showing a single section at a time
+# is to keep and make the most of the common path prefix. With a single section
+# visible all rows share a section, so the prefix is computed on the active
+# section and is still shown, even though the internal header with title and
+# count disappears.
 
-Feature: Inbox de una sola sección con leyenda de conteos y prefijo de ruta común
+Feature: Single-section inbox with a count legend and common path prefix
 
   Background:
-    Given hay ítems en las tres secciones del inbox (Mine = authored, Assigned = review, Mentioned = mentions)
-    And las etiquetas de sección son "Mine", "Assigned" y "Mentioned"
-    And ejecuto "prdash" dentro de una TUI
+    Given there are items in the three sections of the inbox (Mine = authored, Assigned = review, Mentioned = mentions)
+    And the section labels are "Mine", "Assigned" and "Mentioned"
+    And I run "prdash" inside a TUI
 
-  # ─────────────────────── Sección activa y estado inicial ───────────────────────
+  # ─────────────────────── Active section and initial state ───────────────────────
 
-  @inbox @navegacion
-  Scenario: Al abrir, la sección activa es Assigned
-    Given abro la TUI
-    When se pinta el Inbox por primera vez
-    Then la sección activa es "Assigned"
-    And solo se ven en la lista los ítems de Assigned
-    And los ítems de Mine y de Mentioned no aparecen en la lista
+  @inbox @navigation
+  Scenario: On opening, the active section is Assigned
+    Given I open the TUI
+    When the Inbox is painted for the first time
+    Then the active section is "Assigned"
+    And only the items of Assigned are seen in the list
+    And the items of Mine and Mentioned do not appear in the list
 
-  @inbox @navegacion
-  Scenario: Solo se pinta una sección a la vez
-    Given la sección activa es "Assigned"
-    When miro el Inbox
-    Then la lista contiene únicamente ítems de Assigned
-    And no hay una cabecera interna de sección con el título y el conteo dentro de la lista
+  @inbox @navigation
+  Scenario: Only one section is painted at a time
+    Given the active section is "Assigned"
+    When I look at the Inbox
+    Then the list contains items of Assigned only
+    And there is no internal section header with the title and the count inside the list
 
-  @inbox @navegacion
-  Scenario: tab cicla Assigned → Mentioned → Mine → Assigned
-    Given la sección activa es "Assigned"
-    When pulso "tab"
-    Then la sección activa pasa a ser "Mentioned" y la lista muestra sus ítems
-    When pulso "tab"
-    Then la sección activa pasa a ser "Mine" y la lista muestra sus ítems
-    When pulso "tab"
-    Then la sección activa vuelve a ser "Assigned"
-    And el ciclo se repite indefinidamente en ese orden
+  @inbox @navigation
+  Scenario: tab cycles Assigned → Mentioned → Mine → Assigned
+    Given the active section is "Assigned"
+    When I press "tab"
+    Then the active section becomes "Mentioned" and the list shows its items
+    When I press "tab"
+    Then the active section becomes "Mine" and the list shows its items
+    When I press "tab"
+    Then the active section goes back to "Assigned"
+    And the cycle repeats indefinitely in that order
 
-  @inbox @navegacion
-  Scenario: tab cicla también cuando una sección está vacía
-    Given la sección "Mentioned" no tiene ítems
-    And la sección activa es "Assigned"
-    When pulso "tab"
-    Then la sección activa pasa a ser "Mentioned" igualmente
-    And la lista muestra su estado vacío
+  @inbox @navigation
+  Scenario: tab also cycles when a section is empty
+    Given the section "Mentioned" has no items
+    And the active section is "Assigned"
+    When I press "tab"
+    Then the active section becomes "Mentioned" anyway
+    And the list shows its empty state
 
   @inbox @keybindings
-  Scenario: La tecla de ciclo sale de la config, no de un "tab" cableado
-    Given la config reasigna "section-next" a otra tecla
-    When pulso esa tecla
-    Then cambia la sección activa según el ciclo
-    And "tab" deja de cambiar de sección
+  Scenario: The cycle key comes from the config, not from a hardcoded "tab"
+    Given the config rebinds "section-next" to another key
+    When I press that key
+    Then the active section changes following the cycle
+    And "tab" stops changing section
 
-  # ───────────────────────────── Leyenda de conteos ─────────────────────────────
+  # ───────────────────────────── Count legend ─────────────────────────────
 
-  @inbox @leyenda
-  Scenario: La leyenda del borde superior izquierdo sustituye al título "Inbox"
-    Given las secciones tienen 9, 4 y 0 ítems respectivamente
-    When se pinta el Inbox
-    Then el borde superior izquierdo de la caja del Inbox muestra "Mine (9) · Assigned (4) · Mentioned (0)"
-    And ya no se muestra el título "Inbox"
+  @inbox @legend
+  Scenario: The top-left border legend replaces the "Inbox" title
+    Given the sections have 9, 4 and 0 items respectively
+    When the Inbox is painted
+    Then the top-left border of the Inbox box shows "Mine (9) · Assigned (4) · Mentioned (0)"
+    And the "Inbox" title is no longer shown
 
-  @inbox @leyenda
-  Scenario: La sección activa se resalta en la leyenda
-    Given la sección activa es "Assigned"
-    When se pinta la leyenda
-    Then "Assigned" y su conteo se muestran resaltados (color/negrita)
-    And "Mine" y "Mentioned" se muestran atenuados
+  @inbox @legend
+  Scenario: The active section is highlighted in the legend
+    Given the active section is "Assigned"
+    When the legend is painted
+    Then "Assigned" and its count are shown highlighted (color/bold)
+    And "Mine" and "Mentioned" are shown dimmed
 
-  @inbox @leyenda @refresco
-  Scenario: Los conteos de la leyenda reflejan la sección deduplicada
-    Given un ítem que aparecería en más de una sección
-    When se pinta la leyenda
-    Then ese ítem cuenta una sola vez, en la sección de mayor autoridad
-    And cada conteo es el número de ítems que esa sección tiene en la lista
+  @inbox @legend @refresh
+  Scenario: The legend counts reflect the deduped section
+    Given an item that would appear in more than one section
+    When the legend is painted
+    Then that item is counted once, in the section with the highest authority
+    And each count is the number of items that section has in the list
 
-  # ────────────────────────── Prefijo de ruta común (ADR 0002) ──────────────────────────
+  # ────────────────────────── Common path prefix (ADR 0002) ──────────────────────────
 
-  @inbox @prefijo
-  Scenario: El prefijo común de la sección activa se sigue mostrando
-    Given la sección activa tiene varios ítems cuyo proyecto comparte "APPCITTI/vsocial/backend"
-    When se pinta la lista
-    Then el prefijo de ruta común "APPCITTI/vsocial/backend/" aparece una sola vez en la vista
-    And las celdas ITEM de las filas muestran solo el sufijo (p. ej. "api-gateway#100"), sin el prefijo
+  @inbox @prefix
+  Scenario: The common prefix of the active section is still shown
+    Given the active section has several items whose project shares "APPCITTI/vsocial/backend"
+    When the list is painted
+    Then the common path prefix "APPCITTI/vsocial/backend/" appears only once in the view
+    And the ITEM cells of the rows show only the suffix (e.g. "api-gateway#100"), without the prefix
 
-  @inbox @prefijo
-  Scenario: El prefijo mostrado es el de la sección activa
-    Given "Mine" y "Assigned" tienen prefijos de ruta comunes distintos
-    When la sección activa es "Assigned"
-    Then la vista muestra el prefijo común de "Assigned"
-    And no muestra el de "Mine"
-    When pulso "tab" hasta "Mine"
-    Then la vista pasa a mostrar el prefijo común de "Mine"
+  @inbox @prefix
+  Scenario: The prefix shown is the active section's one
+    Given "Mine" and "Assigned" have different common path prefixes
+    When the active section is "Assigned"
+    Then the view shows the common prefix of "Assigned"
+    And it does not show the one of "Mine"
+    When I press "tab" up to "Mine"
+    Then the view switches to show the common prefix of "Mine"
 
-  @inbox @prefijo
-  Scenario: Una sección sin prefijo común no inventa uno
-    Given la sección activa tiene un solo ítem, o sus ítems no comparten directorio
-    When se pinta la lista
-    Then no se muestra un prefijo común
-    And cada celda ITEM lleva la ruta completa, recortada por la cola si no cabe
+  @inbox @prefix
+  Scenario: A section without common prefix does not invent one
+    Given the active section has a single item, or its items do not share a directory
+    When the list is painted
+    Then no common prefix is shown
+    And every ITEM cell carries the full path, truncated from the tail if it does not fit
 
-  @inbox @prefijo
-  Scenario: El prefijo no rompe el ancho de la tabla
-    Given la sección activa tiene un prefijo de ruta común
-    When se pinta la lista a cualquier ancho de terminal
-    Then el prefijo se recorta si no cabe, sin desalinear las columnas
-    And las celdas ITEM conservan la hoja del proyecto y el "#número"
+  @inbox @prefix
+  Scenario: The prefix does not break the table width
+    Given the active section has a common path prefix
+    When the list is painted at any terminal width
+    Then the prefix is truncated if it does not fit, without misaligning the columns
+    And the ITEM cells keep the project leaf and the "#number"
 
-  # ───────────────────────────── Posición por sección ─────────────────────────────
+  # ───────────────────────────── Position per section ─────────────────────────────
 
   @inbox @cursor
-  Scenario: Cada sección recuerda su cursor y su scroll
-    Given en "Assigned" muevo el cursor y desplazo la lista
-    When pulso "tab" a "Mentioned" y muevo su cursor a otro sitio
-    And vuelvo con "tab" a "Assigned"
-    Then "Assigned" recupera el cursor y el scroll que tenía
-    When vuelvo a "Mentioned"
-    Then "Mentioned" recupera su propio cursor y scroll
+  Scenario: Each section remembers its cursor and its scroll
+    Given in "Assigned" I move the cursor and scroll the list
+    When I press "tab" to "Mentioned" and move its cursor elsewhere
+    And I come back with "tab" to "Assigned"
+    Then "Assigned" recovers the cursor and the scroll it had
+    When I come back to "Mentioned"
+    Then "Mentioned" recovers its own cursor and scroll
 
-  @inbox @cursor @refresco
-  Scenario: Un refresco conserva la posición de cada sección
-    Given tengo una posición en cada sección
-    When termina un refresco del inbox
-    Then la sección activa conserva su cursor y su scroll, acotados al nuevo contenido
+  @inbox @cursor @refresh
+  Scenario: A refresh keeps the position of each section
+    Given I have a position in each section
+    When an inbox refresh finishes
+    Then the active section keeps its cursor and its scroll, bounded to the new content
 
-  # ───────────────────────── Estados de la sección activa ─────────────────────────
+  # ───────────────────────── States of the active section ─────────────────────────
 
-  @inbox @estado
-  Scenario: La sección activa vacía se marca como vacía
-    Given la sección activa no tiene ítems y su consulta no falló
-    When se pinta la lista
-    Then la lista muestra "(empty)"
-    And la leyenda muestra 0 para esa sección
+  @inbox @state
+  Scenario: The empty active section is marked as empty
+    Given the active section has no items and its query did not fail
+    When the list is painted
+    Then the list shows "(empty)"
+    And the legend shows 0 for that section
 
-  @inbox @paginacion
-  Scenario: El "loading more…" corresponde a la sección activa
-    Given la sección activa tiene páginas pendientes
-    When se pinta la lista
-    Then la lista muestra "loading more…"
-    And si la sección que paginaba no es la activa, su indicador no se muestra
-    And al volver a esa sección, el indicador vuelve a mostrarse
+  @inbox @pagination
+  Scenario: The "loading more…" belongs to the active section
+    Given the active section has pending pages
+    When the list is painted
+    Then the list shows "loading more…"
+    And if the section that was paginating is not the active one, its indicator is not shown
+    And on returning to that section, the indicator is shown again
 
-  @inbox @degradacion
-  Scenario: Los avisos de consulta se muestran para la sección activa
-    Given la consulta de una sección falló o devolvió datos parciales
-    And esa sección es la activa
-    When se pinta la lista
-    Then la lista muestra su aviso "⚠ <forge>: could not be queried (…)"
-    And si esa sección no es la activa, su aviso no se pinta (sigue visible su conteo en la leyenda)
+  @inbox @degradation
+  Scenario: Query warnings are shown for the active section
+    Given the query of a section failed or returned partial data
+    And that section is the active one
+    When the list is painted
+    Then the list shows its warning "⚠ <forge>: could not be queried (…)"
+    And if that section is not the active one, its warning is not painted (its count stays visible in the legend)
 
-  # ─────────────────────────── No-regresión de otros modos ───────────────────────────
+  # ─────────────────────────── No-regression of other modes ───────────────────────────
 
   @inbox @print
-  Scenario: El modo --print no cambia
-    When ejecuto "prdash --print"
-    Then imprime las tres secciones con sus nombres largos ("Created by me", "Review / assigned", "Mentions")
-    And cada sección lista sus ítems en el orden de siempre
+  Scenario: The --print mode does not change
+    When I run "prdash --print"
+    Then it prints the three sections with their long names ("Created by me", "Review / assigned", "Mentions")
+    And each section lists its items in the usual order
 
-  @inbox @leyenda
-  Scenario: En un terminal estrecho la leyenda se trunca sin romper la caja
-    Given un ancho de terminal menor que la leyenda completa
-    When se pinta el Inbox
-    Then la leyenda se recorta por la derecha
-    And la línea superior sigue midiendo exactamente el ancho de la caja
+  @inbox @legend
+  Scenario: On a narrow terminal the legend is truncated without breaking the box
+    Given a terminal width smaller than the full legend
+    When the Inbox is painted
+    Then the legend is cut on the right
+    And the top line still measures exactly the box width

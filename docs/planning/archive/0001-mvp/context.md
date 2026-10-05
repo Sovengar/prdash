@@ -5,210 +5,210 @@ codegraph: not_initialized
 generated_by: codebase-researcher
 ---
 
-# Context: prdash MVP — inbox multi-forge (F1) + orquestador de review (F2)
+# Context: prdash MVP — multi-forge inbox (F1) + review orchestrator (F2)
 
-## Frescura y naturaleza del repo
+## Repo freshness and nature
 
-- HEAD `f199e3d8cddb74a5deba76fe8518cd000dd319a0`, rama `main`.
-- `codegraph: not_initialized` (no hay `.codegraph/`).
-- **Greenfield**: no hay `go.mod`, ni una sola línea de Go. "Ficheros a tocar" = ficheros/paquetes **a crear**. No hay líneas existentes que extender.
-- Repo hermano de referencia: `/home/buble/dev/projects/gitdash` (mismos stack y convenciones). Índice Engram `codebase-index/gitdash` obs **#2202** (fresco salvo drift posterior). **No** copiar literal: importar el patrón.
+- HEAD `f199e3d8cddb74a5deba76fe8518cd000dd319a0`, branch `main`.
+- `codegraph: not_initialized` (there is no `.codegraph/`).
+- **Greenfield**: no `go.mod`, not a single line of Go. "Files to touch" = files/packages **to create**. There are no existing lines to extend.
+- Reference sibling repo: `/home/buble/dev/projects/gitdash` (same stack and conventions). Engram index `codebase-index/gitdash` obs **#2202** (fresh except for later drift). **Do not** copy literally: import the pattern.
 
-## Qué existe hoy en prdash
+## What exists today in prdash
 
-| Ruta | Contenido |
+| Path | Content |
 |---|---|
-| `README.md` | 5 líneas: descripción + "Estado: planificación (MVP)". |
-| `.gitignore` | `bin/` y `*.test`. |
-| `docs/planning/archive/0001-mvp/` | `issue.md`, `behavior.feature`, `plan.md`, este `context.md`. |
-| `docs/adr/0001-worktree-provisioning.md` | ADR aceptado: provisión de worktree. |
+| `README.md` | 5 lines: description + "Status: planning (MVP)". |
+| `.gitignore` | `bin/` and `*.test`. |
+| `docs/planning/archive/0001-mvp/` | `issue.md`, `behavior.feature`, `plan.md`, this `context.md`. |
+| `docs/adr/0001-worktree-provisioning.md` | Accepted ADR: worktree provisioning. |
 
-No hay código, ni `cmd/`, ni `internal/`, ni `go.mod`, ni `scripts/`, ni `plugin/`.
+There is no code, no `cmd/`, no `internal/`, no `go.mod`, no `scripts/`, no `plugin/`.
 
-## Layout inicial a crear
+## Initial layout to create
 
-Convención de stack (heredada de gitdash, `go.mod` de referencia): Go `1.26.3`, module `prdash`, `charm.land/bubbletea/v2 v2.0.9`, `charm.land/bubbles/v2 v2.2.1`, `charm.land/lipgloss/v2 v2.0.6`, `github.com/BurntSushi/toml v1.6.0`, sin cgo. Imports `charm.land`, **NO** `github.com/charmbracelet`.
+Stack convention (inherited from gitdash, reference `go.mod`): Go `1.26.3`, module `prdash`, `charm.land/bubbletea/v2 v2.0.9`, `charm.land/bubbles/v2 v2.2.1`, `charm.land/lipgloss/v2 v2.0.6`, `github.com/BurntSushi/toml v1.6.0`, no cgo. Imports `charm.land`, **NOT** `github.com/charmbracelet`.
 
-### Puro (sin red, sin subprocess, sin TOML, sin disco)
+### Pure (no network, no subprocess, no TOML, no disk)
 
-| Paquete / fichero | Responsabilidad | Símbolos/contratos esperados |
+| Package / file | Responsibility | Expected symbols/contracts |
 |---|---|---|
-| `internal/forge/model/model.go` | Tipos normalizados inmutables. | `RepoRef{Forge,Host,Project,Owner,Name}`; `Item{Section,Forge,Host,Ref,Number,Title,Author,SourceBranch,TargetBranch,URL,State,ReviewDecision,Checks,UpdatedAt}`; `Section` (authored/review/mentions); `Warning{Forge,Section,Kind,Msg}`; identidad = `With(forge,host,project,number)`. |
-| `internal/forge/parse/parse.go` | Traduce JSON de `gh`/`glab` (GraphQL, REST, Todos) a `model`. | `ParseGHGraphQLSearch`, `ParseGHAuthored`, `ParseGLGraphQL`, `ParseGLMRList`, `ParseGLTodos`, `ParseGHChecks`; **una función por forma de salida**, con fixtures string. Nunca lanza: devuelve items + error de parseo tipado. |
-| `internal/inbox/inbox.go` | Consolida 3 secciones, deduplica y decide relevancia. | `Build(inputs []ForgeResult) Inbox`; regla de autoridad de sección (authored > review > mentions); dedupe por `RepoRef`+número. Sin red/disco. |
-| `internal/state/state.go` | Estado derivado con precedencia y score de orden (atención primero), compartido por TUI y `--print`. | `type State int` + consts, `String()`, `Derive(item) State`, `Score() int`. Precedencia a definir (p. ej. `error > changes-requested > review-required > approved > pending > merged/closed > draft`). |
-| `internal/review/plan/plan.go` | Dado `(Item, Worktree, Entorno)` produce el plan de panes sin tocar Herdr. | `Pane{Cwd,Argv,Label,Env,Kind}`; `Plan(toolArgs ToolArgs, wt Worktree, env Env, pr Item) Plan`. |
+| `internal/forge/model/model.go` | Immutable normalized types. | `RepoRef{Forge,Host,Project,Owner,Name}`; `Item{Section,Forge,Host,Ref,Number,Title,Author,SourceBranch,TargetBranch,URL,State,ReviewDecision,Checks,UpdatedAt}`; `Section` (authored/review/mentions); `Warning{Forge,Section,Kind,Msg}`; identity = `With(forge,host,project,number)`. |
+| `internal/forge/parse/parse.go` | Translates JSON from `gh`/`glab` (GraphQL, REST, Todos) to `model`. | `ParseGHGraphQLSearch`, `ParseGHAuthored`, `ParseGLGraphQL`, `ParseGLMRList`, `ParseGLTodos`, `ParseGHChecks`; **one function per output shape**, with string fixtures. It never panics: it returns items + a typed parse error. |
+| `internal/inbox/inbox.go` | Consolidates the 3 sections, dedupes and decides relevance. | `Build(inputs []ForgeResult) Inbox`; section authority rule (authored > review > mentions); dedupe by `RepoRef`+number. No network/disk. |
+| `internal/state/state.go` | Derived state with precedence and order score (attention first), shared by the TUI and `--print`. | `type State int` + consts, `String()`, `Derive(item) State`, `Score() int`. Precedence to define (e.g. `error > changes-requested > review-required > approved > pending > merged/closed > draft`). |
+| `internal/review/plan/plan.go` | Given `(Item, Worktree, Environment)` produces the pane plan without touching Herdr. | `Pane{Cwd,Argv,Label,Env,Kind}`; `Plan(toolArgs ToolArgs, wt Worktree, env Env, pr Item) Plan`. |
 
-### I/O (adapters y puertos)
+### I/O (adapters and ports)
 
-| Paquete / fichero | Responsabilidad | Símbolos/contratos esperados |
+| Package / file | Responsibility | Expected symbols/contracts |
 |---|---|---|
-| `internal/config/config.go` | TOML XDG; `Load()` nunca falla (defaults + warning). | `Load() (Config,string)`, `LoadFrom(path)`, `Path()`, `Defaults()`, `expandAll()`, `Keybindings`, `Commands`, `HintBarLines()`. Ver §Config. |
-| `internal/forge/forge.go` | Contrato `Adapter` + registro por forge. | `Adapter interface { Forge() string; Host(); Auth(ctx) AuthState; Authored(ctx) ([]model.Item,[]model.Warning); ReviewRequested(ctx); Mentions(ctx); ItemState(ctx,RepoRef,number); Approve(ctx,…); Merge(ctx,…) }`. **Nunca devuelve error duro**: ítems + `[]Warning`. |
-| `internal/forge/github/github.go` | Adapter GitHub vía `gh` (GraphQL + REST). | Implementa `Adapter`; `exec.CommandContext("gh",…)`; parsea con `forge/parse`. |
-| `internal/forge/gitlab/gitlab.go` | Adapter GitLab self-managed vía `glab` (GraphQL + REST + Todos). | Implementa `Adapter`; base URL configurable con subfolder `/git/api/v4/`. |
-| `internal/forge/bitbucket/bitbucket.go` | Adapter registrado, **sin red**. | `Adapter` que responde `Warning{Kind:"unsupported"}` en todos los métodos; compila y pasa la suite de conformidad. |
-| `internal/reporesolver/reporesolver.go` | **Único dueño del namespace de rutas**: índice remoto→local sobre `roots`, memoria de rutas, clon bare, fetch del ref de review, rama local de trabajo. NO llama a la API del forge. | `Resolver interface { ResolveLocal(RepoRef) (path, bool); EnsureBare(RepoRef) (path,error); FetchReviewRef(path, Item) (branch string, error); Remember(RepoRef,path) }`. |
-| `internal/worktree/worktree.go` | Puerto de provisión con 2 implementaciones intercambiables. | `Provisioner interface { Create(Spec) (Worktree,error); Remove(id); List() []Worktree }`; `Spec{Cwd,Branch,Path,Label}`. Implementaciones: `herdrNative` (dentro de Herdr) y `gitDirect` (`git worktree add`). El llamador no sabe cuál corre. |
-| `internal/herdr/herdr.go` | **Único** lugar que lee `HERDR_ENV` y parsea salida de Herdr. | `Port interface { Available() bool; WorktreeCreate(Spec) (Worktree,error); PaneSplit/Workspace/Tab…; Layout(plan.Plan) error; Notify(title string); LinkHandler(url) }`. Degradación fuera de Herdr. |
-| `internal/review/executor/executor.go` | Aplica el plan usando los puertos. | `Mount(item, resolver, worktree, herdr) Result`; orquesta resolve→fetch→branch→provision→layout. Solo habla por puertos. |
-| `internal/cache/cache.go` | Snapshot del inbox + rutas recordadas; corrupto = silencioso. | `Load(path) (File,bool)`, `Save(path, File)`; `FileName = "inbox.json"`, `DirName = "prdash"`; `version` para invalidar. |
-| `internal/tui/app.go` | Modelo bubbletea + pipelines de fondo + event pump. | `Model`, `New(cfg)`, `Init()`, `Update`, `View`, `waitForEvent`, `withPump`, `startRefreshCmd`, `tickCmd`, `Msg` types. |
-| `internal/tui/update.go` | `Update`/teclas/refresco/detalle. | `handleKey`, `actionForKey`, `View()` (alt-screen), render de 3 secciones. |
-| `internal/tui/table.go` | Filas/orden/celdas por sección. | `row{item,state}`, `rows()`, `cells` que devuelven `(texto,style)`. `pad()` ANTES de estilo. |
-| `internal/tui/detail.go` | Detalle del ítem. | `renderDetail`. |
-| `internal/tui/styles.go` | Estilos lipgloss. | consts/vars. |
-| `internal/testutil/testutil.go` | Fixtures: repos git reales + fakes de forge/Herdr. | Ver §Tests. |
-| `cmd/prdash/main.go` | Entrypoint: TUI + dispatch de subcomandos. | `main()`; `--print`; subcomandos `herdr …` que consume el plugin. |
-| `cmd/prdash/print.go` | Modo `--print` one-shot (tabwriter, mismo orden que TUI). | `runPrint(cfg)`. |
-| `cmd/prdash/herdr.go` | Subcomandos invocados por el manifiesto del plugin (pane entrypoint, acción montar review, link handler). | `runHerdrInbox`, `runHerdrMount`, `runHerdrLink`. |
-| `plugin/herdr/herdr-plugin.toml` | Manifiesto Herdr 0.9.x. | Pane del inbox (placement), acción "montar review" con keybind, link handler de URLs de PR; versión mínima. Ver §Contratos. |
+| `internal/config/config.go` | XDG TOML; `Load()` never fails (defaults + warning). | `Load() (Config,string)`, `LoadFrom(path)`, `Path()`, `Defaults()`, `expandAll()`, `Keybindings`, `Commands`, `HintBarLines()`. See §Config. |
+| `internal/forge/forge.go` | `Adapter` contract + per-forge registry. | `Adapter interface { Forge() string; Host(); Auth(ctx) AuthState; Authored(ctx) ([]model.Item,[]model.Warning); ReviewRequested(ctx); Mentions(ctx); ItemState(ctx,RepoRef,number); Approve(ctx,…); Merge(ctx,…) }`. **It never returns a hard error**: items + `[]Warning`. |
+| `internal/forge/github/github.go` | GitHub adapter via `gh` (GraphQL + REST). | Implements `Adapter`; `exec.CommandContext("gh",…)`; parses with `forge/parse`. |
+| `internal/forge/gitlab/gitlab.go` | Self-managed GitLab adapter via `glab` (GraphQL + REST + Todos). | Implements `Adapter`; configurable base URL with subfolder `/git/api/v4/`. |
+| `internal/forge/bitbucket/bitbucket.go` | Registered adapter, **no network**. | An `Adapter` that answers `Warning{Kind:"unsupported"}` on every method; compiles and passes the conformance suite. |
+| `internal/reporesolver/reporesolver.go` | **Sole owner of the path namespace**: remote→local index over `roots`, path memory, bare clone, fetch of the review ref, local working branch. It does NOT call the forge API. | `Resolver interface { ResolveLocal(RepoRef) (path, bool); EnsureBare(RepoRef) (path,error); FetchReviewRef(path, Item) (branch string, error); Remember(RepoRef,path) }`. |
+| `internal/worktree/worktree.go` | Provisioning port with 2 interchangeable implementations. | `Provisioner interface { Create(Spec) (Worktree,error); Remove(id); List() []Worktree }`; `Spec{Cwd,Branch,Path,Label}`. Implementations: `herdrNative` (inside Herdr) and `gitDirect` (`git worktree add`). The caller does not know which one runs. |
+| `internal/herdr/herdr.go` | The **only** place that reads `HERDR_ENV` and parses Herdr output. | `Port interface { Available() bool; WorktreeCreate(Spec) (Worktree,error); PaneSplit/Workspace/Tab…; Layout(plan.Plan) error; Notify(title string); LinkHandler(url) }`. Degradation outside Herdr. |
+| `internal/review/executor/executor.go` | Applies the plan using the ports. | `Mount(item, resolver, worktree, herdr) Result`; orchestrates resolve→fetch→branch→provision→layout. It only speaks through ports. |
+| `internal/cache/cache.go` | Inbox snapshot + remembered paths; corrupt = silent. | `Load(path) (File,bool)`, `Save(path, File)`; `FileName = "inbox.json"`, `DirName = "prdash"`; `version` to invalidate. |
+| `internal/tui/app.go` | bubbletea model + background pipelines + event pump. | `Model`, `New(cfg)`, `Init()`, `Update`, `View`, `waitForEvent`, `withPump`, `startRefreshCmd`, `tickCmd`, `Msg` types. |
+| `internal/tui/update.go` | `Update`/keys/refresh/detail. | `handleKey`, `actionForKey`, `View()` (alt-screen), render of the 3 sections. |
+| `internal/tui/table.go` | Rows/order/cells per section. | `row{item,state}`, `rows()`, `cells` returning `(text,style)`. `pad()` BEFORE style. |
+| `internal/tui/detail.go` | Item detail. | `renderDetail`. |
+| `internal/tui/styles.go` | lipgloss styles. | consts/vars. |
+| `internal/testutil/testutil.go` | Fixtures: real git repos + forge/Herdr fakes. | See §Tests. |
+| `cmd/prdash/main.go` | Entrypoint: TUI + subcommand dispatch. | `main()`; `--print`; `herdr …` subcommands that the plugin consumes. |
+| `cmd/prdash/print.go` | One-shot `--print` mode (tabwriter, same order as the TUI). | `runPrint(cfg)`. |
+| `cmd/prdash/herdr.go` (removed by ADR 0003) | Subcommands invoked by the plugin manifest (pane entrypoint, mount-review action, link handler). | `runHerdrInbox`, `runHerdrMount`, `runHerdrLink`. |
+| `plugin/herdr/herdr-plugin.toml` (removed by ADR 0003) | Herdr 0.9.x manifest. | Inbox pane (placement), "mount review" action with keybind, link handler for PR URLs; minimum version. See §Contracts. |
 
-## Patrones de gitdash a seguir (rutas reales)
+## gitdash patterns to follow (real paths)
 
-| Concern | Fichero modelo | Qué importar de concepto |
+| Concern | Model file | What to import as a concept |
 |---|---|---|
-| Config que nunca falla | `gitdash/internal/config/config.go:81-149` (`Load`/`LoadFrom`) y `Defaults()` `:196-213` | Fichero ausente → defaults silenciosos; TOML roto → defaults + warning string, nunca panic. `expandAll` `:216-228` expande `~`. Keybindings/Commands merge sobre defaults. |
-| Parseo puro + fixtures | `gitdash/internal/gitstatus/parse.go:126` (`ParsePorcelain`), `:237` (`ParseWorktrees`) | Parseo en fichero separado del I/O, sin tocar red/subprocess; tests con fixtures string. En prdash: `forge/parse`. |
-| Estado derivado + score | `gitdash/internal/gitstatus/parse.go:43-125` (`State`, `Derive`, `Score`) | Enum de estados con precedencia explícita y `Score()` para orden atención-primero compartido por TUI y `--print`. |
-| Snapshot con error embebido | `gitdash/internal/gitstatus/status.go:23-55` (`Snapshot`, `State`) | El resultado lleva `Err` dentro; nunca falla duro. En prdash: `Warning` por forge/sección. |
-| Pool concurrente con emisión | `gitdash/internal/gitstatus/status.go:126-154` (`StreamPool`) | Semáforo + goroutines que emiten por callback; patrón para paralelizar consultas por forge sin bloquear la UI. |
-| Subprocess con LC_ALL=C | `gitdash/internal/gitstatus/status.go:202-267` (`gitEnv`, `runGit`, `runGitCombined`) | Forzar locale inglés para reconocer mensajes de error de `gh`/`glab` igual; timeout vía `exec.CommandContext`. |
-| Event pump | `gitdash/internal/tui/app.go:29-82` (msgs), `:215-235` (`waitForEvent`/`sendEvent`/`tickCmd`), `gitdash/internal/tui/update.go:117-121` (`withPump`) | Cada `tea.Cmd` lee UN evento del canal; SIEMPRE re-armar `waitForEvent` en `Update`. Gotcha #1. |
-| Pipeline de fondo | `gitdash/internal/tui/app.go:242-267` (`startScanCmd`), `:292` (`fetchBatchCmd`), `:343` (`startActionCmd`) | Goroutine + `sendEvent(ctx,…)`; guard "una operación a la vez"; refresco automático con `tea.Tick` (`tickCmd`). |
-| Refresco que no pisa acción | `gitdash/internal/tui/update.go:15-115` (dispatcher por `Msg`) | Merge de resultados por clave sin revertir el estado de una acción en curso (escenario "un refresco no pisa una acción en curso"). |
-| Estado UI persistido | `gitdash/internal/state/state.go:26-100` (`Store`, `SaveCollapsed`/`LoadCollapsed` atómico tmp+rename) | Store en `$XDG_STATE_HOME/prdash`. Corrupto/ausente = silencioso. |
-| Cache instantánea | `gitdash/internal/cache/cache.go:55-110` (`Load`/`Save`, `version`) | Snapshot JSON para pintar al arrancar; validación best-effort; corrupto silencioso. |
-| Modo `--print` | `gitdash/cmd/gitdash/print.go:27-111` (`runPrint`) | Reutiliza config+colección, tabwriter, **mismo orden** que la TUI (via `Score()`). |
-| Fixtures de repos git | `gitdash/internal/testutil/testutil.go:13-172` (`Init`, `InitBare`, `AddUpstream`, `MakeWorktree`, `NewBranch`, `FetchLocal`) | Repos git reales en `t.TempDir()`; base para fixtures de worktree/fork. |
-| Entrypoint | `gitdash/cmd/gitdash/main.go:20` (`main`) | `config.Load()` → warn a stderr → `tui.New(cfg)` + `tea.NewProgram`; flag `--print` → `runPrint`. |
-| Agrupación/headers de tabla | `gitdash/internal/group/group.go:39-119` (`Arrange`) | Arreglo a 2 niveles con headers; análogo a las 3 secciones del inbox. |
-| Celdas que devuelven (texto, estilo) | `gitdash/internal/tui/table.go` (funcs `*Cell`), `:render*` | `pad(texto)` ANTES de aplicar estilo (ANSI rompe el ancho). Gotcha de tabla. |
-| Smoke TUI | convención gitdash (`AGENTS.md` Gotcha 3) | `tmux` + `capture-pane`; `script` NO sirve (bubbletea v2 bloquea el primer render). |
+| Config that never fails | `gitdash/internal/config/config.go:81-149` (`Load`/`LoadFrom`) and `Defaults()` `:196-213` | Missing file → silent defaults; broken TOML → defaults + warning string, never a panic. `expandAll` `:216-228` expands `~`. Keybindings/Commands merge over defaults. |
+| Pure parsing + fixtures | `gitdash/internal/gitstatus/parse.go:126` (`ParsePorcelain`), `:237` (`ParseWorktrees`) | Parsing in a file separate from the I/O, touching neither network/subprocess; tests with string fixtures. In prdash: `forge/parse`. |
+| Derived state + score | `gitdash/internal/gitstatus/parse.go:43-125` (`State`, `Derive`, `Score`) | State enum with explicit precedence and `Score()` for the attention-first order shared by the TUI and `--print`. |
+| Snapshot with embedded error | `gitdash/internal/gitstatus/status.go:23-55` (`Snapshot`, `State`) | The result carries `Err` inside; it never fails hard. In prdash: `Warning` per forge/section. |
+| Concurrent pool with emission | `gitdash/internal/gitstatus/status.go:126-154` (`StreamPool`) | Semaphore + goroutines that emit via callback; pattern to parallelize per-forge queries without blocking the UI. |
+| Subprocess with LC_ALL=C | `gitdash/internal/gitstatus/status.go:202-267` (`gitEnv`, `runGit`, `runGitCombined`) | Force the English locale to recognize `gh`/`glab` error messages the same way; timeout via `exec.CommandContext`. |
+| Event pump | `gitdash/internal/tui/app.go:29-82` (msgs), `:215-235` (`waitForEvent`/`sendEvent`/`tickCmd`), `gitdash/internal/tui/update.go:117-121` (`withPump`) | Each `tea.Cmd` reads ONE event from the channel; ALWAYS re-arm `waitForEvent` in `Update`. Gotcha #1. |
+| Background pipeline | `gitdash/internal/tui/app.go:242-267` (`startScanCmd`), `:292` (`fetchBatchCmd`), `:343` (`startActionCmd`) | Goroutine + `sendEvent(ctx,…)`; "one operation at a time" guard; automatic refresh with `tea.Tick` (`tickCmd`). |
+| Refresh that does not overwrite an action | `gitdash/internal/tui/update.go:15-115` (dispatcher by `Msg`) | Merging results by key without reverting the state of an action in progress ("a refresh does not overwrite an action in progress" scenario). |
+| Persisted UI state | `gitdash/internal/state/state.go:26-100` (`Store`, atomic `SaveCollapsed`/`LoadCollapsed` tmp+rename) | Store in `$XDG_STATE_HOME/prdash`. Corrupt/absent = silent. |
+| Instant cache | `gitdash/internal/cache/cache.go:55-110` (`Load`/`Save`, `version`) | JSON snapshot to paint at startup; best-effort validation; corrupt is silent. |
+| `--print` mode | `gitdash/cmd/gitdash/print.go:27-111` (`runPrint`) | Reuses config+collection, tabwriter, **same order** as the TUI (via `Score()`). |
+| Real git repo fixtures | `gitdash/internal/testutil/testutil.go:13-172` (`Init`, `InitBare`, `AddUpstream`, `MakeWorktree`, `NewBranch`, `FetchLocal`) | Real git repos in `t.TempDir()`; base for worktree/fork fixtures. |
+| Entrypoint | `gitdash/cmd/gitdash/main.go:20` (`main`) | `config.Load()` → warn to stderr → `tui.New(cfg)` + `tea.NewProgram`; `--print` flag → `runPrint`. |
+| Table grouping/headers | `gitdash/internal/group/group.go:39-119` (`Arrange`) | 2-level arrangement with headers; analogous to the 3 inbox sections. |
+| Cells returning (text, style) | `gitdash/internal/tui/table.go` (funcs `*Cell`), `:render*` | `pad(text)` BEFORE applying style (ANSI breaks the width). Table gotcha. |
+| TUI smoke | gitdash convention (`AGENTS.md` Gotcha 3) | `tmux` + `capture-pane`; `script` does NOT work (bubbletea v2 blocks the first render). |
 
-## Config TOML a definir (claves + defaults)
+## TOML config to define (keys + defaults)
 
-`config.toml` en `$XDG_CONFIG_HOME/prdash/config.toml`. Fichero ausente → defaults silenciosos.
+`config.toml` at `$XDG_CONFIG_HOME/prdash/config.toml`. Missing file → silent defaults.
 
-| Clave | Tipo | Default | Uso |
+| Key | Type | Default | Use |
 |---|---|---|---|
-| `roots` | `[]string` | `["~/dev"]` | Roots donde buscar clones locales (patrón gitdash). |
-| `refresh_interval` | duration string | `"60s"` | Cadencia del auto-refresco. `0` = solo manual. |
-| `forges` | tabla/array | habilitados github + gitlab | Ver subclaves. |
-| `forge.github.host` | string | `"github.com"` | Host GitHub. |
-| `forge.gitlab.host` | string | `"gitlab.example.com"` | Host GL self-managed. |
-| `forge.gitlab.api_base` | string | `"/git/api/v4/"` | **Subfolder** obligatorio en GL self-managed. |
-| `forge.gitlab.token_env` | string | (implícito, lo maneja glab) | No duplicar credenciales: `glab`/`gh` ya autenticados. |
-| `forge.bitbucket.enabled` | bool | `false` | Adapter solo-interfaz; sin red. |
-| `data_dir` / `clone_dir` | string | `~/.local/share/prdash/repos/<forge>/<host>/<owner>/<repo>` | Clon bare (configurable). |
-| `worktree_dir` | string | bajo `data_dir` | Destino de worktrees (configurable). |
-| `tools.tuicr` | string (argv) | `"tuicr"` | Binario/argv de TUICR. |
-| `tools.hunk` | string (argv) | `"hunk"` | Binario/argv de Hunk. |
-| `tools.agent` | string (argv) | `"opencode"` | Binario/argv del agente. |
-| `tools.gh` / `tools.glab` | string | `"gh"` / `"glab"` | Binarios de forge (override). |
-| `autoreview.enabled` | bool | `false` | F3 post-MVP; solo parseo, dry-run por defecto. |
-| `autoreview.allowlist` | `[]string` | `[]` | Repos (`host/owner/repo`) permitidos para auto-approve (F3). |
-| `keybindings` | map | ver abajo | Merge sobre defaults. |
-| `commands` | map | `gh`/`glab` argv base | Merge sobre defaults. |
+| `roots` | `[]string` | `["~/dev"]` | Roots where to search for local clones (gitdash pattern). |
+| `refresh_interval` | duration string | `"60s"` | Auto-refresh cadence. `0` = manual only. |
+| `forges` | table/array | github + gitlab enabled | See subkeys. |
+| `forge.github.host` | string | `"github.com"` | GitHub host. |
+| `forge.gitlab.host` | string | `"gitlab.example.com"` | Self-managed GL host. |
+| `forge.gitlab.api_base` | string | `"/git/api/v4/"` | **Subfolder** required on self-managed GL. |
+| `forge.gitlab.token_env` | string | (implicit, handled by glab) | Do not duplicate credentials: `glab`/`gh` already authenticated. |
+| `forge.bitbucket.enabled` | bool | `false` | Interface-only adapter; no network. |
+| `data_dir` / `clone_dir` | string | `~/.local/share/prdash/repos/<forge>/<host>/<owner>/<repo>` | Bare clone (configurable). |
+| `worktree_dir` | string | under `data_dir` | Worktree destination (configurable). |
+| `tools.tuicr` | string (argv) | `"tuicr"` | TUICR binary/argv. |
+| `tools.hunk` | string (argv) | `"hunk"` | Hunk binary/argv. |
+| `tools.agent` | string (argv) | `"opencode"` | Agent binary/argv. |
+| `tools.gh` / `tools.glab` | string | `"gh"` / `"glab"` | Forge binaries (override). |
+| `autoreview.enabled` | bool | `false` | F3 post-MVP; parsing only, dry-run by default. |
+| `autoreview.allowlist` | `[]string` | `[]` | Repos (`host/owner/repo`) allowed for auto-approve (F3). |
+| `keybindings` | map | see below | Merge over defaults. |
+| `commands` | map | `gh`/`glab` base argv | Merge over defaults. |
 
-Keybinds sugeridos (merge sobre defaults, patrón `DefaultKeybindings` de gitdash): `quit=q`, `refresh=r`, `detail=enter`, `mount-review=m` (necesita Herdr), `approve=a`, `merge=M`, `section-next=tab`, `open-browser=o`.
+Suggested keybinds (merge over defaults, gitdash's `DefaultKeybindings` pattern): `quit=q`, `refresh=r`, `detail=enter`, `mount-review=m` (needs Herdr), `approve=a`, `merge=M`, `section-next=tab`, `open-browser=o`.
 
-## Contratos con herramientas externas (comandos EXACTOS)
+## Contracts with external tools (EXACT commands)
 
-**GitHub vía `gh`** (usuario autenticado `Sovengar`, scopes gist/read:org/repo/workflow; `gh` 2.67.0):
-- Inbox rico (reviewDecision + checks): `gh api graphql` con `search(type:ISSUE, query:"is:pr is:open author:@me")`. **NO** usar `gh search prs` para el inbox rico (JSON limitado).
-- Variantes de query: `author:@me`, `review-requested:@me`, `assignee:@me`, `mentions:@me` (menciones) — **todas vía GraphQL**.
-- Ref de PR (fork): `refs/pull/<N>/head`.
-- Estado de checks: campos GraphQL (`reviewDecision`) + `statusCheckRollup`/check runs.
-- Rate limit: GraphQL ~5000 pts/h; respetar cabeceras y backoff.
+**GitHub via `gh`** (authenticated user `Sovengar`, scopes gist/read:org/repo/workflow; `gh` 2.67.0):
+- Rich inbox (reviewDecision + checks): `gh api graphql` with `search(type:ISSUE, query:"is:pr is:open author:@me")`. Do **NOT** use `gh search prs` for the rich inbox (limited JSON).
+- Query variants: `author:@me`, `review-requested:@me`, `assignee:@me`, `mentions:@me` (mentions) — **all via GraphQL**.
+- PR ref (fork): `refs/pull/<N>/head`.
+- Checks state: GraphQL fields (`reviewDecision`) + `statusCheckRollup`/check runs.
+- Rate limit: GraphQL ~5000 pts/h; respect the headers and backoff.
 
-**GitLab vía `glab`** (gitlab.com SIN token → 401; self-managed `gitlab.example.com` autenticado como `<usuario>`; `glab` 1.119.0):
-- REST bajo subfolder **`/git/api/v4/`** (glab lo maneja; base URL configurable).
-- Inbox: `glab api graphql` con `currentUser` → `authored` / `reviewRequested` / `assigned`. Alternativa REST `/merge_requests?scope=…`.
-- Menciones: Todos API `glab api <base>/todos?action=mentioned`.
-- `glab mr list -F json` = `BasicMergeRequest` (**sin pipeline**, 1 página, sin `--paginate`) → insuficiente para estado rico; usar GraphQL.
-- Ref de MR: `refs/merge-requests/<N>/head`.
-- Fallos esperados: `401` gitlab.com → tratar como forge no disponible (no vaciar inbox); sin permisos de approve/merge en el self-managed → deshabilitar acción con motivo.
+**GitLab via `glab`** (gitlab.com WITHOUT a token → 401; self-managed `gitlab.example.com` authenticated as `<user>`; `glab` 1.119.0):
+- REST under subfolder **`/git/api/v4/`** (glab handles it; configurable base URL).
+- Inbox: `glab api graphql` with `currentUser` → `authored` / `reviewRequested` / `assigned`. REST alternative `/merge_requests?scope=…`.
+- Mentions: Todos API `glab api <base>/todos?action=mentioned`.
+- `glab mr list -F json` = `BasicMergeRequest` (**no pipeline**, 1 page, no `--paginate`) → insufficient for rich state; use GraphQL.
+- MR ref: `refs/merge-requests/<N>/head`.
+- Expected failures: `401` on gitlab.com → treat as forge unavailable (do not empty the inbox); without approve/merge permissions on the self-managed → disable the action with a reason.
 
-**tuicr** (ya sube reviews reales vía gh/glab/bkt/az):
+**tuicr** (it already pushes real reviews via gh/glab/bkt/az):
 - `tuicr pr <number|owner/repo#N|URL>` (alias `mr`).
-- `tuicr review list|comments|add` → JSON; poll ~30s, sin push.
-- MVP: delegar approve/comentar en tuicr cuando aplique; usar gh/glab directo para approve/merge rápido del inbox.
+- `tuicr review list|comments|add` → JSON; poll ~30s, no push.
+- MVP: delegate approve/commenting to tuicr when applicable; use direct gh/glab for fast approve/merge from the inbox.
 
 **hunk**:
 - `hunk session review|navigate|reload|comment add|list --type user` → JSON.
-- `hunk skill path` (descubrir binario/path).
-- Binario ausente = pane omitido con aviso.
+- `hunk skill path` (discover binary/path).
+- Missing binary = pane skipped with a warning.
 
-**herdr** (solo si `HERDR_ENV=1`):
-- `herdr worktree create --cwd <repo> --branch <local> --path <dest> --label <prdash-…> --no-focus`; también `open`/`list`/`remove`.
+**herdr** (only if `HERDR_ENV=1`):
+- `herdr worktree create --cwd <repo> --branch <local> --path <dest> --label <prdash-…> --no-focus`; also `open`/`list`/`remove`.
 - `herdr workspace|tab create`; `herdr pane split --cwd --ratio --no-focus`; `pane run`; `pane read`; `pane wait-output`.
 - `herdr agent start <name> --kind opencode --pane ID`; `agent prompt --wait`; `agent read/wait/send-keys`.
 - `herdr notification show <title> --sound request`.
-- Plugin: `herdr-plugin.toml` → panes placement overlay/popup/split/tab, acciones con keybind, link handlers Ctrl+click, eventos; env `HERDR_BIN_PATH`/`HERDR_PLUGIN_*`. Docs: herdr.dev/docs. Target Herdr 0.9.x.
-- **argv de todas las herramientas es configurable** (no API): drift de flags se absorbe en config.
+- Plugin: `herdr-plugin.toml` → panes placement overlay/popup/split/tab, actions with keybind, link handlers Ctrl+click, events; env `HERDR_BIN_PATH`/`HERDR_PLUGIN_*`. Docs: herdr.dev/docs. Target Herdr 0.9.x.
+- **The argv of every tool is configurable** (not an API): flag drift is absorbed in config.
 
-**git** (provisión y refs):
-- Resolución de repo: `git -C <root> remote get-url origin` para construir el índice remoto→local.
-- Clon bare: `git clone --bare <url> <dest>`.
-- Fetch de ref de review: `git fetch origin refs/pull/<N>/head:refs/heads/prdash/pr-<N>` (GH) o `refs/merge-requests/<N>/head` (GL).
-- Rama local de trabajo + worktree fallback: `git worktree add <dest> <rama-local>`.
-- Forzar `LC_ALL=C` en el env de los subprocess para parsear errores (patrón gitdash `gitEnv`).
+**git** (provisioning and refs):
+- Repo resolution: `git -C <root> remote get-url origin` to build the remote→local index.
+- Bare clone: `git clone --bare <url> <dest>`.
+- Review ref fetch: `git fetch origin refs/pull/<N>/head:refs/heads/prdash/pr-<N>` (GH) or `refs/merge-requests/<N>/head` (GL).
+- Local working branch + worktree fallback: `git worktree add <dest> <local-branch>`.
+- Force `LC_ALL=C` in the subprocess env to parse errors (gitdash pattern `gitEnv`).
 
-## Estrategia de paginación y refresco (sin tope)
+## Pagination and refresh strategy (no cap)
 
-- **Sin capar** secciones: paginar hasta agotar.
-- GitHub GraphQL: `pageInfo { hasNextPage endCursor }` hasta `hasNextPage=false`.
-- GitLab: iteración de páginas GraphQL/REST (o `glab api --paginate`).
-- **Carga progresiva**: primer render = primera página de cada sección (rápido); páginas restantes en segundo plano sin bloquear UI ni refresco. Indicador "cargando más…" por sección.
-- **Refresco incremental**: reutilizar snapshot en `cache`; refrescar primera página + comparar por cursor.
-- **Backoff** + respeto de cabeceras de rate limit; `401` de gitlab.com = forge no disponible.
-- **Pausar auto-refresco** mientras hay una acción en curso o se está paginando.
-- Indicador "última actualización" **por forge** (una forge lenta no debe mentir sobre el resto).
+- **Do not cap** the sections: paginate until exhausted.
+- GitHub GraphQL: `pageInfo { hasNextPage endCursor }` until `hasNextPage=false`.
+- GitLab: GraphQL/REST page iteration (or `glab api --paginate`).
+- **Progressive loading**: first render = first page of each section (fast); remaining pages in the background without blocking the UI nor the refresh. "loading more…" indicator per section.
+- **Incremental refresh**: reuse the snapshot in `cache`; refresh first page + compare by cursor.
+- **Backoff** + respect of rate limit headers; `401` from gitlab.com = forge unavailable.
+- **Pause the auto-refresh** while an action is in progress or while paginating.
+- "last update" indicator **per forge** (a slow forge must not lie about the rest).
 
-## Tests e infra
+## Tests and infra
 
 - Runner: `go build ./... && go vet ./... && go test ./...`.
-- **Fixtures string** para `forge/parse` (payloads GraphQL/REST/Todos reales recortados → `model.Item`). Patrón gitdash `parse_test.go`.
-- **Fakes de forge/Herdr**: implementaciones en memoria del contrato `Adapter`, `Port`, `Provisioner` para tests de `inbox`, `review/executor`, `state` y `tui` (sin red ni subprocess).
-- **Fixtures de repos git reales** en `t.TempDir()` para `reporesolver`/`worktree`: reutilizar helpers gitdash (`Init`, `InitBare`, `AddUpstream`, `MakeWorktree`, `NewBranch`, `FetchLocal`).
-- **Tests de modelo directo** (construir `Model`, enviar msgs con `Update`, inspeccionar estado) — sin teatest. Patrón `gitdash/internal/tui/app_test.go`.
-- **Smoke TUI con tmux** (`capture-pane`); `script` NO sirve.
-- Mapeo de escenarios sugerido: secciones/dedupe/estado rico → `inbox` + `parse`; degradación por forge → `forge/*` (401, Bitbucket) ; worktree/fork/reuso → `reporesolver` + `worktree` con repos reales; layout fallback → `review/plan` + `herdr` (fakes); refresh/paginación → `tui` + `state`.
+- **String fixtures** for `forge/parse` (real trimmed GraphQL/REST/Todos payloads → `model.Item`). gitdash pattern `parse_test.go`.
+- **Forge/Herdr fakes**: in-memory implementations of the `Adapter`, `Port`, `Provisioner` contracts for tests of `inbox`, `review/executor`, `state` and `tui` (no network nor subprocess).
+- **Real git repo fixtures** in `t.TempDir()` for `reporesolver`/`worktree`: reuse gitdash helpers (`Init`, `InitBare`, `AddUpstream`, `MakeWorktree`, `NewBranch`, `FetchLocal`).
+- **Direct model tests** (build `Model`, send msgs with `Update`, inspect state) — no teatest. Pattern `gitdash/internal/tui/app_test.go`.
+- **TUI smoke with tmux** (`capture-pane`); `script` does NOT work.
+- Suggested scenario mapping: sections/dedupe/rich state → `inbox` + `parse`; per-forge degradation → `forge/*` (401, Bitbucket); worktree/fork/reuse → `reporesolver` + `worktree` with real repos; layout fallback → `review/plan` + `herdr` (fakes); refresh/pagination → `tui` + `state`.
 
-## Convenciones y fronteras de módulo
+## Conventions and module boundaries
 
-- Comentarios de código en **español**, **sin** referencias a specs/IDs de requisito/escenarios (el código es la fuente de verdad). No crear artefactos SDD dentro del repo más allá de `docs/planning/` ya existente.
-- **Fronteras no cruzables** (plan §Módulos): `inbox`/`parse` no tocan red ni disco; los adapters no tocan git/worktree/TUI; `reporesolver` no toca la API del forge; `herdr` no toca git ni TUI y es el **único** que lee `HERDR_ENV`; `review` solo habla por puertos.
-- Adapters devuelven **items + warnings tipados, nunca error duro**.
-- Celdas de tabla devuelven `(texto, estilo)`; `pad()` antes de estilo.
-- Estado derivado con precedencia explícita y `Score()` para el orden atención-primero (compartido TUI/`--print`).
-- SUBPROCESS: siempre `exec.CommandContext` con timeout y `LC_ALL=C`.
-- Config única XDG; adapters y TUI no leen entorno/TOML (el plugin usa el mismo TOML).
+- Code comments in **Spanish**, **without** references to specs/requirement IDs/scenarios (the code is the source of truth). Do not create SDD artifacts inside the repo beyond the existing `docs/planning/`.
+- **Non-crossable boundaries** (plan §Modules): `inbox`/`parse` touch neither network nor disk; adapters touch neither git/worktree/TUI; `reporesolver` does not touch the forge API; `herdr` touches neither git nor TUI and is the **only** one that reads `HERDR_ENV`; `review` only speaks through ports.
+- Adapters return **typed items + warnings, never a hard error**.
+- Table cells return `(text, style)`; `pad()` before style.
+- Derived state with explicit precedence and `Score()` for the attention-first order (TUI/`--print` shared).
+- SUBPROCESS: always `exec.CommandContext` with timeout and `LC_ALL=C`.
+- Single XDG config; adapters and TUI read no environment/TOML (the plugin uses the same TOML).
 
-## Puntos de integración no obvios / gotchas
+## Non-obvious integration points / gotchas
 
-1. **Subfolder GitLab self-managed**: el REST vive bajo `/git/api/v4/`; cualquier URL construida a mano debe incluirlo. Encapsulado tras `forge/gitlab`.
-2. **`HERDR_ENV` aislado**: solo `herdr` lo lee; el resto recibe entorno inyectado (permite testear la TUI en modo "fuera de Herdr" sin variables globales).
-3. **Ownership de rutas**: solo `reporesolver` decide dónde viven clon bare y worktrees; ningún otro módulo construye rutas. `cache` recuerda rutas ya resueltas.
-4. **argv configurable** de tuicr/hunk/agente: son datos del plan, no APIs; un cambio de flags se absorbe en config sin tocar código.
-5. **No re-entrada del pane del plugin**: el pane entrypoint del manifiesto NO debe relanzar la TUI completa dentro de sí misma; dispatcha a un subcomando que imprime/atiende una unidad de trabajo (pane del inbox o acción).
-6. **Event pump**: rearmar `withPump` tras cada evento consumido o el inbox no pinta (Gotcha #1 gitdash).
-7. **Ref de fork ≠ rama de origin**: hay que `fetch` explícito de `refs/pull/N/head` / `refs/merge-requests/N/head` y crear rama local **antes** de pedir el worktree al nativo de Herdr.
-8. **Detección de "vacío" vs "error"**: nunca mostrar "vacío" si la forge devolvió error; estado/`Warning` explícito por forge y por sección.
-9. **Sin TTY en scripts**: ningún comando (git/gh/glab/herdr) debe lanzar editor/pager/REPL; pasar flags no interactivos y `GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1`, `glab` no interactivo.
-10. **Rebuild del binario instalado**: al terminar cambios, `go build -o ~/.local/bin/prdash ./cmd/prdash` (el usuario ejecuta ese; un bin stale produce síntomas falsos).
+1. **Self-managed GitLab subfolder**: the REST lives under `/git/api/v4/`; any URL built by hand must include it. Encapsulated behind `forge/gitlab`.
+2. **Isolated `HERDR_ENV`**: only `herdr` reads it; the rest receives an injected environment (it allows testing the TUI in "outside Herdr" mode with no global variables).
+3. **Path ownership**: only `reporesolver` decides where the bare clone and the worktrees live; no other module builds paths. `cache` remembers paths already resolved.
+4. **Configurable argv** of tuicr/hunk/agent: they are plan data, not APIs; a flag change is absorbed in config without touching code.
+5. **No re-entry of the plugin pane**: the manifest pane entrypoint must NOT relaunch the whole TUI inside itself; it dispatches to a subcommand that prints/serves a unit of work (inbox pane or action).
+6. **Event pump**: re-arm `withPump` after every consumed event or the inbox does not paint (gitdash Gotcha #1).
+7. **Fork ref ≠ origin branch**: an explicit `fetch` of `refs/pull/N/head` / `refs/merge-requests/N/head` is needed and the local branch must be created **before** asking Herdr's native for the worktree.
+8. **"Empty" vs "error" detection**: never show "empty" if the forge returned an error; explicit state/`Warning` per forge and per section.
+9. **No TTY in scripts**: no command (git/gh/glab/herdr) must launch an editor/pager/REPL; pass non-interactive flags and `GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1`, non-interactive `glab`.
+10. **Rebuild of the installed binary**: on finishing changes, `go build -o ~/.local/bin/prdash ./cmd/prdash` (the user runs that one; a stale binary produces false symptoms).
 
-## Riesgos heredados del plan + verificaciones pendientes
+## Risks inherited from the plan + pending verifications
 
-- **`tuicr pr` submit contra el GitLab self-managed**: verificar que sube reviews reales por `glab` en `gitlab.example.com`, no solo GitHub.
-- **`herdr worktree create` desde clon bare** con rama local ya creada y `--path` destino (el diseño elimina el caso "rama remota no local").
-- **Permisos approve/merge en el self-managed** (`<usuario>`): si faltan, deshabilitar acción con motivo.
-- **Placement del pane del plugin y link handler** en Herdr 0.9.x reales.
-- **`git clone --bare` + fetch de refs de MR** en el host self-managed (permisos de fetch).
-- **Rate limit / coste de paginación** con auto-refresco 60s: mitigado con snapshot + incremental + backoff; verificar cabeceras.
-- **Drift de `gh`/`glab`/`herdr`**: parseo puro con fixtures string y aislado por comando.
-- **Worktrees huérfanos**: ownership en el nombre (`prdash-pr-<N>`), listado y limpieza explícita; se conservan al cerrar.
-- **Ancho/estilos de celdas**: verificar `pad()` antes de estilo en Art/emoji/badges de checks.
-- **Degradación limpia fuera de Herdr**: comprobar que falta de `HERDR_ENV` falla suave y no bloquea arranque ni deja procesos huérfanos.
-- **Auth glab gitlab.com**: `401` tratado como forge no disponible, no como inbox vacío.
+- **`tuicr pr` submit against the self-managed GitLab**: verify that it pushes real reviews via `glab` on `gitlab.example.com`, not only GitHub.
+- **`herdr worktree create` from a bare clone** with the local branch already created and a `--path` destination (the design removes the "remote branch not local" case).
+- **approve/merge permissions on the self-managed** (`<user>`): if missing, disable the action with a reason.
+- **Plugin pane placement and link handler** on real Herdr 0.9.x.
+- **`git clone --bare` + MR refs fetch** on the self-managed host (fetch permissions).
+- **Rate limit / pagination cost** with 60s auto-refresh: mitigated with snapshot + incremental + backoff; verify the headers.
+- **`gh`/`glab`/`herdr` drift**: pure parsing with string fixtures and isolated per command.
+- **Orphan worktrees**: ownership in the name (`prdash-pr-<N>`), explicit listing and cleanup; they are kept on close.
+- **Cell width/styles**: verify `pad()` before style on Art/emoji/check badges.
+- **Clean degradation outside Herdr**: check that the lack of `HERDR_ENV` fails soft and blocks neither startup nor leaves orphan processes.
+- **Auth glab gitlab.com**: `401` treated as forge unavailable, not as an empty inbox.

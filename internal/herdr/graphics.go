@@ -30,8 +30,8 @@ const (
 const GraphicsLayer = "prdash-sim"
 
 type Placement struct {
-	Col  int // columna del viewport donde empieza
-	Row  int // fila del viewport donde empieza
+	Col  int
+	Row  int
 	Cols int // anchura en celdas
 	Rows int // altura en celdas
 }
@@ -249,7 +249,7 @@ func decodeResponse(line []byte, out any) error {
 		Error  *rpcError       `json:"error"`
 	}
 	if err := json.Unmarshal(line, &env); err != nil {
-		return fmt.Errorf("herdr: respuesta ilegible: %w", err)
+		return fmt.Errorf("herdr: unreadable response: %w", err)
 	}
 	if env.Error != nil {
 		return env.Error
@@ -260,7 +260,7 @@ func decodeResponse(line []byte, out any) error {
 	if len(env.Result) == 0 {
 		// For a method that DOES expect a result, none being there is an invalid response: a socket
 		// pointing at another program answering `{}` would make probe() report the layer as working.
-		return errors.New("herdr: la respuesta no trae campo result")
+		return errors.New("herdr: the response has no result field")
 	}
 	return json.Unmarshal(env.Result, out)
 }
@@ -270,7 +270,7 @@ func decodeResponse(line []byte, out any) error {
 func encodePNG(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
-		return nil, fmt.Errorf("herdr: codificar la imagen: %w", err)
+		return nil, fmt.Errorf("herdr: encoding the image: %w", err)
 	}
 	return buf.Bytes(), nil
 }

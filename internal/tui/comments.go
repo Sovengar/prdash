@@ -21,8 +21,8 @@ import (
 // paint differently: with only the list both are an empty list, and the first pretends otherwise.
 type commentState struct {
 	list  []model.Comment
-	total int  // los que dice el forge que hay, para poder decir "5 de 23"
-	ready bool // la consulta terminó, salga bien o mal
+	total int  // what the forge says there are, so "5 of 23" can be said
+	ready bool // the query finished, either way
 	err   string
 }
 
@@ -228,7 +228,7 @@ func allocate(need []int, budget int) []int {
 			}
 		}
 		if best < 0 {
-			break // nadie puede absorber más
+			break // nobody can absorb more
 		}
 		rows[best]++
 	}

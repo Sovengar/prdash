@@ -9,52 +9,52 @@ import (
 )
 
 // The most obvious thing in the world and exactly what nobody tests.
-func TestElMemoPathExplicitoManda(t *testing.T) {
+func TestTheExplicitMemoPathWins(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", xdg)
 	// HOME too, so reading the cache directory does not depend on which one the test sets.
 	t.Setenv("HOME", t.TempDir())
 
-	explicito := filepath.Join(t.TempDir(), "memo.json")
-	porDefecto := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
+	explicit := filepath.Join(t.TempDir(), "memo.json")
+	defaultPath := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
 
-	r := New(Options{MemoPath: explicito})
+	r := New(Options{MemoPath: explicit})
 	r.store.SetRoute("clave", "/ruta/explicita")
 
-	if _, err := os.Stat(explicito); err != nil {
-		t.Fatalf("con MemoPath explícito no se escribió en la ruta indicada: %v", err)
+	if _, err := os.Stat(explicit); err != nil {
+		t.Fatalf("with an explicit MemoPath it did not write to the given path: %v", err)
 	}
 	// And it was NOT written to the default path.
-	if _, err := os.Stat(porDefecto); err == nil {
-		t.Fatalf("con MemoPath explícito se escribió TAMBIÉN en la ruta por defecto (%s): "+
-			"la ruta indicada se está ignorando", porDefecto)
+	if _, err := os.Stat(defaultPath); err == nil {
+		t.Fatalf("with an explicit MemoPath it ALSO wrote to the default path (%s): "+
+			"the given path is being ignored", defaultPath)
 	}
 }
 
-func TestSinMemoPathSeUsaElPorDefecto(t *testing.T) {
+func TestWithoutMemoPathTheDefaultIsUsed(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", xdg)
 	t.Setenv("HOME", t.TempDir())
 
-	porDefecto := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
+	defaultPath := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
 
 	// Written with one resolver and read with another.
 	r := New(Options{})
 	r.store.SetRoute("clave", "/ruta/recordada")
 
-	if _, err := os.Stat(porDefecto); err != nil {
-		t.Fatalf("sin MemoPath no se escribió en la ruta por defecto (%s): %v", porDefecto, err)
+	if _, err := os.Stat(defaultPath); err != nil {
+		t.Fatalf("without MemoPath it did not write to the default path (%s): %v", defaultPath, err)
 	}
 
-	otro := New(Options{})
-	if ruta, ok := otro.store.Route("clave"); !ok || ruta != "/ruta/recordada" {
-		t.Errorf("un resolver nuevo no encontró la ruta recordada (ok=%v, ruta=%q): "+
-			"la memoria no está en la ruta por defecto", ok, ruta)
+	other := New(Options{})
+	if route, ok := other.store.Route("clave"); !ok || route != "/ruta/recordada" {
+		t.Errorf("a new resolver did not find the remembered route (ok=%v, route=%q): "+
+			"the memo is not at the default path", ok, route)
 	}
 }
 
 // The default path carries the product's subdirectory.
-func TestLaRutaPorDefectoEsLaDelCacheYNoOtra(t *testing.T) {
+func TestTheDefaultPathIsTheCacheOneAndNoOther(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", xdg)
 	t.Setenv("HOME", t.TempDir())
@@ -62,28 +62,28 @@ func TestLaRutaPorDefectoEsLaDelCacheYNoOtra(t *testing.T) {
 	r := New(Options{})
 	r.store.SetRoute("k", "/r")
 
-	quiere := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
-	if _, err := os.Stat(quiere); err != nil {
-		t.Errorf("la memoria no está en %s: %v", quiere, err)
+	want := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("the memo is not at %s: %v", want, err)
 	}
-	enHome := filepath.Join(os.Getenv("HOME"), cache.MemoFileName)
-	if _, err := os.Stat(enHome); err == nil {
-		t.Errorf("la memoria se escribió también en el HOME (%s): dos programas se pisan", enHome)
+	inHome := filepath.Join(os.Getenv("HOME"), cache.MemoFileName)
+	if _, err := os.Stat(inHome); err == nil {
+		t.Errorf("the memo was also written to HOME (%s): two programs step on each other", inHome)
 	}
 }
 
 // If the cache directory cannot be determined, New does not fail: the whole repo is built without
 // memo persistence.
-func TestUnaRutaPorDefectoIlegibleNoRompeNew(t *testing.T) {
+func TestAnUnreadableDefaultPathDoesNotBreakNew(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")
 
 	r := New(Options{})
 	if r == nil || r.store == nil {
-		t.Fatal("New devolvió nil con el cache ilegible: config que no degrada a default")
+		t.Fatal("New returned nil with an unreadable cache: config that does not degrade to default")
 	}
 	r.store.SetRoute("k", "/r")
-	if ruta, ok := r.store.Route("k"); !ok || ruta != "/r" {
-		t.Errorf("el store en memoria no sirve: ok=%v ruta=%q", ok, ruta)
+	if route, ok := r.store.Route("k"); !ok || route != "/r" {
+		t.Errorf("the in-memory store is no good: ok=%v route=%q", ok, route)
 	}
 }

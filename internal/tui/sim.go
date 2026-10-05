@@ -222,7 +222,7 @@ func (m *Model) startSim(kind sim.Kind) tea.Cmd {
 // error on top of the view is harder to read than the warning.
 func (m *Model) applySim(msg simMsg) {
 	if msg.seq != m.simSeq {
-		return // petición obsoleta: el popup se cerró o se reabrió mientras corría
+		return // stale request: the popup closed or reopened while it ran
 	}
 	if msg.err != nil {
 		m.closeSim()

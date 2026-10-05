@@ -11,133 +11,133 @@ import (
 
 // One contract across all of them: what happens when the forge answers something unreadable.
 
-func ghQueDevuelve(t *testing.T, cuerpo string) string {
+func ghReturning(t *testing.T, body string) string {
 	t.Helper()
-	script, _ := ghQueRegistra(t, cuerpo)
+	script, _ := ghThatLogs(t, body)
 	return script
 }
 
-func avisoUnico(t *testing.T, warns []model.Warning, donde string) model.Warning {
+func onlyWarning(t *testing.T, warns []model.Warning, where string) model.Warning {
 	t.Helper()
 	if len(warns) != 1 {
-		t.Fatalf("%s: %d avisos, want 1: %+v", donde, len(warns), warns)
+		t.Fatalf("%s: %d warnings, want 1: %+v", where, len(warns), warns)
 	}
 	return warns[0]
 }
 
 // HTML is the case chosen, because that is what a corporate proxy returns.
-func TestListarConSalidaQueNoEsJSONAvisaYNoSeRompe(t *testing.T) {
+func TestListWithOutputThatIsNotJSONWarnsAndDoesNotBreak(t *testing.T) {
 	for _, c := range []struct {
-		nombre string
-		salida string
+		name   string
+		output string
 	}{
-		{"html de un proxy", "cat <<'EOF'\n<html><body>Proxy Authentication Required</body></html>\nEOF"},
+		{"html from a proxy", "cat <<'EOF'\n<html><body>Proxy Authentication Required</body></html>\nEOF"},
 		// The truncation goes through a heredoc: with echo the script has a dangling quote and what
 		//fails is the SHELL, not the parsing.
-		{"json truncado", "cat <<'JSON'\n{\"data\":{\"search\":{\"nodes\":[\nJSON"},
-		{"json vacio", "printf ''"},
-		{"array en vez de objeto", `echo '[]'`},
-		{"campo que no es una lista", `echo '{"data":{"search":{"nodes":"no soy una lista"}}}'`},
+		{"truncated json", "cat <<'JSON'\n{\"data\":{\"search\":{\"nodes\":[\nJSON"},
+		{"empty json", "printf ''"},
+		{"array instead of object", `echo '[]'`},
+		{"field that is not a list", `echo '{"data":{"search":{"nodes":"I am not a list"}}}'`},
 	} {
-		a := New("github.com", ghQueDevuelve(t, c.salida))
+		a := New("github.com", ghReturning(t, c.output))
 		page, warns := a.List(context.Background(), forge.Query{Section: model.SectionReview})
 
 		// No panic and no items: an empty page with a warning is "I do not know", and a page with
 		// items is data.
 		if len(page.Items) != 0 {
-			t.Errorf("%s: devolvió %d ítems de una salida ilegible", c.nombre, len(page.Items))
+			t.Errorf("%s: returned %d items from unreadable output", c.name, len(page.Items))
 		}
-		w := avisoUnico(t, warns, c.nombre)
+		w := onlyWarning(t, warns, c.name)
 		if w.Kind != "parse" {
-			t.Errorf("%s: aviso de clase %q, want parse: un dato ilegible no es un rate "+
-				"limit ni un problema de permisos", c.nombre, w.Kind)
+			t.Errorf("%s: warning of kind %q, want parse: unreadable data is neither a rate "+
+				"limit nor a permissions problem", c.name, w.Kind)
 		}
 		if w.Section != model.SectionReview {
-			t.Errorf("%s: el aviso no lleva la sección (lleva %q)", c.nombre, w.Section)
+			t.Errorf("%s: the warning does not carry the section (carries %q)", c.name, w.Section)
 		}
 		if strings.TrimSpace(w.Msg) == "" {
-			t.Errorf("%s: el aviso quedó vacío", c.nombre)
+			t.Errorf("%s: the warning ended up empty", c.name)
 		}
 	}
 }
 
 // Misclassifying here is the real damage: a parse warning must not read as "you have no work".
-func TestElAvisoDeParseoNoDiceQueNoHayNada(t *testing.T) {
-	a := New("github.com", ghQueDevuelve(t, `echo 'no soy json'`))
+func TestTheParseWarningDoesNotSayThereIsNothing(t *testing.T) {
+	a := New("github.com", ghReturning(t, `echo 'I am not json'`))
 	_, warns := a.List(context.Background(), forge.Query{Section: model.SectionReview})
-	w := avisoUnico(t, warns, "list")
+	w := onlyWarning(t, warns, "list")
 
-	for _, clase := range []string{"notfound", "empty", "ok"} {
-		if w.Kind == clase {
-			t.Errorf("una salida ilegible se clasificó como %q, y eso hace que la TUI afirme "+
-				"algo falso sobre el inbox", clase)
+	for _, kind := range []string{"notfound", "empty", "ok"} {
+		if w.Kind == kind {
+			t.Errorf("unreadable output was classified as %q, and that makes the TUI assert "+
+				"something false about the inbox", kind)
 		}
 	}
 	// The message has to be recognisable as a data problem: "parse" is not in the text.
 	if !strings.Contains(strings.ToLower(w.Msg), "json") &&
 		!strings.Contains(strings.ToLower(w.Msg), "parse") {
-		t.Logf("el aviso no menciona el formato: %q", w.Msg)
+		t.Logf("the warning does not mention the format: %q", w.Msg)
 	}
 }
 
 // ItemState is more dangerous than List, because its result is what the card paints.
-func TestLeerElEstadoDeUnPRConSalidaIlegibleAvisaYNoDevuelveUnItemFalso(t *testing.T) {
-	a := New("github.com", ghQueDevuelve(t, `echo 'respuesta rota'`))
+func TestReadingTheStateOfAPRWithUnreadableOutputWarnsAndDoesNotReturnAFakeItem(t *testing.T) {
+	a := New("github.com", ghReturning(t, `echo 'broken response'`))
 	it, warns := a.ItemState(context.Background(),
 		model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
 
-	w := avisoUnico(t, warns, "ItemState")
+	w := onlyWarning(t, warns, "ItemState")
 	if w.Kind != "parse" {
-		t.Errorf("aviso de clase %q, want parse", w.Kind)
+		t.Errorf("warning of kind %q, want parse", w.Kind)
 	}
 	if it.ID() != (model.ID{}) || it.Number != 0 || it.HeadSHA != "" || it.Title != "" {
-		t.Errorf("devolvió un ítem a medias en vez del valor cero: %+v", it)
+		t.Errorf("returned a half item instead of the zero value: %+v", it)
 	}
 }
 
 // The difference with the other two: an invented comment is visible text.
-func TestLaConversacionConSalidaIlegibleAvisaYNoPintaComentariosInventados(t *testing.T) {
-	a := New("github.com", ghQueDevuelve(t, `echo '{{{no es json'`))
+func TestTheConversationWithUnreadableOutputWarnsAndDoesNotPaintInventedComments(t *testing.T) {
+	a := New("github.com", ghReturning(t, `echo '{{{not json'`))
 	page, warns := a.Comments(context.Background(),
 		model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
 
-	w := avisoUnico(t, warns, "Comments")
+	w := onlyWarning(t, warns, "Comments")
 	if w.Kind != "parse" {
-		t.Errorf("aviso de clase %q, want parse", w.Kind)
+		t.Errorf("warning of kind %q, want parse", w.Kind)
 	}
 	if len(page.Comments) != 0 {
-		t.Errorf("devolvió %d comentarios de una salida ilegible", len(page.Comments))
+		t.Errorf("returned %d comments from unreadable output", len(page.Comments))
 	}
 	if page.Total != 0 {
-		t.Errorf("Total = %d con una salida ilegible", page.Total)
+		t.Errorf("Total = %d with unreadable output", page.Total)
 	}
 	// The warning carries no section: the conversation is painted on the item's card, not in a
 	// column.
 	if w.Section != "" {
-		t.Errorf("el aviso de la conversación lleva sección %q; debería ir solo en la ficha", w.Section)
+		t.Errorf("the conversation warning carries section %q; it should only be on the card", w.Section)
 	}
 }
 
 // Both degrade to the same thing and must be told apart.
-func TestUnaFallaDelBinarioYUnaSalidaIlegibleNoSeConfunden(t *testing.T) {
+func TestABinaryFailureAndUnreadableOutputAreNotConfused(t *testing.T) {
 	q := forge.Query{Section: model.SectionReview}
 
 	// The binary fails: the warning gets the class that matches the failure, NOT "parse".
-	caido := New("github.com", ghQueDevuelve(t, "echo 'gh: no such host' >&2\nexit 1"))
-	_, warns := caido.List(context.Background(), q)
-	w := avisoUnico(t, warns, "binario caído")
+	down := New("github.com", ghReturning(t, "echo 'gh: no such host' >&2\nexit 1"))
+	_, warns := down.List(context.Background(), q)
+	w := onlyWarning(t, warns, "binary down")
 	if w.Kind == "parse" {
-		t.Error("un binario que falla se clasificó como parse: el reintento usaría el " +
-			"backoff equivocado y el aviso mentiría sobre la causa")
+		t.Error("a failing binary was classified as parse: the retry would use the wrong " +
+			"backoff and the warning would lie about the cause")
 	}
 	if strings.TrimSpace(w.Msg) == "" {
-		t.Error("el aviso del binario caído está vacío")
+		t.Error("the warning for the down binary is empty")
 	}
 
-	// El binario funciona y la salida es basura: parse, fijo.
-	roto := New("github.com", ghQueDevuelve(t, `echo 'no soy json'`))
-	_, warns = roto.List(context.Background(), q)
-	if got := avisoUnico(t, warns, "salida rota").Kind; got != "parse" {
-		t.Errorf("una salida ilegible dio clase %q, want parse", got)
+	// The binary works and the output is garbage: parse, for sure.
+	broken := New("github.com", ghReturning(t, `echo 'I am not json'`))
+	_, warns = broken.List(context.Background(), q)
+	if got := onlyWarning(t, warns, "broken output").Kind; got != "parse" {
+		t.Errorf("unreadable output gave kind %q, want parse", got)
 	}
 }

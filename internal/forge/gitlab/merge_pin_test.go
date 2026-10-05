@@ -17,11 +17,11 @@ func TestMergePinsTheHeadCommit(t *testing.T) {
 
 		warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: mode, HeadSHA: sha})
 		if len(warns) != 0 {
-			t.Fatalf("modo %q: Merge = %+v, want sin warnings", mode, warns)
+			t.Fatalf("mode %q: Merge = %+v, want no warnings", mode, warns)
 		}
 		joined := strings.Join(readArgs(t, argsFile), " ")
 		if !strings.Contains(joined, "--sha "+sha) {
-			t.Errorf("modo %q: argv = %q, want el pin a %s", mode, joined, sha)
+			t.Errorf("mode %q: argv = %q, want the pin to %s", mode, joined, sha)
 		}
 	}
 }
@@ -33,10 +33,10 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 
 		warns := New("gitlab.example.com", bin).Merge(context.Background(), mergeRef, 7, forge.MergeRequest{Mode: forge.Squash, HeadSHA: sha})
 		if len(warns) == 0 {
-			t.Fatalf("sha %q: un merge sin pin debería reportar warning", sha)
+			t.Fatalf("sha %q: a merge without a pin should report a warning", sha)
 		}
 		if _, err := os.Stat(argsFile); err == nil {
-			t.Errorf("sha %q: no debería haber lanzado la CLI sin poder pinear", sha)
+			t.Errorf("sha %q: it should not have launched the CLI without being able to pin", sha)
 		}
 	}
 }
@@ -44,11 +44,11 @@ func TestMergeRefusesToPinNothing(t *testing.T) {
 // diffHeadSha has to be in the query; Project.mergeMethod does not exist in the schema.
 func TestMRFieldsAskForThePin(t *testing.T) {
 	if !strings.Contains(mrFields, "diffHeadSha") {
-		t.Error("mrFields no pide diffHeadSha, así que el pin nunca podría satisfacerse")
+		t.Error("mrFields does not ask for diffHeadSha, so the pin could never be satisfied")
 	}
 	// The negative assertion documents a decision, not a wish: if the schema ever grows it, the test
 	// says so.
 	if strings.Contains(mrFields, "mergeMethod") {
-		t.Log("mrFields pide mergeMethod: la instancia lo soporta, se puede filtrar por reglas")
+		t.Log("mrFields asks for mergeMethod: the instance supports it, rules filtering is possible")
 	}
 }

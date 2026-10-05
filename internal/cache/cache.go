@@ -56,12 +56,12 @@ func Load(path string) (File, bool) {
 // Best-effort: losing the snapshot costs a refetch, not correctness.
 func Save(path string, f File) error {
 	f.Version = version
-	return guardaJSON(path, f)
+	return saveJSON(path, f)
 }
 
 // One helper for both: two copies of a sequence drift. The `any` makes the error branch real —
 // marshalling a struct of strings and slices never fails, so a concrete type would make it dead code.
-func guardaJSON(path string, v any) error {
+func saveJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

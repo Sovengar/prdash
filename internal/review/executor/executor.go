@@ -169,7 +169,7 @@ func (e *Executor) mountLayout(ctx context.Context, wt worktree.Worktree, pl pla
 		res.Warnings = append(res.Warnings, fmt.Sprintf("could not open the layout: %v", err))
 		return false
 	}
-	_ = e.Herdr.Notify(ctx, "prdash: review listo", herdr.NotifyOptions{Sound: "done"})
+	_ = e.Herdr.Notify(ctx, "prdash: review ready", herdr.NotifyOptions{Sound: "done"})
 	return true
 }
 

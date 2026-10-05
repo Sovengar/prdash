@@ -16,53 +16,53 @@ func TestConformance(t *testing.T) {
 
 // The two OK:false are indistinguishable by the boolean, so the REASON is what decides what the
 // operator does.
-func TestAuthDiceNoImplementadoYNoNoAutenticado(t *testing.T) {
+func TestAuthReportsNotImplementedRatherThanNotAuthenticated(t *testing.T) {
 	auth := New("bitbucket.org").Auth(context.Background())
 
 	if auth.OK {
-		t.Error("Auth dice que Bitbucket está operativo: no lo está")
+		t.Error("Auth says Bitbucket is operational: it is not")
 	}
 	if auth.Forge != "bitbucket" {
-		t.Errorf("Forge = %q, want bitbucket: el estado se pinta junto al nombre del forge",
+		t.Errorf("Forge = %q, want bitbucket: the state is painted next to the forge name",
 			auth.Forge)
 	}
 	if !strings.Contains(strings.ToLower(auth.Reason), "not implemented") {
-		t.Errorf("Reason = %q, y tiene que decir que NO ESTÁ IMPLEMENTADO y no que no hay "+
-			"sesión: son problemas con arreglos distintos", auth.Reason)
+		t.Errorf("Reason = %q, and it must say that it is NOT IMPLEMENTED rather than that "+
+			"there is no session: they are problems with different fixes", auth.Reason)
 	}
 	// The reason must NOT contain the word "authenticated": that is what sends the user off to
 	// configure auth instead of looking at the project.
 	if strings.Contains(strings.ToLower(auth.Reason), "auth") {
-		t.Errorf("Reason = %q menciona autenticación: mandaría a revisar el token de algo "+
-			"que no tiene arreglo", auth.Reason)
+		t.Errorf("Reason = %q mentions authentication: it would send the user to check the "+
+			"token of something that has no fix", auth.Reason)
 	}
 }
 
 // Same pattern as the other partially-implemented forges.
-func TestLasOperacionesNoSoportadasAvisanSinSalirAConsultarElForge(t *testing.T) {
+func TestUnsupportedOperationsWarnWithoutQueryingTheForge(t *testing.T) {
 	a := New("bitbucket.org")
 
 	for _, c := range []struct {
-		nombre string
-		q      forge.Query
+		name string
+		q    forge.Query
 	}{
-		{"listado de review", forge.Query{Section: model.SectionReview}},
-		{"listado de menciones", forge.Query{Section: model.SectionMentions}},
-		{"listado de propios", forge.Query{Section: model.SectionAuthored}},
+		{"review listing", forge.Query{Section: model.SectionReview}},
+		{"mentions listing", forge.Query{Section: model.SectionMentions}},
+		{"authored listing", forge.Query{Section: model.SectionAuthored}},
 	} {
 		page, warns := a.List(context.Background(), c.q)
 		if len(page.Items) != 0 {
-			t.Errorf("%s: %d ítems de una operación no soportada", c.nombre, len(page.Items))
+			t.Errorf("%s: %d items from an unsupported operation", c.name, len(page.Items))
 		}
 		if len(warns) == 0 {
-			t.Errorf("%s: sin aviso: el inbox parecería vacío sin explicación", c.nombre)
+			t.Errorf("%s: no warning: the inbox would look empty without an explanation", c.name)
 			continue
 		}
 		if warns[0].Kind != "unsupported" {
-			t.Errorf("%s: clase %q, want unsupported", c.nombre, warns[0].Kind)
+			t.Errorf("%s: kind %q, want unsupported", c.name, warns[0].Kind)
 		}
 		if warns[0].Section != c.q.Section {
-			t.Errorf("%s: el aviso no lleva la sección pedida (lleva %q)", c.nombre, warns[0].Section)
+			t.Errorf("%s: the warning does not carry the requested section (carries %q)", c.name, warns[0].Section)
 		}
 	}
 }

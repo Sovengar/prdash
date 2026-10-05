@@ -31,7 +31,7 @@ func retargetItem(state string) model.Item {
 }
 
 // The path is the same as the other actions —re-read, check, act, re-read—.
-func TestRunRetargetCambiaLaBaseYRelee(t *testing.T) {
+func TestRunRetargetChangesTheBaseAndReReads(t *testing.T) {
 	it := retargetItem("OPEN")
 	a := retargetFixture(t, it)
 
@@ -40,51 +40,51 @@ func TestRunRetargetCambiaLaBaseYRelee(t *testing.T) {
 		t.Fatalf("RunRetarget = %+v, want OK", out)
 	}
 	if a.RetargetCount() != 1 || a.Retargets[0] != "release/2.0" {
-		t.Errorf("el adapter recibió %v, want una llamada con release/2.0", a.Retargets)
+		t.Errorf("the adapter received %v, want one call with release/2.0", a.Retargets)
 	}
 	if out.Base != "release/2.0" {
-		t.Errorf("Outcome.Base = %q, want la rama pedida para el aviso", out.Base)
+		t.Errorf("Outcome.Base = %q, want the requested branch for the warning", out.Base)
 	}
 	if !out.HasItem {
-		t.Error("Outcome no trae el ítem releído: la vista se quedaría con la base vieja")
+		t.Error("Outcome does not bring the re-read item: the view would keep the old base")
 	}
 }
 
-func TestRunRetargetNiegaSinRama(t *testing.T) {
+func TestRunRetargetRefusesWithoutABranch(t *testing.T) {
 	it := retargetItem("OPEN")
 	a := retargetFixture(t, it)
 
 	out := forge.RunRetarget(context.Background(), a, it.Ref, it.Number, "   ")
 	if !out.Perm {
-		t.Errorf("Outcome = %+v, want Perm: un flag de base vacío deja el PR sin base", out)
+		t.Errorf("Outcome = %+v, want Perm: an empty base flag leaves the PR with no base", out)
 	}
 	if out.Msg != forge.ErrMissingBaseBranch.Error() {
-		t.Errorf("Msg = %q, want el motivo canónico", out.Msg)
+		t.Errorf("Msg = %q, want the canonical reason", out.Msg)
 	}
 	if out.HasItem {
-		t.Error(" releó el ítem para nada: sin rama no hay acción que guardar")
+		t.Error("it re-read the item for nothing: with no branch there is no action to save")
 	}
 	if a.RetargetCount() != 0 {
-		t.Errorf("llamó al adapter (%v) sin rama que enviar", a.Retargets)
+		t.Errorf("it called the adapter (%v) with no branch to send", a.Retargets)
 	}
 }
 
-func TestRunRetargetRespetaElGuardDeAbierto(t *testing.T) {
+func TestRunRetargetRespectsTheOpenGuard(t *testing.T) {
 	for _, state := range []string{"MERGED", "CLOSED"} {
 		it := retargetItem(state)
 		a := retargetFixture(t, it)
 
 		out := forge.RunRetarget(context.Background(), a, it.Ref, it.Number, "release/2.0")
 		if !out.Conflict {
-			t.Errorf("RunRetarget sobre %s = %+v, want conflicto", state, out)
+			t.Errorf("RunRetarget on %s = %+v, want conflict", state, out)
 		}
 		if a.RetargetCount() != 0 {
-			t.Errorf("llamó al adapter sobre un ítem %s", state)
+			t.Errorf("it called the adapter on a %s item", state)
 		}
 	}
 }
 
-func TestRunRetargetClasificaElPermisoDelForge(t *testing.T) {
+func TestRunRetargetClassifiesTheForgesPermission(t *testing.T) {
 	it := retargetItem("OPEN")
 	a := retargetFixture(t, it)
 	a.ActionWarnings = map[string][]model.Warning{
@@ -95,9 +95,9 @@ func TestRunRetargetClasificaElPermisoDelForge(t *testing.T) {
 
 	out := forge.RunRetarget(context.Background(), a, it.Ref, it.Number, "release/2.0")
 	if !out.Perm {
-		t.Errorf("Outcome = %+v, want Perm por falta de push", out)
+		t.Errorf("Outcome = %+v, want Perm for lack of push", out)
 	}
 	if !strings.Contains(out.Msg, "push access") {
-		t.Errorf("Msg = %q, want el motivo del forge", out.Msg)
+		t.Errorf("Msg = %q, want the forge's reason", out.Msg)
 	}
 }

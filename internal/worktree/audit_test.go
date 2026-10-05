@@ -10,7 +10,7 @@ import (
 	"prdash/internal/testutil"
 )
 
-func TestOwnedReconocesoloLaMarcaPrdash(t *testing.T) {
+func TestOwnedRecognizesOnlyThePrdashMark(t *testing.T) {
 	cases := []struct {
 		label string
 		path  string
@@ -25,7 +25,7 @@ func TestOwnedReconocesoloLaMarcaPrdash(t *testing.T) {
 	}
 	for _, c := range cases {
 		if got := Owned(c.label, c.path); got != c.want {
-			t.Errorf("Owned(%q, %q) = %v, quiero %v", c.label, c.path, got, c.want)
+			t.Errorf("Owned(%q, %q) = %v, want %v", c.label, c.path, got, c.want)
 		}
 	}
 }
@@ -39,49 +39,49 @@ func TestAuditListsOnlyOwnedWorktrees(t *testing.T) {
 	owned := filepath.Join(base, "prdash-pr-1")
 	foreign := filepath.Join(base, "otra-herramienta")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "propia", Path: owned, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree propio: %v", err)
+		t.Fatalf("preparing our own worktree: %v", err)
 	}
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "ajena")
 
 	entries := NewGitDirect(base).Audit(context.Background())
 	if len(entries) != 1 {
-		t.Fatalf("Audit = %+v, quiero solo el worktree propio", entries)
+		t.Fatalf("Audit = %+v, want only our own worktree", entries)
 	}
 	if entries[0].Path != owned || entries[0].Orphan {
-		t.Fatalf("entrada = %+v", entries[0])
+		t.Fatalf("entry = %+v", entries[0])
 	}
 	if entries[0].Branch != "propia" {
-		t.Fatalf("rama = %q", entries[0].Branch)
+		t.Fatalf("branch = %q", entries[0].Branch)
 	}
 }
 
-func TestAuditOrdenaPorRuta(t *testing.T) {
+func TestAuditSortsByPath(t *testing.T) {
 	repo := newRepo(t)
 	base := t.TempDir()
 
-	var quiere []string
+	var want []string
 	for _, n := range []string{"prdash-pr-10", "prdash-pr-2", "prdash-pr-1"} {
 		testutil.RunGit(t, repo, "branch", n)
 		path := filepath.Join(base, n)
 		if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: n, Path: path, Label: n}); err != nil {
-			t.Fatalf("crear %s: %v", n, err)
+			t.Fatalf("creating %s: %v", n, err)
 		}
-		quiere = append(quiere, path)
+		want = append(want, path)
 	}
 	// The expected order is LEXICOGRAPHIC on the paths, not creation order.
-	slices.Sort(quiere)
+	slices.Sort(want)
 
 	entries := NewGitDirect(base).Audit(context.Background())
-	if len(entries) != len(quiere) {
-		t.Fatalf("Audit = %d entradas, want %d", len(entries), len(quiere))
+	if len(entries) != len(want) {
+		t.Fatalf("Audit = %d entries, want %d", len(entries), len(want))
 	}
 	for i, e := range entries {
-		if e.Path != quiere[i] {
+		if e.Path != want[i] {
 			var got []string
 			for _, x := range entries {
 				got = append(got, filepath.Base(x.Path))
 			}
-			t.Errorf("Audit no viene ordenado por ruta: %v", got)
+			t.Errorf("Audit is not sorted by path: %v", got)
 			break
 		}
 	}
@@ -94,7 +94,7 @@ func TestAuditFlagsOrphanWhenSourceGone(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 	if err := os.RemoveAll(repo); err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestAuditFlagsOrphanWhenSourceGone(t *testing.T) {
 
 	entries := NewGitDirect(base).Audit(context.Background())
 	if len(entries) != 1 || !entries[0].Orphan || entries[0].Reason == "" {
-		t.Fatalf("esperaba un huérfano con motivo, got %+v", entries)
+		t.Fatalf("expected an orphan with a reason, got %+v", entries)
 	}
 }
 
@@ -115,13 +115,13 @@ func TestListExcludesForeignWorktrees(t *testing.T) {
 	owned := filepath.Join(base, "prdash-pr-1")
 	foreign := filepath.Join(base, "otra-herramienta")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "propia", Path: owned, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree propio: %v", err)
+		t.Fatalf("preparing our own worktree: %v", err)
 	}
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "ajena")
 
 	list := NewGitDirect(base).List(context.Background())
 	if len(list) != 1 || list[0].Path != owned {
-		t.Fatalf("List = %+v, quiero solo el worktree propio", list)
+		t.Fatalf("List = %+v, want only our own worktree", list)
 	}
 }
 
@@ -133,17 +133,17 @@ func TestRemoveOrphanDeletesCheckout(t *testing.T) {
 	dest := filepath.Join(base, "prdash-pr-1")
 	g := NewGitDirect(base)
 	if _, err := g.Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 	if err := os.RemoveAll(repo); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := g.Remove(context.Background(), dest); err != nil {
-		t.Fatalf("Remove de huérfano: %v", err)
+		t.Fatalf("Remove of an orphan: %v", err)
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("el checkout huérfano debería haberse borrado: %v", err)
+		t.Fatalf("the orphaned checkout should have been deleted: %v", err)
 	}
 }
 
@@ -157,10 +157,10 @@ func TestRemoveRefusesForeignWorktree(t *testing.T) {
 
 	g := NewGitDirect(base)
 	if err := g.Remove(context.Background(), foreign); err == nil {
-		t.Fatal("no debería borrar un worktree ajeno")
+		t.Fatal("it should not delete a foreign worktree")
 	}
 	if _, err := os.Stat(foreign); err != nil {
-		t.Fatalf("el worktree ajeno no debería tocarse: %v", err)
+		t.Fatalf("the foreign worktree should not be touched: %v", err)
 	}
 }
 
@@ -171,12 +171,12 @@ func TestRemoveRefusesPathOutsideBase(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "prdash-pr-1")
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", outside, "feature")
 
-	g := NewGitDirect(t.TempDir()) // raíz gestionada distinta
+	g := NewGitDirect(t.TempDir()) // a different managed root
 	if err := g.Remove(context.Background(), outside); err == nil {
-		t.Fatal("no debería borrar fuera de la raíz gestionada")
+		t.Fatal("it should not delete outside the managed root")
 	}
 	if _, err := os.Stat(outside); err != nil {
-		t.Fatalf("el worktree fuera de la raíz no debería tocarse: %v", err)
+		t.Fatalf("the worktree outside the root should not be touched: %v", err)
 	}
 }
 
@@ -186,7 +186,7 @@ func TestAuditSkipsNonWorktreeDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := NewGitDirect(base).Audit(context.Background()); len(got) != 0 {
-		t.Fatalf("un directorio sin worktree no debería listarse: %+v", got)
+		t.Fatalf("a directory without a worktree should not be listed: %+v", got)
 	}
 }
 
@@ -198,17 +198,17 @@ func TestRemoveOrphanWithoutGitDirDeletesCheckout(t *testing.T) {
 	dest := filepath.Join(base, "prdash-pr-1")
 	g := NewGitDirect(base)
 	if _, err := g.Create(context.Background(), Spec{Repo: repo, Branch: "feature", Path: dest, Label: "prdash-pr-1"}); err != nil {
-		t.Fatalf("preparar worktree: %v", err)
+		t.Fatalf("preparing a worktree: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dest, ".git"), []byte("garbage\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := g.Remove(context.Background(), dest); err != nil {
-		t.Fatalf("Remove de huérfano sin gitdir: %v", err)
+		t.Fatalf("Remove of an orphan without gitdir: %v", err)
 	}
 	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		t.Fatalf("el checkout debería haberse borrado: %v", err)
+		t.Fatalf("the checkout should have been deleted: %v", err)
 	}
 }
 
@@ -220,9 +220,9 @@ func TestRemoveRefusesNonLinkedDir(t *testing.T) {
 	}
 
 	if err := NewGitDirect(base).Remove(context.Background(), dir); err == nil {
-		t.Fatal("un directorio que no es worktree enlazado no debería borrarse")
+		t.Fatal("a directory that is not a linked worktree should not be deleted")
 	}
 	if _, err := os.Stat(dir); err != nil {
-		t.Fatalf("el directorio no debería tocarse: %v", err)
+		t.Fatalf("the directory should not be touched: %v", err)
 	}
 }

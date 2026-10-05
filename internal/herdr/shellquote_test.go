@@ -6,152 +6,152 @@ import (
 )
 
 // The safe list is short on purpose.
-func TestLoQueNoEsSeguroLlevaComillasYLoQueLoEsNo(t *testing.T) {
-	seguros := []string{
+func TestUnsafeThingsGetQuotedAndSafeOnesDoNot(t *testing.T) {
+	safe := []string{
 		"abc", "ABC", "a1", "0",
 		"pr-123", "feature_x", "main-2", "v1.2.3",
 		"a-b_c.d", "-", "_", ".",
 	}
-	for _, s := range seguros {
+	for _, s := range safe {
 		if !shellSafe(s) {
-			t.Errorf("shellSafe(%q) dio false: un nombre sin signos raros no necesita comillas", s)
+			t.Errorf("shellSafe(%q) gave false: a name without weird signs needs no quotes", s)
 		}
 		if got := shellQuote(s); got != s {
-			t.Errorf("shellQuote(%q) dio %q, want el texto tal cual", s, got)
+			t.Errorf("shellQuote(%q) gave %q, want the text as it is", s, got)
 		}
 	}
 
 	for _, s := range insetList() {
 		if shellSafe(s) {
-			t.Errorf("shellSafe(%q) dio true: un shell interpretaría ese texto", s)
+			t.Errorf("shellSafe(%q) gave true: a shell would interpret that text", s)
 		}
 		got := shellQuote(s)
 		if !strings.HasPrefix(got, "'") || !strings.HasSuffix(got, "'") {
-			t.Errorf("shellQuote(%q) dio %q, y tiene que ir entre comillas simples", s, got)
+			t.Errorf("shellQuote(%q) gave %q, and it has to go between single quotes", s, got)
 		}
 	}
 }
 
 func insetList() []string {
 	return []string{
-		"con espacio",
-		"punto y coma",
-		"$(comando)",
-		"`comando`",
+		"with space",
+		"semi;colon",
+		"$(command)",
+		"`command`",
 		"a|b", "a&b", "a>b", "a<b", "a;b",
 		"a\nb", "a\tb",
-		"comilla'simple",
-		"dolar$",
+		"quote'single",
+		"dollar$",
 		"tilde~",
-		"asterisco*",
-		"interrogacion?",
-		"corchete[]",
-		"llave{}",
+		"asterisk*",
+		"question?",
+		"bracket[]",
+		"brace{}",
 		"parentheses()",
-		"comilla\"doble",
+		"double\"quote",
 		`\`,
-		"#comentario",
+		"#comment",
 		"#123",
 	}
 }
 
 // The case that cannot be treated like the others.
-func TestLaCadenaVaciaLlevaComillasYNoDesaparece(t *testing.T) {
+func TestEmptyStringGetsQuotedAndDoesNotDisappear(t *testing.T) {
 	got := shellQuote("")
 	if got != "''" {
-		t.Errorf("shellQuote de la vacia dio %q, want %q: sin comillas el argumento "+
-			"desaparece del comando y el pane arranca en el HOME del usuario", got, "''")
+		t.Errorf("shellQuote of the empty one gave %q, want %q: without quotes the argument "+
+			"disappears from the command and the pane starts in the user's HOME", got, "''")
 	}
 	// shellSafe("") IS true —the loop sees no character and nothing dangerous— and that does not
 	//let it out unquoted.
 	if !shellSafe("") {
-		t.Error("shellSafe de la vacia dio false: el bucle no ve caracteres y no hay nada " +
-			"que marcar. La protege la guarda de shellQuote, no esta")
+		t.Error("shellSafe of the empty one gave false: the loop sees no characters and there is " +
+			"nothing to flag. What protects it is shellQuote's guard, not this one")
 	}
 }
 
 // The classic `'\”` escape: closing the quote, escaping, reopening.
-func TestLaComillaSimpleSeEscapaYElRestoNo(t *testing.T) {
+func TestSingleQuoteIsEscapedAndTheRestIsNot(t *testing.T) {
 	got := shellQuote("it's")
 	want := `'it'\''s'`
 	if got != want {
-		t.Errorf("shellQuote dio %q, want %q", got, want)
+		t.Errorf("shellQuote gave %q, want %q", got, want)
 	}
-	if resuelto := desEscapar(got); resuelto != "it's" {
-		t.Errorf("el shell leería %q, want %q", resuelto, "it's")
-	}
-
-	varias := shellQuote("'a'b'c'")
-	if r := desEscapar(varias); r != "'a'b'c'" {
-		t.Errorf("varias comillas: el shell leería %q, want %q", r, "'a'b'c'")
+	if resolved := resolveQuoted(got); resolved != "it's" {
+		t.Errorf("the shell would read %q, want %q", resolved, "it's")
 	}
 
-	if r := desEscapar(shellQuote("'")); r != "'" {
-		t.Errorf("una comilla suelta dio %q", r)
+	multiple := shellQuote("'a'b'c'")
+	if r := resolveQuoted(multiple); r != "'a'b'c'" {
+		t.Errorf("several quotes: the shell would read %q, want %q", r, "'a'b'c'")
+	}
+
+	if r := resolveQuoted(shellQuote("'")); r != "'" {
+		t.Errorf("a lone quote gave %q", r)
 	}
 	// A string that already comes in single quotes is quoted whole and its inner quotes are left
 	// alone.
-	yaCitada := "'prefijo'"
-	if r := desEscapar(shellQuote(yaCitada)); r != yaCitada {
-		t.Errorf("una etiqueta ya citada dio %q, want %q", r, yaCitada)
+	alreadyQuoted := "'prefix'"
+	if r := resolveQuoted(shellQuote(alreadyQuoted)); r != alreadyQuoted {
+		t.Errorf("an already quoted label gave %q, want %q", r, alreadyQuoted)
 	}
 }
 
 // The smallest shell that resolves single quotes with that escape, which is all it takes to check it.
-func desEscapar(citado string) string {
-	if len(citado) < 2 || !strings.HasPrefix(citado, "'") || !strings.HasSuffix(citado, "'") {
-		return citado
+func resolveQuoted(quoted string) string {
+	if len(quoted) < 2 || !strings.HasPrefix(quoted, "'") || !strings.HasSuffix(quoted, "'") {
+		return quoted
 	}
-	interior := citado[1 : len(citado)-1]
+	inner := quoted[1 : len(quoted)-1]
 	// Inside single quotes every quote has to be part of a `'\''`, so a plain replacement breaks.
-	return strings.ReplaceAll(interior, `'\''`, "'")
+	return strings.ReplaceAll(inner, `'\''`, "'")
 }
 
 // The mix is the real case: a label with spaces, quotes and slashes.
-func TestUnArgumentoConTodoLoPeligrosoJuntosNoSeRompe(t *testing.T) {
-	casos := []string{
+func TestArgumentWithEverythingDangerousTogetherDoesNotBreak(t *testing.T) {
+	cases := []string{
 		`fix "the thing"; rm -rf /`,
-		`rama con 'comilla' y espacio`,
+		"branch with 'quote' and space",
 		`$(whoami)`,
-		"nueva\nlínea",
-		"tab\tdentro",
-		"acentos-y-ñ",
+		"new\nline",
+		"tab\tinside",
+		"accents-and-ñ",
 		"%s %d %v\n",
 		"*",
 		`a'b'c"d`,
 		"\\\\",
-		"  con espacios alrededor  ",
+		"  with spaces around  ",
 	}
-	for _, original := range casos {
-		citado := shellQuote(original)
-		if resuelto := desEscapar(citado); resuelto != original {
-			t.Errorf("el shell leería %q de %q, y debía leer %q", resuelto, citado, original)
+	for _, original := range cases {
+		quoted := shellQuote(original)
+		if resolved := resolveQuoted(quoted); resolved != original {
+			t.Errorf("the shell would read %q from %q, and it had to read %q", resolved, quoted, original)
 		}
 		// The mechanical property: a quoted string has an EVEN number of single quotes.
-		if n := strings.Count(citado, "'"); n%2 != 0 {
-			t.Errorf("%q se citó como %q, con un número impar de comillas", original, citado)
+		if n := strings.Count(quoted, "'"); n%2 != 0 {
+			t.Errorf("%q was quoted as %q, with an odd number of quotes", original, quoted)
 		}
 	}
 }
 
 // A PROPERTY assertion over the whole domain, not a table of cases.
-func TestUnTextoQueNoEsSeguroNuncaSaleSinComillas(t *testing.T) {
+func TestTextThatIsNotSafeNeverGoesOutUnquoted(t *testing.T) {
 	for r := rune(32); r < rune(127); r++ {
 		s := string(r)
-		sinComillas := shellQuote(s) == s
-		if sinComillas != shellSafe(s) {
-			t.Errorf("el rune %q sale %s y shellSafe lo marca %s: las dos cosas "+
-				"tienen que coincidir",
+		unquoted := shellQuote(s) == s
+		if unquoted != shellSafe(s) {
+			t.Errorf("the rune %q comes out %s and shellSafe flags it as %s: the two "+
+				"have to match",
 				r,
-				map[bool]string{true: "sin comillas", false: "citado"}[sinComillas],
-				map[bool]string{true: "seguro", false: "inseguro"}[shellSafe(s)])
+				map[bool]string{true: "unquoted", false: "quoted"}[unquoted],
+				map[bool]string{true: "safe", false: "unsafe"}[shellSafe(s)])
 		}
 	}
 	// Outside ASCII it is unknown: the sweep only covers printable ASCII, and writing that down
 	// avoids guessing.
 	for _, s := range []string{"ñ", "日", "🙂"} {
 		if shellSafe(s) {
-			t.Errorf("%q sale sin comillas; los no ASCII no están en la lista de seguros", s)
+			t.Errorf("%q comes out unquoted; the non-ASCII are not in the safe list", s)
 		}
 	}
 }
