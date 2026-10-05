@@ -14,7 +14,7 @@ type listLine struct {
 func (m *Model) listLines(inner int) []listLine {
 	items := m.rows()
 	problems := m.sectionProblems(m.activeSection)
-	lines := make([]listLine, 0, len(items)+len(problems)+4)
+	var lines []listLine
 
 	// One layout for the active section only: sizing every section would waste width on suffixes
 	// that are not on screen, and measuring per line would make the table dance as text is written.

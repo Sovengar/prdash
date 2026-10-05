@@ -459,7 +459,7 @@ func (m Model) retargetSearchBox() string {
 	header := styleRef.Render("from ") + styleCount.Render(from) + styleDim.Render("  ·  ") +
 		styleDim.Render(branchCountLabel(m))
 
-	body := make([]string, 0, m.retargetRows()+2)
+	var body []string
 	switch {
 	case m.retarget.errMsg != "":
 		body = append(body, styleError.Render(m.retarget.errMsg))

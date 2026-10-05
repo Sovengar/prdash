@@ -143,7 +143,7 @@ func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec
 // git_sim_auto_open=false is not optional: git-sim ends by handing the image to the desktop
 // viewer, which never returns without a display. It has no command-line form, only git_sim_* env vars.
 func env() []string {
-	out := make([]string, 0, len(os.Environ())+1)
+	var out []string
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "git_sim_") {
 			continue
