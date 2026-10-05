@@ -7,278 +7,299 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Last full-module `go tool gremlins unleash` run (4 workers, --timeout-coefficient 3): 34
-# unique survivors, down from 286. The campaign covered the pure logic
-# (forge/parse, forge/tool, gitcmd, inbox, state, config, review/plan) and the
-# decision and geometry of the TUI (list, table, overlay, detail, app, bordered,
-# sections, toast, retarget) plus the image fit of internal/sim, herdr's version
-# compare and worktree's audit order.
-# What is left is thin: a couple of clamps whose floor can never bind because an
+# Full-module `go tool gremlins unleash --workers 4 --timeout-coefficient 3`, on
+# the revision that translated the repository to English (ADR 0010):
+#   Killed: 1618, Lived: 38, Not covered: 203, Timed out: 11
+#   Test efficacy: 97.71%, mutator coverage: 89.08%
+# Of those 38 survivors, 4 did not need an entry and 34 are below. The four:
 #
-# Last sync re-measured only: internal/tui/comments.go, internal/tui/sim.go, internal/worktree/herdr.go. Every other
-# entry is carried over from the previous full-module run and is NOT
-# re-verified by it. Only a full run proves those.
-
-# 139 `perr != nil`. EQUIVALENTE con la negacion, y el mutante es `nil != perr`: el
-# orden de los operandos cambiado. Sobre dos operandos eso no altera nada, asi que
-# ninguna entrada puede distinguirlo.
+#   - `CONDITIONALS_NEGATION internal/forge/github/github.go` (was entry 139) and one
+#     `CONDITIONALS_BOUNDARY internal/tui/sim.go` (was entry 578) are KILLED now: their
+#     code moved onto a line that a test already covers, so the entries are gone.
+#   - `CONDITIONALS_BOUNDARY internal/tui/update.go:139` and
+#     `CONDITIONALS_NEGATION internal/tui/update.go:507` were gaps, and they got TESTS
+#     instead of entries: `TestReleasingMoreReadersThanAreArmedDoesNotGoNegative` and
+#     `TestTheActionProgressNoticeNamesTheMergeModeAndNothingElseDoes`. A test is
+#     always the better answer than a comment saying the gap is accepted.
 #
-# La otra negacion posible, `perr == nil`, SI la mata un test —el camino bueno
-# devolveria un aviso de parseo con `perr` nil dentro—, con lo que lo que sobrevive es
-# justo la variante que no se puede matar.
+# HOW MEASURED, AND WHY THE NUMBERS ARE NOT CRISP. A second full run, on a machine
+# at load 20 of 28 cores, reported `Timed out: 104` against the 11 of the run above,
+# and TIMED OUT mutants are excluded from the report: the survivors of a loaded run
+# are a SUBSET, never a superset. It found no survivor without an entry, which is the
+# direction that matters, and it reported 3 of these 34 as KILLED
+# (`comments.go:209`, `detail.go:166`, `list.go:17`) — mutants the clean run had as
+# LIVED. Cross-run variance like that is why the entries stay: a surviving entry costs
+# nothing, because a killed mutant never shows up as a survivor and the gate never
+# reads it, while a MISSING entry for a mutant that does live takes the PR down. The
+# asymmetry decides, not the tidiness of the table.
 #
-# Y obliga a ser exacto con la palabra: la entrada esta porque el mutante existe y
-# sobrevive, no porque el codigo tenga un defecto.
-CONDITIONALS_NEGATION internal/forge/github/github.go:139
-# 444 `strings.Index(project, "/") >= 0`. EQUIVALENTE con `> 0`, y el indice cero NO
-# PUEDE DARSE: antes del corte hay un `strings.Trim(project, "/")`, con lo que el
-# proyecto no empieza nunca por barra. Una barra en la posicion cero es imposible, y
-# una condicion cuya frontera es imposible no se puede distinguir con ningun test.
-# El `> 0` devolveria `"", project` para algo como `"/repo"`, que ya sale de la
-# rama buena.
-CONDITIONALS_BOUNDARY internal/forge/github/github.go:444
-# 595 `strings.LastIndex(owner, "/") >= 0`. EQUIVALENTE con `> 0`: en el indice cero
-# —una cadena que empieza por barra, como `/proyecto`— las DOS ramas dan cadena vacia,
-# porque la del `if` recorta `owner[:0]` y la del `else` pone `""`. No hay nada que
-# las separe, y eso se comprueba con un test que mete `/proyecto`.
+# WHY EVERY LINE NUMBER HERE CHANGED. The entries are keyed by `file:line`, and the
+# translation moved code inside files without changing what it does. A full run is the
+# only thing that recalibrates them: a previous version of this file had 34 entries and
+# not ONE of them was still on its line, 16 of them past the end of the file. Checking
+# that a line number is in range is not enough; the only cheap check that means anything
+# is to re-run and diff, which is what produced this file.
 #
-# OJO con lo que NO es esto: `/grupo/proyecto` produce un dueño de `/grupo`, que es una
-# ruta y no un nombre, y parece una fuente de worktrees fuera de la raiz. Lo produce el
-# codigo, y no por esta condicion —la ultima barra de `/grupo/proyecto` no esta en el
-# indice cero—. Es comportamiento, no un mutante sobreviviente, asi que va en un
-# `t.Log` del test y no aqui.
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:595
-# 854 `strings.LastIndex(path, "/") >= 0`. EQUIVALENTE con `> 0`, por la misma cuenta
-# que la entrada de este fichero sobre el dueño: el `strings.Trim(path, "/")` de
-# arriba deja la cadena sin barras en los extremos, con lo que el indice cero no se da.
-# Y ademas aqui el `else` devuelve `"", path`, que es justo lo que daria el `if` con
-# indice cero.
-CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:854
-# 39 `v.Major > min.Major`. EQUIVALENTE con `>=`, y es una IDENTIDAD EN LA GUARDA, no
-# en la frontera: la comparacion esta dentro de `case v.Major != min.Major`, con lo que
-# los dos valores son distintos por construccion y `>` y `>=` coinciden siempre.
-# El patch si usa `>=` y no `>`, y es a proposito: ahi ya no hay guarda que excluya el
-# empate, y la version EXACTA minima tiene que validar.
-CONDITIONALS_BOUNDARY internal/herdr/herdr.go:39
-# 41 `v.Minor > min.Minor`. Lo mismo que la entrada anterior de este fichero: dentro
-# de `case v.Minor != min.Minor` no hay empate posible, con lo que `>=` no cambia nada.
-# Y la cascada de `switch` importa: si el major no coincide manda el major y el minor
-# ni se mira, que es como un versionado se compara por partes.
-CONDITIONALS_BOUNDARY internal/herdr/herdr.go:41
-# 271 `strings.IndexByte(s, '\n') >= 0`. EQUIVALENTE con `> 0`: hay un
-# `strings.TrimSpace(s)` justo encima, con lo que la cadena no empieza nunca por salto
-# de linea y el indice cero no se da. Es la misma cuenta que las dos entradas de
-# `splitProject`: un recorte antes de la comparacion hace la frontera inalcanzable.
-CONDITIONALS_BOUNDARY internal/herdr/parse.go:271
-# 139 `return si > sj`. EQUIVALENTE con `>=`, y la razon no es la frontera: es que la
-# comparacion esta DENTRO de `if si != sj`, y ahi los dos valores son distintos por
-# construccion, con lo que `>` y `>=` dan lo mismo SIEMPRE. No hay entrada que los
-# separe porque no hay empate que alcanzar.
+# Two entries that sat here with no explanation at all (`sim.go`, `audit.go`) now carry
+# their account. An entry nobody can check is an entry nobody maintains.
 #
-# Lo que si importa ahi es que el comparador sea un orden TOTAL, y por eso hay un
-# tercer desempate por numero: con solo atencion y fecha, dos PRs del mismo autor del
-# mismo dia empatan y `sort.SliceStable` los deja en el orden de llegada, que depende
-# de que forge respondio antes. Ese desempate si lo mata un test, y con el al reves
-# tambien.
-CONDITIONALS_BOUNDARY internal/inbox/inbox.go:139
-# 80 `rank(kind) < rank(prev)`. EQUIVALENTE con `<=`, y el empate que haria falta para
-# distinguirlos es IMPOSIBLE aqui: `assignAuthority` recorre `sectionOrder`, no las
-# claves del mapa, y `rank` es la posicion en `sectionOrder`. Dos secciones que se
-# miran tienen rangos distintos, siempre.
+# 50 `len(p.Comments) > CommentLimit`. EQUIVALENT with `>=`, and it is the same class as the
+# two cuts of `internal/tui`: trimming a list by its own whole length to THAT length is an
+# identity. With `len(p.Comments) == CommentLimit` the body does
+# `p.Comments[len(p.Comments)-CommentLimit:]`, that is `p.Comments[0:]`, which is the whole
+# list. The `>` is there to skip the slice expression, not to mean something at the edge.
 #
-# Y el otro caso del `||` —el mismo item dos veces en la MISMA seccion— tambien es una
-# identidad: `rank(kind) == rank(prev)` y reasignar el mismo valor es reasignarlo.
-#
-# Lo que no es un empate pero parece, por si vuelve a salir: una seccion que prdash no
-# declara da rango `len(sectionOrder)`, igual que cualquier otra desconocida, y esas SI
-# empatarian entre si. Pero no se miran: no estan en `sectionOrder`. Hay un test que lo
-# afirma, porque el rango de un mapa sin orden es donde se esconden las respuestas
-# distintas para el mismo dato.
-CONDITIONALS_BOUNDARY internal/inbox/inbox.go:80
-# 349 `colon < 0`. EQUIVALENTE con `<=`: el unico caso que cambia es `colon == 0`, que
-# es un SCP con el host vacio — `x@:a/b` —, y ahi el host sale vacio y lo rechaza el
-# `host == ""` de mas abajo. Las dos condiciones devuelven lo mismo.
-#
-# Y ojo con el otro mitad del mismo `||`: `host == ""` quitarlo entero NO muere, porque
-# el `hosts[host]` de abajo ya rechaza el host vacio, pero cambiarlo por
-# `host == "github.com"` SI muere. La mitad `== ""` es redundante y la otra no, y
-# eso no es lo mismo que decir que el chequeo es muerto.
-CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:349
-# 119 `float64(maxRows)*perRow <= float64(maxCols)`. EQUIVALENTE con `<`, y aqui el
-# borde EXISTE y las dos ramas dan lo mismo. Cuando `maxRows*perRow == maxCols`:
-#
-#   - la rama del `if` devuelve `(max(int(maxRows*perRow), 1), maxRows)`
+# It appears here and not in the previous run because the line MOVED: `KeepLast` sat at a
+# different line number when the last campaign measured it, so the gate saw a survivor it
+# had no entry for. Which is the real lesson of this resync: an allowlist keyed by line
+# number needs a full run to stay true, not a guess.
+CONDITIONALS_BOUNDARY internal/forge/forge.go:50
+# 337 `strings.Index(project, "/") >= 0`. EQUIVALENT with `> 0`, and index zero CANNOT
+# OCCUR: before the cut there is a `strings.Trim(project, "/")`, so the
+# project never starts with a slash. A slash at position zero is impossible, and
+# a condition whose boundary is impossible cannot be distinguished by any test.
+# The `> 0` would return `"", project` for something like `"/repo"`, which already comes out of the
+# good branch.
+CONDITIONALS_BOUNDARY internal/forge/github/github.go:337
+# 510 `strings.LastIndex(owner, "/") >= 0`. EQUIVALENT with `> 0`: at index zero
+# —a string that starts with a slash, like `/proyecto`— BOTH branches give an empty string,
+# because the `if` one trims `owner[:0]` and the `else` one sets `""`. There is nothing
+# that separates them, and that is checked by a test that passes `/proyecto`.
+# WARNING about what this is NOT: `/grupo/proyecto` produces an owner of `/grupo`, which is a
+# path and not a name, and looks like a source of worktrees outside the root. The code
+# produces it, and not because of this condition —the last slash of `/grupo/proyecto` is not at
+# index zero—. It is behaviour, not a surviving mutant, so it goes into a
+# `t.Log` of the test and not here.
+CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:510
+# 724 `strings.LastIndex(path, "/") >= 0`. EQUIVALENT with `> 0`, by the same reasoning
+# as this file's entry about the owner: the `strings.Trim(path, "/")` above
+# leaves the string without slashes at the ends, so index zero never occurs.
+# And besides, here the `else` returns `"", path`, which is exactly what the `if` would give with
+# index zero.
+CONDITIONALS_BOUNDARY internal/forge/parse/parse.go:724
+# 26 `v.Major > min.Major`. EQUIVALENT with `>=`, and it is an IDENTITY IN THE GUARD, not
+# at the boundary: the comparison is inside `case v.Major != min.Major`, so
+# the two values are distinct by construction and `>` and `>=` always agree.
+# The patch does use `>=` and not `>`, and it is on purpose: there is no guard there left to exclude the
+# tie, and the EXACT minimum version has to validate.
+CONDITIONALS_BOUNDARY internal/herdr/herdr.go:26
+# 28 `v.Minor > min.Minor`. Same as the previous entry of this file: inside
+# `case v.Minor != min.Minor` no tie is possible, so `>=` changes nothing.
+# And the `switch` cascade matters: if the major does not match, the major decides and the minor
+# is not even looked at, which is how a version is compared part by part.
+CONDITIONALS_BOUNDARY internal/herdr/herdr.go:28
+# 246 `strings.IndexByte(s, '\n') >= 0`. EQUIVALENT with `> 0`: there is a
+# `strings.TrimSpace(s)` right above, so the string never starts with a line
+# break and index zero never occurs. It is the same reasoning as the two entries of
+# `splitProject`: a trim before the comparison makes the boundary unreachable.
+CONDITIONALS_BOUNDARY internal/herdr/parse.go:246
+# 65 `rank(kind) < rank(prev)`. EQUIVALENT with `<=`, and the tie that would be needed to
+# tell them apart is IMPOSSIBLE here: `assignAuthority` walks `sectionOrder`, not the
+# map keys, and `rank` is the position in `sectionOrder`. Two sections that are
+# looked at have different ranks, always.
+# And the other case of the `||` —the same item twice in the SAME section— is also an
+# identity: `rank(kind) == rank(prev)` and reassigning the same value is reassigning it.
+# What is not a tie but looks like one, in case it comes up again: a section that prdash does not
+# declare gets rank `len(sectionOrder)`, just like any other unknown one, and those WOULD
+# tie with each other. But they are never looked at: they are not in `sectionOrder`. There is a test that
+# asserts it, because the rank of an unordered map is where the different
+# answers for the same data hide.
+CONDITIONALS_BOUNDARY internal/inbox/inbox.go:65
+# 120 `return si > sj`. EQUIVALENT with `>=`, and the reason is not the boundary: it is that the
+# comparison is INSIDE `if si != sj`, and there the two values are distinct by
+# construction, so `>` and `>=` always give the same result. There is no input that
+# separates them because there is no tie to reach.
+# What does matter there is that the comparator be a TOTAL order, and that is why there is a
+# third tiebreak by number: with only attention and date, two PRs by the same author from the
+# same day tie and `sort.SliceStable` leaves them in arrival order, which depends
+# on which forge answered first. That tiebreak IS killed by a test, and so is its reverse
+# too.
+CONDITIONALS_BOUNDARY internal/inbox/inbox.go:120
+# 286 `colon < 0`. EQUIVALENT with `<=`: the only case that changes is `colon == 0`, which
+# is an SCP with an empty host — `x@:a/b` —, and there the host comes out empty and the
+# `host == ""` below rejects it. The two conditions return the same thing.
+# And watch out for the other half of the same `||`: removing `host == ""` entirely is NOT killed, because
+# the `hosts[host]` below already rejects the empty host, but changing it to
+# `host == "github.com"` IS killed. The `== ""` half is redundant and the other is not, and
+# that is not the same as saying the check is dead.
+CONDITIONALS_BOUNDARY internal/reporesolver/reporesolver.go:286
+# 81 `float64(maxRows)*perRow <= float64(maxCols)`. EQUIVALENT with `<`, and here the
+# boundary EXISTS and both branches give the same thing. When `maxRows*perRow == maxCols`:
+#   - the `if` branch returns `(max(int(maxRows*perRow), 1), maxRows)`
 #     `= (maxCols, maxRows)`;
-#   - la rama de abajo devuelve `(maxCols, max(int(maxCols)/perRow))`
-#     `= (maxCols, maxRows)`, porque dividir `maxCols` por `perRow` es `maxRows`.
+#   - the branch below returns `(maxCols, max(int(maxCols)/perRow))`
+#     `= (maxCols, maxRows)`, because dividing `maxCols` by `perRow` gives `maxRows`.
+# So the tie exists and both branches resolve it the same way. It is the most awkward class of
+# identity in write: the boundary is reached, the code runs, and the
+# result does not change.
+CONDITIONALS_BOUNDARY internal/sim/pixels.go:81
+# 255 `keep < 0`. EQUIVALENT with `<= 0`, because the body assigns `keep = 0` and at the
+# boundary `keep` is ALREADY zero: assigning zero to zero is an identity. The clamp exists
+# for a negative caller, and nothing distinguishes the two at zero.
 #
-# O sea que el empate existe y las dos ramas lo resuelven igual. Es la clase de
-# identidad mas incomoda de write: el borde se alcanza, se ejecuta el codigo, y el
-# resultado no cambia.
-CONDITIONALS_BOUNDARY internal/sim/pixels.go:119
-# 285 `len(files) <= keep`. EQUIVALENTE con `<`: en la igualdad no se poda nada de
-# verdad, porque lo que se podaria es `files[keep:]`, que con `len(files) == keep` es
-# un slice VACIO. La poda se ordena antes, con lo que el bucle de borrado no recorre
-# nada y el resultado es identico. El `<=` esta para no ordenar cuando no hace falta.
-CONDITIONALS_BOUNDARY internal/sim/service.go:285
-# 186 `make([]string, 0, len(os.Environ())+1)`. EQUIVALENTE, y no es logica: es una PISTA
-# DE CAPACIDAD. Que sobre o falte una posicion no cambia el slice que sale.
-ARITHMETIC_BASE internal/sim/sim.go:186
-# 947 `keys[i].forge < keys[j].forge`. EQUIVALENTE con `<=`, y es una IDENTIDAD EN LA
-# GUARDA: la comparacion esta dentro de `if keys[i].forge != keys[j].forge`, con lo que
-# los dos forges son DISTINTOS por construccion y `<` y `<=` coinciden siempre. No hay
-# entrada que los separe porque no hay empate que alcanzar.
+# Sibling of the 277 below, which is the other half of the same prune.
+CONDITIONALS_BOUNDARY internal/sim/service.go:255
+# 277 `len(files) <= keep`. EQUIVALENT with `<`: at equality nothing is really
+# pruned, because what would be pruned is `files[keep:]`, which with `len(files) == keep` is
+# an EMPTY slice. The sort runs first, so the deletion loop walks
+# nothing and the result is identical. The `<=` is there to skip the sort when it is not needed.
+CONDITIONALS_BOUNDARY internal/sim/service.go:277
+# 146 `make([]string, 0, len(os.Environ())+1)`. EQUIVALENT, and it is not logic: it is a HINT
+# OF CAPACITY. Whether one slot is spare or missing does not change the resulting slice.
+ARITHMETIC_BASE internal/sim/sim.go:146
+# 787 `keys[i].forge < keys[j].forge`. EQUIVALENT with `<=`, and it is an IDENTITY IN THE
+# GUARD: the comparison is inside `if keys[i].forge != keys[j].forge`, so
+# the two forges are DISTINCT by construction and `<` and `<=` always agree. There is no
+# input that separates them because there is no tie to reach.
+# What makes the class awkward: inside a `!=` the difference between `<` and `<=` is the
+# equality case, and that case can no longer occur. It is the same reasoning as
+# `return si > sj` inside `if si != sj` in the inbox order, and the same as
+# `v.Major > min.Major` inside `case v.Major != min.Major` in the version check.
+# And the guard ABOVE it does have its dead mutant: with `==`, `<=` or `>=` instead of
+# `!=` the tiebreak applies to pairs of the same forge and the order comes out wrong.
+CONDITIONALS_BOUNDARY internal/tui/app.go:787
+# 790 `keys[i].section < keys[j].section`. Same as the previous entry of this
+# file: inside `if keys[i].section != keys[j].section` the values are distinct
+# by construction, so `<` and `<=` agree.
+CONDITIONALS_BOUNDARY internal/tui/app.go:790
+# 792 `keys[i].kind < keys[j].kind`. EQUIVALENT with `<=`, and the tie CANNOT OCCUR:
+# `sort.Slice` compares DISTINCT elements of the slice, and two distinct keys of a map
+# cannot match on all three columns. With forge and section equal, kind is the only
+# thing that tells them apart, and if it also matched they would be the SAME key, which in a
+# map cannot appear twice.
+# So the boundary of this comparison is unreachable because of THE TYPE OF THE CONTAINER,
+# not because of a prior trim. The two guards above DO have their dead mutant, and the
+# third does not, and that difference is fixed differently in each case: one is killed by a
+# test and the other is proved by the map's accounting.
+# And what you do not see without thinking: a test that checks that the order is coherent
+# with itself passes with the inverted comparator, because an inverted order is also
+# coherent. You have to assert the ORDER, with the expected one written in the test.
+# And the fixture needs FIVE kinds per forge-and-section group: with two, the sort
+# is still right with a `!=` because it uses insertion order and comes out right by chance.
+CONDITIONALS_BOUNDARY internal/tui/app.go:792
+# 90 `st.total < len(st.list)`. EQUIVALENT with `<=`: with total equal to the list the
+# body does `st.total = len(st.list)`, that is, assigning to a variable the value it already
+# has. That is an identity and no input can separate it.
+# And HERE IS THE LESSON THAT COST DEARLY. I mutated `<=` by hand, called it dead and removed it
+# from the allowlist. GREMLINS DOES NOT GENERATE THAT TEXT: its boundary mutator on `<` produces
+# `<=`, not the other way around. So the real mutant stayed alive, and the CI gate would
+# have marked it as NEW and taken down the PR.
+# MY HARNESS DEMONSTRATES ONE CONCRETE MUTATION, NOT THAT THE TOOL HAS NO OTHER TO
+# KILL. Each one mutates with its own set of texts, and mine is not theirs. The only
+# way to know if anything remains is TO CROSS-CHECK AGAINST THE REPORT, which is what was
+# done afterwards: 8 entries I believed dead were alive.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:90
+# 134 `len(shown) > forge.CommentLimit`. EQUIVALENT with `>=`: cutting a list
+# by its own whole length to THAT length is an identity — `shown[:5]` of a list
+# of five is the whole list —. What does distinguish it is cutting to LESS, and that
+# mutation IS killed by the test for the cap of five.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:134
+# 158 `total > budget`. EQUIVALENT with `>=`, and with `total+1 > budget` too, by
+# the same reasoning: when the budget gives EXACTLY what is asked, both branches give
+# the same because `allocate` with the exact sum returns `need` unchanged.
+# The reasoning: `allocate` gives one row to each comment and hands out the leftovers one
+# by one to whoever has least, stopping when nobody can absorb more. If the sum of what
+# each one asks for IS the budget, the leftovers are exactly the missing ones and
+# the distribution ends with each comment at its own count. There is a test asserting that
+# identity over seven distributions.
+# And the assumption that every request is for one row or more is set by
+# `commentBody` with its `max(1, lines)`. Without that floor, a comment with empty body
+# would ask for zero rows and `allocate` would give it one, which is more than it asked for, and the
+# identity breaks. That is why there is also a test asserting that nobody asks for zero.
+CONDITIONALS_BOUNDARY internal/tui/comments.go:158
+# 209 `commentBoxWidth`. EQUIVALENT, and it is not logic: it is a CAPACITY HINT. Whether
+# a row of capacity is spare or missing does not change the resulting slice —`append` reassigns
+# when it is short and wastes when it has spare—.
+# My harness called this one dead with four variants and it was still alive: gremlins mutates the
+# `max` and the product with ITS OWN set of texts, not the one I write. See the
+# note on `comments.go:90`, which is the same lesson.
+ARITHMETIC_BASE internal/tui/comments.go:209
+# 147 `make([]string, 0, (len(fields)+1)/2)`. EQUIVALENT, and it is not logic: it is a HINT
+# OF CAPACITY. Whether spare or missing does not change the resulting slice; `append` reassigns
+# when it is short of room and wastes when it has spare. Checked with `+0` and with `/3`.
+ARITHMETIC_BASE internal/tui/detail.go:147
+# 166 `rows <= 0 || len(lines) <= rows`. The second half is an identity with `<`: with
+# `len(lines) == rows` the body does `lines[len(lines)-rows:]`, which is `lines[0:]`, which
+# is the whole list. Cutting by the integer number of elements to that length is not
+# cutting.
+# The first half is NOT an identity and a test kills it: with zero rows the cut
+# would return an empty slice and the card would stay blank, and zero rows is production
+# on a short terminal.
+CONDITIONALS_BOUNDARY internal/tui/detail.go:166
+# 17 `make([]listLine, 0, len(items)+len(problems)+4)`. EQUIVALENT: it is the initial
+# capacity of a slice that is filled with `append`. Whether the hint is too small or too big
+# does not change the lines that come out.
+ARITHMETIC_BASE internal/tui/list.go:17
+# 85 `minSegs < 0 || len(s) < minSegs`. The first half is the startup sentinel, and
+# the `-1` is correct because `strings.Split` never returns an empty slice.
+# And `len(s) < minSegs` with `<=` is an identity: at the boundary —two projects with the
+# SAME number of segments— reassigning to `minSegs` the same value is reassigning it.
+# And `minSegs < 0` with `<= 0` is not distinguishable either: on the first iteration `minSegs`
+# is -1 and becomes `len(s)`, which is 1 or more, so it never ends up being zero.
+CONDITIONALS_BOUNDARY internal/tui/refcol.go:85
+# 462 `make([]string, 0, m.retargetRows()+2)`. EQUIVALENT, and it is not logic: it is a
+# CAPACITY HINT. Whether a row of capacity is spare or missing does not change the slice
+# that comes out: `append` reassigns when it is short of room and wastes when it has spare, and in
+# both cases the content is the same.
+# And no test can kill it because it does not expose itself. The only way to assert the
+# capacity would be to look at `cap()`, which is exactly what the mutant changes: an assert
+# like that does not look at behaviour, it looks at the line the mutant touched. Allowlisting is
+# for this.
+ARITHMETIC_BASE internal/tui/retarget.go:462
+# 94 `lay.bodyLines > 0`. EQUIVALENT with `>=`, and the reason is the same as in the
+# other two cuts of this file: `bodyLines` comes from `computeLayout`, which always
+# leaves it at `max(1, height-reserved())`, that is 1 or more, or at zero when `show` is
+# false. With zero, `visibleList(all, scroll, 0)` returns the empty list and the body stays
+# the same with the guard or without it: both branches paint nothing. And at the boundary of
+# 0, `>=` enters the `if` but the `for` does not iterate. Identity at the edge.
+# What DOES distinguish the two is removing the guard entirely, and that mutant is also
+# alive for the same reason: `visibleList` with zero rows returns empty on its own.
+# 138 `lay.bodyLines > 0`. EQUIVALENT with `>=`, by the same reasoning as the other
+# two cuts of the file: `bodyLines` comes from `computeLayout`, which always leaves it
+# at `max(1, height-reserved())` —one or more— or at zero when `show` is false. With
+# zero, `visibleList(all, scroll, 0)` returns the empty list, so the body stays
+# the same with the guard or without it. And at the boundary of zero, `>=` enters the `if` but
+# the `for` does not iterate. Identity at the edge.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:94
+# 144 `hintLines < len(lines)`. EQUIVALENT with `>=`: at the edge, with the budget
+# EQUAL to the number of lines, cutting the list by its whole length is an
+# identity —`lines[:len(lines)]` is the whole list—. And with a larger budget, the
+# mutant cuts to `len(lines)`, which is already the size. Both branches give the same thing.
+# The floor `max(0, hintLines)` is not optional either: cutting by a NEGATIVE number in
+# Go is a PANIC, and the test checks it with a budget of -1.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:144
+# 167 `len(plain) > maxHintLines`. EQUIVALENT with `>=` by the same reasoning as the 144:
+# cutting a list by its whole length to that length is an identity. With
+# `len(plain) == maxHintLines` both give the whole list, and with more lines both
+# give the first `maxHintLines`. And `plain` comes from `wrapText`, which with a
+# normal width does not go beyond that, so the condition never even becomes true.
+CONDITIONALS_BOUNDARY internal/tui/sections.go:167
+# 425 `pad := n - ansi.StringWidth(s); pad > 0`. EQUIVALENT with `>=`, and the boundary
+# is where the padding is zero: `strings.Repeat(" ", 0)` is the empty string, so appending
+# it adds nothing. The `>` is there to skip the call, not to mean something at the edge.
 #
-# Lo que hace la clase incomoda: dentro de un `!=` la diferencia entre `<` y `<=` es el
-# caso de igualdad, y ese caso ya no se puede dar. Es la misma cuenta que
-# `return si > sj` dentro de `if si != sj` en el orden de inbox, y la misma que
-# `v.Major > min.Major` dentro de `case v.Major != min.Major` en el versionado.
+# It was allowlisted with no explanation at all, which is worse than not allowlisting it:
+# an entry nobody can check is an entry nobody maintains. It is here now with the account
+# of why it survives.
+CONDITIONALS_BOUNDARY internal/tui/sim.go:425
+# 288 `n >= w`. EQUIVALENT with `>`: at equality the `else` does
+# `s + strings.Repeat(" ", w-n)` with `w-n == 0`, and `Repeat` of zero spaces is the
+# empty string. The `>=` is there to skip the `else` in the exact case.
+CONDITIONALS_BOUNDARY internal/tui/table.go:288
+# 236 `anchor := len(lines) - 1`. EQUIVALENT with `len(lines)`: `landRow` does not clamp the
+# anchor, and does not clamp it on purpose — `admitsWarning` counts as NO a row that does not
+# exist. With the anchor one row lower, the three-row block does not fit there because the
+# third one does not exist, and `landRow` keeps going down to the same row as always.
+# Verified in both variants. And with `len(lines) - 2` it IS noticeable, because there a row
+# does exist, and that mutant is killed by a test asserting that the notice sticks to the last one.
+ARITHMETIC_BASE internal/tui/toast.go:236
+# 236 the same `len(lines) - 1` through the other path. EQUIVALENT by the same reasoning as
+# the ARITHMETIC_BASE entry of this line: an anchor above the last row cannot
+# land anywhere, so it gives the same result.
+INVERT_NEGATIVES internal/tui/toast.go:236
+# 60 `out[i].Path < out[j].Path`. EQUIVALENT with `<=`, and the tie CANNOT OCCUR: an entry
+# is one worktree, the paths come from a directory listing that cannot repeat a name, and
+# nothing else is sorted. So there is no pair for `<=` and `<` to disagree about.
 #
-# Y la guarda de ENCIMA si tiene su mutante muerto: con `==`, `<=` o `>=` en lugar de
-# `!=` el desempate se aplica a pares del mismo forge y el orden sale mal.
-CONDITIONALS_BOUNDARY internal/tui/app.go:947
-# 950 `keys[i].section < keys[j].section`. Lo mismo que la entrada anterior de este
-# fichero: dentro de `if keys[i].section != keys[j].section` los valores son distintos
-# por construccion, con lo que `<` y `<=` coinciden.
-CONDITIONALS_BOUNDARY internal/tui/app.go:950
-# 952 `keys[i].kind < keys[j].kind`. EQUIVALENTE con `<=`, y el empate NO PUEDE DARSE:
-# `sort.Slice` compara elementos DISTINTOS del slice, y dos claves distintas de un mapa
-# no pueden coincidir en las tres columnas. Con forge y section iguales el kind es lo
-# unico que las diferencia, y si tambien coincidiera serian la MISMA clave, que en un
-# mapa no puede aparecer dos veces.
-#
-# O sea que la frontera de esta comparacion es inalcanzable por el TIPO DEL CONTENEDOR,
-# no por un recorte previo. Las dos guardas de arriba si tienen su mutante muerto, y la
-# tercera no, y esa diferencia se arregla distinta en cada caso: una se mata con un
-# test y la otra se demuestra con la cuenta del mapa.
-#
-# Y lo que no se ve sin pensarlo: un test que comprueba que el orden es coherente
-# consigo mismo pasa con el comparador invertido, porque un orden invertido tambien es
-# coherente. Hay que afirmar el ORDEN, con el esperado escrito en el test.
-# Y el fixture necesita CINCO tipos por grupo de forge y seccion: con dos, el sort
-# acierta igual con un `!=` porque usa orden por insercion y sale bien por casualidad.
-CONDITIONALS_BOUNDARY internal/tui/app.go:952
-# 112 `st.total < len(st.list)`. EQUIVALENTE con `<=`: con total igual a la lista el
-# cuerpo hace `st.total = len(st.list)`, o sea asignarle a una variable el valor que ya
-# tiene. Eso es una identidad y no hay entrada que la separe.
-#
-# Y HERE ESTA LA LECCION QUE COSTO CARO. Yo mute `<=` a mano, lo di muerto y lo retire
-# del allowlist. GREMLINS NO GENERA ESE TEXTO: su mutador de frontera sobre `<` produce
-# `<=`, no al reves. Con lo que el mutante real seguia vivo, y el gate de CI lo habria
-# marcado como NUEVO y habria tumbado el PR.
-#
-# MI HARNESS DEMUESTRA UNA MUTACION CONCRETA, NO QUE LA HERRAMIENTA NO TENGA OTRA QUE
-# MATAR. Cada uno muta con su propio juego de textos, y el mio no es el suyo. La unica
-# forma de saber si queda algo es CONTRASTAR CON EL INFORME, que es lo que se hizo
-# despues: 8 entradas que yo creia muertas estaban vivas.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:112
-# 188 `len(shown) > forge.CommentLimit`. EQUIVALENTE con `>=`: recortar una lista
-# por su longitud entera a ESA longitud es una identidad — `shown[:5]` de una lista
-# de cinco es la lista entera —. Lo que si la distingue es recortar a MENOS, y esa
-# mutacion si la mata el test del tope de cinco.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:188
-# 228 `total > budget`. EQUIVALENTE con `>=`, y con `total+1 > budget` tambien, por
-# la misma cuenta: cuando el presupuesto da EXACTO lo que se pide, las dos ramas dan
-# lo mismo porque `allocate` con la suma justa devuelve `need` sin cambiarlo.
-#
-# La cuenta: `allocate` pone una fila a cada comentario y reparte las sobrantes una a
-# una a quien menos tiene, parando cuando nadie puede absorber mas. Si la suma de lo
-# que pide cada uno ES el presupuesto, las sobrantes son exactamente las que faltan y
-# el reparto termina con cada comentario en su numero. Hay un test que afirma esa
-# identidad sobre siete repartos.
-#
-# Y el supuesto de que todas las peticiones son de una fila o mas lo pone
-# `commentBody` con su `max(1, lines)`. Sin ese suelo un comentario de cuerpo vacio
-# pediria cero filas y `allocate` le daria una, que es mas de lo que pidio, y la
-# identidad se rompe. Por eso hay tambien un test que afirma que nadie pide cero.
-CONDITIONALS_BOUNDARY internal/tui/comments.go:228
-# 336 `commentBoxWidth`. EQUIVALENTE, y no es logica: es una PISTA DE CAPACIDAD. Que
-# sobre o falte una fila de capacidad no cambia el slice que sale —`append` reasigna
-# cuando le falta y desperdicia cuando sobra—.
-#
-# Este lo dio muerto mi harness con cuatro variantes y seguia vivo: gremlins muta el
-# `max` y el producto con SU propio juego de textos, que no es el que yo escribo. Ver la
-# nota de `comments.go:112`, que es la misma leccion.
-ARITHMETIC_BASE internal/tui/comments.go:336
-# 238 `make([]string, 0, (len(fields)+1)/2)`. EQUIVALENTE, y no es logica: es una PISTA
-# DE CAPACIDAD. Que sobre o que falte no cambia el slice que sale; `append` reasigna
-# cuando le falta sitio y desperdicia cuando sobra. Comprobado con `+0` y con `/3`.
-ARITHMETIC_BASE internal/tui/detail.go:238
-# 264 `rows <= 0 || len(lines) <= rows`. La segunda mitad es una identidad con `<`: con
-# `len(lines) == rows` el cuerpo hace `lines[len(lines)-rows:]`, que es `lines[0:]`, que
-# es la lista entera. Recortar por el numero entero de elementos a esa longitud es no
-# recortar.
-#
-# La primera mitad NO es identidad y la mata un test: con cero filas el recorte
-# devolveria un slice vacio y la ficha se quedaria en blanco, y cero filas es produccion
-# en un terminal corto.
-CONDITIONALS_BOUNDARY internal/tui/detail.go:264
-# 35 `make([]listLine, 0, len(items)+len(problems)+4)`. EQUIVALENTE: es la capacidad
-# inicial de un slice que se rellena con `append`. Que la pista se quede corta o larga
-# no cambia las lineas que salen.
-ARITHMETIC_BASE internal/tui/list.go:35
-# 138 `minSegs < 0 || len(s) < minSegs`. La primera mitad es el sentinel de arranque, y
-# el `-1` es correcto porque `strings.Split` nunca devuelve un slice vacio.
-#
-# Y `len(s) < minSegs` con `<=` es una identidad: en la frontera —dos proyectos con el
-# MISMO numero de segmentos— reasignar `minSegs` el mismo valor es reasignarlo.
-# Y `minSegs < 0` con `<= 0` tampoco se distingue: en la primera iteracion `minSegs`
-# vale -1 y se pone `len(s)`, que es 1 o mas, con lo que nunca llega a valer cero.
-CONDITIONALS_BOUNDARY internal/tui/refcol.go:138
-# 629 `make([]string, 0, m.retargetRows()+2)`. EQUIVALENTE, y no es logica: es una
-# PISTA DE CAPACIDAD. Que sobre o que falte una fila de capacidad no cambia el slice
-# que sale: `append` reasigna cuando le falta sitio y desperdicia cuando sobra, y en
-# los dos casos el contenido es el mismo.
-#
-# Y no se puede matar con un test porque no se deja. La unica forma de afirmar la
-# capacidad seria mirar `cap()`, que es justo lo que cambia el mutante: un aserto
-# asi no mira comportamiento, mira la linea que el mutante toco. Allowlistar es
-# para esto.
-ARITHMETIC_BASE internal/tui/retarget.go:629
-# 138 `lay.bodyLines > 0`. EQUIVALENTE con `>=`, y la razon es la misma que en los
-# otros dos recortes de este fichero: `bodyLines` sale de `computeLayout`, que siempre
-# lo deja en `max(1, height-reserved())`, o sea 1 o mas, o en cero cuando `show` es
-# falso. Con cero, `visibleList(all, scroll, 0)` devuelve la lista vacia y el cuerpo se
-# queda igual con la guarda o sin ella: las dos ramas pintan nada. Y en la frontera de
-# 0, `>=` entra en el `if` pero el `for` no itera. Identidad en el borde.
-# Lo que SI distingue las dos es quitar la guarda entera, y ese mutante tambien esta
-# vivo por lo mismo: `visibleList` con cero filas devuelve vacio por su cuenta.
-# 138 `lay.bodyLines > 0`. EQUIVALENTE con `>=`, por la misma cuenta que los otros
-# dos recortes del fichero: `bodyLines` sale de `computeLayout`, que siempre lo deja
-# en `max(1, height-reserved())` —uno o mas— o en cero cuando `show` es falso. Con
-# cero, `visibleList(all, scroll, 0)` devuelve la lista vacia, asi que el cuerpo queda
-# igual con la guarda o sin ella. Y en la frontera de cero, `>=` entra en el `if` pero
-# el `for` no itera. Identidad en el borde.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:138
-# 203 `hintLines < len(lines)`. EQUIVALENTE con `>=`: en el borde, con el presupuesto
-# IGUAL al numero de lineas, recortar la lista por su longitud entera es una
-# identidad —`lines[:len(lines)]` es la lista entera—. Y con presupuesto mayor, el
-# mutante recorta a `len(lines)`, que ya es el tamano. Las dos ramas dan lo mismo.
-# El suelo `max(0, hintLines)` tampoco es opcional: cortar por un numero NEGATIVO en
-# Go es un PANIC, y el test lo comprueba con un presupuesto de -1.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:203
-# 244 `len(plain) > maxHintLines`. EQUIVALENTE con `>=` por la misma cuenta que el 203:
-# recortar una lista por su longitud entera a esa longitud es una identidad. Con
-# `len(plain) == maxHintLines` las dos dan la lista entera, y con mas lineas las dos
-# dan las primeras `maxHintLines`. Y `plain` sale de `wrapText`, que con un ancho
-# normal no pasa de ahi, asi que la condicion ni siquiera llega a ser cierta.
-CONDITIONALS_BOUNDARY internal/tui/sections.go:244
-CONDITIONALS_BOUNDARY internal/tui/sim.go:342
-CONDITIONALS_BOUNDARY internal/tui/sim.go:578
-# 365 `n >= w`. EQUIVALENTE con `>`: en la igualdad el `else` hace
-# `s + strings.Repeat(" ", w-n)` con `w-n == 0`, y `Repeat` de cero espacios es la
-# cadena vacia. El `>=` esta para no hacer el `else` en el caso exacto.
-CONDITIONALS_BOUNDARY internal/tui/table.go:365
-# 319 `anchor := len(lines) - 1`. EQUIVALENTE con `len(lines)`: `landRow` no acota el
-# ancla, y no la acota a proposito — `admitenAviso` cuenta como que NO una fila que no
-# existe. Con el ancla una fila mas abajo, el bloque de tres filas no cabe ahi porque la
-# tercera no existe, y `landRow` sigue bajando hasta la misma fila de siempre.
-#
-# Verificado en las dos variantes. Y con `len(lines) - 2` SI se nota, porque ahi si hay
-# fila, y ese mutante lo mata un test que afirma que el aviso se pega a la ultima.
-ARITHMETIC_BASE internal/tui/toast.go:319
-# 319 el mismo `len(lines) - 1` por la otra via. EQUIVALENTE por la misma cuenta que la
-# entrada de ARITHMETIC_BASE de esta linea: un ancla por encima de la ultima fila no
-# puede aterrizar en ningun sitio, asi que da el mismo resultado.
-INVERT_NEGATIVES internal/tui/toast.go:319
-CONDITIONALS_BOUNDARY internal/worktree/audit.go:69
+# Also an entry that had no explanation, for the same reason as the `sim.go` one.
+CONDITIONALS_BOUNDARY internal/worktree/audit.go:60

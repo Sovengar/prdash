@@ -9,65 +9,65 @@ import (
 // The event bomb is an invariant the rest of the model assumes, and not one test covers it: a
 //leak here is a goroutine per keypress.
 
-type eventoMarcado struct{ n int }
+type markedEvent struct{ n int }
 
 // What matters is the "and only one".
-func TestLaBombaLeeUnEventoYSoloUno(t *testing.T) {
+func TestTheTimerReadsOneEventAndOnlyOne(t *testing.T) {
 	ch := make(chan event, 3)
-	ch <- eventoMarcado{n: 1}
-	ch <- eventoMarcado{n: 2}
+	ch <- markedEvent{n: 1}
+	ch <- markedEvent{n: 2}
 
 	cmd := waitForEvent(ch)
 
-	// El primer Cmd saca el primero.
-	ev, ok := cmd().(eventoMarcado)
+	// The first Cmd takes the first one.
+	ev, ok := cmd().(markedEvent)
 	if !ok {
-		t.Fatal("el Cmd no devolvió un evento")
+		t.Fatal("the Cmd did not return an event")
 	}
 	if ev.n != 1 {
-		t.Errorf("el evento leído es %+v, want el primero", ev)
+		t.Errorf("the event read is %+v, want the first one", ev)
 	}
 	// It does NOT take the second: it stays in the channel for the next Cmd.
 	if n := len(ch); n != 1 {
-		t.Errorf("quedan %d eventos en el canal tras un Cmd, want 1: se llevó más de uno", n)
+		t.Errorf("%d events stay in the channel after one Cmd, want 1: it took more than one", n)
 	}
 
-	ev2 := cmd().(eventoMarcado)
+	ev2 := cmd().(markedEvent)
 	if ev2.n != 2 {
-		t.Errorf("el segundo evento es %+v, want el segundo", ev2)
+		t.Errorf("the second event is %+v, want the second one", ev2)
 	}
 }
 
 // This is what prevents the hang.
-func TestLaBombaSeDetieneConElCanalCerrado(t *testing.T) {
+func TestTheTimerStopsWhenTheChannelCloses(t *testing.T) {
 	ch := make(chan event)
 	close(ch)
 
 	got := waitForEvent(ch)()
 	if got != nil {
-		t.Errorf("con el canal cerrado el Cmd devolvió %v (%T), want nil: nil es lo que le "+
-			"dice a bubbletea que no hay más mensajes", got, got)
+		t.Errorf("with the channel closed the Cmd returned %v (%T), want nil: nil is what "+
+			"tells bubbletea there are no more messages", got, got)
 	}
 	// Asking more times does not revive the channel or return something else.
 	for i := range 3 {
 		if got := waitForEvent(ch)(); got != nil {
-			t.Errorf("la llamada %d con el canal cerrado devolvió %v", i, got)
+			t.Errorf("call %d with the channel closed returned %v", i, got)
 			break
 		}
 	}
 }
 
-func TestPublicarRespetaLaCancelacion(t *testing.T) {
+func TestPublishRespectsTheCancellation(t *testing.T) {
 	ch := make(chan event, 1)
-	sendEvent(context.Background(), ch, eventoMarcado{n: 1})
+	sendEvent(context.Background(), ch, markedEvent{n: 1})
 
 	select {
 	case got := <-ch:
-		if m, ok := got.(eventoMarcado); !ok || m.n != 1 {
-			t.Errorf("se publicó el 1 y llegó %v", got)
+		if m, ok := got.(markedEvent); !ok || m.n != 1 {
+			t.Errorf("1 was published and %v arrived", got)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("el evento no llegó")
+		t.Fatal("the event never arrived")
 	}
 
 	// With the context ALREADY cancelled and nobody reading, it does not block. That is what proves
@@ -75,46 +75,68 @@ func TestPublicarRespetaLaCancelacion(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	sinLeer := make(chan event) // sin buffer y sin lector: publicar aquí bloquearía
-	hecho := make(chan struct{})
+	unread := make(chan event) // no buffer and no reader: publishing here would block
+	doneF := make(chan struct{})
 	go func() {
-		defer close(hecho)
-		sendEvent(ctx, sinLeer, eventoMarcado{n: 2})
+		defer close(doneF)
+		sendEvent(ctx, unread, markedEvent{n: 2})
 	}()
 	select {
-	case <-hecho:
+	case <-doneF:
 	case <-time.After(2 * time.Second):
-		t.Fatal("sendEvent se bloqueó con el contexto cancelado: se queda en una goroutine " +
-			"que nadie va a terminar")
+		t.Fatal("sendEvent blocked with the context cancelled: it stays in a goroutine " +
+			"that nobody will ever finish")
 	}
 
 	// Publishing BLOCKS on purpose when the context is alive and there is no reader.
 }
 
+// The guard is the only thing between a double release and a counter that lies about how many
+// goroutines are parked on the channel, and the invariant says it cannot happen. This forces it.
+func TestReleasingMoreReadersThanAreArmedDoesNotGoNegative(t *testing.T) {
+	m := newTestModel(t)
+	m.readers = 0
+
+	m.releaseReader()
+	if m.readers != 0 {
+		t.Errorf("releasing with none armed left the counter at %d, want 0: it must not go negative", m.readers)
+	}
+	m.releaseReader()
+	if m.readers != 0 {
+		t.Errorf("after releasing twice with none armed the counter is %d, want 0", m.readers)
+	}
+
+	m.armReader()
+	m.releaseReader()
+	if m.readers != 0 {
+		t.Errorf("one arm and one release left the counter at %d, want 0", m.readers)
+	}
+}
+
 // The counter exists so the invariant can be asserted at all.
-func TestElContadorDeLectoresEsLoQuePermiteAfirmarElInvariante(t *testing.T) {
+func TestTheReaderCounterIsWhatAllowsAssertingTheInvariant(t *testing.T) {
 	m := newTestModel(t)
 	m.events = make(chan event, 1)
 	m.readers = 0
 
 	cmd := m.armReader()
 	if m.readers != 1 {
-		t.Errorf("armReader dejó el contador en %d, want 1", m.readers)
+		t.Errorf("armReader left the counter at %d, want 1", m.readers)
 	}
 	if cmd == nil {
-		t.Fatal("armReader devolvió un Cmd nil")
+		t.Fatal("armReader returned a nil Cmd")
 	}
 
 	// Arming twice is two readers, which is exactly what the invariant forbids.
 	m.armReader()
 	if m.readers != 2 {
-		t.Errorf("tras armar dos veces el contador quedó en %d", m.readers)
+		t.Errorf("after arming twice the counter stayed at %d", m.readers)
 	}
 
 	// The armed Cmd reads from the MODEL's channel, not another one.
-	m.events <- eventoMarcado{n: 9}
-	got, ok := cmd().(eventoMarcado)
+	m.events <- markedEvent{n: 9}
+	got, ok := cmd().(markedEvent)
 	if !ok || got.n != 9 {
-		t.Errorf("el Cmd de armReader no leyó del canal del modelo: %v", cmd())
+		t.Errorf("the armReader Cmd did not read from the models channel: %v", cmd())
 	}
 }
