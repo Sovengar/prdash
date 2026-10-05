@@ -144,7 +144,7 @@ func commentBudget(rows, gridLines, urlLines, warningLines int) int {
 
 func detailGrid(fields []detailField, inner int) []string {
 	cell := max(24, (inner-detailGap)/2)
-	out := make([]string, 0, (len(fields)+1)/2)
+	var out []string
 	for i := 0; i < len(fields); i += 2 {
 		left, leftW := detailCell(fields[i], cell)
 		right := ""
