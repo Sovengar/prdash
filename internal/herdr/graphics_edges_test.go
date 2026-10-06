@@ -151,6 +151,9 @@ func graphicsWithBrokenWrite(t *testing.T) *Graphics {
 	})
 	broken := connWithBrokenWrite{Conn: client}
 	return &Graphics{
+		// Socket is pinned: without it call() reads the ambient HERDR_SOCKET_PATH and returns a bare
+		// ErrNoGraphics before dialing, so in CI the broken write under test is never reached.
+		Socket:  "/tmp/herdr.sock",
 		PaneID:  "pane-1",
 		Timeout: 2 * time.Second,
 		dial: func(context.Context, string, string) (net.Conn, error) {
