@@ -58,12 +58,16 @@ func collectBySection(inputs []ForgeResult) (map[model.Section][]model.Item, []m
 	return collected, warnings
 }
 
+// sectionOrder walks sections from best to worst authority, so the FIRST writer of an identity
+// wins and the loop needs no comparison at all: the old `rank(kind) < rank(prev)` had an
+// equality case no input can reach (distinct sections have distinct ranks), which made its
+// boundary mutant one no test could kill.
 func assignAuthority(collected map[model.Section][]model.Item) map[model.ID]model.Section {
 	best := map[model.ID]model.Section{}
 	for _, kind := range sectionOrder {
 		for _, it := range collected[kind] {
 			id := it.ID()
-			if prev, ok := best[id]; !ok || rank(kind) < rank(prev) {
+			if _, ok := best[id]; !ok {
 				best[id] = kind
 			}
 		}
@@ -103,15 +107,6 @@ func (in Inbox) Empty() bool {
 		}
 	}
 	return true
-}
-
-func rank(kind model.Section) int {
-	for i, k := range sectionOrder {
-		if k == kind {
-			return i
-		}
-	}
-	return len(sectionOrder)
 }
 
 // The score key has its operands swapped because the most urgent item goes first; a tie falls to the
