@@ -151,9 +151,9 @@ Conventional Commits, as observed in the history:
 
 ```
 fix(tooling): guard mutate-diff against gremlins empty-diff full-module fallback
-feat(retarget): cambiar la rama destino con `e` y un buscador de ramas (#20)
-chore(repo): worktrees de Worktrunk bajo .worktrees/
-docs(readme): nota de prueba 1/10 (#5)
+feat(retarget): change the PR/MR target branch with `e` and a branch searcher (#20)
+chore(repo): Worktrunk worktrees under .worktrees/
+docs(readme): 1/10 smoke test note (#5)
 ```
 
 Scope in the language of the subsystem touched. The PR/MR number goes in

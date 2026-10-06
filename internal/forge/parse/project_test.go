@@ -13,14 +13,14 @@ func TestJoinProjectDoesNotPutOrphanSeparators(t *testing.T) {
 		owner, piece string
 		want         string
 	}{
-		{"both", "acme", "proy", "acme/proy"},
+		{"both", "acme", "proj", "acme/proj"},
 		{"only owner", "acme", "", "acme"},
-		{"only name", "", "proy", "proy"},
+		{"only name", "", "proj", "proj"},
 		{"neither", "", "", ""},
-		{"owner with slashes", "grupo/sub", "proy", "grupo/sub/proy"},
-		{"name with slashes", "acme", "sub/proy", "acme/sub/proy"},
+		{"owner with slashes", "group/sub", "proj", "group/sub/proj"},
+		{"name with slashes", "acme", "sub/proj", "acme/sub/proj"},
 		{"both with slashes", "a/b", "c/d", "a/b/c/d"},
-		{"spaces", " acme ", " proy ", " acme / proy "},
+		{"spaces", " acme ", " proj ", " acme / proj "},
 	}
 	for _, c := range cases {
 		got := joinProject(c.owner, c.piece)
@@ -42,17 +42,17 @@ func TestSplitProjectSplitsAtTheLastSlashAndNotTheFirst(t *testing.T) {
 		wantA string
 		wantB string
 	}{
-		{"one slash", "acme/proy", "acme", "proy"},
-		{"two slashes", "grupo/sub/proy", "grupo/sub", "proy"},
-		{"three slashes", "a/b/c/proy", "a/b/c", "proy"},
-		{"no slash", "proy", "", "proy"},
-		{"leading slash", "/grupo/proy", "grupo", "proy"},
-		{"trailing slash", "grupo/proy/", "grupo", "proy"},
-		{"slashes on both edges", "/grupo/proy/", "grupo", "proy"},
+		{"one slash", "acme/proj", "acme", "proj"},
+		{"two slashes", "group/sub/proj", "group/sub", "proj"},
+		{"three slashes", "a/b/c/proj", "a/b/c", "proj"},
+		{"no slash", "proj", "", "proj"},
+		{"leading slash", "/group/proj", "group", "proj"},
+		{"trailing slash", "group/proj/", "group", "proj"},
+		{"slashes on both edges", "/group/proj/", "group", "proj"},
 		{"only slashes", "///", "", ""},
 		{"empty", "", "", ""},
 		// Trim removes slashes, NOT spaces, so the spaces stay inside both halves.
-		{"slash with spaces around", " grupo/sub /proy ", " grupo/sub ", "proy "},
+		{"slash with spaces around", " group/sub /proj ", " group/sub ", "proj "},
 	}
 	for _, c := range cases {
 		a, b := splitProject(c.path)
@@ -128,13 +128,13 @@ func TestProjectFromRefRemovesTheNumberSuffix(t *testing.T) {
 		ref  string
 		want string
 	}{
-		{"with number", "grupo/proy!12", "grupo/proy"},
-		{"without number", "grupo/proy", "grupo/proy"},
-		{"with slashes", "a/b/proy!3", "a/b/proy"},
-		{"big number", "grupo/proy!1234", "grupo/proy"},
+		{"with number", "group/proj!12", "group/proj"},
+		{"without number", "group/proj", "group/proj"},
+		{"with slashes", "a/b/proj!3", "a/b/proj"},
+		{"big number", "group/proj!1234", "group/proj"},
 		{"empty", "", ""},
 		{"only the sign", "!", ""},
-		{"with spaces", "grupo/proy ! 12", "grupo/proy "},
+		{"with spaces", "group/proj ! 12", "group/proj "},
 	}
 	for _, c := range cases {
 		if got := projectFromRef(c.ref); got != c.want {
@@ -157,15 +157,15 @@ func TestSplitRepoURLTakesTheProjectOnlyFromTheAPIsPath(t *testing.T) {
 		wantA string
 		wantB string
 	}{
-		{"API of a repo", "https://api.github.com/repos/acme/proy", "acme", "proy"},
-		{"API with subgroups", "https://api.github.com/repos/grupo/sub/proy", "grupo/sub", "proy"},
-		{"self-hosted API", "https://git.umane.example/api/v3/repos/acme/proy", "acme", "proy"},
+		{"API of a repo", "https://api.github.com/repos/acme/proj", "acme", "proj"},
+		{"API with subgroups", "https://api.github.com/repos/group/sub/proj", "group/sub", "proj"},
+		{"self-hosted API", "https://git.umane.example/api/v3/repos/acme/proj", "acme", "proj"},
 		// A query string stays glued to the name, which is acceptable because the URL comes from us.
-		{"with query", "https://api.github.com/repos/acme/proy?x=1", "acme", "proy?x=1"},
-		{"clone url", "https://github.com/acme/proy.git", "", ""},
-		{"html url", "https://github.com/acme/proy", "", ""},
+		{"with query", "https://api.github.com/repos/acme/proj?x=1", "acme", "proj?x=1"},
+		{"clone url", "https://github.com/acme/proj.git", "", ""},
+		{"html url", "https://github.com/acme/proj", "", ""},
 		// With no scheme the project still comes out: splitRepoURL only looks for the `/repos/` marker.
-		{"no scheme", "api.github.com/repos/acme/proy", "acme", "proy"},
+		{"no scheme", "api.github.com/repos/acme/proj", "acme", "proj"},
 		{"empty", "", "", ""},
 	}
 	for _, c := range cases {
@@ -177,8 +177,8 @@ func TestSplitRepoURLTakesTheProjectOnlyFromTheAPIsPath(t *testing.T) {
 	}
 
 	// The property: with a project, the two halves recompose into a real path.
-	a, b := splitRepoURL("https://api.github.com/repos/acme/proy")
-	if got := joinProject(a, b); got != "acme/proy" {
+	a, b := splitRepoURL("https://api.github.com/repos/acme/proj")
+	if got := joinProject(a, b); got != "acme/proj" {
 		t.Errorf("the project from the URL gave %q, which cannot be recomposed", got)
 	}
 }

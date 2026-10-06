@@ -93,8 +93,8 @@ type Mergeability struct {
 type RepoRef struct {
 	Forge   string // "github" | "gitlab" | ...
 	Host    string // "github.com" | "gitlab.example.com" | ...
-	Project string // ruta completa: "owner/repo" (GH) o "grupo/sub/proy" (GL)
-	Owner   string // propietario/grupo inmediato
+	Project string // full path: "owner/repo" (GH) or "group/sub/name" (GL)
+	Owner   string // immediate owner/group
 	Name    string
 }
 

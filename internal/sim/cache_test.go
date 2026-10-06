@@ -50,7 +50,7 @@ func TestCopyFileToTempLeavesTheDestinationIntactAndNotTheTemp(t *testing.T) {
 // No simulated cut needed: copying a DIRECTORY as if it were an image fails with EISDIR on the read.
 func TestCopyFileCleansTheTempWhenTheCopyIsCut(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "esto-es-un-directorio.jpg")
+	src := filepath.Join(dir, "this-is-a-directory.jpg")
 	if err := os.MkdirAll(src, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestPruneWithFewerThanToKeepDoesNothingAndWithZeroDeletesAll(t *testing.T) 
 func TestPruneOnMissingDirectoryDoesNotBlowUp(t *testing.T) {
 	prune(filepath.Join(t.TempDir(), "no-existe"), 3)
 
-	file := filepath.Join(t.TempDir(), "soy-un-fichero")
+	file := filepath.Join(t.TempDir(), "soy-a-file")
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

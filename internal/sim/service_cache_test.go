@@ -66,7 +66,7 @@ func TestPruneKeepsTheRecentAndDeletesTheOld(t *testing.T) {
 func TestPruneIgnoresWhatAreNotImagesAndTheDirectories(t *testing.T) {
 	dir := t.TempDir()
 
-	for _, n := range []string{"vieja.jpg", "nueva.jpg"} {
+	for _, n := range []string{"vieja.jpg", "new.jpg"} {
 		path := filepath.Join(dir, n)
 		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
@@ -75,7 +75,7 @@ func TestPruneIgnoresWhatAreNotImagesAndTheDirectories(t *testing.T) {
 	extras := map[string]string{
 		"a-medias.jpg.part": "copyFile's temp",
 		"nota.txt":          "not an image",
-		"sin-extension":     "has no extension",
+		"without-extension": "has no extension",
 	}
 	for n := range extras {
 		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644); err != nil {
@@ -101,7 +101,7 @@ func TestPruneIgnoresWhatAreNotImagesAndTheDirectories(t *testing.T) {
 
 	prune(dir, 1)
 
-	if _, err := os.Stat(filepath.Join(dir, "nueva.jpg")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "new.jpg")); err != nil {
 		t.Error("the most recent image did not survive the prune")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "vieja.jpg")); err == nil {
@@ -150,7 +150,7 @@ func TestKeepCopiesTheImageAndPrunesAfterwards(t *testing.T) {
 	}
 
 	s := &Service{CacheDir: filepath.Join(dir, "cache")}
-	it := model.Item{Forge: "github", Number: 42, Ref: model.RepoRef{Project: "grupo/proyecto"}}
+	it := model.Item{Forge: "github", Number: 42, Ref: model.RepoRef{Project: "group/project"}}
 
 	dst, err := s.keep(source, it, KindMerge)
 	if err != nil {
@@ -168,7 +168,7 @@ func TestKeepCopiesTheImageAndPrunesAfterwards(t *testing.T) {
 		t.Error("the copy's temp is still in the cache")
 	}
 	name := filepath.Base(dst)
-	if !strings.HasPrefix(name, "github-") || !strings.Contains(name, "proyecto") {
+	if !strings.HasPrefix(name, "github-") || !strings.Contains(name, "project") {
 		t.Errorf("the name %q carries neither forge nor project", name)
 	}
 	if !strings.Contains(name, "-42-") {
@@ -237,7 +237,7 @@ func TestCacheDirFallsBackToDefaultAndIsMemoized(t *testing.T) {
 		t.Errorf("the second call gave %q, want the memoized %q", other, path)
 	}
 
-	explicit := filepath.Join(dir, "otro")
+	explicit := filepath.Join(dir, "other")
 	withField := &Service{CacheDir: explicit}
 	if g, _ := withField.cacheDir(); g != explicit {
 		t.Errorf("with CacheDir set it gave %q, want %q", g, explicit)
@@ -331,7 +331,7 @@ func TestSimBinaryIsTheFieldOrTheCanonicalOneAndNothingElse(t *testing.T) {
 	if got := (&Runner{Bin: "/opt/git-sim-mio"}).bin(); got != "/opt/git-sim-mio" {
 		t.Errorf("with Bin set it gave %q", got)
 	}
-	t.Setenv("GIT_SIM_BIN", "/opt/otro")
+	t.Setenv("GIT_SIM_BIN", "/opt/other")
 	if got := (&Runner{}).bin(); got != DefaultBin {
 		t.Errorf("with GIT_SIM_BIN in the environment it gave %q, want the canonical one", got)
 	}
@@ -344,9 +344,9 @@ func TestSimBinaryIsTheFieldOrTheCanonicalOneAndNothingElse(t *testing.T) {
 // The path and arguments are what make the failure reproducible without guessing which invocation
 // hit it.
 func TestSimErrorBringsWhatWasExecuted(t *testing.T) {
-	e := &Error{Args: []string{"config", "user.email"}, Dir: "/repos/proy", Msg: "no such repository", ExitCode: 128}
+	e := &Error{Args: []string{"config", "user.email"}, Dir: "/repos/proj", Msg: "no such repository", ExitCode: 128}
 	msg := e.Error()
-	for _, want := range []string{"config", "user.email", "/repos/proy", "no such repository", "128"} {
+	for _, want := range []string{"config", "user.email", "/repos/proj", "no such repository", "128"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("the message %q does not bring %q", msg, want)
 		}

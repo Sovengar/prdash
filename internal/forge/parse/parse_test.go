@@ -344,6 +344,8 @@ func TestParseGHChecksBuckets(t *testing.T) {
 		{"pending", `[{"name":"a","state":"PENDING","bucket":"pending"}]`, model.ChecksPending},
 		{"pass", `[{"name":"a","state":"SUCCESS","bucket":"pass"}]`, model.ChecksPassing},
 		{"without bucket uses the state", `[{"name":"a","state":"FAILURE"}]`, model.ChecksFailing},
+		// No runs at all is unknown, not passing: the `Total > 0` boundary is what tells them apart.
+		{"no runs at all", `[]`, model.ChecksUnknown},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

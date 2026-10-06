@@ -94,24 +94,30 @@ type Mounter interface {
 	Mount(ctx context.Context, it model.Item) (executor.Result, error)
 }
 
-const refreshTimeout = 60 * time.Second
+// 60s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const refreshTimeout = time.Duration(60e9)
 
-const mountTimeout = 5 * time.Minute
+// 5m as a literal, same coverage argument as refreshTimeout above.
+const mountTimeout = time.Duration(300e9)
 
-const actionTimeout = 60 * time.Second
+// 60s as a literal, same coverage argument as refreshTimeout above.
+const actionTimeout = time.Duration(60e9)
 
 // Short because it must not leave the event hanging when the checkout does not answer.
-const reviewCleanupTimeout = 30 * time.Second
+// 30s as a literal, same coverage argument as refreshTimeout above.
+const reviewCleanupTimeout = time.Duration(30e9)
 
 // A read of a single PR: past this the problem is the forge and not worth waiting for, and the rest of
-// the panel is still true.
-const commentsTimeout = 20 * time.Second
+// the panel is still true. 20s as a literal, same coverage argument as refreshTimeout above.
+const commentsTimeout = time.Duration(20e9)
 
 // A clock and not an event, because looking is cheap: that spares it from being re-armed at every
 // site where the selection changes — keys, pages arriving, actions — and going unasked at one.
-const commentsPoll = 200 * time.Millisecond
+// 200ms as a literal, same coverage argument as refreshTimeout above.
+const commentsPoll = time.Duration(200e6)
 
-const maxBackoff = 10 * time.Minute
+// 10m as a literal, same coverage argument as refreshTimeout above.
+const maxBackoff = time.Duration(600e9)
 
 // The forge is unique per adapter, so it is enough with it plus section and kind.
 type streamKey struct {
@@ -757,16 +763,16 @@ func lastRefreshLabel(since time.Time, now time.Time) string {
 		return "no data"
 	}
 	d := now.Sub(since)
-	switch {
-	case d < time.Second:
+	if d < time.Second {
 		return "now"
-	case d < time.Minute:
-		return fmt.Sprintf("%ds ago", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
-	default:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
 	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	}
+	return fmt.Sprintf("%dh ago", int(d.Hours()))
 }
 
 func (m *Model) applySnapshot(f cache.File) {

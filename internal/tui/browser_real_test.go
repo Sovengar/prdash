@@ -72,7 +72,7 @@ func TestWithNoOpenerInThePATHItWarnsAndOpensNothing(t *testing.T) {
 func TestAnOpenerThatCannotBeExecutedWarnsWithItsError(t *testing.T) {
 	binDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(binDir, "xdg-open"),
-		[]byte("#!/interprete-que-no-existe\nexit 0\n"), 0o755); err != nil {
+		[]byte("#!/interpreter-that-does-not-existe\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir)

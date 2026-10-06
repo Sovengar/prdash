@@ -148,16 +148,15 @@ func ParseGHGraphQLSearch(raw string) ([]model.Item, PageInfo, error) {
 		nodes []ghPRNode
 		page  PageInfo
 	)
-	switch {
-	case resp.Data.Search != nil:
+	if resp.Data.Search != nil {
 		nodes = resp.Data.Search.Nodes
 		page = PageInfo{
 			Next: resp.Data.Search.PageInfo.EndCursor,
 			More: resp.Data.Search.PageInfo.HasNextPage,
 		}
-	case resp.Data.Repository != nil && resp.Data.Repository.PullRequest != nil:
+	} else if resp.Data.Repository != nil && resp.Data.Repository.PullRequest != nil {
 		nodes = []ghPRNode{*resp.Data.Repository.PullRequest}
-	default:
+	} else {
 		return nil, PageInfo{}, &Error{Tool: "gh-graphql", Msg: "response without pull request data"}
 	}
 
@@ -219,7 +218,7 @@ func mergeableFromGH(v string) model.Mergeability {
 		return model.Mergeability{Known: true, Conflicted: true}
 	case "MERGEABLE":
 		return model.Mergeability{Known: true}
-	default: // "", UNKNOWN y cualquier valor que no conocemos
+	default: // "", UNKNOWN, or any value we do not know
 		return model.Mergeability{}
 	}
 }
@@ -255,14 +254,13 @@ func checksFromRollup(n ghPRNode) model.Checks {
 			c.Pending++
 		}
 	}
-	switch {
-	case c.Failing > 0:
+	if c.Failing > 0 {
 		c.State = model.ChecksFailing
-	case c.Pending > 0:
+	} else if c.Pending > 0 {
 		c.State = model.ChecksPending
-	case c.Total > 0:
+	} else if c.Total > 0 {
 		c.State = model.ChecksPassing
-	default:
+	} else {
 		c.State = checksStateFromRollup(rollup.State)
 	}
 	return c
@@ -385,14 +383,13 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 			}
 		}
 	}
-	switch {
-	case c.Failing > 0:
+	if c.Failing > 0 {
 		c.State = model.ChecksFailing
-	case c.Pending > 0:
+	} else if c.Pending > 0 {
 		c.State = model.ChecksPending
-	case c.Total > 0:
+	} else if c.Total > 0 {
 		c.State = model.ChecksPassing
-	default:
+	} else {
 		c.State = model.ChecksUnknown
 	}
 	return c, nil
@@ -593,7 +590,7 @@ type glBasicMR struct {
 		Username string `json:"username"`
 	} `json:"author"`
 	References struct {
-		Full  string `json:"full"`  // "grupo/proy!12"
+		Full  string `json:"full"`  // "group/name!12"
 		Short string `json:"short"` // "!12"
 	} `json:"references"`
 }
@@ -709,14 +706,13 @@ func splitRepoURL(u string) (string, string) {
 }
 
 func joinProject(owner, name string) string {
-	switch {
-	case owner == "":
+	if owner == "" {
 		return name
-	case name == "":
-		return owner
-	default:
-		return owner + "/" + name
 	}
+	if name == "" {
+		return owner
+	}
+	return owner + "/" + name
 }
 
 func splitProject(path string) (string, string) {

@@ -88,10 +88,10 @@ func TestATOMLThatDoesNotParseWarnsAndDoesNotKeepHalfOfWhatItRead(t *testing.T) 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "broken.toml")
 	writeConfig(t, path, `
-roots = ["/tmp/un-sitio-que-no-debe-aplicarse"]
-data_dir = "/otro"
+roots = ["/tmp/a-site-that-must-not-apply"]
+data_dir = "/other"
 refresh_interval = "10s"
-esto-no-es-una-llave
+this-is-not-a-key
 `)
 
 	cfg, warn := LoadFrom(path)
@@ -108,11 +108,11 @@ esto-no-es-una-llave
 			len(cfg.Roots), len(def.Roots))
 	}
 	for _, r := range cfg.Roots {
-		if r == "/tmp/un-sitio-que-no-debe-aplicarse" {
+		if r == "/tmp/a-site-that-must-not-apply" {
 			t.Error("a roots from the TOML that never finished parsing was applied")
 		}
 	}
-	if cfg.DataDir == "/otro" {
+	if cfg.DataDir == "/other" {
 		t.Error("a data_dir from a TOML that never finished parsing was applied")
 	}
 }

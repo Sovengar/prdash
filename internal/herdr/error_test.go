@@ -46,13 +46,13 @@ func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
 	}{
 		{
 			"nested code and message",
-			`{"error":{"code":"E_NOPE","message":"no existe la rama"}}`,
-			"E_NOPE", "no existe la rama",
+			`{"error":{"code":"E_NOPE","message":"branch does not exist"}}`,
+			"E_NOPE", "branch does not exist",
 		},
 		{
 			"flat code and message",
-			`{"code":"E_PLAN","message":"el plan no cabe"}`,
-			"E_PLAN", "el plan no cabe",
+			`{"code":"E_PLAN","message":"the plan does not fit"}`,
+			"E_PLAN", "the plan does not fit",
 		},
 		// Code only: the message comes from the exec error, not the server.
 		{
@@ -85,13 +85,13 @@ func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
 		// JSON that is not Herdr's: no code and no message, so it is shown as the CLI printed it.
 		{
 			"foreign JSON",
-			`{"otra":"cosa"}`,
-			"", `{"otra":"cosa"}`,
+			`{"other":"cosa"}`,
+			"", `{"other":"cosa"}`,
 		},
 		{
 			"not JSON",
-			"panic: algo se rompió",
-			"", "panic: algo se rompió",
+			"panic: something broke",
+			"", "panic: something broke",
 		},
 		{
 			"empty stderr",

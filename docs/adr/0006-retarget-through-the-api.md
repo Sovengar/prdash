@@ -24,7 +24,7 @@ and it fits the rest of the adapter, which already uses `gh pr …` and
 Tested against a real PR (`Sovengar/prdash#13`), **`gh pr edit` does not work**:
 
 ```
-$ gh pr edit 13 -R Sovengar/prdash -B una-rama-que-no-existe
+$ gh pr edit 13 -R Sovengar/prdash -B a-branch-that-does-not-exist
 GraphQL: Projects (classic) is being deprecated in favor of the new Projects
 experience, see: … (repository.pullRequest.projectCards)
 ```
@@ -35,7 +35,7 @@ project, and `projectCards` blows up in the repos where that field errors. The
 same `gh` with the REST API does the operation:
 
 ```
-$ gh api -X PATCH repos/Sovengar/prdash/pulls/13 -f base=una-rama-que-no-existe
+$ gh api -X PATCH repos/Sovengar/prdash/pulls/13 -f base=a-branch-that-does-not-exist
 gh: Validation Failed (HTTP 422)          # and the reason goes in the JSON body
 ```
 

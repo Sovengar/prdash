@@ -118,7 +118,7 @@ func TestMovingTheCursorRecalculatesTheWindow(t *testing.T) {
 func seqBranches(n int) []string {
 	out := make([]string, 0, n)
 	for i := range n {
-		out = append(out, "rama/"+string(rune('a'+i%26))+string(rune('a'+i/26)))
+		out = append(out, "branch/"+string(rune('a'+i%26))+string(rune('a'+i/26)))
 	}
 	return out
 }

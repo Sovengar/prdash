@@ -12,9 +12,9 @@ import (
 const mrJSON = `[{"iid":12,"title":"MR","description":"desc",
 "web_url":"u","state":"opened","source_branch":"feat/a","target_branch":"main",
 "updated_at":"2026-09-21T07:00:00Z","created_at":"2026-09-20T07:00:00Z",
-"author":{"username":"me"},"labels":["uno"],
-"references":{"full":"grp/sub/proy!12","short":"!12"},
-"assignees":[{"username":"otro"}],
+"author":{"username":"me"},"labels":["one"],
+"references":{"full":"grp/sub/proj!12","short":"!12"},
+"assignees":[{"username":"other"}],
 "reviewers":[{"username":"me"}],
 "detailed_merge_status":"mergeable","merge_status":"can_be_merged",
 "diff_stats":{"additions":10,"deletions":2,"changes":3},
@@ -25,12 +25,12 @@ const graphqlJSON = `{"data":{"currentUser":{"reviewRequestedMergeRequests":{"no
 	"iid":7,"title":"PR","description":"d","webUrl":"u","state":"opened",
 	"sourceBranch":"feat/b","targetBranch":"main",
 	"updatedAt":"2026-09-21T07:00:00Z","createdAt":"2026-09-20T07:00:00Z",
-	"author":{"username":"me"},"labels":{"nodes":[{"name":"uno"}]},
-	"assignees":{"nodes":[{"username":"otro"}]},
-	"reviewers":{"nodes":[{"username":"otro"}]},
+	"author":{"username":"me"},"labels":{"nodes":[{"name":"one"}]},
+	"assignees":{"nodes":[{"username":"other"}]},
+	"reviewers":{"nodes":[{"username":"other"}]},
 	"mergeStatus":"MERGEABLE","headRefOid":"deadbeef",
 	"diffStats":[{"additions":5,"deletions":1,"changeCount":2}],
-	"headPipeline":{"status":"SUCCESS"},"project":{"fullPath":"grp/sub/proy","name":"proy","group":{"fullPath":"grp/sub"}}
+	"headPipeline":{"status":"SUCCESS"},"project":{"fullPath":"grp/sub/proj","name":"proj","group":{"fullPath":"grp/sub"}}
 }],"pageInfo":{"hasNextPage":true,"endCursor":"Y3Vyc29yOjI="}}}}}`
 
 // The cursor is what stops the TUI from asking for the first page again.
@@ -236,5 +236,29 @@ func TestTheTodosListFollowsThePageCursor(t *testing.T) {
 		if len(page.Items) != 0 {
 			t.Errorf("with cursor %q it returned items from an empty response", cursor)
 		}
+	}
+}
+
+// The Assigned review listing is a different query from the plain Review one, and only a test
+// that asks for it tells the two apart: a negated section or kind silently falls through to the
+// other query and the page still parses.
+func TestTheAssignedReviewListingAsksForTheAssignedQuery(t *testing.T) {
+	script, argsFile := glabThatLogs(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
+	a := New("h.example", script)
+
+	_, warns := a.List(context.Background(), forge.Query{
+		Section:    model.SectionReview,
+		ReviewKind: model.ReviewAssigned,
+	})
+
+	if len(warns) != 0 {
+		t.Errorf("the assigned listing gave warnings %+v", warns)
+	}
+	args := loggedArgs(t, argsFile)
+	if !strings.Contains(args, "assignedMergeRequests") {
+		t.Errorf("the assigned listing did not ask for assignedMergeRequests: %s", args)
+	}
+	if strings.Contains(args, "reviewRequests") && !strings.Contains(args, "assignedMergeRequests") {
+		t.Errorf("the assigned listing asked for the plain review query instead: %s", args)
 	}
 }

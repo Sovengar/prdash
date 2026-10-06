@@ -227,17 +227,22 @@ func relativeTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"
 	}
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
+	return relativeSince(time.Since(t))
+}
+
+// Takes the elapsed duration instead of a timestamp so the unit boundaries are testable inputs:
+// a boundary that only `time.Since` can produce is a boundary no test can pin.
+func relativeSince(d time.Duration) string {
+	if d < time.Minute {
 		return "now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	default:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 func orDash(s string) string {

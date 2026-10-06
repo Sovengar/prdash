@@ -183,7 +183,7 @@ const ghSearchUnknownFixture = `{
       "nodes": [
         {"number": 6, "title": "calculando", "url": "u6", "state": "OPEN", "isDraft": false,
          "mergeable": "UNKNOWN", "reviewDecision": "", "updatedAt": "2026-09-20T08:00:00Z",
-         "headRefName": "feat/nuevo", "baseRefName": "main", "headRefOid": "ddd444",
+         "headRefName": "feat/new", "baseRefName": "main", "headRefOid": "ddd444",
          "repository": {"nameWithOwner": "acme/lib", "name": "lib", "owner": {"login": "acme"},
                         "mergeCommitAllowed": true, "rebaseMergeAllowed": true, "squashMergeAllowed": true},
          "author": {"login": "me"}}
@@ -232,6 +232,6 @@ const glTodosMRFixture = `[
    "target_url":"https://gitlab.example.com/grp/proj/-/merge_requests/24",
    "updated_at":"2026-09-23T09:00:00Z",
    "target":{"iid":24,"title":"mencionado","web_url":"u24","state":"opened",
-             "source_branch":"feat/x","target_branch":"main","author":{"username":"otro"},
+             "source_branch":"feat/x","target_branch":"main","author":{"username":"other"},
              "references":{"full":"grp/proj!24"}}}
 ]`

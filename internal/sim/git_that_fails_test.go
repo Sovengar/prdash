@@ -22,7 +22,7 @@ func gitFailingAt(t *testing.T, sub string) *gitcmd.Runner {
 	content := "#!/bin/sh\n" +
 		"for arg in \"$@\"; do\n" +
 		"  if [ \"$arg\" = \"" + sub + "\" ]; then\n" +
-		"    printf '%s\\n' 'fatal: el subcomando " + sub + " no se pudo completar' >&2\n" +
+		"    printf '%s\\n' 'fatal: the subcommand " + sub + " did not complete' >&2\n" +
 		"    exit 1\n" +
 		"  fi\n" +
 		"done\n" +
@@ -97,7 +97,7 @@ func TestThreeStagingGitFailuresAreWarnedWithTheirSubcommandAndReason(t *testing
 			}
 			// And git's reason is inside the wrap, which is what tells "could not complete" from a generic
 			// failure.
-			if !strings.Contains(msg, "no se pudo completar") {
+			if !strings.Contains(msg, "did not complete") {
 				t.Errorf("the warning %q does not bring git's reason", msg)
 			}
 			if res.Path != "" {

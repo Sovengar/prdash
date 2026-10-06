@@ -426,7 +426,7 @@ func TestAllocateGivesTheLeftoverToWhoseNeedsIt(t *testing.T) {
 		budget int
 		want   []int
 	}{
-		{"caben enteros", []int{1, 4, 1, 1, 1}, 10, []int{1, 4, 1, 1, 1}},
+		{"fit whole", []int{1, 4, 1, 1, 1}, 10, []int{1, 4, 1, 1, 1}},
 		{"a spare row", []int{1, 4, 1, 1, 1}, 8, []int{1, 4, 1, 1, 1}},
 		{"one row short", []int{1, 4, 1, 1, 1}, 7, []int{1, 3, 1, 1, 1}},
 		{"all largos", []int{4, 4, 4, 4, 4}, 11, []int{3, 2, 2, 2, 2}},

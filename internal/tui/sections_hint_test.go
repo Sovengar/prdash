@@ -105,7 +105,7 @@ func TestSectionPrefixDoesNotEatTheLastPathPart(t *testing.T) {
 		{"same repo", []string{"acme/widget", "acme/widget"}, "acme"},
 		{"common group", []string{"grp/proj", "grp/other"}, "grp"},
 		{"common group of three", []string{"a/b", "a/c", "a/d"}, "a"},
-		{"subgrupos distintos", []string{"grp/sub/proj", "grp/other/proj"}, "grp"},
+		{"subgroups distintos", []string{"grp/sub/proj", "grp/other/proj"}, "grp"},
 		{"different groups", []string{"acme/widget", "other/widget"}, ""},
 		{"one without slash", []string{"widget", "acme/widget"}, ""},
 		{"only one", []string{"acme/widget"}, ""},

@@ -73,8 +73,8 @@ func TestToolEffectiveFallsBackToTheDefaultBinary(t *testing.T) {
 		{"empty argv uses the default", Tool{}, []string{"pr", "7"}, "default-bin pr 7"},
 		{"own argv without extra", Tool{Argv: []string{"tuicr", "pr"}}, nil, "tuicr pr"},
 		{"own argv with extra", Tool{Argv: []string{"hunk"}}, []string{"diff", "main...HEAD"}, "hunk diff main...HEAD"},
-		{"override is verbatim", Tool{Override: true, Argv: []string{"mi-script", "--ya", "completo"}}, []string{"NO", "SE", "ANADE"}, "mi-script --ya completo"},
-		{"empty override does not invent the default", Tool{Override: true}, []string{"tampoco"}, ""},
+		{"override is verbatim", Tool{Override: true, Argv: []string{"my-script", "--yes", "complete"}}, []string{"must", "not", "appear"}, "my-script --yes complete"},
+		{"empty override does not invent the default", Tool{Override: true}, []string{"nor-this"}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -104,7 +104,7 @@ func TestToolBinaryDistinguishesAnEmptyOverrideFromAnEmptyBase(t *testing.T) {
 		{"own argv", Tool{Argv: []string{"tuicr", "pr"}}, "tuicr"},
 		{"empty base falls back to default", Tool{}, "default-bin"},
 		{"empty override has no binary", Tool{Override: true}, ""},
-		{"override with argv", Tool{Override: true, Argv: []string{"mi-script", "--x"}}, "mi-script"},
+		{"override with argv", Tool{Override: true, Argv: []string{"my-script", "--x"}}, "my-script"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

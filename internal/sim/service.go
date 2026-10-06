@@ -287,14 +287,13 @@ func pruneWith(dir string, keep int, listing func(string) ([]os.DirEntry, error)
 
 func slug(project string) string {
 	out := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
 			return r
-		case r == '-' || r == '_' || r == '.':
-			return r
-		default:
-			return '-'
 		}
+		if r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		return '-'
 	}, project)
 	return strings.Trim(out, "-")
 }

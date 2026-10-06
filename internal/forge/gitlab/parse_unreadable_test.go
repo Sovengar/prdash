@@ -40,7 +40,7 @@ const emptyGraphql = `{"data":{"project":{"mergeRequest":null}}}`
 func TestANonexistentMRSaysItDoesNotExistAndDoesNotReturnAFakeItem(t *testing.T) {
 	a := New("gitlab.example.com", glabReturning(t, "cat <<'JSON'\n"+emptyGraphql+"\nJSON"))
 
-	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grupo/proyecto"}
+	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "group/project"}
 	it, warns := a.ItemState(context.Background(), ref, 404)
 
 	w := onlyWarning(t, warns, "nonexistent MR")
@@ -49,7 +49,7 @@ func TestANonexistentMRSaysItDoesNotExistAndDoesNotReturnAFakeItem(t *testing.T)
 			"a rate limit", w.Kind)
 	}
 	// The message says WHICH: without the number the warning could belong to any of the MRs.
-	for _, want := range []string{"404", "grupo/proyecto"} {
+	for _, want := range []string{"404", "group/project"} {
 		if !strings.Contains(w.Msg, want) {
 			t.Errorf("the warning %q does not mention %q", w.Msg, want)
 		}
@@ -77,7 +77,7 @@ func TestOutputThatIsNotJSONInGitLabWarnsAndDoesNotBreak(t *testing.T) {
 		{"list instead of object", "echo '[1,2,3]'"},
 	} {
 		a := New("gitlab.example.com", glabReturning(t, c.body))
-		ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grupo/proy"}
+		ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "group/proj"}
 		it, warns := a.ItemState(context.Background(), ref, 7)
 
 		if w := onlyWarning(t, warns, c.name); w.Kind != "parse" {
@@ -118,7 +118,7 @@ func TestListWithUnreadableOutputWarnsAndDoesNotInventItems(t *testing.T) {
 // The same risk as GitHub but with a different output shape.
 func TestGitLabsConversationWithUnreadableOutputDoesNotInventNotes(t *testing.T) {
 	a := New("gitlab.example.com", glabReturning(t, "echo 'broken'"))
-	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grupo/proyecto"}
+	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "group/project"}
 
 	page, warns := a.Comments(context.Background(), ref, 12)
 
@@ -168,7 +168,7 @@ func TestAnEmptyProjectSaysNoAndDoesNotGoOutToAskTheForge(t *testing.T) {
 func TestAMissingBinarySaysNoAndDoesNotTryToRun(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-glab-here")
 	a := New("gitlab.example.com", missing)
-	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "grupo/proyecto"}
+	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "group/project"}
 
 	_, warns := a.ItemState(context.Background(), ref, 12)
 	w := onlyWarning(t, warns, "no glab")
@@ -188,7 +188,7 @@ func TestReadingTheStateOfAnExistingMRReturnsItStampedWithItsIdentity(t *testing
 		`"targetBranch":"main","approved":false,"updatedAt":"2026-09-21T07:00:00Z",` +
 		`"diffHeadSha":"abc123"}}}}`
 	a := New("gitlab.acme.example", glabReturning(t, glabPrinting(liveMR)))
-	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.acme.example", Project: "grupo/proyecto"}
+	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.acme.example", Project: "group/project"}
 
 	it, warns := a.ItemState(context.Background(), ref, 12)
 

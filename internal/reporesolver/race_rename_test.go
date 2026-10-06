@@ -57,7 +57,7 @@ func TestAFailedRenameLeavesNoTempKeepsTheForeignCloneAndAllowsRetry(t *testing.
 			Git:      gitPublishingTheCloneFirst(t, origin),
 		})
 	}
-	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto"}
+	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/project"}
 	dest := freshResolver().barePath(ref)
 
 	published, err := freshResolver().EnsureBare(context.Background(), ref)

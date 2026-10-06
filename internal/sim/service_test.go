@@ -210,7 +210,7 @@ func TestMaterializePrefersTheLocalBranch(t *testing.T) {
 	clone := filepath.Join(t.TempDir(), "clone")
 	testutil.RunGit(t, t.TempDir(), "clone", "--quiet", repo, clone)
 	testutil.RunGit(t, clone, "checkout", "--quiet", "main")
-	testutil.CommitFile(t, clone, "solo-local.txt", "x", "avance local")
+	testutil.CommitFile(t, clone, "local-only.txt", "x", "local progress")
 
 	localSHA := strings.TrimSpace(testutil.RunGit(t, clone, "rev-parse", "main"))
 	remoteSHA := strings.TrimSpace(testutil.RunGit(t, repo, "rev-parse", "main"))

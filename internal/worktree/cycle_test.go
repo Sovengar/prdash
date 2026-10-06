@@ -56,15 +56,15 @@ func TestCreatingOverAWorktreeAlreadyOnTheSameBranchReusesIt(t *testing.T) {
 		t.Errorf("there are %d lines in worktree list, want 2", n)
 	}
 
-	testutil.RunGit(t, first.Repo, "branch", "otra")
+	testutil.RunGit(t, first.Repo, "branch", "other")
 	_, err = g.Create(context.Background(), Spec{
-		Repo: first.Repo, Branch: "otra",
+		Repo: first.Repo, Branch: "other",
 		Path: first.Path, Label: "prdash-pr-1",
 	})
 	if err == nil {
 		t.Fatal("creating with another branch over the same worktree gave nil")
 	}
-	for _, want := range []string{"feat/x", "otra"} {
+	for _, want := range []string{"feat/x", "other"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error %q does not mention %q", err, want)
 		}
@@ -99,7 +99,7 @@ func TestTheWorktreeLabelComesFromTheDirectoryNameWhenNotGiven(t *testing.T) {
 	testutil.RunGit(t, repo, "branch", "pr-9")
 	withLabel, err := g.Create(context.Background(), Spec{
 		Repo: repo, Branch: "pr-9",
-		Path: filepath.Join(root, "sin-prefijo"), Label: "prdash-pr-9",
+		Path: filepath.Join(root, "without-prefix"), Label: "prdash-pr-9",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestDirtyCountsUntrackedFiles(t *testing.T) {
 		t.Error("a freshly created worktree came back dirty")
 	}
 
-	fresh := filepath.Join(wt.Path, "nuevo.txt")
+	fresh := filepath.Join(wt.Path, "new.txt")
 	if err := os.WriteFile(fresh, []byte("uncommitted work"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestDirtyCountsUntrackedFiles(t *testing.T) {
 	if err := os.WriteFile(fresh, []byte("changed again"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	testutil.RunGit(t, wt.Path, "add", "nuevo.txt")
+	testutil.RunGit(t, wt.Path, "add", "new.txt")
 	dirty, err = g.dirty(ctx, wt.Path)
 	if err != nil {
 		t.Fatal(err)

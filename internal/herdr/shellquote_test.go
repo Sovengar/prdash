@@ -9,6 +9,7 @@ import (
 func TestUnsafeThingsGetQuotedAndSafeOnesDoNot(t *testing.T) {
 	safe := []string{
 		"abc", "ABC", "a1", "0",
+		"z", "Z", "9", "azAZ09",
 		"pr-123", "feature_x", "main-2", "v1.2.3",
 		"a-b_c.d", "-", "_", ".",
 	}

@@ -177,14 +177,15 @@ func shellQuote(s string) string {
 
 func shellSafe(s string) bool {
 	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
 			// `#` is deliberately absent from the safe list: at the START of a word it opens a comment, so a
 			// branch starting with `#` vanished from the command unquoted. Quoting the rare case costs nothing.
-		case r == '-', r == '_', r == '.', r == '/', r == '@', r == ':', r == '=', r == '+', r == ',', r == '%':
-		default:
-			return false
+			continue
 		}
+		if r == '-' || r == '_' || r == '.' || r == '/' || r == '@' || r == ':' || r == '=' || r == '+' || r == ',' || r == '%' {
+			continue
+		}
+		return false
 	}
 	return true
 }

@@ -60,7 +60,7 @@ func TestOnlyOneRowCarriesTheCursorAndItIsTheChosenOne(t *testing.T) {
 
 // Two different signals and the popup has to distinguish them.
 func TestTheCursorAndTheCurrentBaseDoNotShareASymbol(t *testing.T) {
-	m := branchesOfThePopup(t, "", "main", "otra", "tercera")
+	m := branchesOfThePopup(t, "", "main", "other", "tercera")
 	m.retarget.cursor = 0
 	m.retarget.win = 0
 	lines := linesOfThePopup(m)
@@ -93,7 +93,7 @@ func TestTheCursorAndTheCurrentBaseDoNotShareASymbol(t *testing.T) {
 func TestTheListAlignsInAColumn(t *testing.T) {
 	// A long base and a one-character one, which is what separates an aligned column from a
 	// coincidental one.
-	m := branchesOfThePopup(t, "", "main", "una-rama-con-name-larguísimo-de-verdad", "wip")
+	m := branchesOfThePopup(t, "", "main", "a-branch-with-name-naïve-and-quite-long", "wip")
 	m.retarget.cursor = 1
 	m.retarget.win = 0
 
@@ -170,7 +170,7 @@ func TestALongNameNeitherOverflowsNorStepsOnTheSuffix(t *testing.T) {
 func TestHowManyRowsArePaintedNotOneMoreNorOneLess(t *testing.T) {
 	many := []string{"main"}
 	for i := range 40 {
-		many = append(many, "rama/"+string(rune('a'+i%26))+string(rune('a'+i/26)))
+		many = append(many, "branch/"+string(rune('a'+i%26))+string(rune('a'+i/26)))
 	}
 	for _, h := range []int{10, 14, 20, 40} {
 		m := sizedRetarget(t, 90, h, many...)
@@ -180,7 +180,7 @@ func TestHowManyRowsArePaintedNotOneMoreNorOneLess(t *testing.T) {
 				h, got, want, m.retargetRows())
 		}
 	}
-	few := []string{"main", "otra", "wip"}
+	few := []string{"main", "other", "wip"}
 	for _, h := range []int{10, 20, 40} {
 		m := sizedRetarget(t, 90, h, few...)
 		if got := countBranchRows(m); got != len(few) {
@@ -208,7 +208,7 @@ func countBranchRows(m Model) int {
 
 // The header names the base even when it does not know it.
 func TestTheHeaderNamesTheBaseEvenWhenItDoesNotKnowIt(t *testing.T) {
-	m := branchesOfThePopup(t, "", "main", "otra")
+	m := branchesOfThePopup(t, "", "main", "other")
 	if !strings.Contains(stripANSI(m.retargetOverlay2()), "from main") {
 		t.Errorf("the header should say which base you leave from: %q", stripANSI(m.retargetOverlay2()))
 	}
@@ -266,13 +266,13 @@ func TestTheBranchCountDistinguishesFilteredFromUnfiltered(t *testing.T) {
 
 // Without a filter the field shows a dim placeholder.
 func TestTheFilterFieldDistinguishesThePlaceholderFromTheText(t *testing.T) {
-	m := branchesOfThePopup(t, "", "main", "otra")
+	m := branchesOfThePopup(t, "", "main", "other")
 	txt := stripANSI(m.retargetOverlay2())
 	if !strings.Contains(txt, "type to search") {
 		t.Errorf("without a filter the field should offer the placeholder: %q", txt)
 	}
 
-	m = branchesOfThePopup(t, "ot", "main", "otra")
+	m = branchesOfThePopup(t, "ot", "main", "other")
 	txt = stripANSI(m.retargetOverlay2())
 	if strings.Contains(txt, "type to search") {
 		t.Errorf("with a filter set the placeholder should not remain: %q", txt)
@@ -303,7 +303,7 @@ func TestTheFilterFieldDistinguishesThePlaceholderFromTheText(t *testing.T) {
 
 // A filter that matches nothing leaves the list empty and the box says so.
 func TestThePopupSaysWhenItFindsNothing(t *testing.T) {
-	m := branchesOfThePopup(t, "", "main", "otra")
+	m := branchesOfThePopup(t, "", "main", "other")
 	m.retarget.query = "noexiste"
 	m.applyQuery()
 	txt := stripANSI(m.retargetOverlay2())

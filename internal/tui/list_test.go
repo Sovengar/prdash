@@ -193,6 +193,9 @@ func TestScrollForSettlesTheWindowOnTheCursor(t *testing.T) {
 		{"a window bigger than the content goes above", 0, 0, 4, 10, 0},
 		{"the scroll never stays negative", -5, 0, 60, 10, 0},
 		{"the scroll never goes past the end", 99, 59, 60, 10, 50},
+		// A zero-height window is degenerate but defined, and it is what tells the
+		// `target <= current` boundary mutant from the real condition.
+		{"view zero: the arithmetic stays defined", 5, 5, 10, 0, 6},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

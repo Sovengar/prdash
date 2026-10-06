@@ -25,9 +25,9 @@ Test PR 1/10: smoke note to practice the PR resolution cycle.
 ## Build and installation
 
 ```sh
-make build      # compila en ./bin/prdash
-make install    # instala en ~/.local/bin/prdash
-make config GITLAB_HOST=gitlab.miempresa.com   # crea ~/.config/prdash/config.toml
+make build      # builds ./bin/prdash
+make install    # installs into ~/.local/bin/prdash
+make config GITLAB_HOST=gitlab.mycompany.com   # creates ~/.config/prdash/config.toml
 ```
 
 The config lives in `$XDG_CONFIG_HOME/prdash/config.toml`. A missing or
@@ -48,14 +48,14 @@ override and, with `clone_base = "/"`, forces the root. The default
 
 ```toml
 [forge.gitlab]
-host = "gitlab.miempresa.com"
-# Instancia en subcarpeta: https://gitlab.miempresa.com/git/grupo/proyecto
-api_base = "/git/api/v4/"   # deriva clone_base = "git"
+host = "gitlab.mycompany.com"
+# Instance in a subfolder: https://gitlab.mycompany.com/git/group/project
+api_base = "/git/api/v4/"   # derives clone_base = "git"
 # clone_base = "git"        # or explicit (wins over api_base)
 
 [forge.github]
 host = "github.com"
-# GitHub Enterprise en subcarpeta:
+# GitHub Enterprise in a subfolder:
 # clone_base = "ent"
 ```
 
@@ -312,7 +312,7 @@ confirmation.
 │from main  ·  5 branches                                      │
 │▸ main                                               · current│
 │  develop                                                     │
-│  feat/una-rama-deliberadamente-larguisima-que-no-cabe        │
+│  feat/a-branch-deliberately-too-long-to-fit                 │
 │  fix/hunk-pane-argv                                          │
 │  release/2.0                                                 │
 │                                                              │
@@ -593,7 +593,7 @@ there are no link handlers; for the second one, jump to the prdash pane and pres
 `make check` is the local equivalent of the CI gate (Build/Lint/Test jobs):
 
 ```sh
-make check   # build + lint + test (nunca instala)
+make check   # build + lint + test (never installs)
 make test    # go build ./... && go vet ./... && gofmt check && go test -race -count=1 ./...
 make lint    # go vet + gofmt + golangci-lint v2.13.2 (pinned, via go run)
 make fmt     # formats the code

@@ -13,10 +13,12 @@ import (
 	"time"
 )
 
-const DefaultTimeout = 30 * time.Second
+// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const DefaultTimeout = time.Duration(30e9)
 
 // Same reason and same fix as in gitcmd and herdr: a child that inherited the pipe keeps it open.
-const pipeCloseGrace = 250 * time.Millisecond
+// 250ms as a literal, same coverage argument as DefaultTimeout above.
+const pipeCloseGrace = time.Duration(250e6)
 
 type Runner struct {
 	Bin     string
@@ -199,24 +201,28 @@ func isRateLimitText(lower string) bool {
 }
 
 func kindForHTTP(code int) string {
-	switch {
-	case code == 401:
+	if code == 401 {
 		return "auth"
-	case code == 403:
-		return "permission"
-	case code == 404:
-		return "notfound"
-	case code == 409:
-		return "conflict"
-	case code == 422:
-		return "validation"
-	case code == 429:
-		return "ratelimit"
-	case code >= 500:
-		return "network"
-	default:
-		return ""
 	}
+	if code == 403 {
+		return "permission"
+	}
+	if code == 404 {
+		return "notfound"
+	}
+	if code == 409 {
+		return "conflict"
+	}
+	if code == 422 {
+		return "validation"
+	}
+	if code == 429 {
+		return "ratelimit"
+	}
+	if code >= 500 {
+		return "network"
+	}
+	return ""
 }
 
 // The forge CLIs do not pass the API's reason on stderr: there is one line with the whole argv.

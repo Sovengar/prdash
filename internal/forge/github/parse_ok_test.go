@@ -12,7 +12,7 @@ import (
 func TestAResponseThatParsesGivesTheItemAndNotAWarning(t *testing.T) {
 	dir := t.TempDir()
 
-	withPR := `{"data":{"search":{"issueCount":1,"nodes":[{"__typename":"PullRequest","number":7,"title":"uno","state":"OPEN","updatedAt":"2026-03-17T10:00:00Z","url":"https://github.com/acme/widget/pull/7","author":{"login":"alice"},"headRefName":"feat/x","baseRefName":"main","mergeable":"MERGEABLE"}]}}}`
+	withPR := `{"data":{"search":{"issueCount":1,"nodes":[{"__typename":"PullRequest","number":7,"title":"one","state":"OPEN","updatedAt":"2026-03-17T10:00:00Z","url":"https://github.com/acme/widget/pull/7","author":{"login":"alice"},"headRefName":"feat/x","baseRefName":"main","mergeable":"MERGEABLE"}]}}}`
 	script := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+withPR+"'\n")
 	a := New("github.com", script)
 
@@ -28,8 +28,8 @@ func TestAResponseThatParsesGivesTheItemAndNotAWarning(t *testing.T) {
 	if it.Number != 7 {
 		t.Errorf("the item came out with number %d, want 7: the response carries PR 7", it.Number)
 	}
-	if it.Title != "uno" {
-		t.Errorf("the item came out with title %q, want %q", it.Title, "uno")
+	if it.Title != "one" {
+		t.Errorf("the item came out with title %q, want %q", it.Title, "one")
 	}
 
 	// The other half: a response that does NOT parse MUST give a warning. Without it the assertion above

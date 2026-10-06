@@ -132,7 +132,7 @@ func TestUnnamedEnvironmentVariableDoesNotEnterThePaneCommand(t *testing.T) {
 
 	for _, bad := range [][]string{
 		{"SIN_IGUAL"},
-		{"=sin-nombre"},
+		{"=without-name"},
 		{"BUENA=1", "SIN_IGUAL", "=tampoco", "OTRA=2"},
 	} {
 		p := good

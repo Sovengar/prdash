@@ -52,7 +52,7 @@ func TestRemovingTheBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 		t.Errorf("the second time gave %v, want nil", err)
 	}
 
-	other := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/otro", Owner: "o", Name: "otro"}
+	other := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/other", Owner: "o", Name: "other"}
 	if err := os.MkdirAll(r.barePath(other), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -68,10 +68,10 @@ func TestRemovingTheBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 func TestTheIndexPrunesHiddenDirsAndDoesNotIndexNonRepos(t *testing.T) {
 	base := t.TempDir()
 
-	repo := filepath.Join(base, "proyecto")
+	repo := filepath.Join(base, "project")
 	testutil.InitRepo(t, repo)
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
-	testutil.SetRemote(t, repo, "origin", "https://github.com/acme/proyecto.git")
+	testutil.SetRemote(t, repo, "origin", "https://github.com/acme/project.git")
 
 	hidden := filepath.Join(base, ".cache")
 	if err := os.MkdirAll(hidden, 0o755); err != nil {
@@ -80,22 +80,22 @@ func TestTheIndexPrunesHiddenDirsAndDoesNotIndexNonRepos(t *testing.T) {
 	inside := filepath.Join(hidden, "dentro")
 	testutil.InitRepo(t, inside)
 	testutil.CommitFile(t, inside, "x.txt", "x", "x")
-	testutil.SetRemote(t, inside, "origin", "https://github.com/otro/oculto.git")
+	testutil.SetRemote(t, inside, "origin", "https://github.com/other/hidden.git")
 
 	if err := os.MkdirAll(filepath.Join(base, "normal"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	noRemote := filepath.Join(base, "sin-remoto")
+	noRemote := filepath.Join(base, "without-remote")
 	testutil.InitRepo(t, noRemote)
 	testutil.CommitFile(t, noRemote, "y.txt", "y", "y")
 
 	r := resolverWithHosts(t, base)
 	idx := r.buildIndex()
 
-	goodKey := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto",
-		Owner: "acme", Name: "proyecto"})
-	hiddenKey := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "otro/oculto",
-		Owner: "otro", Name: "oculto"})
+	goodKey := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/project",
+		Owner: "acme", Name: "project"})
+	hiddenKey := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "other/hidden",
+		Owner: "other", Name: "hidden"})
 
 	if _, ok := idx[goodKey]; !ok {
 		t.Errorf("the normal repo was not indexed: %v", idx)
@@ -112,7 +112,7 @@ func TestTheIndexPrunesHiddenDirsAndDoesNotIndexNonRepos(t *testing.T) {
 		}
 		// The key is the canonical one, not the raw URL: that is what lets ResolveLocal and the index
 		// agree.
-		if !strings.Contains(k, "acme/proyecto") {
+		if !strings.Contains(k, "acme/project") {
 			t.Errorf("an index key does not look canonical: %q", k)
 		}
 	}
@@ -124,13 +124,13 @@ func TestTheIndexPrunesHiddenDirsAndDoesNotIndexNonRepos(t *testing.T) {
 // Not general robustness: a configured root that does not exist is normal (an unmounted volume).
 func TestAMissingRootDoesNotTakeDownTheGoodOne(t *testing.T) {
 	base := t.TempDir()
-	repo := filepath.Join(base, "proyecto")
+	repo := filepath.Join(base, "project")
 	testutil.InitRepo(t, repo)
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
-	testutil.SetRemote(t, repo, "origin", "https://github.com/acme/proyecto.git")
+	testutil.SetRemote(t, repo, "origin", "https://github.com/acme/project.git")
 
-	good := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto",
-		Owner: "acme", Name: "proyecto"})
+	good := repoKey(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/project",
+		Owner: "acme", Name: "project"})
 	missing := filepath.Join(base, "no-existe")
 	withBad := resolverWithHosts(t, missing, base).buildIndex()
 	goodOnly := resolverWithHosts(t, base).buildIndex()
@@ -142,7 +142,7 @@ func TestAMissingRootDoesNotTakeDownTheGoodOne(t *testing.T) {
 		t.Errorf("a nonexistent root changed the index: %d entries with the bad one, %d without it",
 			len(withBad), len(goodOnly))
 	}
-	file := filepath.Join(base, "un-fichero")
+	file := filepath.Join(base, "a-file")
 	if err := os.WriteFile(file, []byte("I am not a directory"), 0o644); err != nil {
 		t.Fatal(err)
 	}

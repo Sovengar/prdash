@@ -6,11 +6,11 @@ import (
 )
 
 func TestBranchCacheFreshAtTheExactTTLStillServes(t *testing.T) {
-	ahora := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 
 	for _, c := range []struct {
 		name         string
-		edad         time.Duration
+		age          time.Duration
 		wantsCurrent bool
 	}{
 		{"freshly made", 0, true},
@@ -23,10 +23,10 @@ func TestBranchCacheFreshAtTheExactTTLStillServes(t *testing.T) {
 		{"much older", time.Hour, false},
 		{"in the future", -time.Hour, true},
 	} {
-		fetched := ahora.Add(-c.edad)
-		if got := branchCacheFresh(fetched, ahora); got != c.wantsCurrent {
+		fetched := now.Add(-c.age)
+		if got := branchCacheFresh(fetched, now); got != c.wantsCurrent {
 			t.Errorf("%s: a listing from %v ago gave fresh=%v, want %v",
-				c.name, c.edad, got, c.wantsCurrent)
+				c.name, c.age, got, c.wantsCurrent)
 		}
 	}
 }
@@ -41,7 +41,7 @@ func TestRetargetWindowForFollowsTheCursor(t *testing.T) {
 				got := retargetWindowFor(win, cursor, rows, total)
 
 				if got < 0 {
-					t.Fatalf("total=%d win=%d cursor=%d dio window %d: negativa", total, win, cursor, got)
+					t.Fatalf("total=%d win=%d cursor=%d gave window %d: negative", total, win, cursor, got)
 				}
 				if maxWin := max(0, total-rows); got > maxWin {
 					t.Fatalf("total=%d win=%d cursor=%d gave window %d, more than the last possible %d",
@@ -50,7 +50,7 @@ func TestRetargetWindowForFollowsTheCursor(t *testing.T) {
 
 				if total <= rows {
 					if got != 0 {
-						t.Fatalf("total=%d win=%d cursor=%d dio window %d, want 0: "+
+						t.Fatalf("total=%d win=%d cursor=%d gave window %d, want 0: "+
 							"the list fits whole, there is nothing to scroll", total, win, cursor, got)
 					}
 					continue
@@ -81,6 +81,12 @@ func TestRetargetWindowForFollowsTheCursor(t *testing.T) {
 	// Two rows out and the window drops two, not all the way to the cursor.
 	if got := retargetWindowFor(4, 11, rows, 20); got != 7 {
 		t.Errorf("with the cursor two rows outside it gave window %d, want 7", got)
+	}
+	// Zero rows is degenerate but defined, and it is what tells the `cursor <= win` boundary
+	// mutant from the real condition: at cursor == win the true condition falls through to the
+	// second branch and lands one row lower.
+	if got := retargetWindowFor(4, 4, 0, 20); got != 5 {
+		t.Errorf("with zero rows and cursor on win it gave window %d, want 5", got)
 	}
 	if got := retargetWindowFor(0, 19, rows, 20); got != 15 {
 		t.Errorf("with the cursor on the last branch it gave window %d, want 15", got)

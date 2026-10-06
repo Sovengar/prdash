@@ -136,8 +136,8 @@ func TestTheSameForAMissingMemo(t *testing.T) {
 	if m.Routes == nil || m.Reviews == nil {
 		t.Errorf("LoadMemo returned nil maps with no file: %+v", m)
 	}
-	m.Routes["github/h/proy"] = "/tmp/clones/proy"
-	m.Reviews["github/h/proy#1"] = ReviewRecord{Repo: "proy", Worktree: "/tmp/wt", Branch: "b"}
+	m.Routes["github/h/proj"] = "/tmp/clones/proj"
+	m.Reviews["github/h/proj#1"] = ReviewRecord{Repo: "proj", Worktree: "/tmp/wt", Branch: "b"}
 }
 
 // LoadMemo's ok says nothing about the CONTENT: a {"version":1} is a valid empty memo.
@@ -192,21 +192,21 @@ func TestSaveMemoFailsWhenTheParentIsAFile(t *testing.T) {
 
 func TestStoreWithoutAPathWritesNothingAndDoesNotCrash(t *testing.T) {
 	s := OpenStore("")
-	s.SetRoute("github/h/proy", "/tmp/clones/proy")
-	s.SetReview("github/h/proy#1", ReviewRecord{Repo: "proy", Worktree: "/tmp/wt", Branch: "b"})
-	s.DeleteReview("github/h/proy#1")
+	s.SetRoute("github/h/proj", "/tmp/clones/proj")
+	s.SetReview("github/h/proj#1", ReviewRecord{Repo: "proj", Worktree: "/tmp/wt", Branch: "b"})
+	s.DeleteReview("github/h/proj#1")
 
-	if _, ok := s.Review("github/h/proy#1"); ok {
+	if _, ok := s.Review("github/h/proj#1"); ok {
 		t.Error("Review returned a record that was deleted")
 	}
-	if got, ok := s.Route("github/h/proy"); !ok || got != "/tmp/clones/proy" {
+	if got, ok := s.Route("github/h/proj"); !ok || got != "/tmp/clones/proj" {
 		t.Errorf("Route returned (%q, %v) after saving it", got, ok)
 	}
 }
 
 func TestDeletingAReviewThatIsNotThereDoesNotBreak(t *testing.T) {
 	s := OpenStore(filepath.Join(t.TempDir(), "memo.json"))
-	s.SetReview("a#1", ReviewRecord{Repo: "proy"})
+	s.SetReview("a#1", ReviewRecord{Repo: "proj"})
 	s.DeleteReview("a#2") // never existed
 	s.DeleteReview("a#2") // nor the second time
 	if _, ok := s.Review("a#1"); !ok {

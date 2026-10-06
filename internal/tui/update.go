@@ -221,21 +221,21 @@ func (m *Model) applyReviewCleanup(msg reviewCleanupMsg) {
 
 // Never suppresses the merge's facts; it prefixes them with the worktree's outcome.
 func reviewCleanupNotice(base string, baseLevel noticeLevel, removed bool, reason string, err error) (string, noticeLevel) {
-	switch {
-	case err != nil:
+	if err != nil {
 		// The merge did go: a failure to delete the worktree is a warning, not a failed action.
 		return base + " · could not remove the worktree: " + err.Error(), levelWarn
-	case removed:
+	}
+	if removed {
 		level := levelOK
 		if baseLevel == levelWarn {
 			level = levelWarn
 		}
 		return base + " · worktree removed", level
-	case reason != "":
-		return base + " · " + keptReviewNotice(reason), levelWarn
-	default:
-		return base, baseLevel
 	}
+	if reason != "" {
+		return base + " · " + keptReviewNotice(reason), levelWarn
+	}
+	return base, baseLevel
 }
 
 func keptReviewNotice(reason string) string {

@@ -100,20 +100,22 @@ func (m *Model) commentLines(it model.Item, avail, inner int) []string {
 		return nil
 	}
 	st := m.comments[it.ID()]
-	switch {
-	case st == nil:
+	if st == nil {
 		// Not asked and nothing in flight. The next tick might not even ask: without a session it does
 		// not, and the header already says so. "Loading…" here would announce a query that does not exist.
 		return nil
-	case !st.ready:
+	}
+	if !st.ready {
 		// In flight: said rather than left blank, because a blank is indistinguishable from "this PR has
 		// no comments" and we do not know that yet.
 		return []string{label("Comments", styleDim.Render("loading…"))}
-	case st.err != "":
+	}
+	if st.err != "" {
 		// No floor on the width: `inner` is never below 38 and labelWidth is 14, so the difference is
 		// never negative. A floor would guard an impossible negative width.
 		return []string{label("Comments", styleWarn.Render(truncate("not read: "+st.err, inner-labelWidth)))}
-	case len(st.list) == 0:
+	}
+	if len(st.list) == 0 {
 		// No comments, no box: the box exists to separate the conversation from the fields, and a box
 		// around the word "none" separates nothing.
 		return []string{label("Comments", styleDim.Render("none"))}
@@ -307,32 +309,32 @@ func commentRow(idx int, author, sep, piece string, w int, cut bool) string {
 		indent, prefix = commentIndent, styleDetailKey.Render(author+sep)
 	}
 	runes := []rune(piece)
-	switch n := utf8.RuneCountInString(piece); {
-	case cut:
+	n := utf8.RuneCountInString(piece)
+	if cut {
 		room := max(1, w-1)
 		if n <= room {
 			return indent + prefix + piece + "…"
 		}
 		return indent + prefix + clipRunes(runes, room)
-	case n > w:
+	}
+	if n > w {
 		// A single word wider than the box: there is nowhere to break it, so it is clipped.
 		return indent + prefix + clipRunes(runes, w)
-	default:
-		return indent + prefix + piece
 	}
+	return indent + prefix + piece
 }
 
 func clipRunes(runes []rune, n int) string {
-	switch {
-	case n >= len(runes):
+	if n >= len(runes) {
 		return string(runes)
-	case n <= 0:
-		return ""
-	case n == 1:
-		return "…"
-	default:
-		return string(runes[:n-1]) + "…"
 	}
+	if n <= 0 {
+		return ""
+	}
+	if n == 1 {
+		return "…"
+	}
+	return string(runes[:n-1]) + "…"
 }
 
 const maxCommentAuthor = 24

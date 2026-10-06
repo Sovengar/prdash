@@ -69,13 +69,13 @@ func TestWrapTextSplitsByWordsAndRespectsTheWidth(t *testing.T) {
 	})
 
 	t.Run("a word longer than the width", func(t *testing.T) {
-		got := wrapText("supercalifragilistico", 5)
-		if len(got) != 1 || got[0] != "supercalifragilistico" {
+		got := wrapText("supercalifragilistic", 5)
+		if len(got) != 1 || got[0] != "supercalifragilistic" {
 			t.Errorf("long word gave %q, want one line with the whole word", got)
 		}
-		got = wrapText("ab supercalifragilistico", 5)
-		if len(got) != 2 || got[0] != "ab" || got[1] != "supercalifragilistico" {
-			t.Errorf("dio %q, want [ab supercalifragilistico]", got)
+		got = wrapText("ab supercalifragilistic", 5)
+		if len(got) != 2 || got[0] != "ab" || got[1] != "supercalifragilistic" {
+			t.Errorf("gave %q, want [ab supercalifragilistic]", got)
 		}
 	})
 }

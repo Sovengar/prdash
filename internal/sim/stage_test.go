@@ -95,7 +95,7 @@ func TestMaterializeUsesTheLocalBranchIfItAlreadyExists(t *testing.T) {
 	path := filepath.Join(tmp, "clone")
 	git(t, tmp, "clone", "--quiet", "--shared", repo, path)
 
-	testutil.CommitFile(t, path, "local.txt", "local", "solo local")
+	testutil.CommitFile(t, path, "local.txt", "local", "local only")
 	before := git(t, path, "rev-parse", "main")
 
 	if err := s.materialize(context.Background(), path, "main"); err != nil {

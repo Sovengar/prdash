@@ -117,7 +117,7 @@ func TestTheLoginIsExtractedFromGlabsFormat(t *testing.T) {
 	}{
 		{"full format", "Logged in to git.umane.example as glab (GLAB_TOKEN)", "glab"},
 		{"dots in the login", "as j.perez (GLAB_TOKEN)", "j.perez"},
-		{"hyphen in the login", "as mi-user (GLAB_TOKEN)", "mi-user"},
+		{"hyphen in the login", "as my-user (GLAB_TOKEN)", "my-user"},
 		{"without the token path", "Logged in to git.umane.example as glab", "glab"},
 		{"active account", "  Active account: true\n  Logged in to x as glab (Y)", "glab"},
 		{"without the word as", "something else", ""},

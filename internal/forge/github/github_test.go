@@ -259,3 +259,11 @@ func TestCommentsFailureIsWarning(t *testing.T) {
 		t.Fatal("a failure should warn")
 	}
 }
+
+// commentFetch is precomputed (a const decl carries no coverage, ADR 0011): this pins the
+// formula so a change of forge.CommentLimit cannot leave the margin silently behind.
+func TestCommentFetchKeepsTheMargin(t *testing.T) {
+	if commentFetch != 3*forge.CommentLimit {
+		t.Errorf("commentFetch = %d, want 3 * forge.CommentLimit = %d", commentFetch, 3*forge.CommentLimit)
+	}
+}

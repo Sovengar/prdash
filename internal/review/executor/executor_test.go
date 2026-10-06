@@ -238,7 +238,7 @@ func TestMountCloneFailureLeavesNoGarbage(t *testing.T) {
 	h := newHarness(t, harnessOpts{
 		origin: filepath.Join(t.TempDir(), "privado.git"), // does not exist / no access
 		cloneURL: func(model.RepoRef) string {
-			return filepath.Join(t.TempDir(), "sin-permiso.git")
+			return filepath.Join(t.TempDir(), "without-permission.git")
 		},
 	})
 	it := item(h.ref, 5)

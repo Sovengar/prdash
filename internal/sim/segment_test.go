@@ -136,8 +136,8 @@ func TestReviewBranchIsActivatedForRebaseAndBaseForMerge(t *testing.T) {
 		base       string
 		itemBranch string
 	}{
-		{"merge with a missing base", KindMerge, "base/que-no-existe", "feat/x"},
-		{"rebase with a missing base", KindRebase, "base/que-no-existe", "feat/x"},
+		{"merge with a missing base", KindMerge, "base/that-does-not-exist", "feat/x"},
+		{"rebase with a missing base", KindRebase, "base/that-does-not-exist", "feat/x"},
 	} {
 		_, _, err := New(locatorForStage()).stage(context.Background(),
 			Place{Repo: source, Branch: c.itemBranch}, c.kind, c.base, t.TempDir())
@@ -178,7 +178,7 @@ func TestCopyFileLeavesNoTempIfTheDestinationIsAnExistingDirectory(t *testing.T)
 	}
 	// The real prune does not touch the `.part` even if one were left, which is what makes a
 	// leftover harmless.
-	leftovers := filepath.Join(dir, "otro.part")
+	leftovers := filepath.Join(dir, "other.part")
 	if err := os.WriteFile(leftovers, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

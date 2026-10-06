@@ -198,7 +198,7 @@ func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 // --porcelain` does not.
 func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
-	if err := os.WriteFile(filepath.Join(dest, "nuevo.txt"), []byte("untracked"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dest, "new.txt"), []byte("untracked"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,7 +247,7 @@ func TestRemoveIfCleanRefusesForeign(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
 	base := t.TempDir()
-	foreign := filepath.Join(base, "otra-herramienta")
+	foreign := filepath.Join(base, "other-tool")
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "feature")
 
 	removed, _, err := NewGitDirect(base).RemoveIfClean(context.Background(), foreign)

@@ -34,11 +34,13 @@ type Spec struct {
 const (
 	DefaultBin = "git-sim"
 	// A healthy render takes a couple of seconds; the limit exists for the failure mode where git-sim hangs
-	// handing the image to the desktop viewer, which never returns without a display.
-	DefaultTimeout = 60 * time.Second
+	// handing the image to the desktop viewer, which never returns without a display. 60s as a literal
+	// because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+	DefaultTimeout = time.Duration(60e9)
 
 	// Same reason and same fix as in herdr: a child holding our pipes keeps `cmd.Run` from returning.
-	pipeCloseGrace = 250 * time.Millisecond
+	// 250ms as a literal, same coverage argument as DefaultTimeout above.
+	pipeCloseGrace = time.Duration(250e6)
 )
 
 type Runner struct {

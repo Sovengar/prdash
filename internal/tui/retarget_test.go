@@ -276,7 +276,7 @@ func TestALateListingIsNotPainted(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "release/2.0")
 	m = press(t, m, "esc") // closed: the in-flight request goes stale
 
-	m = send(t, m, branchesMsg{seq: m.branchSeq, names: []string{"otra/cosa"}})
+	m = send(t, m, branchesMsg{seq: m.branchSeq, names: []string{"other/cosa"}})
 
 	if m.retarget.state != retargetClosed {
 		t.Errorf("a late listing reopened the popup: state = %v", m.retarget.state)

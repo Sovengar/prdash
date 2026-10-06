@@ -14,8 +14,8 @@ func TestAConfigPathIsExpandedAndTheOnesNotStartingWithTildeAreNot(t *testing.T)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "c.toml")
 	writeConfig(t, path, `
-data_dir = "~/datos-de-prdash"
-clone_dir = "~otro/cosas"
+data_dir = "~/data-of-prdash"
+clone_dir = "~other-stuff"
 worktree_dir = "~"
 `)
 
@@ -23,10 +23,10 @@ worktree_dir = "~"
 	if warn != "" {
 		t.Fatalf("warn %q", warn)
 	}
-	if want := filepath.Join(home, "datos-de-prdash"); cfg.DataDir != want {
+	if want := filepath.Join(home, "data-of-prdash"); cfg.DataDir != want {
 		t.Errorf("DataDir = %q, want %q (a ~ with a separator does expand)", cfg.DataDir, want)
 	}
-	if cfg.CloneDir != "~otro/cosas" {
+	if cfg.CloneDir != "~other-stuff" {
 		t.Errorf("CloneDir = %q: a ~ without a separator is a file name and is left alone",
 			cfg.CloneDir)
 	}
@@ -57,7 +57,7 @@ func TestTheConfigPathsAreAppliedAndTheMissingOnesAreNotTouched(t *testing.T) {
 
 	allThree := filepath.Join(dir, "three.toml")
 	writeConfig(t, allThree, `
-data_dir = "/tmp/datos"
+data_dir = "/tmp/data"
 clone_dir = "/tmp/clones"
 worktree_dir = "/tmp/worktrees"
 `)
@@ -65,7 +65,7 @@ worktree_dir = "/tmp/worktrees"
 	if warn != "" {
 		t.Fatalf("warn %q", warn)
 	}
-	if cfg.DataDir != "/tmp/datos" || cfg.CloneDir != "/tmp/clones" ||
+	if cfg.DataDir != "/tmp/data" || cfg.CloneDir != "/tmp/clones" ||
 		cfg.WorktreeDir != "/tmp/worktrees" {
 		t.Errorf("the three paths were not applied: %q %q %q",
 			cfg.DataDir, cfg.CloneDir, cfg.WorktreeDir)
@@ -95,7 +95,7 @@ func TestAutoReviewParsesAndItsAbsenceLeavesThingsAsTheyWere(t *testing.T) {
 	writeConfig(t, path, `
 [autoreview]
 enabled = true
-allowlist = ["acme/seguro", "otro/repo"]
+allowlist = ["acme/seguro", "other/repo"]
 `)
 	cfg, warn = LoadFrom(path)
 	if warn != "" {
@@ -209,7 +209,7 @@ func TestAMissingForgeInConfigTouchesNothing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "one.toml")
 
-	writeConfig(t, path, "[forge.github]\nhost = \"otro.example.com\"\n")
+	writeConfig(t, path, "[forge.github]\nhost = \"other.example.com\"\n")
 	cfg, warn := LoadFrom(path)
 	if warn != "" {
 		t.Fatalf("warn %q", warn)

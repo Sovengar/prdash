@@ -65,6 +65,9 @@ check: build lint test
 tidy: ## Syncs go.mod/go.sum
 	go mod tidy
 
+audit-lang: ## Advisory: flags Spanish content in tracked files (ADR 0010)
+	@bash scripts/audit-lang.sh
+
 mutate: ## Mutation testing (gremlins) on the whole module — advisory, never blocks CI
 	go tool gremlins unleash --workers 4 --timeout-coefficient 3 --output report.json
 
