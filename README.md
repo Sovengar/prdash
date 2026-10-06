@@ -61,6 +61,8 @@ host = "github.com"
 
 ## Usage
 
+PR de prueba 7/10: nota de humo para practicar el ciclo de resolucion de PRs.
+
 ```sh
 prdash            # the inbox TUI
 prdash --print    # the inbox as plain text (includes the worktree path of the
