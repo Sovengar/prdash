@@ -7,16 +7,6 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- **`make audit-lang` — the English audit ADR 0010 promised.**
-  `scripts/audit-lang.sh` flags Spanish-only tokens and accented characters in
-  every tracked file, with a content whitelist for the unicode-width fixtures
-  that need real accented strings. Advisory, like `make mutate-diff`: it
-  reports and exits non-zero, and CI does not run it yet. The archive
-  (`docs/planning/archive/`) is out of scope under its own AGENTS.md, and
-  inline code spans and fenced blocks in Markdown are treated as quotations.
-
 ### Changed
 
 - **Mutation: the code is shaped so tests can measure it (ADR 0011).** Every
@@ -31,10 +21,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   the 41 `cmd/prdash` positions attributed to gremlins v0.6.0
   (go-gremlins/gremlins#319), not to the suite.
 
-- **The English migration is complete and now enforced.** 22 Spanish-named test
-  files renamed, Spanish fixture values and test identifiers translated, the
-  README config block and the AGENTS.md commit examples in English, and the
-  language audit green over every tracked file.
+- **The English migration is complete.** 22 Spanish-named test files renamed,
+  Spanish fixture values and test identifiers translated, and the README config
+  block and the AGENTS.md commit examples in English.
 
 ### Fixed
 

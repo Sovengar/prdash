@@ -73,8 +73,8 @@ sibling project uses.
   matters is read after an idle run.
 - The `+` chains of `ghPRFields` and `mrFields` became single literal lines:
   same queries, no reachable-by-nothing operators.
-- The audit promised by ADR 0010 exists as `scripts/audit-lang.sh`
-  (`make audit-lang`), advisory like `make mutate-diff`.
+- The language audit ADR 0010 called the enforcement mechanism was committed,
+  measured and removed: a token list cannot decide language (ADR 0012).
 
 ## Rejected alternatives
 
