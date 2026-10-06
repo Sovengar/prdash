@@ -121,6 +121,11 @@ func TestVersionAtLeastComparesCascade(t *testing.T) {
 	if !(Version{99, 0, 0, ""}).AtLeast(min) {
 		t.Error("a very high major should meet any 0.x minimum")
 	}
+	// Only a minimum with a positive major reaches the major-below return: every 0.x minimum
+	// falls through to the minor comparison, which is why this case uses its own minimum.
+	if (Version{0, 9, 3, ""}).AtLeast(Version{1, 0, 0, ""}) {
+		t.Error("0.9.3 should not meet a 1.0.0 minimum")
+	}
 }
 
 // Herdr's message is what the TUI shows, and the three added parts are the code, the dir and the
