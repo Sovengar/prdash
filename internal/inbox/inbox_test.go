@@ -205,15 +205,17 @@ func TestSortItemsBreaksTiesInACascade(t *testing.T) {
 	}
 }
 
-func TestRankOrdersTheSections(t *testing.T) {
-	for i, kind := range sectionOrder {
-		if got := rank(kind); got != i {
-			t.Errorf("rank(%v) = %d, want %d (its position in sectionOrder)", kind, got, i)
-		}
+// The order of sectionOrder is load-bearing: assignAuthority keeps the FIRST section that
+// mentions an identity, so "first" must mean "most authoritative".
+func TestSectionOrderIsTheAuthorityOrder(t *testing.T) {
+	want := []model.Section{model.SectionAuthored, model.SectionReview, model.SectionMentions}
+	if len(sectionOrder) != len(want) {
+		t.Fatalf("sectionOrder = %v, want %v", sectionOrder, want)
 	}
-	// A section not in the list goes last, not to an arbitrary place.
-	if got := rank(model.Section("made-up")); got != len(sectionOrder) {
-		t.Errorf("rank(made-up) = %d, want %d (at the end)", got, len(sectionOrder))
+	for i, kind := range want {
+		if sectionOrder[i] != kind {
+			t.Errorf("sectionOrder[%d] = %v, want %v (best authority first)", i, sectionOrder[i], kind)
+		}
 	}
 }
 
