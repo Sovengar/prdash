@@ -317,11 +317,10 @@ func commentRow(idx int, author, sep, piece string, w int, cut bool) string {
 		}
 		return indent + prefix + clipRunes(runes, room)
 	}
-	if n > w {
-		// A single word wider than the box: there is nowhere to break it, so it is clipped.
-		return indent + prefix + clipRunes(runes, w)
-	}
-	return indent + prefix + piece
+	// One call replaces the old `n > w` guard: clipRunes returns the piece unchanged whenever
+	// it fits (w >= len), so the guard was a no-op whose equality case no test could tell apart
+	// from this line — a mutant of a comparison with no observable difference.
+	return indent + prefix + clipRunes(runes, w)
 }
 
 func clipRunes(runes []rune, n int) string {
