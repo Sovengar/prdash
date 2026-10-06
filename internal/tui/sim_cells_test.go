@@ -871,7 +871,7 @@ func TestPadRightPadItOrLeaveIt(t *testing.T) {
 		{"very long", "many letters", 3, 13},  // it does not touch it either
 		{"empty", "", 5, 5},
 		{"a zero", "abc", 0, 3},
-		{"n negativa", "abc", -4, 3},
+		{"negative n", "abc", -4, 3},
 		{"with accents", "áéí", 6, 3}, // 3 columns, 6 bytes
 		{"with emoji", "🙂", 4, 2},     // 2 columns, 4 bytes
 		{"emoji y text", "a🙂b", 6, 4},

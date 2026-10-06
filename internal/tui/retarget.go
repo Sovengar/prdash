@@ -37,11 +37,13 @@ const (
 
 // One or more pages of a repository: past this the problem is the forge, the popup says so, the item
 // stays as it was and nothing was touched.
-const retargetTimeout = 30 * time.Second
+// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const retargetTimeout = time.Duration(30e9)
 
 // Paging a 200-branch repository on every open is the kind of cost that makes an action end up
 // unused. Five minutes: short enough for a fresh branch, long enough to be free to return.
-const branchCacheTTL = 5 * time.Minute
+// As a literal, same coverage argument as retargetTimeout above.
+const branchCacheTTL = time.Duration(300e9)
 
 type retargetState int
 
@@ -388,10 +390,9 @@ func (m *Model) retargetWindow() int {
 // It has THREE consumers and the last one used to clip it, so the allowlist called the formula
 // unkillable. What is observable is the position, not the formula.
 func retargetWindowFor(win, cursor, rows, total int) int {
-	switch {
-	case cursor < win:
+	if cursor < win {
 		win = cursor
-	case cursor >= win+rows:
+	} else if cursor >= win+rows {
 		win = cursor - rows + 1
 	}
 	return max(0, min(win, max(0, total-rows)))
@@ -460,12 +461,11 @@ func (m Model) retargetSearchBox() string {
 		styleDim.Render(branchCountLabel(m))
 
 	var body []string
-	switch {
-	case m.retarget.errMsg != "":
+	if m.retarget.errMsg != "" {
 		body = append(body, styleError.Render(m.retarget.errMsg))
-	case len(m.retarget.view) == 0:
+	} else if len(m.retarget.view) == 0 {
 		body = append(body, styleEmpty.Render("no branch matches the filter"))
-	default:
+	} else {
 		names, start := m.retargetVisible()
 		for i, name := range names {
 			marker := "  "

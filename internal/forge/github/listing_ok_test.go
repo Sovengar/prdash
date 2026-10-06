@@ -10,7 +10,7 @@ import (
 
 const searchWithPRs = `{"data":{"search":{"issueCount":2,"pageInfo":` +
 	`{"hasNextPage":true,"endCursor":"CUR2"},"nodes":[` +
-	`{"__typename":"PullRequest","number":7,"title":"uno","state":"OPEN",` +
+	`{"__typename":"PullRequest","number":7,"title":"one","state":"OPEN",` +
 	`"updatedAt":"2026-03-17T10:00:00Z","url":"https://github.com/acme/widget/pull/7",` +
 	`"author":{"login":"alice"},"headRefName":"feat/x","baseRefName":"main",` +
 	`"mergeable":"MERGEABLE","isDraft":false,` +
@@ -43,7 +43,7 @@ func TestListWithAValidResponseReturnsTheItemsAndPagination(t *testing.T) {
 	}
 
 	first := page.Items[0]
-	if first.Number != 7 || first.Title != "uno" {
+	if first.Number != 7 || first.Title != "one" {
 		t.Errorf("the first item is %+v", first)
 	}
 	if first.Forge != "github" || first.Host != "github.com" {

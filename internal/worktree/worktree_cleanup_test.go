@@ -17,7 +17,7 @@ func TestTheWorktreeLabelIsTheSpecs(t *testing.T) {
 
 	// Real branches: Create takes them from the repo, so an invented name fails before
 	// reaching the label and the test would prove nothing.
-	for _, b := range []string{"con-etiqueta", "sin-etiqueta", "etiqueta-igual-al-dir",
+	for _, b := range []string{"with-label", "without-label", "label-same-as-dir",
 		"directorio-anidado", "w-temp-8837"} {
 		testutil.RunGit(t, repo, "branch", b)
 	}
@@ -29,11 +29,11 @@ func TestTheWorktreeLabelIsTheSpecs(t *testing.T) {
 		wantLabel string
 		note      string
 	}{
-		{"con-etiqueta", "prdash-acme-12", "prdash/acme#12", "prdash/acme#12",
+		{"with-label", "prdash-acme-12", "prdash/acme#12", "prdash/acme#12",
 			"the spec's wins: it is the property with which prdash recognises the worktree"},
-		{"sin-etiqueta", "prdash-acme-12", "", "prdash-acme-12",
+		{"without-label", "prdash-acme-12", "", "prdash-acme-12",
 			"with no label the directory name is the last resort"},
-		{"etiqueta-igual-al-dir", "prdash-acme-12", "prdash-acme-12", "prdash-acme-12",
+		{"label-same-as-dir", "prdash-acme-12", "prdash-acme-12", "prdash-acme-12",
 			"they match, and it does not matter which of the two wins"},
 		{"directorio-anidado", "sub/dir/prdash-acme-12", "prdash/acme#12", "prdash/acme#12",
 			"the directory may be nested; the label is not deduced from it"},

@@ -18,9 +18,9 @@ func TestOwnedRecognizesOnlyThePrdashMark(t *testing.T) {
 	}{
 		{"prdash-pr-3", "/x/y/prdash-pr-3", true},
 		{"", "/x/y/prdash-pr-3", true},
-		{"prdash-pr-3", "/x/y/otra-cosa", true},
-		{"otra-herramienta", "/x/y/otra-herramienta", false},
-		{"", "/x/y/otra-herramienta", false},
+		{"prdash-pr-3", "/x/y/other-cosa", true},
+		{"other-tool", "/x/y/other-tool", false},
+		{"", "/x/y/other-tool", false},
 		{"repodash", "/x/y/repodash", false},
 	}
 	for _, c := range cases {
@@ -37,7 +37,7 @@ func TestAuditListsOnlyOwnedWorktrees(t *testing.T) {
 
 	base := t.TempDir()
 	owned := filepath.Join(base, "prdash-pr-1")
-	foreign := filepath.Join(base, "otra-herramienta")
+	foreign := filepath.Join(base, "other-tool")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "propia", Path: owned, Label: "prdash-pr-1"}); err != nil {
 		t.Fatalf("preparing our own worktree: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestListExcludesForeignWorktrees(t *testing.T) {
 
 	base := t.TempDir()
 	owned := filepath.Join(base, "prdash-pr-1")
-	foreign := filepath.Join(base, "otra-herramienta")
+	foreign := filepath.Join(base, "other-tool")
 	if _, err := NewGitDirect(base).Create(context.Background(), Spec{Repo: repo, Branch: "propia", Path: owned, Label: "prdash-pr-1"}); err != nil {
 		t.Fatalf("preparing our own worktree: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestRemoveRefusesForeignWorktree(t *testing.T) {
 	testutil.RunGit(t, repo, "branch", "feature")
 
 	base := t.TempDir()
-	foreign := filepath.Join(base, "otra-herramienta")
+	foreign := filepath.Join(base, "other-tool")
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", foreign, "feature")
 
 	g := NewGitDirect(base)

@@ -14,7 +14,8 @@ import (
 	"prdash/internal/worktree"
 )
 
-const worktreeTimeout = 30 * time.Second
+// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const worktreeTimeout = time.Duration(30e9)
 
 // Injected writers, not os.Stdout: this is the command that DELETES files, so its output is the
 // evidence that it deleted what it said and nothing else.
@@ -43,23 +44,23 @@ func runWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer, args []stri
 // never a real path. Rejecting it turns a typo like `--orphan` into an error instead of a path.
 func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err error) {
 	for _, arg := range args {
-		switch {
-		case arg == "--orphans":
+		if arg == "--orphans" {
 			orphans = true
-		case arg == "--dry-run":
+		} else if arg == "--dry-run" {
 			dryRun = true
-		case strings.HasPrefix(arg, "-"):
+		} else if strings.HasPrefix(arg, "-") {
 			return false, false, nil, fmt.Errorf("unknown flag %q", arg)
-		default:
+		} else {
 			paths = append(paths, arg)
 		}
 	}
-	switch {
-	case orphans && len(paths) > 0:
+	if orphans && len(paths) > 0 {
 		return false, false, nil, fmt.Errorf("the two modes cannot be mixed: pass paths or --orphans, not both")
-	case dryRun && !orphans:
+	}
+	if dryRun && !orphans {
 		return false, false, nil, fmt.Errorf("--dry-run requires --orphans")
-	case !orphans && len(paths) == 0:
+	}
+	if !orphans && len(paths) == 0 {
 		return false, false, nil, fmt.Errorf("missing at least one path to remove")
 	}
 	return orphans, dryRun, paths, nil

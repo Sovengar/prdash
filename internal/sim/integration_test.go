@@ -68,7 +68,7 @@ func TestKeptImageIsUsable(t *testing.T) {
 	cache := filepath.Join(dir, "cache")
 
 	svc := &Service{CacheDir: cache}
-	it := model.NewItem(model.RepoRef{Forge: "github", Project: "grupo/sub/proyecto"}, 12)
+	it := model.NewItem(model.RepoRef{Forge: "github", Project: "group/sub/project"}, 12)
 
 	got, err := svc.keep(path, it, KindMerge)
 	if err != nil {

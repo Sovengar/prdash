@@ -30,8 +30,8 @@ func TestRememberingAnEmptyPathDoesNotDirtyTheMemo(t *testing.T) {
 	}
 
 	other := model.RepoRef{Forge: "github", Host: "github.com",
-		Project: "grupo/sub/proy", Owner: "grupo", Name: "proy"}
-	r.Remember(other, "/clones/grupo/sub/proy")
+		Project: "group/sub/proj", Owner: "group", Name: "proj"}
+	r.Remember(other, "/clones/group/sub/proj")
 	if got, _ := r.store.Route(repoKey(ref)); got != route {
 		t.Errorf("saving one project overwrote the other: %q", got)
 	}

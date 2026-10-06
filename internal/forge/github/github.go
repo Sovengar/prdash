@@ -21,7 +21,9 @@ const pageSize = 50
 
 // More than the pane shows (forge.CommentLimit), so a PR full of bot boilerplate does not come up
 // short. The margin costs the user nothing because the reply is already filtered and trimmed.
-const commentFetch = 3 * forge.CommentLimit
+// 15 = 3 * forge.CommentLimit, written as a literal because a const decl carries no coverage
+// (ADR 0011); TestCommentFetchKeepsTheMargin pins the formula against a future change of the limit.
+const commentFetch = 15
 
 type Adapter struct {
 	host   string
@@ -294,11 +296,9 @@ func qualifierFor(q forge.Query) (string, bool) {
 
 // `headRefOid` and the three `merge*Allowed` ride in the same item query, so pinning and mode
 // filtering cost no extra call, and so does `mergeable` for the collision warning.
-const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName ` +
-	`headRefOid additions deletions changedFiles ` +
-	`author { login } repository { nameWithOwner name owner { login } ` +
-	`mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } ` +
-	`commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
+// One literal line, not a `+` chain: a package-level const decl carries no coverage (ADR 0011),
+// so every `+` here would be a mutation position no test can ever reach.
+const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName headRefOid additions deletions changedFiles author { login } repository { nameWithOwner name owner { login } mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
 
 func searchQuery(qualifier, cursor string) string {
 	after := ""

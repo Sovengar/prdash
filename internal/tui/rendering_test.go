@@ -167,6 +167,8 @@ func TestADiffstatThatIsNotTwoSignedDigitsIsNotPainted(t *testing.T) {
 		paints bool
 	}{
 		{"both with sign", "+12 -3", true},
+		{"zero counts", "+0 -0", true},
+		{"nines", "+9 -9", true},
 		// The queue goes AFTER the deleted count, which is why "+12 files -3" does not read as a net.
 		{"units at the end", "+12 -3 files", true},
 		{"units in the middle", "+12 files -3", false},
@@ -175,7 +177,7 @@ func TestADiffstatThatIsNotTwoSignedDigitsIsNotPainted(t *testing.T) {
 		{"empty", "", false},
 		{"text that is not a count", "no changes", false},
 		{"a single sign", "+12 -", false},
-		{"signo suelto", "- 3", false},
+		{"lone sign", "- 3", false},
 		{"empty tail", "+12 -3   ", true},
 	} {
 		spans := diffSpans(c.plain)

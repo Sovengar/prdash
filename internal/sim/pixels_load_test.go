@@ -41,7 +41,7 @@ func TestLoadOpensByContentNotByExtension(t *testing.T) {
 		}
 	}
 
-	pngPath := filepath.Join(dir, "otro.png")
+	pngPath := filepath.Join(dir, "other.png")
 	if err := os.WriteFile(pngPath, testPNG(t, 3, 3, color.RGBA{G: 9, A: 255}), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +143,15 @@ func TestSlugLeavesAFileNameNotAPath(t *testing.T) {
 
 	if got := slug("group/project"); got != "group-project" {
 		t.Errorf("a slash gave %q", got)
+	}
+	// The character-class boundaries as exact values: the property checks above cannot tell
+	// 'z' from '-', and a boundary mutant lives exactly there.
+	for in, want := range map[string]string{
+		"a": "a", "z": "z", "A": "A", "Z": "Z", "0": "0", "9": "9", "azAZ09": "azAZ09",
+	} {
+		if got := slug(in); got != want {
+			t.Errorf("slug(%q) = %q, want %q (class boundaries are values, not properties)", in, got, want)
+		}
 	}
 	if got := slug("///"); got != "" {
 		t.Errorf("only slashes gave %q, want empty: a name of dashes is not a name", got)

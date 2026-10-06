@@ -18,7 +18,8 @@ import (
 var ErrNoGraphics = errors.New("herdr: pane graphics unavailable")
 
 // Better to fall to half-blocks than to leave the popup half painted.
-const graphicsTimeout = 5 * time.Second
+// 5s as a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const graphicsTimeout = time.Duration(5e9)
 
 const (
 	defaultCellWidthPx  = 1

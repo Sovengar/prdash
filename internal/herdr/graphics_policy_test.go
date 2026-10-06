@@ -81,7 +81,7 @@ func TestGraphicsReadyDoesNotLookAtTheSocketWhenNotInside(t *testing.T) {
 	// There is no way to inject a socket that breaks, because the function takes strings. What is
 	//asserted is the consequence.
 	for _, herdrEnv := range []string{"", "0", "2", "true", "1x"} {
-		withoutSocket := graphicsReady(herdrEnv, "/no/existe/el/socket", "w1:p1")
+		withoutSocket := graphicsReady(herdrEnv, "/no/such/socket", "w1:p1")
 		withSocket := graphicsReady(herdrEnv, "/run/herdr.sock", "w1:p1")
 		if withoutSocket != withSocket {
 			t.Errorf("HERDR_ENV=%q: the result changed with the socket (%v vs %v): "+

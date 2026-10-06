@@ -2,10 +2,54 @@
 
 All notable changes to prdash are documented in this file.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) and
-versioning follows [Semantic Versioning](https://semver.org/lang/es/).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+### Added
+
+- **`make audit-lang` — the English audit ADR 0010 promised.**
+  `scripts/audit-lang.sh` flags Spanish-only tokens and accented characters in
+  every tracked file, with a content whitelist for the unicode-width fixtures
+  that need real accented strings. Advisory, like `make mutate-diff`: it
+  reports and exits non-zero, and CI does not run it yet. The archive
+  (`docs/planning/archive/`) is out of scope under its own AGENTS.md, and
+  inline code spans and fenced blocks in Markdown are treated as quotations.
+
+### Changed
+
+- **Mutation: the code is shaped so tests can measure it (ADR 0011).** Every
+  tagless `switch` became an `if/else` chain — go-cover never instruments
+  case-clause conditions, so boundary and negation mutants on them were
+  invisible; package-level const arithmetic became precomputed literals with
+  drift pins (`TestCommentFetchKeepsTheMargin`) for the derived ones; the
+  `n < 0` no-op guard in `compactCount` is gone; and boundaries that only an
+  injected value can hold still (`relativeSince`, zero-height scroll windows,
+  `<= 9999`) are now pinned by tests. Full-module gremlins after the campaign:
+  1719 killed, one proven equivalent boundary left in the comment wrapper, and
+  the 41 `cmd/prdash` positions attributed to gremlins v0.6.0
+  (go-gremlins/gremlins#319), not to the suite.
+
+- **The English migration is complete and now enforced.** 22 Spanish-named test
+  files renamed, Spanish fixture values and test identifiers translated, the
+  README config block and the AGENTS.md commit examples in English, and the
+  language audit green over every tracked file.
+
+### Fixed
+
+- **`Version.AtLeast` covered its major-below branch.** Every test compared
+  against a `0.x` minimum, whose `Major` is 0, so `v.Major < min.Major` never
+  executed. A `1.0.0` minimum case closes it: `internal/herdr` back to 100%.
+
+- **The authority comparison in the inbox could not be killed.**
+  `rank(kind) < rank(prev)` had an equality case no input reaches — distinct
+  sections have distinct ranks — so its boundary mutant survived every test.
+  `assignAuthority` now keeps the first section of `sectionOrder`, which is the
+  same authority order with no operator at all.
+
+
+## [0.2.0] - 2026-10-06
 
 ### Added
 

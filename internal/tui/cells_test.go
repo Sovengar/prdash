@@ -30,7 +30,7 @@ func TestTheProblemLabelTranslatesWhatIsKnownAndWhatIsNot(t *testing.T) {
 	for _, c := range cases {
 		got := problemLabel(c.kind)
 		if got != c.want {
-			t.Errorf("problemLabel(%q) dio %q, want %q", c.kind, got, c.want)
+			t.Errorf("problemLabel(%q) gave %q, want %q", c.kind, got, c.want)
 		}
 		if got != strings.TrimSpace(got) {
 			t.Errorf("problemLabel(%q) gave %q with edge spaces", c.kind, got)
@@ -45,7 +45,7 @@ func TestTheProblemLabelTranslatesWhatIsKnownAndWhatIsNot(t *testing.T) {
 
 // Down, not up: a label saying 59s when a minute has passed reads as fresh data when it is not.
 func TestTheAgeOfTheLastRefreshRoundsDown(t *testing.T) {
-	ahora := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC)
 
 	cases := []struct {
 		name string
@@ -53,20 +53,20 @@ func TestTheAgeOfTheLastRefreshRoundsDown(t *testing.T) {
 		want string
 	}{
 		{"right now", time.Millisecond, "now"},
-		{"59 segundos", 59 * time.Second, "59s ago"},
-		{"60 segundos", 60 * time.Second, "1m ago"},
-		{"90 segundos", 90 * time.Second, "1m ago"},
+		{"59 seconds", 59 * time.Second, "59s ago"},
+		{"60 seconds", 60 * time.Second, "1m ago"},
+		{"90 seconds", 90 * time.Second, "1m ago"},
 		{"59 minutos", 59 * time.Minute, "59m ago"},
 		{"60 minutos", 60 * time.Minute, "1h ago"},
 		{"25 horas", 25 * time.Hour, "25h ago"},
 	}
 	for _, c := range cases {
-		if got := lastRefreshLabel(ahora.Add(-c.ago), ahora); got != c.want {
+		if got := lastRefreshLabel(now.Add(-c.ago), now); got != c.want {
 			t.Errorf("%s (%s): gave %q, want %q", c.name, c.ago, got, c.want)
 		}
 	}
 
-	if got := lastRefreshLabel(time.Time{}, ahora); got != "no data" {
+	if got := lastRefreshLabel(time.Time{}, now); got != "no data" {
 		t.Errorf("a zero since gave %q, want \"no data\"", got)
 	}
 
@@ -78,28 +78,28 @@ func TestTheAgeOfTheLastRefreshRoundsDown(t *testing.T) {
 		30 * time.Minute, 59 * time.Minute, 60 * time.Minute, 90 * time.Minute,
 		3 * time.Hour, 50 * time.Hour,
 	} {
-		got := lastRefreshLabel(ahora.Add(-d), ahora)
-		representado, err := durationOf(got)
+		got := lastRefreshLabel(now.Add(-d), now)
+		parsed, err := durationOf(got)
 		if err != nil {
 			t.Errorf("the text %q could not be read back: %v", got, err)
 			continue
 		}
 		// The error fits ONE label unit, not a fixed minute: at 1h30m that rounds to "1h ago" with 30
 		// minutes of difference, which is rounding and not a failure.
-		_, unid := numberOf(got)
-		if diff := d - representado; diff < 0 || diff >= unitDuration(unid) {
+		_, unit := numberOf(got)
+		if diff := d - parsed; diff < 0 || diff >= unitDuration(unit) {
 			t.Errorf("with %s the label %q stands for %s: the error does not fit one unit "+
-				"of that label", d, got, representado)
+				"of that label", d, got, parsed)
 		}
 	}
 	var previous int
 	for _, d := range []time.Duration{time.Second, 59 * time.Second, 60 * time.Second,
 		59 * time.Minute, 60 * time.Minute, 3 * time.Hour} {
-		_, unid := numberOf(lastRefreshLabel(ahora.Add(-d), ahora))
-		if unid < previous {
-			t.Errorf("with %s unit %d goes back from %d", d, unid, previous)
+		_, unit := numberOf(lastRefreshLabel(now.Add(-d), now))
+		if unit < previous {
+			t.Errorf("with %s unit %d goes back from %d", d, unit, previous)
 		}
-		previous = unid
+		previous = unit
 	}
 }
 
@@ -226,10 +226,10 @@ func TestTheUsersRoleDistinguishesOwnFromReview(t *testing.T) {
 	viewer := "me"
 
 	if got := roleText(model.Item{ReviewKind: model.ReviewRequested}, viewer); got != "review req" {
-		t.Errorf("review requested dio %q", got)
+		t.Errorf("review requested gave %q", got)
 	}
 	if got := roleText(model.Item{ReviewKind: model.ReviewAssigned}, viewer); got != "assigned" {
-		t.Errorf("review assigned dio %q", got)
+		t.Errorf("review assigned gave %q", got)
 	}
 	// An owned item with a pending review stays "review req": the forge says a review is waiting, and
 	// the viewer is who has to look at it, author or not.
@@ -339,8 +339,8 @@ func numberOf(text string) (int, int) {
 	if len(fields) == 0 {
 		return 0, 0
 	}
-	n, unid, _ := partsOf(fields[0])
-	return n, unid
+	n, unit, _ := partsOf(fields[0])
+	return n, unit
 }
 
 func durationOf(text string) (time.Duration, error) {
@@ -348,14 +348,14 @@ func durationOf(text string) (time.Duration, error) {
 	if len(fields) == 0 {
 		return 0, errors.New("empty text")
 	}
-	n, unid, had := partsOf(fields[0])
+	n, unit, had := partsOf(fields[0])
 	if !had {
 		if fields[0] == "now" || fields[0] == "no" {
 			return 0, nil
 		}
 		return 0, errors.New("no number")
 	}
-	switch unid {
+	switch unit {
 	case 1:
 		return time.Duration(n) * time.Second, nil
 	case 2:

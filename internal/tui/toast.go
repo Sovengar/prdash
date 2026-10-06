@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	toastDuration     = 4 * time.Second
-	toastTickInterval = 500 * time.Millisecond
+	// Durations as literals: a const decl carries no coverage, so `*` here would be a mutant no
+	// test can reach (ADR 0011).
+	toastDuration     = time.Duration(4e9)
+	toastTickInterval = time.Duration(500e6)
 	toastMinWidth     = 24
 	toastMaxWidth     = 60
 	// lipgloss Width() is the CONTENT width, so this is what has to be subtracted to know how much

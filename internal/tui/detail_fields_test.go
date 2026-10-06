@@ -309,6 +309,29 @@ func TestRelTimeDoesNotInventANegativeNumber(t *testing.T) {
 	}
 }
 
+// The unit boundaries are pinned as exact durations: a boundary only `time.Since` can produce
+// is a boundary no test can hold still.
+func TestRelativeSincePinsTheUnitBoundaries(t *testing.T) {
+	for _, c := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "now"},
+		{time.Second, "now"},
+		{time.Minute - time.Nanosecond, "now"},
+		{time.Minute, "1m"},
+		{time.Hour - time.Nanosecond, "59m"},
+		{time.Hour, "1h"},
+		{24*time.Hour - time.Nanosecond, "23h"},
+		{24 * time.Hour, "1d"},
+		{-time.Hour, "now"}, // a skewed clock stays "now", never a negative age
+	} {
+		if got := relativeSince(c.d); got != c.want {
+			t.Errorf("relativeSince(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
 func TestOrDashLeavesNoFieldEmpty(t *testing.T) {
 	if got := orDash(""); got != "-" {
 		t.Errorf("orDash(\"\") = %q, want \"-\"", got)

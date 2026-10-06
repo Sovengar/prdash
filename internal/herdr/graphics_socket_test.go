@@ -269,7 +269,7 @@ func TestNonJSONResponseIsRejectedAndNotPaddedWithZeros(t *testing.T) {
 	}{
 		{"garbage", sendGarbage},
 		{"response without result field", func(c net.Conn, _ map[string]any) {
-			_, _ = c.Write([]byte(`{"hola":"que tal"}` + "\n"))
+			_, _ = c.Write([]byte(`{"hello":"how are you"}` + "\n"))
 		}},
 		{"empty response", func(c net.Conn, _ map[string]any) {
 			_, _ = c.Write([]byte("{}" + "\n"))

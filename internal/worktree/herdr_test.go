@@ -479,10 +479,10 @@ func TestOnADestinationThatIsNotAWorktreeItDoesNotCreateOnTopNorAdopt(t *testing
 // if it were the item's.
 func TestAdoptingAWorktreeOfAnotherBranchIsRefusedAndSaid(t *testing.T) {
 	repo := repoWithBranch(t)
-	testutil.RunGit(t, repo, "branch", "otra")
+	testutil.RunGit(t, repo, "branch", "other")
 
 	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
-	testutil.RunGit(t, repo, "worktree", "add", "--quiet", dest, "otra")
+	testutil.RunGit(t, repo, "worktree", "add", "--quiet", dest, "other")
 
 	h := NewHerdrNative(&fakeRunner{available: true}, t.TempDir())
 	_, err := h.Create(context.Background(), Spec{
@@ -494,7 +494,7 @@ func TestAdoptingAWorktreeOfAnotherBranchIsRefusedAndSaid(t *testing.T) {
 	if err == nil {
 		t.Fatal("it adopted a worktree of another branch")
 	}
-	for _, want := range []string{"otra", "feat/x", dest} {
+	for _, want := range []string{"other", "feat/x", dest} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error %q does not say %q", err, want)
 		}

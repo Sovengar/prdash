@@ -365,12 +365,13 @@ func RunRetarget(ctx context.Context, a Adapter, ref model.RepoRef, number int, 
 }
 
 func checkBeforeAction(cur model.Item, warns []model.Warning) *Outcome {
-	switch {
-	case hasKind(warns, "notfound"):
+	if hasKind(warns, "notfound") {
 		return &Outcome{Conflict: true, Msg: "the item no longer exists in the forge"}
-	case hasKind(warns, "permission"), hasKind(warns, "auth"):
+	}
+	if hasKind(warns, "permission") || hasKind(warns, "auth") {
 		return &Outcome{Perm: true, Msg: firstMsg(warns)}
-	case len(warns) > 0 || cur.Number == 0:
+	}
+	if len(warns) > 0 || cur.Number == 0 {
 		msg := firstMsg(warns)
 		if msg == "" {
 			msg = "could not re-read the item"

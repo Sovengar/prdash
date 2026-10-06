@@ -19,7 +19,7 @@ const (
 
 const (
 	itemWidthMin = 6  // "ITEM" (4) + gap + 1 rune of text
-	itemWidthCap = 34 // "subgrupo/proyecto#1234"
+	itemWidthCap = 34 // "group/subgroup/project#1234"
 )
 
 // Boxes are always drawn at an exact width, so without this the first render would come out at 0

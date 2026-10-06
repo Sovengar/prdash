@@ -16,7 +16,7 @@ func TestAMissingSchemeDoesNotSlipThroughTheSCPBranch(t *testing.T) {
 		{"://git@github.com:acme/widget.git", "missing scheme with an SCP shape behind it: the case " +
 			"the `>= 0` condition was put there to close"},
 		{"://github.com/acme/widget", "missing scheme, no SCP behind it"},
-		{"://git@gitlab.com:grupo/proy", "another host, so it is not a github-only thing"},
+		{"://git@gitlab.com:group/proj", "another host, so it is not a github-only thing"},
 	}
 	for _, c := range cases {
 		ref, ok := ParseRemoteURL(c.raw, testHosts(), nil)

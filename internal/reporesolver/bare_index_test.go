@@ -62,20 +62,20 @@ func TestBuildIndexDoesNotEnterHiddenDirectoriesNorSkipTheRoot(t *testing.T) {
 	// Two different origins so the indexed repo can be told apart.
 	visibleOrigin := filepath.Join(t.TempDir(), "visible.git")
 	testutil.InitBare(t, visibleOrigin)
-	hiddenOrigin := filepath.Join(t.TempDir(), "oculto.git")
+	hiddenOrigin := filepath.Join(t.TempDir(), "hidden.git")
 	testutil.InitBare(t, hiddenOrigin)
 
 	visibleRef := ghRef()
-	hiddenRef := glRef("gitlab.example.com", "grupo/escondido")
+	hiddenRef := glRef("gitlab.example.com", "group/hidden")
 
 	root := filepath.Join(t.TempDir(), ".workspace")
 
-	visible := filepath.Join(root, "proyecto")
+	visible := filepath.Join(root, "project")
 	testutil.InitRepo(t, visible)
 	testutil.CommitFile(t, visible, "a.txt", "a", "a")
 	testutil.SetRemote(t, visible, "origin", visibleOrigin)
 
-	hidden := filepath.Join(root, ".cache", "escondido")
+	hidden := filepath.Join(root, ".cache", "hidden")
 	testutil.InitRepo(t, hidden)
 	testutil.CommitFile(t, hidden, "b.txt", "b", "b")
 	testutil.SetRemote(t, hidden, "origin", hiddenOrigin)

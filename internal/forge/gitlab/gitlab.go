@@ -21,7 +21,9 @@ const ForgeName = "gitlab"
 const pageSize = 50
 
 // Same reason as GitHub: the margin keeps an MR full of system notes from coming up short.
-const commentFetch = 3 * forge.CommentLimit
+// 15 = 3 * forge.CommentLimit, written as a literal because a const decl carries no coverage
+// (ADR 0011); TestCommentFetchKeepsTheMargin pins the formula against a future change of the limit.
+const commentFetch = 15
 
 type Adapter struct {
 	host   string
@@ -88,18 +90,19 @@ func (a *Adapter) mrArgs(sub string, number int, project string, extra ...string
 }
 
 func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
-	switch {
-	case q.Section == model.SectionAuthored:
+	if q.Section == model.SectionAuthored {
 		return a.graphqlList(ctx, q, glAuthoredQuery(q.Cursor))
-	case q.Section == model.SectionReview && q.ReviewKind == model.ReviewAssigned:
-		return a.graphqlList(ctx, q, glAssignedQuery(q.Cursor))
-	case q.Section == model.SectionReview:
-		return a.graphqlList(ctx, q, glReviewQuery(q.Cursor))
-	case q.Section == model.SectionMentions:
-		return a.todosList(ctx, q)
-	default:
-		return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("unsupported list: %s", q.Section))}
 	}
+	if q.Section == model.SectionReview && q.ReviewKind == model.ReviewAssigned {
+		return a.graphqlList(ctx, q, glAssignedQuery(q.Cursor))
+	}
+	if q.Section == model.SectionReview {
+		return a.graphqlList(ctx, q, glReviewQuery(q.Cursor))
+	}
+	if q.Section == model.SectionMentions {
+		return a.todosList(ctx, q)
+	}
+	return forge.Page{}, []model.Warning{a.warn(q.Section, "unsupported", fmt.Errorf("unsupported list: %s", q.Section))}
 }
 
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
@@ -325,9 +328,8 @@ func restEndpoint(resource string) string {
 
 // `diffStats` is one entry PER CHANGED FILE and the schema exposes no `changedFiles`, so the count
 // is the list's length. The merge strategies are deliberately not asked: unknown does not restrict.
-const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt ` +
-	`diffHeadSha squash detailedMergeStatus diffStats { additions deletions } ` +
-	`author { username } project { fullPath name group { fullPath } }`
+// One literal line, not a `+` chain: a package-level const decl carries no coverage (ADR 0011).
+const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt diffHeadSha squash detailedMergeStatus diffStats { additions deletions } author { username } project { fullPath name group { fullPath } }`
 
 const glConn = `pageInfo { hasNextPage endCursor } nodes { %s }`
 

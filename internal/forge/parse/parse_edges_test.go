@@ -197,7 +197,7 @@ func TestGLTodosIgnoresWhatIsNotAMention(t *testing.T) {
 		// The iid is inside the target: the parser requires it to build the item.
 		raw := fmt.Sprintf(
 			`[{"action_name":%q,"target_type":%q,`+
-				`"target":{"iid":%d,"references":{"full":"grp/sub/proy!%d"}}}]`,
+				`"target":{"iid":%d,"references":{"full":"grp/sub/proj!%d"}}}]`,
 			c.action, c.kind, c.iid, c.iid)
 
 		items, total, err := ParseGLTodos(raw)

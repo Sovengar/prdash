@@ -18,7 +18,8 @@ import (
 	"prdash/internal/tui/bordered"
 )
 
-const simTimeout = 90 * time.Second
+// 90s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const simTimeout = time.Duration(90e9)
 
 const simLayer = herdr.GraphicsLayer
 

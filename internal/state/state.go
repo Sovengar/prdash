@@ -132,14 +132,15 @@ func MergeBlock(it model.Item) Block {
 	if it.Mergeable.Known && it.Mergeable.Conflicted {
 		return Block{Reason: conflictedReason(it.TargetBranch)}
 	}
-	switch {
-	case it.Checks.State == model.ChecksFailing:
+	if it.Checks.State == model.ChecksFailing {
 		return Block{Reason: checksFailingReason(it.Checks)}
-	case it.Checks.State == model.ChecksPending:
+	}
+	if it.Checks.State == model.ChecksPending {
 		return Block{Reason: fmt.Sprintf("CI is still running (%d pending)", it.Checks.Pending)}
+	}
 	// Normalised because the same datum arrives in different conventions per forge, and comparing it raw
 	// made the gate miss requested changes in both.
-	case normalize(it.ReviewDecision) == "changes_requested":
+	if normalize(it.ReviewDecision) == "changes_requested" {
 		return Block{Reason: "changes were requested on this item"}
 	}
 	return Block{}

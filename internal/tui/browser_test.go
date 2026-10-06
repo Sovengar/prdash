@@ -73,7 +73,7 @@ func TestAnEmptyURLDoesNotOpenAndOneWithSpacesIsNotSplit(t *testing.T) {
 			t.Logf("%s: browserCommand with an empty URL gave %q; the guard lives in the Cmd", so, args)
 		}
 
-		withSpaces := "https://github.com/acme/project/tree/mi rama"
+		withSpaces := "https://github.com/acme/project/tree/my branch"
 		_, args = browserCommand(so, withSpaces)
 		encontrada := 0
 		for _, a := range args {

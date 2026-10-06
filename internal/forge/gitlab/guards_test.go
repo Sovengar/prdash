@@ -76,7 +76,7 @@ func TestA400FromGitLabSaysWhatTheServerSays(t *testing.T) {
 exit 1
 `)
 	a := New("h.example", script)
-	warns := a.Retarget(context.Background(), model.RepoRef{Project: "grupo/proy"}, 3, "main")
+	warns := a.Retarget(context.Background(), model.RepoRef{Project: "group/proj"}, 3, "main")
 	if len(warns) == 0 {
 		t.Fatal("a runner that fails gave no warning")
 	}
@@ -91,7 +91,7 @@ exit 1
 	script, _ = glabThatLogs(t, `exit 1
 `)
 	a = New("h.example", script)
-	warns = a.Retarget(context.Background(), model.RepoRef{Project: "grupo/proy"}, 3, "main")
+	warns = a.Retarget(context.Background(), model.RepoRef{Project: "group/proj"}, 3, "main")
 	if len(warns) == 0 {
 		t.Fatal("a runner that fails without a body gave no warning")
 	}
@@ -103,7 +103,7 @@ exit 1
 exit 1
 `)
 	a = New("h.example", script)
-	warns = a.Retarget(context.Background(), model.RepoRef{Project: "grupo/proy"}, 3, "main")
+	warns = a.Retarget(context.Background(), model.RepoRef{Project: "group/proj"}, 3, "main")
 	if len(warns) == 0 || strings.TrimSpace(warns[0].Msg) == "" {
 		t.Errorf("with an unreadable body the warning ended up empty: %+v", warns)
 	}
@@ -115,7 +115,7 @@ func TestRetargetWithoutABaseBranchDoesNotGoOutToTheNetwork(t *testing.T) {
 		script, argsFile := glabThatLogs(t, `echo '{}'
 `)
 		a := New("h.example", script)
-		warns := a.Retarget(context.Background(), model.RepoRef{Project: "grupo/proy"}, 3, branch)
+		warns := a.Retarget(context.Background(), model.RepoRef{Project: "group/proj"}, 3, branch)
 		if len(warns) == 0 {
 			t.Errorf("branch %q: no warning came out", branch)
 			continue
@@ -131,7 +131,7 @@ func TestRetargetWithoutABaseBranchDoesNotGoOutToTheNetwork(t *testing.T) {
 	script, argsFile := glabThatLogs(t, `echo '{}'
 `)
 	a := New("h.example", script)
-	_ = a.Retarget(context.Background(), model.RepoRef{Project: "grupo/proy"}, 3, "main")
+	_ = a.Retarget(context.Background(), model.RepoRef{Project: "group/proj"}, 3, "main")
 	if _, err := os.Stat(argsFile); err != nil {
 		t.Error("with a branch it did not go out to the network: the guard swallowed the good call")
 	}
@@ -156,7 +156,7 @@ func TestAnEmptyRefDoesNotGoOutToTheNetwork(t *testing.T) {
 		t.Errorf("an empty ref went out to the network:\n%s", loggedArgs(t, argsFile))
 	}
 
-	_, _ = a.ItemState(context.Background(), model.RepoRef{Project: "grupo/proy"}, 1)
+	_, _ = a.ItemState(context.Background(), model.RepoRef{Project: "group/proj"}, 1)
 	if _, err := os.Stat(argsFile); err != nil {
 		t.Error("with a ref it did not go out to the network: the guard swallowed the good call")
 	}
@@ -166,7 +166,7 @@ func TestGitLabsStampPutsTheReviewKindOnlyInReview(t *testing.T) {
 	for _, section := range []model.Section{model.SectionReview, model.SectionAuthored, model.SectionMentions} {
 		a := New("h.example", "glab")
 		items := []model.Item{{Number: 1, Ref: model.RepoRef{
-			Forge: ForgeName, Host: "h.example", Project: "grupo/proy", Owner: "grupo", Name: "proy"}}}
+			Forge: ForgeName, Host: "h.example", Project: "group/proj", Owner: "group", Name: "proj"}}}
 		a.stamp(items, forge.Query{Section: section, ReviewKind: model.ReviewRequested})
 
 		has := items[0].ReviewKind != ""

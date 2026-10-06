@@ -198,8 +198,8 @@ func TestGraphicsClientIsBuiltAndReadsTheEnvironment(t *testing.T) {
 	if got := g.pane(); got != "p9" {
 		t.Errorf("pane gave %q, want p9", got)
 	}
-	direct := &Graphics{Socket: "/tmp/otro.sock", PaneID: "p0"}
-	if got := direct.socket(); got != "/tmp/otro.sock" {
+	direct := &Graphics{Socket: "/tmp/other.sock", PaneID: "p0"}
+	if got := direct.socket(); got != "/tmp/other.sock" {
 		t.Errorf("with Socket set it gave %q", got)
 	}
 	if got := direct.pane(); got != "p0" {

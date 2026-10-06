@@ -256,11 +256,11 @@ func isDiffCount(s string, sign byte) bool {
 		return false
 	}
 	for i := 1; i < len(s); i++ {
-		switch c := s[i]; {
-		case c >= '0' && c <= '9', c == '.', c == 'k':
-		default:
-			return false
+		c := s[i]
+		if (c >= '0' && c <= '9') || c == '.' || c == 'k' {
+			continue
 		}
+		return false
 	}
 	return true
 }
@@ -268,19 +268,21 @@ func isDiffCount(s string, sign byte) bool {
 // Rounded in integer tenths rather than with fmt, because 9999 with one decimal comes out
 // "10.0k": four runes and no meaning. Rounding up out of the window falls back to integers.
 func compactCount(n int) string {
-	switch {
-	case n < 0:
+	// Negatives are printed, not rounded. The old `n < 0` guard was a no-op — `n < 1000`
+	// already routes them to the same Itoa — and a no-op guard is a mutant no test can kill.
+	if n < 1000 {
 		return strconv.Itoa(n)
-	case n < 1000:
-		return strconv.Itoa(n)
-	case n < 10000:
+	}
+	// `<= 9999` and not `< 10000`: the two spell the same set, but the boundary mutant of `<`
+	// survives at exactly 10000 because both sides render "10k" there, while the mutant of `<=`
+	// dies at 9999 ("9k" vs "10k").
+	if n <= 9999 {
 		if tenths := (n + 50) / 100; tenths < 100 {
 			return strconv.Itoa(tenths/10) + "." + strconv.Itoa(tenths%10) + "k"
 		}
 		return strconv.Itoa((n+500)/1000) + "k"
-	default:
-		return strconv.Itoa(n/1000) + "k"
 	}
+	return strconv.Itoa(n/1000) + "k"
 }
 
 func pad(s string, w int) string {
@@ -305,12 +307,11 @@ func stripANSI(s string) string {
 	var out strings.Builder
 	inSeq := false
 	for _, r := range s {
-		switch {
-		case r == '\x1b':
+		if r == '\x1b' {
 			inSeq = true
-		case inSeq && (r == 'm' || r == 'K'):
+		} else if inSeq && (r == 'm' || r == 'K') {
 			inSeq = false
-		case !inSeq:
+		} else if !inSeq {
 			out.WriteRune(r)
 		}
 	}

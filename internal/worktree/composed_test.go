@@ -44,12 +44,12 @@ func TestComposedWithoutHerdrDataKeepsWhatTheCallerAsked(t *testing.T) {
 func TestComposedHerdrWinsWhereItSaysSomething(t *testing.T) {
 	spec := emptySpec()
 	info := herdr.WorktreeInfo{
-		Path:           "/otro/sitio/movido",
-		Branch:         "renombrada-por-herdr",
+		Path:           "/other/sitio/moved",
+		Branch:         "renamed-by-herdr",
 		WorkspaceID:    "ws-1",
 		RootPaneID:     "pane-1",
 		WorkspaceLabel: "ws-label",
-		Label:          "el-repo",
+		Label:          "the-repo",
 	}
 
 	wt := composed(spec, info)
@@ -79,12 +79,12 @@ func TestComposedTheLabelIsTheCallersNotHerdrs(t *testing.T) {
 	// Every Herdr field set at once and distinct from each other, which is the only way the
 	// precedence shows: if two matched, either order would pass.
 	info := herdr.WorktreeInfo{
-		Path:           "/wt/movido",
-		Branch:         "rama-de-herdr",
+		Path:           "/wt/moved",
+		Branch:         "branch-de-herdr",
 		WorkspaceID:    "ws-1",
 		RootPaneID:     "pane-1",
-		WorkspaceLabel: "etiqueta-del-workspace",
-		Label:          "nombre-del-repo",
+		WorkspaceLabel: "label-of-the-workspace",
+		Label:          "name-of-the-repo",
 	}
 	spec := emptySpec()
 
@@ -120,10 +120,10 @@ func TestComposedWithoutCallerLabelFallsBackInThisOrder(t *testing.T) {
 		spec := emptySpec()
 		spec.Label = ""
 		info := herdr.WorktreeInfo{
-			WorkspaceLabel: "etiqueta-del-workspace",
-			Label:          "nombre-del-repo",
+			WorkspaceLabel: "label-of-the-workspace",
+			Label:          "name-of-the-repo",
 		}
-		if got := composed(spec, info).Label; got != "etiqueta-del-workspace" {
+		if got := composed(spec, info).Label; got != "label-of-the-workspace" {
 			t.Errorf("label=%q, want the workspace's: it is the one asked for when opening it", got)
 		}
 	})
@@ -131,8 +131,8 @@ func TestComposedWithoutCallerLabelFallsBackInThisOrder(t *testing.T) {
 	t.Run("without the workspace's, the repo's", func(t *testing.T) {
 		spec := emptySpec()
 		spec.Label = ""
-		info := herdr.WorktreeInfo{Label: "nombre-del-repo"}
-		if got := composed(spec, info).Label; got != "nombre-del-repo" {
+		info := herdr.WorktreeInfo{Label: "name-of-the-repo"}
+		if got := composed(spec, info).Label; got != "name-of-the-repo" {
 			t.Errorf("label=%q, want the repo's", got)
 		}
 	})
@@ -149,7 +149,7 @@ func TestComposedWithoutCallerLabelFallsBackInThisOrder(t *testing.T) {
 	t.Run("the last resort comes from the already resolved path", func(t *testing.T) {
 		spec := emptySpec()
 		spec.Label = ""
-		info := herdr.WorktreeInfo{Path: "/otro/movido/prdash-42"}
+		info := herdr.WorktreeInfo{Path: "/other/moved/prdash-42"}
 		got := composed(spec, info)
 		if got.Label != "prdash-42" {
 			t.Errorf("label=%q, want the RESOLVED path name prdash-42, not the caller's %q",

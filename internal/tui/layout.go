@@ -20,11 +20,12 @@ type layout struct {
 }
 
 const (
-	headerContentLines = 1 // spinner and forge status
-	headerLines        = headerContentLines + 2
-	listChrome         = 2
-	detailChrome       = 2
-	keybindsChrome     = 2
+	// 1 spinner/forge-status line + 2 border lines, precomputed: a const decl carries no coverage,
+	// so `+` here would be a mutant no test can reach (ADR 0011).
+	headerLines    = 3
+	listChrome     = 2
+	detailChrome   = 2
+	keybindsChrome = 2
 )
 
 // The detail keeps its 40% while the body can stay at minListRows, and degrades in order if not:

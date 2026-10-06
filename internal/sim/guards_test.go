@@ -72,7 +72,7 @@ func TestWithoutTMPDIRTheSimulationDirectoryIsNotPrepared(t *testing.T) {
 func TestRepoThatNoLongerExistsFailsOnCloneNotCheckout(t *testing.T) {
 	// The repo Locator gives does not exist, which is stronger than deleting it afterwards.
 	s := newService(t, fakeLocator{ok: true, place: Place{
-		Repo: filepath.Join(t.TempDir(), "repo-que-no-existe"), Branch: "prdash/pr-7",
+		Repo: filepath.Join(t.TempDir(), "repo-that-does-not-exist"), Branch: "prdash/pr-7",
 	}}, fakeSim(t, writeJPEG(t)))
 
 	_, _, err := s.stage(context.Background(), s.locatorPlace(), KindMerge, "main", t.TempDir())
@@ -82,7 +82,7 @@ func TestRepoThatNoLongerExistsFailsOnCloneNotCheckout(t *testing.T) {
 	if !strings.Contains(err.Error(), "clone") {
 		t.Errorf("the error %q does not say the clone failed", err)
 	}
-	if !strings.Contains(err.Error(), "repo-que-no-existe") {
+	if !strings.Contains(err.Error(), "repo-that-does-not-exist") {
 		t.Errorf("the error %q does not name the repo that could not be cloned", err)
 	}
 }
@@ -159,7 +159,7 @@ func TestGitSimThatProducesNoImageSaysSo(t *testing.T) {
 
 // The chain end to end, with no mocks.
 func TestSimulatePropagatesStageFailureAndSaysWhereItCameFrom(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "repo-que-no-existe")
+	missing := filepath.Join(t.TempDir(), "repo-that-does-not-exist")
 	s := newService(t, fakeLocator{ok: true, place: Place{Repo: missing, Branch: "prdash/pr-7"}},
 		fakeSim(t, writeJPEG(t)))
 

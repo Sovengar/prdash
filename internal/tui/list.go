@@ -30,13 +30,12 @@ func (m *Model) listLines(inner int) []listLine {
 		lines = append(lines, listLine{text: "  " + styleWarn.Render("⚠ "+p), row: -1})
 	}
 
-	switch {
-	case len(items) > 0:
+	if len(items) > 0 {
 		lines = append(lines, listLine{text: "  " + headerLine(lay, inner-2), row: -1})
 		for i, it := range items {
 			lines = append(lines, listLine{text: m.renderItem(it, m.activeSection, lay, i == m.cursor, inner-2), row: i})
 		}
-	case len(problems) == 0:
+	} else if len(problems) == 0 {
 		lines = append(lines, listLine{text: "  " + styleEmpty.Render("(empty)"), row: -1})
 	}
 
@@ -57,10 +56,9 @@ func cursorLine(lines []listLine, cursor int) int {
 
 func scrollFor(current, target, total, view int) int {
 	if target >= 0 {
-		switch {
-		case target < current:
+		if target < current {
 			current = target
-		case target >= current+view:
+		} else if target >= current+view {
 			current = target - view + 1
 		}
 	}

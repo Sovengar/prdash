@@ -11,12 +11,14 @@ import (
 	"time"
 )
 
-// fetch and clone legitimately take a while.
-const DefaultTimeout = 60 * time.Second
+// fetch and clone legitimately take a while. 60s as a literal because a const decl carries no
+// coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const DefaultTimeout = time.Duration(60e9)
 
 // A child that inherited our pipe descriptors keeps them open, so without this grace period the
 // timeout kills the process and `cmd.Run` still does not return. Same reason and fix as in herdr.
-const pipeCloseGrace = 250 * time.Millisecond
+// 250ms as a literal, same coverage argument as DefaultTimeout above.
+const pipeCloseGrace = time.Duration(250e6)
 
 type Runner struct {
 	// Empty means "git" from PATH.

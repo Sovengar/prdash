@@ -85,9 +85,9 @@ func TestABranchThatDoesNotExistFailsAndLeavesNoResidueDirectory(t *testing.T) {
 			t.Errorf("the failed worktree stayed in git's record: %q", l)
 		}
 	}
-	testutil.RunGit(t, repo, "branch", "otra")
+	testutil.RunGit(t, repo, "branch", "other")
 	wt, err := g.Create(context.Background(), Spec{
-		Repo: repo, Branch: "otra", Path: filepath.Join(root, "prdash-pr-8"),
+		Repo: repo, Branch: "other", Path: filepath.Join(root, "prdash-pr-8"),
 		Label: "prdash-pr-8",
 	})
 	if err != nil {
@@ -122,7 +122,7 @@ func TestADestinationThatIsAlreadyARepoIsNeitherOverwrittenNorReadAsAWorktree(t 
 	}
 
 	if _, err := g.Create(ctx, Spec{
-		Repo: filepath.Join(t.TempDir(), "otro"), Branch: "main",
+		Repo: filepath.Join(t.TempDir(), "other"), Branch: "main",
 		Path: repo, Label: "prdash-pr-7",
 	}); err == nil {
 		t.Error("Create over an existing repo gave nil")

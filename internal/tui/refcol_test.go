@@ -28,11 +28,11 @@ func TestSectionPrefix(t *testing.T) {
 		items []model.Item
 		want  string
 	}{
-		{"subgrupo long", mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app"), "APPCITTI/vsocial/backend"},
+		{"subgroup long", mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app"), "APPCITTI/vsocial/backend"},
 		{"short in the common group", mkItems("APPCITTI/vsocial/a/x", "APPCITTI/vsocial/b/y"), "APPCITTI/vsocial"},
 		{"nothing in common", mkItems("a/one", "b/two"), ""},
 		{"github owner/repo", mkItems("acme/widget", "acme/lib"), "acme"},
-		{"proyectos identicos", mkItems("g/p", "g/p"), "g"},
+		{"projects identicos", mkItems("g/p", "g/p"), "g"},
 		{"a single item", mkItems("APPCITTI/vsocial/backend/api"), ""},
 		{"no subgroups", mkItems("a", "b"), ""},
 		{"prefijos parciales", mkItems("APPCITTI/vs/x", "APPCITTI/vsocial/y"), "APPCITTI"},
@@ -99,8 +99,8 @@ func TestNewRefLayoutSizesITEMByContent(t *testing.T) {
 
 	lay = newRefLayout([]inbox.Section{
 		section(model.SectionReview, mkItems(
-			"g/un-servicio-con-name-larguísimo",
-			"g/other-servicio-con-name-larguísimo",
+			"g/a-naïve-service-with-a-very-long-name",
+			"g/other-naïve-service-with-a-very-long-name",
 		)...),
 	}, prefixCommon)
 	if got := lay.cols[colRefIdx].width; got != itemWidthCap {
@@ -115,8 +115,8 @@ func TestNewRefLayoutSizesITEMByContent(t *testing.T) {
 
 func TestItemCellsKeepTheNumberWhenClipped(t *testing.T) {
 	items := mkItems(
-		"APPCITTI/vsocial/backend/un-servicio-con-name-larguísimo",
-		"APPCITTI/vsocial/backend/other-servicio-con-name-larguísimo",
+		"APPCITTI/vsocial/backend/a-naïve-service-with-a-very-long-name",
+		"APPCITTI/vsocial/backend/other-naïve-service-with-a-very-long-name",
 	)
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixCommon)
 	ref := itemCells(items[0], model.SectionReview, "me", lay)[colRefIdx].text

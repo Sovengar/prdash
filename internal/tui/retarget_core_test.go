@@ -171,7 +171,7 @@ func TestTheBranchCacheExpiresRightAtTheBoundary(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	key := keyOf(m.retargetItemForTest())
 
-	m.storeBranches(key, []string{"main", "otra"})
+	m.storeBranches(key, []string{"main", "other"})
 	if got, ok := m.cachedBranches(key); !ok || len(got) != 2 {
 		t.Errorf("freshly cached = (%q, %v), want the two names", got, ok)
 	}
@@ -203,12 +203,12 @@ func TestTheBranchCacheExpiresRightAtTheBoundary(t *testing.T) {
 
 	// The key carries forge and host: the same owner/repo in two forges are two lists.
 	other := repoKey{forge: "gitlab", host: key.host, project: key.project}
-	m.storeBranches(other, []string{"main", "solo-gitlab"})
-	m.storeBranches(key, []string{"main", "solo-github"})
-	if got, _ := m.cachedBranches(other); !contains(got, "solo-gitlab") {
+	m.storeBranches(other, []string{"main", "gitlab-only"})
+	m.storeBranches(key, []string{"main", "github-only"})
+	if got, _ := m.cachedBranches(other); !contains(got, "gitlab-only") {
 		t.Errorf("the gitlab key returned %q", got)
 	}
-	if got, _ := m.cachedBranches(key); contains(got, "solo-gitlab") {
+	if got, _ := m.cachedBranches(key); contains(got, "gitlab-only") {
 		t.Errorf("the github key returned gitlab branches: %q", got)
 	}
 }
@@ -225,7 +225,7 @@ func TestClosingThePopupInvalidatesTheInFlightListing(t *testing.T) {
 		t.Fatalf("state = %v, want cerrado", m.retarget.state)
 	}
 
-	m = send(t, m, branchesMsg{seq: seqBefore, names: []string{"otra/cosa"}})
+	m = send(t, m, branchesMsg{seq: seqBefore, names: []string{"other/cosa"}})
 	if m.retarget.state != retargetClosed {
 		t.Errorf("a listing with the sequence from before the close reopened the popup: state = %v", m.retarget.state)
 	}
@@ -238,7 +238,7 @@ func TestClosingThePopupInvalidatesTheInFlightListing(t *testing.T) {
 	}
 
 	open, _ := retargetFixture(t, "main", "release/2.0")
-	open = send(t, open, branchesMsg{seq: open.branchSeq, names: []string{"main", "otra"}})
+	open = send(t, open, branchesMsg{seq: open.branchSeq, names: []string{"main", "other"}})
 	if open.retarget.state != retargetChoosing {
 		t.Errorf("with the current sequence and the popup open it should search: %v", open.retarget.state)
 	}

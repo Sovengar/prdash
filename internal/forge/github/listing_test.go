@@ -40,13 +40,13 @@ const checksJSON = `[{"name":"build","state":"FAILURE","bucket":"fail"},
 {"name":"e2e","state":"PENDING","bucket":"pending"}]`
 
 const searchJSON = `{"total_count":1,"incomplete_results":false,"items":[
-{"number":42,"title":"PR","html_url":"https://github.com/acme/proy/pull/42",
+{"number":42,"title":"PR","html_url":"https://github.com/acme/proj/pull/42",
  "state":"open","created_at":"2026-09-20T07:00:00Z","updated_at":"2026-09-21T07:00:00Z",
  "user":{"login":"me"},
- "repository_url":"https://api.github.com/repos/acme/proy",
- "pull_request":{"url":"https://api.github.com/repos/acme/proy/pulls/42",
+ "repository_url":"https://api.github.com/repos/acme/proj",
+ "pull_request":{"url":"https://api.github.com/repos/acme/proj/pulls/42",
    "head":{"ref":"feat/x","sha":"deadbeef"},"base":{"ref":"main"}},
- "labels":[{"name":"uno"}]}
+ "labels":[{"name":"one"}]}
 ]}`
 
 // This case's finding, and the reason checks parses BEFORE the exit code.
@@ -55,7 +55,7 @@ func TestChecksAreReadEvenWhenTheExitCodeIsAnError(t *testing.T) {
 		"cat <<'JSON'\n"+checksJSON+"\nJSON\nexit 8\n")
 	a := New("github.com", script)
 
-	checks, warns := a.checks(context.Background(), "acme/proy", 42)
+	checks, warns := a.checks(context.Background(), "acme/proj", 42)
 
 	if len(warns) != 0 {
 		t.Fatalf("checks gave warnings %+v with parseable JSON: the exit code of "+
@@ -69,7 +69,7 @@ func TestChecksAreReadEvenWhenTheExitCodeIsAnError(t *testing.T) {
 	}
 	// The command carries the repo and the number, which is how it avoids depending on the cwd.
 	args := loggedArgs(t, argsFile)
-	for _, want := range []string{"pr checks 42", "--repo acme/proy", "--json"} {
+	for _, want := range []string{"pr checks 42", "--repo acme/proj", "--json"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("the args do not carry %q: %s", want, args)
 		}
@@ -80,7 +80,7 @@ func TestChecksAreReadEvenWhenTheExitCodeIsAnError(t *testing.T) {
 func TestChecksWithoutJSONAreAWarningWithTheirKind(t *testing.T) {
 	// The command fails without JSON.
 	script, _ := ghThatLogs(t, "echo 'HTTP 403: Forbidden' >&2\nexit 1\n")
-	checks, warns := New("github.com", script).checks(context.Background(), "acme/proy", 42)
+	checks, warns := New("github.com", script).checks(context.Background(), "acme/proj", 42)
 	if len(warns) != 1 {
 		t.Fatalf("without JSON and with a failure it gave %d warnings, want 1", len(warns))
 	}
@@ -93,7 +93,7 @@ func TestChecksWithoutJSONAreAWarningWithTheirKind(t *testing.T) {
 	}
 
 	script, _ = ghThatLogs(t, "echo 'this is not json'\nexit 0\n")
-	_, warns = New("github.com", script).checks(context.Background(), "acme/proy", 42)
+	_, warns = New("github.com", script).checks(context.Background(), "acme/proj", 42)
 	if len(warns) != 1 || warns[0].Kind != "parse" {
 		t.Fatalf("warning = %+v, want kind parse", warns)
 	}
@@ -168,7 +168,7 @@ func TestReReadingAnItemWithoutAnOwnerWarnsWithoutCallingTheForge(t *testing.T) 
 	a := New("github.com", script)
 
 	_, warns := a.ItemState(context.Background(),
-		model.RepoRef{Project: "proy"}, 1)
+		model.RepoRef{Project: "proj"}, 1)
 	if len(warns) != 1 || warns[0].Kind != "notfound" {
 		t.Fatalf("warning = %+v, want a notfound", warns)
 	}
@@ -182,7 +182,7 @@ func TestReReadingAnItemWithoutAnOwnerWarnsWithoutCallingTheForge(t *testing.T) 
 
 	script, argsFile = ghThatLogs(t, "echo '{\"data\":{\"search\":{\"nodes\":[]}}}'\n")
 	a = New("github.com", script)
-	_, warns = a.ItemState(context.Background(), model.RepoRef{Project: "acme/proy"}, 1)
+	_, warns = a.ItemState(context.Background(), model.RepoRef{Project: "acme/proj"}, 1)
 	if _, err := os.Stat(argsFile); err != nil {
 		t.Error("with an owner the forge was not called")
 	}
@@ -205,7 +205,7 @@ func TestReReadingAnItemWithoutAnOwnerWarnsWithoutCallingTheForge(t *testing.T) 
 func TestTheGraphQLRollupSurvivesWhenChecksCannotBeRead(t *testing.T) {
 	script, _ := ghThatLogs(t, bodyOfFailingChecks())
 	it, warns := New("github.com", script).ItemState(context.Background(),
-		model.RepoRef{Project: "acme/proy"}, 42)
+		model.RepoRef{Project: "acme/proj"}, 42)
 
 	if len(warns) != 0 {
 		t.Fatalf("ItemState gave warnings %+v: failing checks must not take down the "+
@@ -236,7 +236,7 @@ exit 1
 `
 	script, _ := ghThatLogs(t, body)
 	it, warns := New("github.com", script).ItemState(context.Background(),
-		model.RepoRef{Project: "acme/proy"}, 42)
+		model.RepoRef{Project: "acme/proj"}, 42)
 
 	if len(warns) != 0 {
 		t.Fatalf("warnings = %+v", warns)
@@ -264,12 +264,12 @@ exit 1
 
 func graphqlJSONOfAnItem() string {
 	return `{"data":{"search":{"nodes":[
-{"number":42,"title":"PR","state":"OPEN","url":"https://github.com/acme/proy/pull/42",
+{"number":42,"title":"PR","state":"OPEN","url":"https://github.com/acme/proj/pull/42",
  "headRefName":"feat/x","baseRefName":"main","isDraft":false,
  "updatedAt":"2026-09-21T07:00:00Z","author":{"login":"me"},
  "headRefOid":"deadbeef","mergeable":"MERGEABLE","reviewDecision":"REVIEW_REQUIRED",
  "additions":5,"deletions":1,"changedFiles":2,
- "repository":{"nameWithOwner":"acme/proy","name":"proy","owner":{"login":"acme"},
+ "repository":{"nameWithOwner":"acme/proj","name":"proj","owner":{"login":"acme"},
    "viewerPermission":"WRITE","mergeCommitAllowed":true,"rebaseMergeAllowed":true,
    "squashMergeAllowed":true},
  "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS",

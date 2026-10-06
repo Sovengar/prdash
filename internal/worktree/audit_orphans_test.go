@@ -29,10 +29,10 @@ func TestTheGitFileOfAWorktreeSaysWhereTheOriginIs(t *testing.T) {
 		t.Errorf("a relative path gave %q, want %q (relative to the worktree)", got, want)
 	}
 
-	withNewline := filepath.Join(base, "con-salto")
+	withNewline := filepath.Join(base, "with-newline")
 	mkdir(t, withNewline)
-	writeGitFile(t, withNewline, "gitdir:   "+filepath.Join(base, "otro")+"  \n")
-	if got := linkedGitDir(withNewline); got != filepath.Join(base, "otro") {
+	writeGitFile(t, withNewline, "gitdir:   "+filepath.Join(base, "other")+"  \n")
+	if got := linkedGitDir(withNewline); got != filepath.Join(base, "other") {
 		t.Errorf("with spaces and a newline gave %q", got)
 	}
 
@@ -41,7 +41,7 @@ func TestTheGitFileOfAWorktreeSaysWhereTheOriginIs(t *testing.T) {
 		value   string
 		missing bool
 	}{
-		{"no prefix", "/otra/cosa\n", false},
+		{"no prefix", "/other/cosa\n", false},
 		{"empty gitdir", "gitdir:\n", false},
 		{"gitdir with spaces", "gitdir:    \n", false},
 		{"other prefix", "worktree: /x\n", false},
@@ -80,7 +80,7 @@ func TestABrokenLinkIsAnOrphanAndAHealthyOneIsNot(t *testing.T) {
 
 	broken := filepath.Join(base, "roto")
 	mkdir(t, broken)
-	writeGitFile(t, broken, "gitdir: "+filepath.Join(source, "wt-que-no-existe"))
+	writeGitFile(t, broken, "gitdir: "+filepath.Join(source, "wt-that-does-not-exist"))
 	if sourceReachable(broken) {
 		t.Error("a broken link gave true: the worktree would be reported alive and occupy disk forever")
 	}
@@ -109,7 +109,7 @@ func TestAuditOnlyReturnsWhatBelongsToPrdashAndFlagsTheBroken(t *testing.T) {
 	writeFixtureFile(t, filepath.Join(source, "wt-1"), "")
 	writeFixtureFile(t, filepath.Join(source, "wt-ajeno"), "")
 
-	userRepo := filepath.Join(base, "repo-del-usuario")
+	userRepo := filepath.Join(base, "repo-of-the-user")
 	mkdir(t, filepath.Join(userRepo, ".git"))
 
 	alive := filepath.Join(root, "prdash-pr-1")
@@ -118,13 +118,13 @@ func TestAuditOnlyReturnsWhatBelongsToPrdashAndFlagsTheBroken(t *testing.T) {
 
 	broken := filepath.Join(root, "prdash-pr-2")
 	mkdir(t, broken)
-	writeGitFile(t, broken, "gitdir: "+filepath.Join(source, "wt-que-borre"))
+	writeGitFile(t, broken, "gitdir: "+filepath.Join(source, "wt-that-was-deleted"))
 
 	foreign := filepath.Join(root, "vroom-pr-9")
 	mkdir(t, foreign)
 	writeGitFile(t, foreign, "gitdir: "+filepath.Join(source, "wt-ajeno"))
 
-	mkdir(t, filepath.Join(root, "una-carpeta"))
+	mkdir(t, filepath.Join(root, "a-carpeta"))
 
 	entries := NewGitDirect(root).Audit(context.Background())
 
@@ -136,7 +136,7 @@ func TestAuditOnlyReturnsWhatBelongsToPrdashAndFlagsTheBroken(t *testing.T) {
 	if len(entries) != 2 {
 		t.Errorf("Audit returned %d entries, want 2 (only prdash's): %+v", len(entries), entries)
 	}
-	if _, ok := seen["repo-del-usuario"]; ok {
+	if _, ok := seen["repo-of-the-user"]; ok {
 		t.Error("a normal user repo showed up in the listing: prdash worktrees remove could delete it")
 	}
 	if _, ok := seen["vroom-pr-9"]; ok {

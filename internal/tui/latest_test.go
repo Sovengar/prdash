@@ -114,10 +114,10 @@ func TestRepublishWithoutAnImageDoesNothingNorFails(t *testing.T) {
 func TestTheChooserSetsTheItemsBranchAndItsPlaceholderWhenThereIsNone(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	it := mkItem("github", "github.com", "acme/widget", "one", 7, "")
-	it.SourceBranch = "feat/mi-rama"
+	it.SourceBranch = "feat/my-branch"
 	m.sim.item = it
 
-	if box := m.simChooserBox(); !strings.Contains(box, "feat/mi-rama") {
+	if box := m.simChooserBox(); !strings.Contains(box, "feat/my-branch") {
 		t.Errorf("the popup does not name the items branch:\n%s", box)
 	}
 	if box := m.simChooserBox(); !strings.Contains(box, it.TargetBranch) {
@@ -222,13 +222,13 @@ func TestStartRetargetClosesThePopupIfTheActionCannotBeDone(t *testing.T) {
 			m.actionBusy = true
 			m.retarget.state = retargetConfirm
 			m.retarget.item = mkItem("github", "github.com", "acme/widget", "one", 7, "")
-			m.retarget.view = []string{"main", "otra"}
+			m.retarget.view = []string{"main", "other"}
 			return m
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m := c.prepara(t)
-			if cmd := m.startRetarget("otra"); cmd != nil {
+			if cmd := m.startRetarget("other"); cmd != nil {
 				t.Error("an action that cannot be done returned a command: it would apply the " +
 					"base change anyway")
 			}

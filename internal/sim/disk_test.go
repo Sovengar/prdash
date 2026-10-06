@@ -213,11 +213,11 @@ func TestImageDisappearingBeforeLstatDoesNotBreakThePrune(t *testing.T) {
 
 	// And the whole listing failing.
 	calm := t.TempDir()
-	fakeImage(t, calm, "una.jpg", base)
+	fakeImage(t, calm, "a.jpg", base)
 	pruneWith(calm, 0, func(string) ([]os.DirEntry, error) {
 		return nil, &os.PathError{Op: "readdir", Path: calm, Err: fs.ErrPermission}
 	})
-	if _, err := os.Stat(filepath.Join(calm, "una.jpg")); err != nil {
+	if _, err := os.Stat(filepath.Join(calm, "a.jpg")); err != nil {
 		t.Errorf("an unreadable listing emptied the cache: %v", err)
 	}
 

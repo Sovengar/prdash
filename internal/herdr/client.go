@@ -12,11 +12,13 @@ import (
 	"time"
 )
 
-const DefaultTimeout = 30 * time.Second
+// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const DefaultTimeout = time.Duration(30e9)
 
 // 250ms on purpose, not a second: this is a TUI, what does not answer the keyboard reads as a
-// hang, and a process that has not closed its pipes in 250ms is not going to.
-const pipeCloseGrace = 250 * time.Millisecond
+// hang, and a process that has not closed its pipes in 250ms is not going to. Literal for the
+// same coverage reason as DefaultTimeout above.
+const pipeCloseGrace = time.Duration(250e6)
 
 type execFunc func(ctx context.Context, args ...string) (stdout, stderr []byte, err error)
 

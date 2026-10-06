@@ -21,7 +21,7 @@ func TestAttachAdoptsTheWorkspaceThatIsAlreadyOpen(t *testing.T) {
 	runner := &fakeRunner{
 		available: true,
 		listResult: []herdr.WorktreeInfo{
-			{Path: "/wt/otro", OpenWorkspaceID: "ws-otro"}, // another checkout: ignored
+			{Path: "/wt/other", OpenWorkspaceID: "ws-other"}, // another checkout: ignored
 			{Path: spec.Path, OpenWorkspaceID: "ws-7"},
 		},
 		panes: map[string][]herdr.PaneInfo{
@@ -52,18 +52,18 @@ func TestAttachDoesNotAdoptTheWorkspaceOfAnotherCheckout(t *testing.T) {
 	runner := &fakeRunner{
 		available: true,
 		listResult: []herdr.WorktreeInfo{
-			{Path: "/wt/otro", OpenWorkspaceID: "ws-otro"},
+			{Path: "/wt/other", OpenWorkspaceID: "ws-other"},
 		},
-		panes:     map[string][]herdr.PaneInfo{"ws-otro": {{PaneID: "ws-otro:p0"}}},
-		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-nuevo", RootPaneID: "ws-nuevo:p0"},
+		panes:     map[string][]herdr.PaneInfo{"ws-other": {{PaneID: "ws-other:p0"}}},
+		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 	}
 
 	wt, err := attachFor(t, runner, spec)
 	if err != nil {
 		t.Fatalf("gave an error: %v", err)
 	}
-	if wt.WorkspaceID != "ws-nuevo" {
-		t.Errorf("workspace=%q, want ws-nuevo: another checkout's is not adopted, or the "+
+	if wt.WorkspaceID != "ws-new" {
+		t.Errorf("workspace=%q, want ws-new: another checkout's is not adopted, or the "+
 			"review of PR 7 mounts in the workspace of PR 6", wt.WorkspaceID)
 	}
 	if len(runner.paneListArgs) != 0 {
@@ -89,18 +89,18 @@ func TestAttachAClosedIDIsNotAdopted(t *testing.T) {
 				listResult: []herdr.WorktreeInfo{{Path: spec.Path, OpenWorkspaceID: "ws-7"}},
 				panes:      map[string][]herdr.PaneInfo{"ws-7": c.panes},
 				panesErr:   map[string]error{"ws-7": c.err},
-				workspace:  herdr.WorkspaceInfo{WorkspaceID: "ws-nuevo", RootPaneID: "ws-nuevo:p0"},
+				workspace:  herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 			}
 
 			wt, err := attachFor(t, runner, spec)
 			if err != nil {
 				t.Fatalf("gave an error: %v", err)
 			}
-			if wt.WorkspaceID != "ws-nuevo" {
-				t.Errorf("workspace=%q, want ws-nuevo: an id that points at nothing is not adopted",
+			if wt.WorkspaceID != "ws-new" {
+				t.Errorf("workspace=%q, want ws-new: an id that points at nothing is not adopted",
 					wt.WorkspaceID)
 			}
-			if wt.RootPaneID != "ws-nuevo:p0" {
+			if wt.RootPaneID != "ws-new:p0" {
 				t.Errorf("pane=%q, want the new workspace's", wt.RootPaneID)
 			}
 			if len(runner.wsCalls) != 1 {
@@ -129,15 +129,15 @@ func TestAttachWithoutAListDoesNotAdopt(t *testing.T) {
 	runner := &fakeRunner{
 		available:  true,
 		listResult: nil,
-		workspace:  herdr.WorkspaceInfo{WorkspaceID: "ws-nuevo", RootPaneID: "ws-nuevo:p0"},
+		workspace:  herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 	}
 
 	wt, err := attachFor(t, runner, spec)
 	if err != nil {
 		t.Fatalf("without a list it should open a workspace and carry on: %v", err)
 	}
-	if wt.WorkspaceID != "ws-nuevo" {
-		t.Errorf("workspace=%q, want ws-nuevo", wt.WorkspaceID)
+	if wt.WorkspaceID != "ws-new" {
+		t.Errorf("workspace=%q, want ws-new", wt.WorkspaceID)
 	}
 	if len(runner.paneListArgs) != 0 {
 		t.Errorf("it asked for the panes (%v) with no list to say so", runner.paneListArgs)
@@ -151,15 +151,15 @@ func TestAttachWithAnEmptyWorkspaceIDDoesNotAdopt(t *testing.T) {
 		listResult: []herdr.WorktreeInfo{
 			{Path: spec.Path, OpenWorkspaceID: ""}, // no open workspace
 		},
-		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-nuevo", RootPaneID: "ws-nuevo:p0"},
+		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 	}
 
 	wt, err := attachFor(t, runner, spec)
 	if err != nil {
 		t.Fatalf("gave an error: %v", err)
 	}
-	if wt.WorkspaceID != "ws-nuevo" {
-		t.Errorf("workspace=%q, want ws-nuevo", wt.WorkspaceID)
+	if wt.WorkspaceID != "ws-new" {
+		t.Errorf("workspace=%q, want ws-new", wt.WorkspaceID)
 	}
 	if len(runner.paneListArgs) != 0 {
 		t.Errorf("it asked for the panes of an EMPTY id (%v): Herdr cannot "+
@@ -173,22 +173,22 @@ func TestAttachOnlyOpensAWorkspaceWhenEverythingFails(t *testing.T) {
 		available: true,
 		listResult: []herdr.WorktreeInfo{
 			{Path: spec.Path, OpenWorkspaceID: "ws-cerrado"},
-			{Path: "/wt/otro", OpenWorkspaceID: "ws-valido"},
+			{Path: "/wt/other", OpenWorkspaceID: "ws-valido"},
 		},
 		panes: map[string][]herdr.PaneInfo{
 			"ws-cerrado": nil,
 			"ws-valido":  {{PaneID: "ws-valido:p0"}},
 		},
 		panesErr:  map[string]error{"ws-cerrado": errors.New("workspace_not_found")},
-		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-nuevo", RootPaneID: "ws-nuevo:p0"},
+		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 	}
 
 	wt, err := attachFor(t, runner, spec)
 	if err != nil {
 		t.Fatalf("gave an error: %v", err)
 	}
-	if wt.WorkspaceID != "ws-nuevo" {
-		t.Errorf("workspace=%q, want ws-nuevo", wt.WorkspaceID)
+	if wt.WorkspaceID != "ws-new" {
+		t.Errorf("workspace=%q, want ws-new", wt.WorkspaceID)
 	}
 	if len(runner.wsCalls) != 1 {
 		t.Errorf("%d workspaces were opened, want 1: opening two leaves an orphan workspace "+
@@ -214,15 +214,15 @@ func TestAttachABadIDStopsTheSearch(t *testing.T) {
 			"ws-vivo":    {{PaneID: "ws-vivo:p0"}},
 		},
 		panesErr:  map[string]error{"ws-cerrado": errors.New("workspace_not_found")},
-		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-nuevo", RootPaneID: "ws-nuevo:p0"},
+		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 	}
 
 	wt, err := attachFor(t, runner, spec)
 	if err != nil {
 		t.Fatalf("gave an error: %v", err)
 	}
-	if wt.WorkspaceID != "ws-nuevo" {
-		t.Errorf("workspace=%q, want ws-nuevo: as soon as the checkout appears with an id that "+
+	if wt.WorkspaceID != "ws-new" {
+		t.Errorf("workspace=%q, want ws-new: as soon as the checkout appears with an id that "+
 			"does not hold, the rest of the list is not read. Without that the id of the second "+
 			"entry would be adopted, which belongs to another repo and would open the review in a "+
 			"foreign workspace",
@@ -241,14 +241,14 @@ func TestReuseTheCallersLabelOverwritesTheCheckouts(t *testing.T) {
 	base := t.TempDir()
 	dest := filepath.Join(base, "prdash-pr-1")
 	if _, err := NewGitDirect(base).Create(context.Background(),
-		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "etiqueta-VIEJA"}); err != nil {
+		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "label-VIEJA"}); err != nil {
 		t.Fatalf("preparing a worktree: %v", err)
 	}
 
 	runner := &fakeRunner{
 		available: true,
 		listResult: []herdr.WorktreeInfo{
-			{Path: dest, Branch: "feature", Label: "la-del-repo-del-nativo"},
+			{Path: dest, Branch: "feature", Label: "the-native-repo-label"},
 		},
 		workspace: herdr.WorkspaceInfo{WorkspaceID: "w1", RootPaneID: "w1:p1"},
 	}
@@ -276,9 +276,9 @@ func TestReuseWithoutACallerLabelKeepsTheCheckouts(t *testing.T) {
 	testutil.RunGit(t, repo, "branch", "feature")
 
 	base := t.TempDir()
-	dest := filepath.Join(base, "el-pr-7-del-repo-acme")
+	dest := filepath.Join(base, "pr-7-of-acme-repo")
 	if _, err := NewGitDirect(base).Create(context.Background(),
-		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "lo-que-pase"}); err != nil {
+		Spec{Repo: repo, Branch: "feature", Path: dest, Label: "whatever-happens"}); err != nil {
 		t.Fatalf("preparing a worktree: %v", err)
 	}
 
@@ -295,8 +295,8 @@ func TestReuseWithoutACallerLabelKeepsTheCheckouts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if wt.Label != "el-pr-7-del-repo-acme" {
-		t.Errorf("label=%q, want the checkout's name el-pr-7-del-repo-acme", wt.Label)
+	if wt.Label != "pr-7-of-acme-repo" {
+		t.Errorf("label=%q, want the checkout's name pr-7-of-acme-repo", wt.Label)
 	}
 	if wt.Label == "acme-widget" {
 		t.Error("the label is the repo name the native reports: all the " +

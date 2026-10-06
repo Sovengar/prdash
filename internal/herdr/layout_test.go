@@ -180,7 +180,7 @@ func TestMountLayoutTabFailureIsWarning(t *testing.T) {
 	base := f.respond
 	f.respond = func(args []string) ([]byte, []byte, error) {
 		if len(args) > 1 && args[0] == "tab" && args[1] == "create" {
-			return nil, nil, fmt.Errorf("sin espacio")
+			return nil, nil, fmt.Errorf("no space")
 		}
 		return base(args)
 	}
@@ -201,7 +201,7 @@ func TestMountLayoutPaneFailureIsWarning(t *testing.T) {
 	base := f.respond
 	f.respond = func(args []string) ([]byte, []byte, error) {
 		if len(args) > 1 && args[0] == "pane" && args[1] == "split" {
-			return nil, nil, fmt.Errorf("sin espacio")
+			return nil, nil, fmt.Errorf("no space")
 		}
 		return base(args)
 	}

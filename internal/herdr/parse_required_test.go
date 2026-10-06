@@ -113,15 +113,15 @@ func TestParseServerErrorAcceptsBothForms(t *testing.T) {
 	}{
 		{
 			name:     "nested",
-			stderr:   `{"error":{"code":"pane_gone","message":"el pane ya no existe"}}`,
+			stderr:   `{"error":{"code":"pane_gone","message":"the pane no longer exists"}}`,
 			wantCode: "pane_gone",
-			wantMsg:  "el pane ya no existe",
+			wantMsg:  "the pane no longer exists",
 		},
 		{
 			name:     "flat",
-			stderr:   `{"code":"pane_gone","message":"el pane ya no existe"}`,
+			stderr:   `{"code":"pane_gone","message":"the pane no longer exists"}`,
 			wantCode: "pane_gone",
-			wantMsg:  "el pane ya no existe",
+			wantMsg:  "the pane no longer exists",
 		},
 		{
 			name: "nested with code and no message",

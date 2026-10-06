@@ -175,9 +175,9 @@ func writeScript(t *testing.T, dir, name, body string) string {
 // The notes are asked apart from the inbox, with `last` and with `system`, which is the only thing
 // telling a note written by a person from one the MR left when it opened.
 func TestNotesQueryShape(t *testing.T) {
-	q := glNotesQuery("grupo/sub/proy", 42, commentFetch)
+	q := glNotesQuery("group/sub/proj", 42, commentFetch)
 	for _, want := range []string{
-		`project(fullPath: "grupo/sub/proy")`,
+		`project(fullPath: "group/sub/proj")`,
 		`mergeRequest(iid: "42")`,
 		"notes(last: 15)",
 		"author { username }",
@@ -214,7 +214,7 @@ cat <<'OUT'
 OUT
 `)
 	page, warns := New("gitlab.example.com", script).Comments(context.Background(),
-		model.RepoRef{Project: "grupo/sub/proy"}, 42)
+		model.RepoRef{Project: "group/sub/proj"}, 42)
 	if len(warns) != 0 {
 		t.Fatalf("warnings = %v", warns)
 	}
@@ -249,11 +249,19 @@ func TestCommentsEmptyRepo(t *testing.T) {
 func TestCommentsFailureIsWarning(t *testing.T) {
 	script := writeScript(t, t.TempDir(), "glab", "#!/bin/sh\necho boom >&2\nexit 1\n")
 	page, warns := New("gitlab.example.com", script).Comments(context.Background(),
-		model.RepoRef{Project: "grupo/proy"}, 42)
+		model.RepoRef{Project: "group/proj"}, 42)
 	if len(page.Comments) != 0 {
 		t.Errorf("a failure must not return comments: %+v", page.Comments)
 	}
 	if len(warns) == 0 {
 		t.Fatal("a failure should warn")
+	}
+}
+
+// commentFetch is precomputed (a const decl carries no coverage, ADR 0011): this pins the
+// formula so a change of forge.CommentLimit cannot leave the margin silently behind.
+func TestCommentFetchKeepsTheMargin(t *testing.T) {
+	if commentFetch != 3*forge.CommentLimit {
+		t.Errorf("commentFetch = %d, want 3 * forge.CommentLimit = %d", commentFetch, 3*forge.CommentLimit)
 	}
 }

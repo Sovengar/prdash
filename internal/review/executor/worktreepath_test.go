@@ -35,7 +35,7 @@ func TestTheActiveWorktreeWinsOverTheCanonicalPath(t *testing.T) {
 	}
 
 	// An active review WITH a worktree wins, even when it is not the canonical path.
-	active := wtDir + "/movido-a-mano"
+	active := wtDir + "/moved-a-mano"
 	if err := resolver.RecordReview(it, reviewWith(active)); err != nil {
 		t.Fatalf("RecordReview: %v", err)
 	}

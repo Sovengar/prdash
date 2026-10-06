@@ -147,10 +147,10 @@ func TestARelativeRootWithADeletedWorkingDirectoryDoesNotDropTheWholeIndex(t *te
 	good := filepath.Join(t.TempDir(), "bueno")
 	testutil.InitRepo(t, good)
 	testutil.CommitFile(t, good, "a.txt", "a", "a")
-	testutil.SetRemote(t, good, "origin", "https://github.com/acme/proyecto.git")
-	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto"}
+	testutil.SetRemote(t, good, "origin", "https://github.com/acme/project.git")
+	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/project"}
 
-	vanished := filepath.Join(t.TempDir(), "cwd-que-se-va")
+	vanished := filepath.Join(t.TempDir(), "cwd-that-vanishes")
 	if err := os.MkdirAll(vanished, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestARelativeRootWithADeletedWorkingDirectoryDoesNotDropTheWholeIndex(t *te
 	if err := os.RemoveAll(vanished); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := filepath.Abs("repo-que-no-existe"); err == nil {
+	if _, err := filepath.Abs("repo-that-does-not-exist"); err == nil {
 		t.Fatal("the cwd is still alive: the test is not measuring the Getwd failure")
 	}
 
@@ -180,7 +180,7 @@ func TestAFailedCloneLeavesNoTempAndSaysToClone(t *testing.T) {
 	if err := os.MkdirAll(cloneDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	missing := filepath.Join(t.TempDir(), "repo-que-no-existe.git")
+	missing := filepath.Join(t.TempDir(), "repo-that-does-not-exist.git")
 	r := New(Options{
 		Roots:    []string{t.TempDir()},
 		CloneDir: cloneDir,
@@ -188,7 +188,7 @@ func TestAFailedCloneLeavesNoTempAndSaysToClone(t *testing.T) {
 		Hosts:    map[string]string{"github.com": "github"},
 		CloneURL: func(model.RepoRef) string { return missing },
 	})
-	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/proyecto"}
+	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/project"}
 
 	dest, err := r.EnsureBare(context.Background(), ref)
 	if err == nil {

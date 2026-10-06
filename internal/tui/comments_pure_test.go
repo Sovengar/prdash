@@ -16,7 +16,7 @@ func TestClipRunesMarksWhatWasLost(t *testing.T) {
 		n    int
 		want string
 	}{
-		{6, "abcdef"},   // cabe exact: intacto
+		{6, "abcdef"},   // fits exactly: intact
 		{7, "abcdef"},   // spare room: intact
 		{100, "abcdef"}, // lots of spare: intact
 		{1, "…"},        // only the mark fits

@@ -133,20 +133,20 @@ func TestKindIgnoresTheHTTPCodeThatSeparatesNothing(t *testing.T) {
 
 func TestHTTPStatusRebuildsTheCode(t *testing.T) {
 	cases := map[string]int{
-		"HTTP 404: Not Found":            404,
-		"HTTP 503 Service Unavailable":   503,
-		"status code 401":                401,
-		"status: 429":                    429,
-		"http/1.1 200 OK":                200,
-		"HTTP 000":                       0,
-		"no code":                        0,
-		"":                               0,
-		"HTTP 40":                        0, // incomplete: it is not invented
-		"status code 40a":                0,
-		"port 8080 is not a code":        0,
-		"HTTP 403 without a status text": 403,
-		"se receiving 200 but it is not a status": 0,
-		"status code: 422 with a colon":           422,
+		"HTTP 404: Not Found":                  404,
+		"HTTP 503 Service Unavailable":         503,
+		"status code 401":                      401,
+		"status: 429":                          429,
+		"http/1.1 200 OK":                      200,
+		"HTTP 000":                             0,
+		"no code":                              0,
+		"":                                     0,
+		"HTTP 40":                              0, // incomplete: it is not invented
+		"status code 40a":                      0,
+		"port 8080 is not a code":              0,
+		"HTTP 403 without a status text":       403,
+		"receiving 200 but it is not a status": 0,
+		"status code: 422 with a colon":        422,
 		// Something that looks like a code but is not. A false positive here is not a 0: it is a code
 		// printed as if it were one.
 		"X-Status-Code: 409 in a header":  0,

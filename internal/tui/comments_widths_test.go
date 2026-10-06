@@ -26,7 +26,7 @@ func TestCommentWidths(t *testing.T) {
 			wantFirst := max(8, inner-utf8.RuneCountInString(commentIndent+author+commentSep))
 			wantCont := max(8, inner-utf8.RuneCountInString(contIndent))
 			if first != wantFirst || cont != wantCont {
-				t.Errorf("inner=%d author=%q: dio (%d, %d), want (%d, %d)",
+				t.Errorf("inner=%d author=%q: gave (%d, %d), want (%d, %d)",
 					inner, author, first, cont, wantFirst, wantCont)
 			}
 			// The count is in RUNES: an author with accents or emoji takes one column per character.

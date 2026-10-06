@@ -17,7 +17,8 @@ import (
 	"prdash/internal/worktree"
 )
 
-const printTimeout = 60 * time.Second
+// 60s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+const printTimeout = time.Duration(60e9)
 
 // A nil lookup leaves the output with just the F1 information.
 type reviewLookup func(model.Item) (worktree.Worktree, bool)

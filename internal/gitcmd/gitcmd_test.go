@@ -20,8 +20,8 @@ func TestTheErrorMessageBringsWhatIsNeededToFixIt(t *testing.T) {
 	}{
 		{
 			name: "with dir and exit code",
-			e:    &Error{Args: []string{"rev-parse", "HEAD"}, Dir: "/repos/proy", Msg: "fatal: not a git repository", ExitCode: 128},
-			want: "git -C /repos/proy rev-parse HEAD: fatal: not a git repository (exit 128)",
+			e:    &Error{Args: []string{"rev-parse", "HEAD"}, Dir: "/repos/proj", Msg: "fatal: not a git repository", ExitCode: 128},
+			want: "git -C /repos/proj rev-parse HEAD: fatal: not a git repository (exit 128)",
 		},
 		{
 			name: "without dir",

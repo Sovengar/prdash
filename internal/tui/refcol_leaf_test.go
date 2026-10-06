@@ -15,7 +15,7 @@ func TestRefLeafCutsAtTheLastSeparator(t *testing.T) {
 		want    string
 	}{
 		{"acme/widget", 7, "widget#7"},
-		{"grupo/sub/project", 12, "project#12"},
+		{"group/sub/project", 12, "project#12"},
 		{"a/b/c/d", 1, "d#1"},
 		{"widget", 7, "widget#7"},
 		{"", 7, "#7"},
@@ -57,9 +57,9 @@ func TestRefLeafCutsAtTheLastSeparator(t *testing.T) {
 // The prefix has to be a strict directory for ALL of them.
 func TestSectionPrefixWithProjectsOfDifferentDepth(t *testing.T) {
 	cases := []struct {
-		name      string
-		proyectos []string
-		want      string
+		name     string
+		projects []string
+		want     string
 	}{
 		{"same depth", []string{"acme/a", "acme/b"}, "acme"},
 		{"profundidad distinta", []string{"a/b/c", "a/b/d"}, "a/b"},
@@ -76,12 +76,12 @@ func TestSectionPrefixWithProjectsOfDifferentDepth(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			items := make([]model.Item, len(c.proyectos))
-			for i, p := range c.proyectos {
+			items := make([]model.Item, len(c.projects))
+			for i, p := range c.projects {
 				items[i] = model.Item{Number: i + 1, Ref: model.RepoRef{Project: p}}
 			}
 			if got := sectionPrefix(items); got != c.want {
-				t.Errorf("sectionPrefix(%v) = %q, want %q", c.proyectos, got, c.want)
+				t.Errorf("sectionPrefix(%v) = %q, want %q", c.projects, got, c.want)
 			}
 		})
 	}

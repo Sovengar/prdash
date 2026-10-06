@@ -181,7 +181,7 @@ func TestMergeItemKeepsWhatTheForgeDoesNotKnowAndChangesWhatItDoes(t *testing.T)
 // The difference between "no" and "not known".
 func TestOtherwiseTheDetailDoesNotShowADash(t *testing.T) {
 	if got := yesNo(true); got != "yes" {
-		t.Errorf("yesNo(true) dio %q", got)
+		t.Errorf("yesNo(true) gave %q", got)
 	}
 	if got := yesNo(false); got != "no" {
 		t.Errorf("yesNo(false) gave %q, want \"no\": a false is an answer, not an absence", got)
