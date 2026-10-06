@@ -139,7 +139,9 @@ jobs:
             exit 0
           fi
 
-          grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST" | sed 's/[[:space:]]*$//' | sort -u > /tmp/allow.txt
+          # `|| true`: an allowlist that is all comments makes grep exit 1, and the step runs under an
+          # inherited `bash -e`, which would abort the gate instead of reporting zero new survivors.
+          grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST" | sed 's/[[:space:]]*$//' | sort -u > /tmp/allow.txt || true
           comm -23 /tmp/lived.txt /tmp/allow.txt > /tmp/new_lived.txt
           new=$(wc -l < /tmp/new_lived.txt)
 
