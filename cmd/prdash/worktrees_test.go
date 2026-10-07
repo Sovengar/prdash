@@ -388,7 +388,7 @@ func TestRunWorktreesRemoveOrphansDryRun(t *testing.T) {
 }
 
 func TestRunWorktreesRemoveOrphansNoneIsSuccess(t *testing.T) {
-	base, _, _ := worktreeFixture(t) // healthy + foreign, no orphans
+	base, _, _ := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
 
 	var stdout, stderr bytes.Buffer

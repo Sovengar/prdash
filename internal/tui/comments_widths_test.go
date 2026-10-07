@@ -8,7 +8,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The first row carries the author and the rest only the continuation indent.
 func TestCommentWidths(t *testing.T) {
 	for _, inner := range []int{0, 1, 5, 10, 20, 30, 40, 60, 80, 120, 200} {
 		for _, author := range []string{"", "a", "alice", "someone-with-a-long-name"} {
@@ -106,7 +105,6 @@ func TestCommentRowReservesTheGapForTheEllipsis(t *testing.T) {
 			w, w+5, a, b)
 	}
 
-	// Without clipping a text that fits comes whole and WITHOUT a mark.
 	withoutCut := strings.Repeat("x", w-3)
 	if got := stripANSI(commentRow(0, "alice", ": ", withoutCut, w, false)); strings.Contains(got, "…") {
 		t.Errorf("a text that fits whole should not carry a mark: %q", got)
@@ -143,8 +141,7 @@ func TestCommentRowReservesTheGapForTheEllipsis(t *testing.T) {
 	if strings.Contains(next, "alice") {
 		t.Errorf("the second row should not carry the author: %q", next)
 	}
-	// The continuation carries a FIXED indent whatever the author, which is what makes the body read
-	//as a block.
+	// The continuation carries a fixed indent whatever the author, which makes the body read as a block.
 	if !strings.HasPrefix(next, contIndent) {
 		t.Errorf("the second row should go with the continuation indent, gave %q", next)
 	}
@@ -166,7 +163,6 @@ func TestCommentRowReservesTheGapForTheEllipsis(t *testing.T) {
 	}
 }
 
-// When the comment does not fit in the rows it gets.
 func TestTheCutMarksTheLastRowAndAddsNone(t *testing.T) {
 	const inner = 40
 	first, _ := commentWidths(inner, "alice")
@@ -215,8 +211,7 @@ func TestTheCutMarksTheLastRowAndAddsNone(t *testing.T) {
 		if len(short) == 0 {
 			continue
 		}
-		// The mark only appears when something was really lost: with one chunk and enough budget there
-		// is nothing to say.
+		// The mark appears only when something was lost: with one chunk and enough budget there is nothing.
 		if asks < chunks {
 			if last := stripANSI(short[len(short)-1]); !strings.Contains(last, "…") {
 				t.Errorf("with %d chunks and a budget of %d the last row carries no mark: %q",
@@ -236,7 +231,6 @@ func TestTheCutMarksTheLastRowAndAddsNone(t *testing.T) {
 		}
 	}
 
-	// A second paragraph: the cut has to land on the last chunk written.
 	body := palabra + "\n\n" + palabra + " " + palabra + " " + palabra
 	c := model.Comment{Author: "alice", Body: body}
 	firstParagraph := len(wrapText(palabra, first))

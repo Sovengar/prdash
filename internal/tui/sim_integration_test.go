@@ -94,8 +94,7 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	if len(m.sim.cells) != m.sim.cellH {
 		t.Errorf("cells = %d lines, want %d", len(m.sim.cells), m.sim.cellH)
 	}
-	// The cells go to the middle of the box, not the first line: the overlay's arithmetic
-	// owns that.
+	// The cells go to the middle of the box, not the first line: the overlay's arithmetic owns that.
 	block := strings.Index(view, "▀")
 	if block < 0 {
 		t.Fatalf("the view contains no half-block:\n%s", view)

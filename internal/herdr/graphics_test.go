@@ -18,8 +18,7 @@ type fakeSocket struct {
 	lastRequest map[string]any
 	served      int
 	fail        bool
-	// silent closes the connection WITHOUT answering, like a server that dies midway; distinct from fail
-	//(which does not even accept).
+	// silent closes WITHOUT answering, like a server that dies midway; distinct from fail (which does not even accept).
 	silent   bool
 	halfLine bool
 	deadline time.Time
@@ -49,11 +48,9 @@ func (f *fakeSocket) dial(ctx context.Context, _, _ string) (net.Conn, error) {
 		f.lastRequest = req.Params
 		f.served++
 		if f.silent {
-			// Closes without answering: the client is left with an empty read and an error.
 			return
 		}
 		if f.halfLine {
-			// Writes half a response and closes: ReadBytes reads something but not a whole line.
 			_, _ = server.Write([]byte(f.response[:len(f.response)/2]))
 			return
 		}

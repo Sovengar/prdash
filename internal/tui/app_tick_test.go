@@ -37,14 +37,12 @@ func TestMergeItemLosesNeitherTheSectionNorTheReviewKind(t *testing.T) {
 	if got.Section != model.SectionAuthored {
 		t.Errorf("Section = %q, want the reread one (%q)", got.Section, model.SectionAuthored)
 	}
-	// An EMPTY ReviewKind IS recovered: the re-read never knows it, and a lost kind would drop the
-	// item out of its column.
+	// An EMPTY ReviewKind IS recovered: the re-read never brings it, and losing it drops the item from its column.
 	if got.ReviewKind != model.ReviewAssigned {
 		t.Errorf("ReviewKind = %q, want the original one: ItemState never brings it", got.ReviewKind)
 	}
 }
 
-// The auto-refresh interval is three decisions.
 func TestTickIntervalWithBackoffAndCap(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 
@@ -91,7 +89,6 @@ func TestArmTickDoesNotChainTicks(t *testing.T) {
 	if !m.tickPending {
 		t.Error("armTick should mark the tick as pending")
 	}
-	// A second armTick with one pending arms no other: this is the single chain.
 	if cmd := m.armTick(); cmd != nil {
 		t.Error("with a tick already pending armTick should not arm another (double chain)")
 	}
@@ -105,7 +102,6 @@ func TestRecomputeBackoffGrowsOnlyWithRateLimitOrTimeout(t *testing.T) {
 		return m
 	}
 
-	// No warnings: back to zero.
 	m := new()
 	m.recomputeBackoff()
 	if m.backoff != 0 {
@@ -128,12 +124,11 @@ func TestRecomputeBackoffGrowsOnlyWithRateLimitOrTimeout(t *testing.T) {
 		if m.backoff != 30*time.Second {
 			t.Errorf("warning %q gave backoff %v, want the interval (30s) as base", kind, m.backoff)
 		}
-		// And repeating it doubles it...
 		m.recomputeBackoff()
 		if m.backoff != time.Minute {
 			t.Errorf("the second %q gave %v, want the double (60s)", kind, m.backoff)
 		}
-		// ...up to the ceiling, which is what stops the inbox going hours without a refresh.
+		// Up to the ceiling, which is what stops the inbox going hours without a refresh.
 		for range 20 {
 			m.recomputeBackoff()
 		}
@@ -174,14 +169,12 @@ func TestAppendWarningsDoesNotRepeatTheSameNotice(t *testing.T) {
 		t.Errorf("another section should be another notice, ended at %d", len(got))
 	}
 
-	// Distinto tipo: other.
 	got = appendWarnings(got, []model.Warning{{Forge: "github", Section: model.SectionReview, Kind: "auth", Msg: "boom"}})
 	if len(got) != 4 {
 		t.Errorf("another kind should be another notice, ended at %d", len(got))
 	}
 
-	// The Forge is NOT part of the key: the same warning from two forges is kept once, on
-	// purpose.
+	// The Forge is not part of the key: the same warning from two forges is kept once, on purpose.
 	got = appendWarnings(got, []model.Warning{{Forge: "gitlab", Section: model.SectionReview, Kind: "network", Msg: "boom"}})
 	if len(got) != 4 {
 		t.Errorf("the same notice of another forge should not duplicate, ended at %d", len(got))
@@ -209,7 +202,6 @@ func TestPausedWithLoadingOrAction(t *testing.T) {
 	}
 }
 
-// The "loading more" indicator belongs to the section being paged.
 func TestSectionLoadingMoreLooksAtTheActiveSection(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.streams[streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested}] = &stream{more: true}

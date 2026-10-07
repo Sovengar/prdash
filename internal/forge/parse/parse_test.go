@@ -360,8 +360,7 @@ func TestParseGHChecksBuckets(t *testing.T) {
 	}
 }
 
-// A parse error has to say WHAT failed as well as where: without the cause, "invalid JSON"
-// says nothing.
+// A parse error has to say WHAT failed as well as where: without the cause, "invalid JSON" says nothing.
 func TestParseErrorSaysWhatAndWhere(t *testing.T) {
 	_, _, err := ParseGHGraphQLSearch("{")
 	if err == nil {

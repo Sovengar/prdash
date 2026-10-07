@@ -14,7 +14,6 @@ func sizedRetarget(t *testing.T, w, h int, branches ...string) Model {
 	return send(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 }
 
-// The popup draws ON TOP, in both dimensions.
 func TestTheRetargetPopupRespectsTheTerminalInBothDimensions(t *testing.T) {
 	for _, w := range []int{20, 40, 64, 80, 200} {
 		for _, h := range []int{5, 8, 12, 20, 60} {
@@ -42,7 +41,6 @@ func TestTheRetargetPopupRespectsTheTerminalInBothDimensions(t *testing.T) {
 	}
 }
 
-// The number of branch rows is what decides the height.
 func TestThePopupsRowsFitBetweenTheMarginAndTheCeiling(t *testing.T) {
 	branches := []string{"main", "a/1", "a/2", "a/3", "a/4", "a/5", "a/6", "a/7", "a/8", "a/9", "a/10", "a/11", "a/12", "a/13"}
 	for _, h := range []int{4, 6, 8, 10, 14, 20, 40, 100} {
@@ -87,8 +85,7 @@ func TestMovingTheCursorRecalculatesTheWindow(t *testing.T) {
 	m.retarget.view = seqBranches(rows + 4)
 	for cursor := 0; cursor < rows+4; cursor++ {
 		m.retarget.cursor, m.retarget.win = cursor, 0
-		// This is what moveRetargetCursor does: the arithmetic lives in retargetWindow and the render
-		//reads m.retarget.win.
+		// What moveRetargetCursor does: the arithmetic lives in retargetWindow and the render reads m.retarget.win.
 		m.retarget.win = m.retargetWindow()
 		visibles, start := m.retargetVisible()
 		if cursor < start || cursor >= start+len(visibles) {

@@ -80,7 +80,6 @@ func TestWrapTextSplitsByWordsAndRespectsTheWidth(t *testing.T) {
 	})
 }
 
-// Each one expires after ITS duration.
 func TestToastExpiresByItsDuration(t *testing.T) {
 	new := func() *toastManager {
 		tm := &toastManager{now: func() time.Time { return time.Unix(1_000, 0) }}
@@ -92,7 +91,7 @@ func TestToastExpiresByItsDuration(t *testing.T) {
 	if len(tm.texts()) != 1 {
 		t.Fatalf("texts = %q, want 1 notice", tm.texts())
 	}
-	tm.update() // now == created, d = 0 < duration
+	tm.update()
 	if len(tm.texts()) != 1 {
 		t.Errorf("a freshly created notice should not expire: %q", tm.texts())
 	}
@@ -115,8 +114,7 @@ func TestToastExpiresByItsDuration(t *testing.T) {
 		t.Errorf("an instant before it elapses the notice should remain, %q stays", tm.texts())
 	}
 
-	// Each notice expires on ITS OWN duration: pruning with the first one's would drop the long
-	// one early.
+	// Each notice expires on ITS OWN duration: pruning with the first one's would drop the long one early.
 	tm = &toastManager{now: func() time.Time { return time.Unix(1_000, 0) }}
 	tm.toasts = []toast{
 		{message: "short", created: time.Unix(1_000, 0), duration: time.Second},

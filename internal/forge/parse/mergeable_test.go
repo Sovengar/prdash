@@ -35,8 +35,7 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			// UNKNOWN is "I do not know yet", not a "yes": with no Known there is no warning either, because a
-			// false warning is worse.
+			// UNKNOWN is "I do not know yet", not a "yes": with no Known there is no warning, because a false warning is worse.
 			name: "github graphql: UNKNOWN gives no warning",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items := mustSearch(t, ghSearchUnknownFixture, 1)

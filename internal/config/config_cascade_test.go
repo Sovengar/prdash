@@ -7,9 +7,7 @@ import (
 	"testing"
 )
 
-// Load never fails: that is the project rule. A TUI that does not start because the file has a typo is
-//worse than one that starts with defaults.
-
+// Load never fails: a TUI that does not start over a typo is worse than one with defaults.
 func TestLoadWithoutAFileSaysNothing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "does-not-exist.toml")
@@ -23,7 +21,6 @@ func TestLoadWithoutAFileSaysNothing(t *testing.T) {
 	}
 }
 
-// The case that gets confused with the previous one, because the RESULT is the same —the defaults—.
 func TestAFileThatExistsAndCannotBeReadWarns(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("as root read permissions do not prevent reading")
@@ -47,7 +44,6 @@ func TestAFileThatExistsAndCannotBeReadWarns(t *testing.T) {
 	}
 }
 
-// Having no variable set at all is a container environment.
 func TestLoadThroughTheXDGPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -85,7 +81,6 @@ func TestLoadThroughTheXDGPath(t *testing.T) {
 	}
 }
 
-// The fallback is a REAL default, not an empty string.
 func TestKeyForFallsBackToTheDefaultAndNotToEmpty(t *testing.T) {
 	cfg := Defaults()
 
@@ -103,7 +98,6 @@ func TestKeyForFallsBackToTheDefaultAndNotToEmpty(t *testing.T) {
 	}
 }
 
-// Two actions on the same key, resolved deterministically.
 func TestActionForKeyInvertsTheMapAndIsStable(t *testing.T) {
 	cfg := Defaults()
 
@@ -151,7 +145,7 @@ func TestCmdArgsSplitsTheCommandOnSpaces(t *testing.T) {
 		}
 	}
 
-	// Pinned as empty, because an empty argv here is the signal of "no command for this action".
+	// An empty argv is the signal of "no command for this action".
 	if got := cfg.CmdArgs("nonexistent-action"); len(got) != 0 {
 		t.Errorf("an action with no command gave %q, want an empty argv", got)
 	}
@@ -161,8 +155,7 @@ func TestCmdArgsSplitsTheCommandOnSpaces(t *testing.T) {
 	}
 }
 
-// That is the whole function: the difference between "the user did not configure it" and "the user
-// configured it to nothing".
+// The whole function: "did not configure it" differs from "configured it to nothing".
 func TestThePaneOverrideIsNotAnEmptyValue(t *testing.T) {
 	cfg := Defaults()
 
@@ -210,8 +203,7 @@ func TestToolArgsPrioritisesTheOverrideAndThenTheBinary(t *testing.T) {
 		t.Errorf("with tools.tuicr it gave %q", got)
 	}
 
-	// `--model o3` is TWO fields, not one with a space in it, which is exactly what a naive single-arg
-	//split gets wrong.
+	// `--model o3` is TWO fields, which a naive single-arg split gets wrong.
 	cfg.Commands["tuicr"] = "tuicr review --model o3"
 	got = cfg.ToolArgs("tuicr")
 	want := []string{"tuicr", "review", "--model", "o3"}
@@ -231,7 +223,6 @@ func TestToolArgsPrioritisesTheOverrideAndThenTheBinary(t *testing.T) {
 	}
 }
 
-// The case separating the two branches of a naive `== ""` is whitespace.
 func TestFieldsOrUsesTheFallbackOnlyWhenEmpty(t *testing.T) {
 	cases := []struct {
 		raw      string

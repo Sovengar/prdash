@@ -194,8 +194,7 @@ func TestRemoveIfCleanKeepsDirtyWorktree(t *testing.T) {
 	}
 }
 
-// An untracked file counts as dirty too: `git diff --quiet` ignores it and `status
-// --porcelain` does not.
+// An untracked file counts as dirty: git diff --quiet ignores it, status --porcelain does not.
 func TestRemoveIfCleanKeepsUntrackedWorktree(t *testing.T) {
 	base, dest, _ := newCleanWorktree(t)
 	if err := os.WriteFile(filepath.Join(dest, "new.txt"), []byte("untracked"), 0o644); err != nil {

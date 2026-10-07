@@ -7,11 +7,9 @@ import (
 
 // The CLI's envelope is {"id":...,"result":{...}} and EVERY command returns a .result.
 
-// The envelope itself is a fake server payload: it stays as the server sent it.
 const badEnvelope = `esto no es json`
 
-// Each parser goes through decodeResult, so one covering only its own cases exercises a branch the
-// other seven share.
+// Each parser goes through decodeResult: one test covers a branch all eight share.
 func TestParsersRejectAnUnreadableEnvelope(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -40,7 +38,6 @@ func TestParsersRejectAnUnreadableEnvelope(t *testing.T) {
 	}
 }
 
-// Valid JSON missing the key that makes the result mean something.
 func TestParsersDemandTheirRequiredKey(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -173,7 +170,6 @@ func TestRPCErrorWithoutMessageIsTheCode(t *testing.T) {
 	}
 }
 
-// Both halves are used, which is why both are parsed.
 func TestParseVersionSeparatesTheNumberFromTheText(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -212,7 +208,6 @@ func TestParseVersionSeparatesTheNumberFromTheText(t *testing.T) {
 	}
 }
 
-// The clipping to the first line.
 func TestFirstLineKeepsTheFirstOne(t *testing.T) {
 	cases := []struct {
 		input string

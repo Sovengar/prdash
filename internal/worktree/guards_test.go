@@ -21,7 +21,6 @@ func repoWithBranch(t *testing.T, extra ...string) string {
 	return repo
 }
 
-// Create's first guard.
 func TestAnIncompleteSpecIsNotProcessedAndNothingIsTouched(t *testing.T) {
 	repo := repoWithBranch(t)
 	root := t.TempDir()
@@ -41,8 +40,7 @@ func TestAnIncompleteSpecIsNotProcessedAndNothingIsTouched(t *testing.T) {
 			t.Errorf("%s: Create gave nil", c.name)
 			continue
 		}
-		// The message says WHAT is missing, not "incomplete spec": the reader has to know whether
-		// mounting another item's review fixes it.
+		// The message says what is missing, so the reader knows whether another item's review fixes it.
 		if !strings.Contains(err.Error(), "incomplete spec") {
 			t.Errorf("%s: the error %q does not say the spec is incomplete", c.name, err)
 		}
@@ -57,7 +55,6 @@ func TestAnIncompleteSpecIsNotProcessedAndNothingIsTouched(t *testing.T) {
 	}
 }
 
-// cleanPartial's cleanup.
 func TestABranchThatDoesNotExistFailsAndLeavesNoResidueDirectory(t *testing.T) {
 	repo := repoWithBranch(t)
 	root := t.TempDir()
@@ -170,7 +167,6 @@ func TestAuditDoesNotEnterGitDirectories(t *testing.T) {
 	}
 }
 
-// The lock's last turn.
 func TestRemoveIfCleanPropagatesTheFailureToRemoveIt(t *testing.T) {
 	root := t.TempDir()
 	repo := repoWithBranch(t, "feat/x")

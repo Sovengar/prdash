@@ -11,13 +11,8 @@ import (
 	"time"
 )
 
-// fetch and clone legitimately take a while. 60s as a literal because a const decl carries no
-// coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const DefaultTimeout = time.Duration(60e9)
 
-// A child that inherited our pipe descriptors keeps them open, so without this grace period the
-// timeout kills the process and `cmd.Run` still does not return. Same reason and fix as in herdr.
-// 250ms as a literal, same coverage argument as DefaultTimeout above.
 const pipeCloseGrace = time.Duration(250e6)
 
 type Runner struct {
@@ -29,8 +24,6 @@ type Runner struct {
 
 func New() *Runner { return &Runner{Bin: "git", Timeout: DefaultTimeout} }
 
-// Exit code and unwrapped cause are preserved so callers can classify a failure without matching on
-// git's English message.
 type Error struct {
 	Args     []string
 	Dir      string
@@ -52,7 +45,6 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-// An empty dir means the current directory. On failure it returns the partial output with the error.
 func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, error) {
 	bin := r.Bin
 	if bin == "" {
@@ -70,7 +62,6 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 		cmd.Dir = dir
 	}
 	cmd.Env = Env()
-	// Without this the timeout cannot cut the read: see pipeCloseGrace.
 	cmd.WaitDelay = pipeCloseGrace
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
@@ -90,8 +81,6 @@ func (r *Runner) Run(ctx context.Context, dir string, args ...string) (string, e
 	return out.String(), nil
 }
 
-// The GIT_* vars are stripped because they beat cmd.Dir: inheriting the caller's git context
-// would land a UI action in a repo that is not the item's, which is the bug that deletes a branch.
 func Env() []string {
 	env := os.Environ()
 	out := env[:0]

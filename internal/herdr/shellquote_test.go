@@ -56,22 +56,19 @@ func insetList() []string {
 	}
 }
 
-// The case that cannot be treated like the others.
 func TestEmptyStringGetsQuotedAndDoesNotDisappear(t *testing.T) {
 	got := shellQuote("")
 	if got != "''" {
 		t.Errorf("shellQuote of the empty one gave %q, want %q: without quotes the argument "+
 			"disappears from the command and the pane starts in the user's HOME", got, "''")
 	}
-	// shellSafe("") IS true —the loop sees no character and nothing dangerous— and that does not
-	//let it out unquoted.
+	// shellSafe("") IS true —the loop sees no character— and that does not let it out unquoted.
 	if !shellSafe("") {
 		t.Error("shellSafe of the empty one gave false: the loop sees no characters and there is " +
 			"nothing to flag. What protects it is shellQuote's guard, not this one")
 	}
 }
 
-// The classic `'\”` escape: closing the quote, escaping, reopening.
 func TestSingleQuoteIsEscapedAndTheRestIsNot(t *testing.T) {
 	got := shellQuote("it's")
 	want := `'it'\''s'`
@@ -90,8 +87,6 @@ func TestSingleQuoteIsEscapedAndTheRestIsNot(t *testing.T) {
 	if r := resolveQuoted(shellQuote("'")); r != "'" {
 		t.Errorf("a lone quote gave %q", r)
 	}
-	// A string that already comes in single quotes is quoted whole and its inner quotes are left
-	// alone.
 	alreadyQuoted := "'prefix'"
 	if r := resolveQuoted(shellQuote(alreadyQuoted)); r != alreadyQuoted {
 		t.Errorf("an already quoted label gave %q, want %q", r, alreadyQuoted)
@@ -108,7 +103,6 @@ func resolveQuoted(quoted string) string {
 	return strings.ReplaceAll(inner, `'\''`, "'")
 }
 
-// The mix is the real case: a label with spaces, quotes and slashes.
 func TestArgumentWithEverythingDangerousTogetherDoesNotBreak(t *testing.T) {
 	cases := []string{
 		`fix "the thing"; rm -rf /`,
@@ -148,8 +142,7 @@ func TestTextThatIsNotSafeNeverGoesOutUnquoted(t *testing.T) {
 				map[bool]string{true: "safe", false: "unsafe"}[shellSafe(s)])
 		}
 	}
-	// Outside ASCII it is unknown: the sweep only covers printable ASCII, and writing that down
-	// avoids guessing.
+	// Outside ASCII it is unknown: the sweep only covers printable ASCII.
 	for _, s := range []string{"ñ", "日", "🙂"} {
 		if shellSafe(s) {
 			t.Errorf("%q comes out unquoted; the non-ASCII are not in the safe list", s)

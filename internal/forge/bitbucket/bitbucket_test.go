@@ -14,8 +14,7 @@ func TestConformance(t *testing.T) {
 	testutil.RunConformance(t, New("bitbucket.org"), testutil.ConformanceOptions{Unsupported: true})
 }
 
-// The two OK:false are indistinguishable by the boolean, so the REASON is what decides what the
-// operator does.
+// The two OK:false are indistinguishable by the boolean, so the REASON decides what the operator does.
 func TestAuthReportsNotImplementedRatherThanNotAuthenticated(t *testing.T) {
 	auth := New("bitbucket.org").Auth(context.Background())
 
@@ -30,15 +29,13 @@ func TestAuthReportsNotImplementedRatherThanNotAuthenticated(t *testing.T) {
 		t.Errorf("Reason = %q, and it must say that it is NOT IMPLEMENTED rather than that "+
 			"there is no session: they are problems with different fixes", auth.Reason)
 	}
-	// The reason must NOT contain the word "authenticated": that is what sends the user off to
-	// configure auth instead of looking at the project.
+	// The reason must NOT contain "authenticated": that would send the user to configure auth instead of the project.
 	if strings.Contains(strings.ToLower(auth.Reason), "auth") {
 		t.Errorf("Reason = %q mentions authentication: it would send the user to check the "+
 			"token of something that has no fix", auth.Reason)
 	}
 }
 
-// Same pattern as the other partially-implemented forges.
 func TestUnsupportedOperationsWarnWithoutQueryingTheForge(t *testing.T) {
 	a := New("bitbucket.org")
 

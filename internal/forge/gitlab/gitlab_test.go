@@ -79,8 +79,7 @@ func TestQueryBuilders(t *testing.T) {
 	if q := glAuthoredQuery("CUR"); !strings.Contains(q, `after: "CUR"`) {
 		t.Errorf("the paginated query should carry the cursor: %s", q)
 	}
-	// The iid is a string literal: the schema declares String! and GraphQL does not coerce Int to
-	// it.
+	// The iid is a string literal: the schema declares String! and GraphQL does not coerce Int to it.
 	if q := glMRQuery("grp/proj", 7); !strings.Contains(q, `project(fullPath: "grp/proj")`) || !strings.Contains(q, `mergeRequest(iid: "7")`) {
 		t.Errorf("glMRQuery = %s", q)
 	}
@@ -172,8 +171,7 @@ func writeScript(t *testing.T, dir, name, body string) string {
 	return path
 }
 
-// The notes are asked apart from the inbox, with `last` and with `system`, which is the only thing
-// telling a note written by a person from one the MR left when it opened.
+// The notes are asked apart from the inbox with `last` and `system`, which tells a person's note from an MR system note.
 func TestNotesQueryShape(t *testing.T) {
 	q := glNotesQuery("group/sub/proj", 42, commentFetch)
 	for _, want := range []string{
@@ -258,8 +256,7 @@ func TestCommentsFailureIsWarning(t *testing.T) {
 	}
 }
 
-// commentFetch is precomputed (a const decl carries no coverage, ADR 0011): this pins the
-// formula so a change of forge.CommentLimit cannot leave the margin silently behind.
+// commentFetch is precomputed (a const decl carries no coverage, ADR 0011): this pins the formula against a change of forge.CommentLimit.
 func TestCommentFetchKeepsTheMargin(t *testing.T) {
 	if commentFetch != 3*forge.CommentLimit {
 		t.Errorf("commentFetch = %d, want 3 * forge.CommentLimit = %d", commentFetch, 3*forge.CommentLimit)

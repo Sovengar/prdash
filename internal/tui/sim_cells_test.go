@@ -19,8 +19,7 @@ import (
 	"prdash/internal/sim"
 )
 
-// A real JPEG, because applySim loads it with sim.Load: an invented path would only measure the
-// discard, not the good path loading the image.
+// A real JPEG, because applySim loads it with sim.Load: an invented path would only measure the discard.
 func fakeRender(t *testing.T) sim.Result {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "render.jpg")
@@ -45,8 +44,7 @@ func simKindForTest(_ bool) sim.Kind { return sim.KindMerge }
 
 func otherKind() sim.Kind { return sim.KindRebase }
 
-// The counter is incremented in startSim BEFORE leaving to the goroutine, so what is slow here does
-// not have to do with what is invalidated.
+// The counter is incremented in startSim BEFORE leaving to the goroutine, so what is slow here is unrelated to what is invalidated.
 type silentSimulator struct{}
 
 func (silentSimulator) Available() bool { return true }
@@ -55,8 +53,7 @@ func (silentSimulator) Simulate(context.Context, model.Item, sim.Kind) (sim.Resu
 	return sim.Result{}, errors.New("silent simulator: this test does not render")
 }
 
-// The 64x64 size is not arbitrary: with a 4x4 image it fitted in ONE cell at any cell size, so
-// changing the cell changed nothing and every geometry assertion passed without looking.
+// The 64x64 size is not arbitrary: a 4x4 image fitted in ONE cell at any cell size, so the geometry assertions passed without looking.
 func imageForGeometry() image.Image {
 	const side = 64
 	img := image.NewRGBA(image.Rect(0, 0, side, side))
@@ -121,9 +118,9 @@ func TestRenderSimCellsRecomposesWhenTheGeometryChanges(t *testing.T) {
 		width  int
 		height int
 	}{
-		{"more width", 2, 2},           // only w changes
-		{"more height", 1, 4},          // only h changes
-		{"the other of the two", 2, 3}, // both change
+		{"more width", 2, 2},
+		{"more height", 1, 4},
+		{"the other of the two", 2, 3},
 		{"narrower and shorter", 1, 1},
 	}
 
@@ -147,8 +144,7 @@ func TestRenderSimCellsRecomposesWhenTheGeometryChanges(t *testing.T) {
 					"want %dx%d: it did not recompose with the new one, and the image stays out of sync",
 					c.width, c.height, m.sim.cellW, m.sim.cellH, wantW, wantH)
 			}
-			// The new geometry has to DIFFER from the old one, or the case would not tell a recomposed from
-			// a no-op and the assertion above would pass with nothing happening.
+			// The new geometry has to DIFFER from the old, or the case would not tell a recomposed from a no-op.
 			if m.sim.cellW == beforeW && m.sim.cellH == beforeH {
 				t.Errorf("the recorded geometry is still %dx%d after changing the cell to "+
 					"%dx%d: the case would not test the change, Compose and no-op would give the same",
@@ -158,8 +154,7 @@ func TestRenderSimCellsRecomposesWhenTheGeometryChanges(t *testing.T) {
 	}
 }
 
-// The stale cells belong to the PREVIOUS image with a different geometry; leaving them would paint
-// the old image inside the new frame, so the user sees a review that is not the one in front of them.
+// The stale cells belong to the PREVIOUS image; leaving them would paint the old review inside the new frame.
 func TestRenderSimCellsWithoutAnImageLeavesNoOldCells(t *testing.T) {
 	m := modelWithSimAtCells(t, 1, 2)
 	m.renderSimCells()
@@ -198,14 +193,13 @@ func TestRenderSimCellsWithoutAnImageLeavesNoOldCells(t *testing.T) {
 	}
 }
 
-// Not a tautology: it CALLS simBox's formula, and `cols-2 > 0` alone is not enough. This
-// REPLACES a test whose t.Fatalf never ran: it swept 4,500 combinations and always passed.
+// Not a tautology: it CALLS simBox's formula. It REPLACES a test whose t.Fatalf never ran over 4,500 combinations.
 func TestThePopupsBoxAlwaysHasAnInteriorGap(t *testing.T) {
 	images := []image.Image{
-		imageForGeometry(), // cuadrada
-		imageOf(4, 512),    // extreme vertical: the one of one column
-		imageOf(2, 512),    // even more vertical
-		imageOf(512, 4),    // apaisada extrema
+		imageForGeometry(),
+		imageOf(4, 512),
+		imageOf(2, 512),
+		imageOf(512, 4),
 		imageOf(64, 64),
 	}
 
@@ -231,8 +225,7 @@ func TestThePopupsBoxAlwaysHasAnInteriorGap(t *testing.T) {
 	}
 }
 
-// Not a counter: a mechanism for INVALIDATING, which works only because the number always moves
-// up. With `--` instead, closing with `++` lands back on 0 and an old render paints over the new.
+// A mechanism for INVALIDATING, not a counter: with `--` instead, closing lands back on 0 and an old render paints over the new.
 func TestSimSeqIncrementsAndNeverDecrements(t *testing.T) {
 	m := newTestModel(t)
 	m.SetSimulator(silentSimulator{})
@@ -241,8 +234,7 @@ func TestSimSeqIncrementsAndNeverDecrements(t *testing.T) {
 
 	for i := range 20 {
 		m.startSim(simKindForTest(false))
-		// An increment of ONE, not just "it went up": if open and close summed more, two opens could land
-		// on the same number and the discard would break unnoticed.
+		// An increment of ONE, not just "it went up": otherwise two opens could land on the same number and the discard would break.
 		if m.simSeq != split+1 {
 			t.Fatalf("opening the popup (round %d) left simSeq at %d, want %d: "+
 				"it has to grow by one at a time", i, m.simSeq, split+1)
@@ -268,8 +260,7 @@ func TestSimSeqIncrementsAndNeverDecrements(t *testing.T) {
 	}
 }
 
-// The case that matters is the CHANGED strategy with the popup open: the first result arrives
-// while the second is still rendering and would paint over it.
+// The case that matters is the CHANGED strategy with the popup open: the first result would paint over the second.
 func TestApplySimDiscardsTheStaleOne(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -334,8 +325,7 @@ func TestApplySimDiscardsTheStaleOne(t *testing.T) {
 	})
 }
 
-// Storing the context is what makes the delete's timeout testable: "how long does this wait" is
-// answered by the deadline the call received, not by the clock.
+// Storing the context makes the delete's timeout testable: "how long" is answered by the deadline the call received, not the clock.
 type graphicsCapture struct {
 	cellW, cellH int
 
@@ -344,8 +334,7 @@ type graphicsCapture struct {
 	layers   []string
 }
 
-// The moment matters: releaseSimLayer does `defer cancel()`, so a double that stored the context
-// would always read "cancelled" and conclude the delete inherits the app's context.
+// The moment matters: releaseSimLayer does `defer cancel()`, so a double storing the context would always read "cancelled".
 type clearCall struct {
 	errOnCall     error
 	timeoutOnCall time.Duration
@@ -366,8 +355,7 @@ func (g *graphicsCapture) Clear(ctx context.Context, layer string) error {
 	dl, exists := ctx.Deadline()
 	var plazo time.Duration
 	if exists {
-		// The deadline is read HERE, at call time, not when the test looks later: the test's own time passes
-		// in between, and with a millisecond deadline you would be measuring the test's clock.
+		// The deadline is read HERE, at call time, not when the test looks later: with a millisecond deadline you would measure the test's clock.
 		plazo = time.Until(dl)
 	}
 	g.clearCtx = append(g.clearCtx, clearCall{
@@ -426,7 +414,7 @@ func TestTheUnmeasuredCellAssumes1x2(t *testing.T) {
 }
 
 func TestTheCellFloorChangesTheImageGeometry(t *testing.T) {
-	m := modelWithSimAtCells(t, 0, 0) // Herdr does not measure: the floor kicks in
+	m := modelWithSimAtCells(t, 0, 0)
 	m.sim.state = simShowing
 	m.sim.img = imageForGeometry()
 	m.renderSimCells()
@@ -769,7 +757,7 @@ func TestPublishSimImageDoesNotPublishWithABoxThatDoesNotFit(t *testing.T) {
 			m.publishSimImage(m.sim.img)
 			cols, rows := m.simBox()
 			if cols-2 > 0 && rows-simChrome > 0 {
-				continue // the box still fits
+				continue
 			}
 			if len(g.placements()) != before {
 				t.Fatalf("with %dx%d the box does not fit (%dx%d) and something was published: an inner "+
@@ -867,13 +855,13 @@ func TestPadRightPadItOrLeaveIt(t *testing.T) {
 	}{
 		{"short, it pads", "ab", 6, 6},
 		{"exact, it does not touch", "abcd", 4, 4},
-		{"exact with one less", "abcd", 3, 4}, // it does not fit: it is left as is
-		{"very long", "many letters", 3, 13},  // it does not touch it either
+		{"exact with one less", "abcd", 3, 4},
+		{"very long", "many letters", 3, 13},
 		{"empty", "", 5, 5},
 		{"a zero", "abc", 0, 3},
 		{"negative n", "abc", -4, 3},
-		{"with accents", "áéí", 6, 3}, // 3 columns, 6 bytes
-		{"with emoji", "🙂", 4, 2},     // 2 columns, 4 bytes
+		{"with accents", "áéí", 6, 3},
+		{"with emoji", "🙂", 4, 2},
 		{"emoji y text", "a🙂b", 6, 4},
 	}
 

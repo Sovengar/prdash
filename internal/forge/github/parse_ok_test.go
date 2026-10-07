@@ -8,7 +8,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The INVERTED condition makes this work.
 func TestAResponseThatParsesGivesTheItemAndNotAWarning(t *testing.T) {
 	dir := t.TempDir()
 
@@ -32,8 +31,7 @@ func TestAResponseThatParsesGivesTheItemAndNotAWarning(t *testing.T) {
 		t.Errorf("the item came out with title %q, want %q", it.Title, "one")
 	}
 
-	// The other half: a response that does NOT parse MUST give a warning. Without it the assertion above
-	//passes with the condition reversed.
+	// The other half: a response that does NOT parse MUST give a warning, or the assertion above passes with the condition reversed.
 	empty := `{"data":{"search":{"issueCount":0,"nodes":[]}}}`
 	emptyScript := writeScript(t, dir, "gh", "#!/bin/sh\necho '"+empty+"'\n")
 	emptyAdapter := New("github.com", emptyScript)
@@ -48,7 +46,6 @@ func TestAResponseThatParsesGivesTheItemAndNotAWarning(t *testing.T) {
 		t.Errorf("the warning came out of kind %q, and what is expected here is notfound or parse", warns[0].Kind)
 	}
 
-	// An undeserialisable response has to give a PARSE warning, the only path that reaches it.
 	garbage := writeScript(t, dir, "gh", "#!/bin/sh\necho 'this is not json'\n")
 	garbageAdapter := New("github.com", garbage)
 	it, warns = garbageAdapter.ItemState(context.Background(),

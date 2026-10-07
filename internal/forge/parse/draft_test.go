@@ -6,7 +6,6 @@ import (
 	"prdash/internal/state"
 )
 
-// The test that was missing while the merge gate was dead.
 func TestDraftFlagFromEveryPath(t *testing.T) {
 	for _, tc := range []struct {
 		name string

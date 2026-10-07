@@ -1,5 +1,3 @@
-// `--print` mode: query the forges once and print the inbox as plain text, in the same order the
-// TUI paints it. For scripts and for checking the pipeline without opening the UI.
 package main
 
 import (
@@ -17,14 +15,10 @@ import (
 	"prdash/internal/worktree"
 )
 
-// 60s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const printTimeout = time.Duration(60e9)
 
-// A nil lookup leaves the output with just the F1 information.
 type reviewLookup func(model.Item) (worktree.Worktree, bool)
 
-// The writer is a parameter, not a fixed os.Stdout: a hardcoded one would let every line of the
-// table escape the test while the exit code and the warnings were still checked.
 func runPrintTo(stdout, stderr io.Writer, adapters []forge.Adapter, reviews reviewLookup) {
 	results := make([]inbox.ForgeResult, len(adapters))
 	var wg sync.WaitGroup

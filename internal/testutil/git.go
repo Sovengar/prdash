@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// The suite never inherits the machine's git config: it is global and mutable, and the repos
-// the tests build are real. A clone does NOT inherit user.name from its origin.
 func gitEnv() []string {
 	env := os.Environ()
 	out := env[:0]
@@ -42,16 +40,12 @@ func gitEnv() []string {
 	)
 }
 
-// An interface rather than *testing.T because *testing.T CANNOT be DOUBLED: Fatalf ends in Goexit
-// and testing.common has private fields, so a red test proves nothing about the helper.
 type testReport interface {
 	Helper()
 	Fatalf(format string, args ...any)
 	Error(args ...any)
 }
 
-// The only place a helper here calls t.Fatal, and one on purpose: with six, "what does a helper
-// do when its fixture does not fit?" has six answers. The prefix lives here for the same reason.
 func abort(t testReport, err error) {
 	t.Helper()
 	if err == nil {
@@ -65,8 +59,6 @@ func abortWith(t testReport, fn func() error) {
 	abort(t, fn())
 }
 
-// An empty dir would make git run in the test process's directory, INSIDE the repo, and a
-// fixture's `git config` would write to the real one. It happened: a green suite left core.bare.
 func RunGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := runGit(dir, args...)
@@ -74,8 +66,6 @@ func RunGit(t *testing.T, dir string, args ...string) string {
 	return out
 }
 
-// A guard that aborts cannot be checked without a subprocess, because t.Fatal kills the goroutine.
-// The error carries the args and git's output: "exit status 128" says neither.
 func runGit(dir string, args ...string) (string, error) {
 	if err := checkDir(dir); err != nil {
 		return "", fmt.Errorf("testutil: %w", err)
@@ -118,8 +108,6 @@ func createRepoDir(dir string) error {
 	return os.MkdirAll(dir, 0o755)
 }
 
-// Measured: a reporesolver test doing two pushes and two fetches triggers it about one run in
-// several.
 func disableAutoGC(t *testing.T, dir string) {
 	t.Helper()
 	RunGit(t, dir, "config", "gc.auto", "0")
@@ -132,8 +120,6 @@ func CommitFile(t *testing.T, dir, name, content, msg string) {
 	RunGit(t, dir, "commit", "-m", msg)
 }
 
-// Two guards because they fail for different reasons: the parent may not exist, or something may
-// sit where the directory should be — and the second sneaks into fixtures unnoticed.
 func commitFile(dir, name, content string) error {
 	path := filepath.Join(dir, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -152,8 +138,6 @@ func InitBare(t *testing.T, dir string) {
 	disableAutoGC(t, dir)
 }
 
-// The `dir == ""` guard cost the most: without it `git init --bare` runs in the process's own
-// directory, INSIDE the repo, and sets core.bare=true on the real one. It happened for real.
 func initBare(dir string) error {
 	if dir == "" {
 		return errors.New("empty dir: `git init --bare` would land in the real repo and set core.bare on it")
@@ -168,8 +152,6 @@ func SetRemote(t *testing.T, dir, name, url string) {
 	abort(t, err)
 }
 
-// The error is ignored on purpose: a remote that did not exist is the normal case on the first call,
-// and aborting would force every test to check before setting.
 func removeRemote(dir, name string) {
 	rm := exec.Command("git", "remote", "remove", name)
 	rm.Dir = dir

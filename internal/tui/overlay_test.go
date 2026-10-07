@@ -30,10 +30,10 @@ func TestOverlayKeepsTheBackgroundAroundThePopup(t *testing.T) {
 	for i, l := range lines {
 		want := "···" + string(rune('0'+i)) + strings.Repeat("·", 16)
 		if l == want {
-			continue // row intacta
+			continue
 		}
 		if i >= 3 && i <= 5 {
-			continue // the ones the popup covers
+			continue
 		}
 		t.Errorf("row %d = %q, want %q", i, l, want)
 	}

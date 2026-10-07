@@ -10,8 +10,6 @@ import (
 
 const splitRatio = 0.5
 
-// The first tab reuses the container's and renames it, instead of leaving an orphan tab to close.
-// Only the absence of a base pane is fatal; anything else is a warning.
 func (c *Client) MountLayout(ctx context.Context, container Container, pl plan.Plan) ([]string, error) {
 	if len(pl.Tabs) == 0 {
 		return nil, nil
@@ -61,8 +59,6 @@ func (c *Client) basePane(ctx context.Context, container Container, tab plan.Tab
 	if container.WorkspaceID == "" {
 		return c.newWorkspace(ctx, tab)
 	}
-	// The caller believes this worktree lives in a Herdr workspace. A stale id comes from a closed
-	// workspace, and mounting another one would detach the review from its worktree, with no warning.
 	panes, listErr := c.PaneList(ctx, container.WorkspaceID)
 	if listErr != nil {
 		return "", "", fmt.Errorf("the workspace %s of this worktree is gone: %w", container.WorkspaceID, listErr)
@@ -178,8 +174,6 @@ func shellQuote(s string) string {
 func shellSafe(s string) bool {
 	for _, r := range s {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			// `#` is deliberately absent from the safe list: at the START of a word it opens a comment, so a
-			// branch starting with `#` vanished from the command unquoted. Quoting the rare case costs nothing.
 			continue
 		}
 		if r == '-' || r == '_' || r == '.' || r == '/' || r == '@' || r == ':' || r == '=' || r == '+' || r == ',' || r == '%' {

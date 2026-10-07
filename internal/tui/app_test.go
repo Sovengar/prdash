@@ -23,7 +23,7 @@ func newTestModel(t *testing.T, adapters ...forge.Adapter) Model {
 	m := New(config.Defaults(), adapters)
 	m.width, m.height = 160, 40
 	m.loading = false
-	m.cachePath = "" // isolates the real cache in tests
+	m.cachePath = ""
 	return m
 }
 
@@ -235,7 +235,6 @@ func TestManualRefreshIncrementsCycle(t *testing.T) {
 	}
 }
 
-// TestAutoRefreshTick starts a refresh on tick when idle.
 func TestAutoRefreshTick(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	before := m.cycle
@@ -270,7 +269,6 @@ func TestRefreshUpdatesOtherItemsDuringAction(t *testing.T) {
 	}
 }
 
-// detailPanel clips the view's text to the detail panel's box, from its border.
 func detailPanel(view string) string {
 	lines := strings.Split(stripANSI(view), "\n")
 	for i, l := range lines {
@@ -453,7 +451,6 @@ func TestPermissionRecordsDenial(t *testing.T) {
 	}
 }
 
-// Without auth the action is disabled and the warning carries the REASON.
 func TestActionDisabledWhenForgeDown(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{
 		ForgeName: "gitlab", HostName: "gitlab.example.com",
@@ -620,7 +617,7 @@ func TestCurrentCycleDrainsLoading(t *testing.T) {
 	}
 }
 
-// TestRefreshDoesNotOverlap covers M-1: cycles do not overlap.
+// Covers M-1: cycles must not overlap.
 func TestRefreshDoesNotOverlap(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = press(t, m, "R")

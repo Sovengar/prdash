@@ -9,8 +9,7 @@ import (
 	"prdash/internal/review/plan"
 )
 
-// The layout is a chain of Herdr calls and NONE is atomic: open the workspace, rename the first
-//tab, split the pane, run the command, rename the pane.
+// The layout is a chain of Herdr calls and NONE is atomic.
 
 // The counter is what makes the test valuable.
 type countingCLI struct {
@@ -128,8 +127,7 @@ func TestEachFailingStepLeavesTheRestMountedAndSaysSo(t *testing.T) {
 	}
 }
 
-// The dependency, not the panic: this is the case that justifies the `continue` after a failed
-// split.
+// The dependency, not the panic: this justifies the `continue` after a failed split.
 func TestPaneThatCannotOpenGetsNeitherCommandNorName(t *testing.T) {
 	cli := newCountingCLI(func(op string, _ []string) bool { return op == "pane split" })
 
@@ -147,8 +145,7 @@ func TestPaneThatCannotOpenGetsNeitherCommandNorName(t *testing.T) {
 		t.Fatal("no split was attempted: the fixture never reached the point")
 	}
 
-	// The `run` count drops versus the good path, which is what says the panes that could not be
-	//opened did NOT get their command.
+	// The `run` count drops versus the good path: unopened panes did NOT get their command.
 	healthy := newCountingCLI(nil)
 	if _, err := healthy.client().MountLayout(context.Background(),
 		Container{WorkspaceID: "w18", PaneID: "w18:p1"}, testPlan()); err != nil {
@@ -169,7 +166,6 @@ func TestPaneThatCannotOpenGetsNeitherCommandNorName(t *testing.T) {
 	}
 }
 
-// The two exits of newWorkspace, which is what runs first.
 func TestWithoutContainerTheLayoutOpensItsOwnWorkspaceAndFailsWithoutBasePane(t *testing.T) {
 	cli := newCountingCLI(nil)
 	warnings, err := cli.client().MountLayout(context.Background(), Container{}, testPlan())
@@ -230,8 +226,7 @@ func TestStaleWorkspaceFailsInsteadOfOpeningAnother(t *testing.T) {
 		t.Errorf("the error %q does not say the workspace is gone", err)
 	}
 
-	// The neighbouring case, easiest to confuse with the previous one: the workspace EXISTS but has no
-	//panes. That is not a Herdr error, it is a freshly created workspace.
+	// The neighbouring case: the workspace EXISTS but has no panes — not a Herdr error, a fresh workspace.
 	empty := newCountingCLI(nil)
 	empty.respond = func(args []string) ([]byte, []byte, error) {
 		switch {

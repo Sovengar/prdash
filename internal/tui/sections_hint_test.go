@@ -7,7 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The merge confirmation is the warning that has to list the modes.
 func TestMergeConfirmNamesTheModesTheRepoAllows(t *testing.T) {
 	base := func(t *testing.T, rules model.MergeRules) Model {
 		m2 := newTestModel(t, ghAdapter())
@@ -33,7 +32,6 @@ func TestMergeConfirmNamesTheModesTheRepoAllows(t *testing.T) {
 		t.Errorf("with three modes there are three separators, got %d: %q", n, txt)
 	}
 
-	// One known mode: ONLY that one.
 	m = base(t, model.MergeRules{Known: true, MergeCommit: true})
 	txt = stripANSI(m.mergeConfirmText())
 	if !strings.Contains(txt, "m merge commit") {
@@ -95,7 +93,6 @@ func TestMergeConfirmSaysSoftBlockBeforehand(t *testing.T) {
 	}
 }
 
-// The ITEM column's prefix is the last directory component's parent.
 func TestSectionPrefixDoesNotEatTheLastPathPart(t *testing.T) {
 	cases := []struct {
 		name  string

@@ -9,8 +9,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// One contract across all of them: what happens when the forge answers something unreadable.
-
 func ghReturning(t *testing.T, body string) string {
 	t.Helper()
 	script, _ := ghThatLogs(t, body)
@@ -32,8 +30,7 @@ func TestListWithOutputThatIsNotJSONWarnsAndDoesNotBreak(t *testing.T) {
 		output string
 	}{
 		{"html from a proxy", "cat <<'EOF'\n<html><body>Proxy Authentication Required</body></html>\nEOF"},
-		// The truncation goes through a heredoc: with echo the script has a dangling quote and what
-		//fails is the SHELL, not the parsing.
+		// The truncation goes through a heredoc: with echo the script has a dangling quote and the SHELL fails, not the parsing.
 		{"truncated json", "cat <<'JSON'\n{\"data\":{\"search\":{\"nodes\":[\nJSON"},
 		{"empty json", "printf ''"},
 		{"array instead of object", `echo '[]'`},
@@ -42,8 +39,7 @@ func TestListWithOutputThatIsNotJSONWarnsAndDoesNotBreak(t *testing.T) {
 		a := New("github.com", ghReturning(t, c.output))
 		page, warns := a.List(context.Background(), forge.Query{Section: model.SectionReview})
 
-		// No panic and no items: an empty page with a warning is "I do not know", and a page with
-		// items is data.
+		// No panic and no items: an empty page with a warning is "I do not know", a page with items is data.
 		if len(page.Items) != 0 {
 			t.Errorf("%s: returned %d items from unreadable output", c.name, len(page.Items))
 		}
@@ -73,7 +69,6 @@ func TestTheParseWarningDoesNotSayThereIsNothing(t *testing.T) {
 				"something false about the inbox", kind)
 		}
 	}
-	// The message has to be recognisable as a data problem: "parse" is not in the text.
 	if !strings.Contains(strings.ToLower(w.Msg), "json") &&
 		!strings.Contains(strings.ToLower(w.Msg), "parse") {
 		t.Logf("the warning does not mention the format: %q", w.Msg)
@@ -111,8 +106,7 @@ func TestTheConversationWithUnreadableOutputWarnsAndDoesNotPaintInventedComments
 	if page.Total != 0 {
 		t.Errorf("Total = %d with unreadable output", page.Total)
 	}
-	// The warning carries no section: the conversation is painted on the item's card, not in a
-	// column.
+	// The warning carries no section: the conversation is painted on the item's card, not in a column.
 	if w.Section != "" {
 		t.Errorf("the conversation warning carries section %q; it should only be on the card", w.Section)
 	}
@@ -122,7 +116,6 @@ func TestTheConversationWithUnreadableOutputWarnsAndDoesNotPaintInventedComments
 func TestABinaryFailureAndUnreadableOutputAreNotConfused(t *testing.T) {
 	q := forge.Query{Section: model.SectionReview}
 
-	// The binary fails: the warning gets the class that matches the failure, NOT "parse".
 	down := New("github.com", ghReturning(t, "echo 'gh: no such host' >&2\nexit 1"))
 	_, warns := down.List(context.Background(), q)
 	w := onlyWarning(t, warns, "binary down")
@@ -134,7 +127,6 @@ func TestABinaryFailureAndUnreadableOutputAreNotConfused(t *testing.T) {
 		t.Error("the warning for the down binary is empty")
 	}
 
-	// The binary works and the output is garbage: parse, for sure.
 	broken := New("github.com", ghReturning(t, `echo 'I am not json'`))
 	_, warns = broken.List(context.Background(), q)
 	if got := onlyWarning(t, warns, "broken output").Kind; got != "parse" {

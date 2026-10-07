@@ -8,7 +8,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// Each stream is saved with its forge's host.
 func TestTheSnapshotStoresEachForgesHost(t *testing.T) {
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(t, adapt)
@@ -69,7 +68,6 @@ func TestTheSnapshotStoresEachForgesHost(t *testing.T) {
 	}
 }
 
-// The snapshot comes out sorted by forge.
 func TestTheSnapshotIsOrderedByForgeSectionAndKind(t *testing.T) {
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
 	m := newTestModel(t, adapt)

@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildAdaptersWiring(t *testing.T) {
-	cfg := config.Defaults() // github + gitlab enabled, bitbucket not
+	cfg := config.Defaults()
 	got := names(buildAdapters(cfg))
 	if strings.Join(got, ",") != "github,gitlab" {
 		t.Fatalf("adapters = %v", got)
@@ -129,8 +129,7 @@ func names(adapters []forge.Adapter) []string {
 	return out
 }
 
-// --print is independent of the TUI's prefix mode by design: the TUI splits the path and --print
-// does not.
+// --print is independent of the TUI's prefix mode: the TUI splits the path, --print does not.
 func TestRunPrintDoesNotApplyThePrefixMode(t *testing.T) {
 	const (
 		longPath    = "APPCITTI/vsocial/backend/api-gateway"
@@ -165,8 +164,7 @@ func TestRunPrintDoesNotApplyThePrefixMode(t *testing.T) {
 	if strings.Contains(out, "…") {
 		t.Errorf("--print truncated a reference, and it must not: the TUI is the one that truncates:\n%s", out)
 	}
-	// The TUI's dimmed prefix line does not exist here: --print composes no list and declares no common
-	// prefix.
+	// The TUI's dimmed prefix line does not exist here: --print declares no common prefix.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(strings.TrimLeft(line, " "), "· ") {
 			t.Errorf("--print painted a prefix line: %q", line)
@@ -174,7 +172,6 @@ func TestRunPrintDoesNotApplyThePrefixMode(t *testing.T) {
 	}
 }
 
-// It replaces the two fd captures that were there before.
 func printToBuffer(t *testing.T, fn func(w io.Writer)) string {
 	t.Helper()
 	var buf bytes.Buffer

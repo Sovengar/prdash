@@ -30,7 +30,6 @@ func TestCellsEmitsTwoPixelsPerCell(t *testing.T) {
 	}
 }
 
-// The cell's colour is the top pixel as foreground and the bottom as background.
 func TestCellsEncodesBothHalves(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 1, 2))
 	img.SetRGBA(0, 0, color.RGBA{R: 10, G: 20, B: 30, A: 255})   // top

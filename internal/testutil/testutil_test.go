@@ -9,9 +9,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// This file tests the test double, which is the opposite of the usual —doubles are not normally
-//tested— and the reason is that a double that lies does not fail, it weakens.
-
+// This file tests the test double: a double that lies does not fail, it weakens.
 func testRef() model.RepoRef {
 	return model.RepoRef{Forge: "github", Host: "github.com", Project: "o/r", Owner: "o", Name: "r"}
 }
@@ -38,8 +36,7 @@ func TestTheDoubleIdentifiesForgeAndHostAndIsAuthenticatedByDefault(t *testing.T
 	}
 }
 
-// The two halves matter for different reasons: advancing a page is what makes list pagination
-// testable, and repeating the last is what makes a test that does not care stop mid-stream.
+// Advancing a page makes pagination testable; repeating the last lets an uncaring test stop mid-stream.
 func TestListAdvancesPageAndTheLastOneRepeats(t *testing.T) {
 	key := FakeKey{Section: model.SectionReview, Kind: model.ReviewRequested}
 	first := forge.Page{Items: []model.Item{{Number: 1}}, More: true, Next: "cursor-1"}
@@ -91,8 +88,7 @@ func TestTheWarningsComeOutOnEveryCall(t *testing.T) {
 	}
 }
 
-// Two behaviours in one function and both matter: it refuses without a HeadSHA, and it records
-// NOTHING, because a merge that did not go asked for no strategy.
+// It refuses without a HeadSHA and records NOTHING: a merge that did not go asked for no strategy.
 func TestTheDoubleRefusesToMergeWithoutAPinAndDoesNotRecordIt(t *testing.T) {
 	f := &FakeAdapter{ForgeName: "github"}
 	ref := testRef()
@@ -132,8 +128,7 @@ func TestTheDoubleRefusesToMergeWithoutAPinAndDoesNotRecordIt(t *testing.T) {
 	}
 }
 
-// The order is what makes Retargets a list rather than a counter: the test's question is "which base
-// did it move to?".
+// Retargets is a list, not a counter: the test asks "which base did it move to?".
 func TestTheDoubleRefusesRetargetWithoutABranchAndRecordsItInOrder(t *testing.T) {
 	f := &FakeAdapter{ForgeName: "github"}
 	ref := testRef()
@@ -165,8 +160,7 @@ func TestTheDoubleRefusesRetargetWithoutABranchAndRecordsItInOrder(t *testing.T)
 	}
 }
 
-// "Only after" is the half that matters: the merge does a re-read before deciding, and a hook that
-// fired on it would corrupt the state being read.
+// The hook only applies after the merge: a re-read before deciding would see the wrong state.
 func TestOnMergeOnlyAppliesAfterTheMerge(t *testing.T) {
 	ref := testRef()
 	key := ItemKey(ref.Project, 1)
@@ -292,8 +286,7 @@ func TestBranchesPerProjectAndWithCounter(t *testing.T) {
 	}
 }
 
-// Separate counters per action kind, not just per item: one counter would report "1" for three
-// different actions.
+// Separate counters per action kind: one counter would report "1" for three different actions.
 func TestTheActionCounterSeparatesTheThree(t *testing.T) {
 	ref := testRef()
 	f := &FakeAdapter{ForgeName: "github"}

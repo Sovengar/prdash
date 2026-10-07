@@ -26,9 +26,6 @@ func waitForFile(path string, limit time.Duration) ([]byte, error) {
 	return nil, last
 }
 
-// The REAL paths of openBrowserCmd: the ones that do not go through the openURL double.
-
-// The PATH is emptied, so nothing is opened.
 func TestWithNoOpenerInThePATHItWarnsAndOpensNothing(t *testing.T) {
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)
@@ -67,8 +64,7 @@ func TestWithNoOpenerInThePATHItWarnsAndOpensNothing(t *testing.T) {
 	}
 }
 
-// LookPath looks at the execute bit and NOT the shebang, so the warning must not say "not found":
-// the user would go install xdg-utils when the interpreter is what is missing.
+// LookPath checks the execute bit, not the shebang: "not found" would send the user to install xdg-utils.
 func TestAnOpenerThatCannotBeExecutedWarnsWithItsError(t *testing.T) {
 	binDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(binDir, "xdg-open"),
@@ -90,14 +86,12 @@ func TestAnOpenerThatCannotBeExecutedWarnsWithItsError(t *testing.T) {
 	if msg.level != levelError {
 		t.Errorf("level %v, want error: the opener exists and does not start", msg.level)
 	}
-	// The warning does NOT say "not found": LookPath DID find it —it looks at the execute bit— and
-	// the failure arrives in Start.
+	// It does not say "not found": LookPath found it (execute bit) and the failure arrives in Start.
 	if strings.Contains(msg.text, "not found") {
 		t.Errorf("the notice says the opener was not found, but `LookPath` did find it: "+
 			"the failure is at Start, not at lookup. Notice: %q", msg.text)
 	}
-	// And it carries Start's cause, which is the only thing that tells a broken shebang from a
-	// permission problem.
+	// It carries Start's cause, the only thing that tells a broken shebang from a permission problem.
 	if !strings.Contains(msg.text, "open browser") {
 		t.Errorf("the notice %q does not say it comes from the opener", msg.text)
 	}
@@ -106,8 +100,7 @@ func TestAnOpenerThatCannotBeExecutedWarnsWithItsError(t *testing.T) {
 	}
 }
 
-// With the guards in the other order, an empty URL on a machine with no opener would report the
-// environment instead of having nothing to open.
+// With the guards reversed, an empty URL on a machine with no opener reports the environment, not the empty URL.
 func TestEmptyURLIsRejectedBeforeLookingAtTheEnvironment(t *testing.T) {
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)
@@ -128,7 +121,6 @@ func TestEmptyURLIsRejectedBeforeLookingAtTheEnvironment(t *testing.T) {
 	}
 }
 
-// The boundary with the shell.
 func TestTheURLIsPassedAsIsToTheOpener(t *testing.T) {
 	binDir := t.TempDir()
 	log := filepath.Join(binDir, "args.log")
@@ -150,7 +142,6 @@ func TestTheURLIsPassedAsIsToTheOpener(t *testing.T) {
 		t.Errorf("the happy path was not taken: %+v", msg)
 	}
 
-	// The opener got the URL as ONE argument, with the brackets the script adds.
 	crudo, err := waitForFile(log, 2*time.Second)
 	if err != nil {
 		t.Fatalf("the opener never ran: %v", err)

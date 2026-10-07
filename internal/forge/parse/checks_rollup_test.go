@@ -9,8 +9,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// Where a forge's datum becomes a signal the TUI uses to decide whether to block a merge.
-
 // A real case, not an edge: GitHub's classic status checks use the global state.
 func TestARollupWithoutContextsUsesTheGlobalState(t *testing.T) {
 	cases := []struct {
@@ -34,8 +32,7 @@ func TestARollupWithoutContextsUsesTheGlobalState(t *testing.T) {
 			t.Errorf("%s: checksStateFromRollup(%q) gave %q, want %q", c.name, c.state, got, c.want)
 		}
 	}
-	// The whole aggregator: a rollup with no contexts and a global state gives the same state, with the
-	//total at zero because there are none.
+	// The whole aggregator: a rollup with no contexts and a global state gives the same state, with Total at zero.
 	for _, c := range cases {
 		got := checksFromSearch(t, commitWithRollup(map[string]any{"state": c.state}))
 		if got.State != c.want {
@@ -47,7 +44,6 @@ func TestARollupWithoutContextsUsesTheGlobalState(t *testing.T) {
 	}
 }
 
-// The contexts win over the global state for a concrete reason.
 func TestTheContextsWinOverTheGlobalState(t *testing.T) {
 	it := checksFromSearch(t, commitWithRollup(map[string]any{
 		"state": "SUCCESS",
@@ -110,7 +106,6 @@ func TestWithoutCommitsOrWithoutRollupThereAreNoChecks(t *testing.T) {
 	}
 }
 
-// isGHFailure and isGHPending, the two predicates.
 func TestGitHubsConclusionsFitInAListAndTheMissingOnesDoNotCount(t *testing.T) {
 	failures := []string{"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED",
 		"STARTUP_FAILURE", "STALE", "failure", "Cancelled"}

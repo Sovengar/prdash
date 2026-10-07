@@ -9,10 +9,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// This file covers the DEGRADATION paths: Load and LoadMemo return a second boolean.
-
-// The three reasons an existing cache is discarded are not the same thing, although all three
-// end in false.
 func TestWhatCannotBeReadIsNotACache(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -35,14 +31,12 @@ func TestWhatCannotBeReadIsNotACache(t *testing.T) {
 		if ok {
 			t.Errorf("%s: Load returned true with %q", c.name, c.content)
 		}
-		// And what comes back is really empty, not half: a File with Streamed set would not be empty.
 		if len(f.Streams) != 0 {
 			t.Errorf("%s: Load returned %d streams without saying it did not load", c.name, len(f.Streams))
 		}
 	}
 }
 
-// The commonest case of all: the first time prdash opens there is no file.
 func TestAMissingCacheIsNotAnError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "does-not-exist", "cache.json")
@@ -59,7 +53,6 @@ func TestAMissingCacheIsNotAnError(t *testing.T) {
 	}
 }
 
-// The two halves are the contract between writer and reader.
 func TestSaveStampsTheVersionAndCreatesTheDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a", "b", "c", "cache.json")
 
@@ -80,7 +73,6 @@ func TestSaveStampsTheVersionAndCreatesTheDirectory(t *testing.T) {
 	}
 }
 
-// Save does fail in one place: the parent exists as a file.
 func TestSaveFailsWhenTheDirectoryIsNotADirectory(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "blocker")
@@ -93,7 +85,6 @@ func TestSaveFailsWhenTheDirectoryIsNotADirectory(t *testing.T) {
 	}
 }
 
-// The cost of a wrong false is different here: the memo holds the resolved clone paths.
 func TestTheSameForTheRouteMemo(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -112,8 +103,7 @@ func TestTheSameForTheRouteMemo(t *testing.T) {
 		if ok {
 			t.Errorf("%s: LoadMemo returned true with %q", c.name, c.content)
 		}
-		// The maps come back EMPTY, not nil: writing to a nil map panics and writing to an empty
-		//one does not.
+		// The maps come back EMPTY, not nil: writing to a nil map panics.
 		if m.Routes == nil {
 			t.Errorf("%s: LoadMemo returned Routes nil", c.name)
 		}
@@ -146,7 +136,6 @@ func TestNormalizeFixesNilMaps(t *testing.T) {
 	if m.Routes == nil || m.Reviews == nil {
 		t.Fatalf("normalize left a nil map: %+v", m)
 	}
-	// Only one nil: the other is NOT touched, which is what distinguishes this from zeroing everything.
 	m = Memo{Routes: map[string]string{"a": "/b"}}
 	m = normalize(m)
 	if m.Routes["a"] != "/b" {

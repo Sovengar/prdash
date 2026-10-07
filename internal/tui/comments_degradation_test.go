@@ -54,8 +54,7 @@ func TestCommentLinesTheCapOfFiveRulesEvenWhenTheBoxIsBig(t *testing.T) {
 		t.Errorf("the box with 20 comments and spare room does not say how many it shows:\n%s", plain)
 	}
 
-	// The band: room for the box with five, not for twenty. Here the box must come out with five and
-	//not disappear.
+	// The band: room for a box with five, not twenty, and the box must come out clipped, not vanish.
 	exact := exactBudget(t, m, it, forge.CommentLimit)
 	inTheBand := m.commentLines(it, exact, 60)
 	if len(inTheBand) == 0 {
@@ -124,8 +123,7 @@ func TestCommentBoxWidthDiscountsTheIndentOnBothSides(t *testing.T) {
 	}
 }
 
-// GitLab exposes no count, so the total is what was read, and it is floored at the list's height so
-// the arithmetic does not invent comments.
+// GitLab exposes no count, so the total is floored at the list's height to avoid inventing comments.
 func TestTheCountIsNeverLowerThanWhatIsShown(t *testing.T) {
 	finalTotal := func(total, list int) int {
 		if total < list {

@@ -10,8 +10,7 @@ import (
 	"prdash/internal/state"
 )
 
-// Two languages in one function, on purpose: five labels in English and two in Spanish. What is
-// pinned is that neither list grows into the other.
+// Two languages in one function on purpose: the test pins that neither list grows into the other.
 func TestTheProblemLabelTranslatesWhatIsKnownAndWhatIsNot(t *testing.T) {
 	cases := []struct {
 		kind string
@@ -70,8 +69,7 @@ func TestTheAgeOfTheLastRefreshRoundsDown(t *testing.T) {
 		t.Errorf("a zero since gave %q, want \"no data\"", got)
 	}
 
-	// The property that matters: read the label back as a duration and you get the real age within one
-	// label unit.
+	// The property that matters: reading the label back gives the real age within one label unit.
 	for _, d := range []time.Duration{
 		time.Second, 30 * time.Second, 59 * time.Second,
 		60 * time.Second, 90 * time.Second,
@@ -84,8 +82,7 @@ func TestTheAgeOfTheLastRefreshRoundsDown(t *testing.T) {
 			t.Errorf("the text %q could not be read back: %v", got, err)
 			continue
 		}
-		// The error fits ONE label unit, not a fixed minute: at 1h30m that rounds to "1h ago" with 30
-		// minutes of difference, which is rounding and not a failure.
+		// The error fits one label unit, not a fixed minute: 1h30m rounds to "1h ago" with 30 minutes off.
 		_, unit := numberOf(got)
 		if diff := d - parsed; diff < 0 || diff >= unitDuration(unit) {
 			t.Errorf("with %s the label %q stands for %s: the error does not fit one unit "+
@@ -103,8 +100,7 @@ func TestTheAgeOfTheLastRefreshRoundsDown(t *testing.T) {
 	}
 }
 
-// The CLI's text and not an invented one: an invented "could not read the branches" would hide both a
-// 404 and an expired token.
+// The CLI's text, not an invented one: inventing would hide both a 404 and an expired token.
 func TestTheBranchNoticeUsesTheCLIsText(t *testing.T) {
 	got := warnMsg([]model.Warning{{Kind: "auth", Msg: "gh: Bad credentials"}})
 	if got != "gh: Bad credentials" {
@@ -140,8 +136,7 @@ func TestTheBranchNoticeUsesTheCLIsText(t *testing.T) {
 	}
 }
 
-// Two forms of the same datum because of width: forgeLabel lives in the detail, where the whole path
-// fits; forgeBadge in the column, where it does not.
+// Two forms because of width: forgeLabel in the detail where the path fits, forgeBadge in the column.
 func TestTheForgeIsIdentifiedTwoWaysAndBothFit(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -180,8 +175,7 @@ func TestTheForgeIsIdentifiedTwoWaysAndBothFit(t *testing.T) {
 			short: "GLab@localhost",
 		},
 		{
-			// An unknown forge uses the FULL name: "PHab" would be an invention resembling the other
-			// abbreviations and meaning nothing.
+			// An unknown forge uses the full name: "PHab" would invent an abbreviation meaning nothing.
 			name:  "unknown forge",
 			it:    model.Item{Forge: "phabricator", Host: "phab.example"},
 			larga: "phabricator@phab.example",
@@ -231,8 +225,7 @@ func TestTheUsersRoleDistinguishesOwnFromReview(t *testing.T) {
 	if got := roleText(model.Item{ReviewKind: model.ReviewAssigned}, viewer); got != "assigned" {
 		t.Errorf("review assigned gave %q", got)
 	}
-	// An owned item with a pending review stays "review req": the forge says a review is waiting, and
-	// the viewer is who has to look at it, author or not.
+	// An owned item with a pending review stays "review req": the viewer is who has to look at it.
 	ownWithReview := model.Item{ReviewKind: model.ReviewRequested, Author: viewer}
 	if got := roleText(ownWithReview, viewer); got != "review req" {
 		t.Errorf("a requested review on an own item gave %q, want review req", got)
@@ -258,8 +251,7 @@ func TestTheUsersRoleDistinguishesOwnFromReview(t *testing.T) {
 	}
 }
 
-// Failing carries the count and passing carries none, on purpose: a big number is what makes a red
-// cell worth reading.
+// Failing carries the count and passing none: a big number is what makes a red cell worth reading.
 func TestTheChecksAreSummarisedByTheCountAndTheTrafficLight(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -332,8 +324,7 @@ func TestTheActionableStateGivesReasonsThatSayWhatToDo(t *testing.T) {
 	}
 }
 
-// Number and unit are NOT separated by a space: "30s ago" is one field with the count glued to the
-// letter.
+// Number and unit are not separated by a space: "30s ago" is one field with the count glued.
 func numberOf(text string) (int, int) {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
@@ -378,8 +369,7 @@ func unitDuration(unit int) time.Duration {
 	return 0
 }
 
-// The third value tells "0" from "no number": "0s ago" is data and "now" has no count. Without the
-// distinction a "now" would read as zero seconds.
+// The third value tells "0" from "no number": "0s ago" is data and "now" has no count.
 func partsOf(campo string) (n, unit int, hadNumber bool) {
 	i := 0
 	for i < len(campo) && campo[i] >= '0' && campo[i] <= '9' {

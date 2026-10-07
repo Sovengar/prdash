@@ -10,10 +10,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// Only two things here, because the rest of the package is tested: RemoveBare, which was at 0%,
-//and buildIndex's two prunings.
-
-// The two halves matter for opposite reasons.
 func TestRemovingTheBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 	r := New(Options{MemoPath: filepath.Join(t.TempDir(), "memo.json")})
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "o/r", Owner: "o", Name: "r"}
@@ -26,12 +22,11 @@ func TestRemovingTheBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 		t.Errorf("removing a bare that does not exist gave %v, want nil: the cleanup cannot "+
 			"fail and mask the mount error", err)
 	}
-	// And the bare's path still does not exist. Checking the parent would prove nothing here.
+	// Checking the parent would prove nothing here.
 	if _, err := os.Stat(bare); err == nil {
 		t.Error("removing a nonexistent bare left it created")
 	}
 
-	// It exists: it is deleted whole.
 	if err := os.MkdirAll(filepath.Join(bare, "objects", "pack"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +105,7 @@ func TestTheIndexPrunesHiddenDirsAndDoesNotIndexNonRepos(t *testing.T) {
 		if !strings.HasPrefix(local, base) {
 			t.Errorf("an index entry points outside the root: %s -> %s", k, local)
 		}
-		// The key is the canonical one, not the raw URL: that is what lets ResolveLocal and the index
-		// agree.
+		// The key is the canonical one, which is what lets ResolveLocal and the index agree.
 		if !strings.Contains(k, "acme/project") {
 			t.Errorf("an index key does not look canonical: %q", k)
 		}
@@ -151,7 +145,6 @@ func TestAMissingRootDoesNotTakeDownTheGoodOne(t *testing.T) {
 		t.Errorf("a root that is a file changed the index: %v", withFile)
 	}
 
-	// And with no roots: an empty index, not an error.
 	empty := resolverWithHosts(t).buildIndex()
 	if len(empty) != 0 {
 		t.Errorf("with no roots it gave %v", empty)

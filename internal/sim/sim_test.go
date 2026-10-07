@@ -46,8 +46,7 @@ func TestArgsCarryTheRefOfEachKind(t *testing.T) {
 	}
 }
 
-// git-sim ends by handing the image to the desktop viewer, and without a display that call never
-// returns.
+// Without a display git-sim's desktop-viewer call never returns.
 func TestEnvForcesNoAutoOpen(t *testing.T) {
 	t.Setenv("git_sim_auto_open", "true")
 	t.Setenv("git_sim_img_format", "png")

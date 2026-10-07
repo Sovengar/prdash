@@ -1,5 +1,3 @@
-// Package forge defines the contract every forge implements. The methods return items plus typed
-// warnings and never a hard error: a down or unauthenticated forge must not empty the inbox.
 package forge
 
 import (
@@ -34,21 +32,14 @@ var Streams = []Query{
 	{Section: model.SectionMentions},
 }
 
-// Exactly what the detail pane paints, so we never pay for rows nobody sees.
 const CommentLimit = 5
 
-// Total is separate because they do not have to match: the pane shows CommentLimit and the
-// total is what lets it say "5 of 23". It is a lower bound, never an overcount.
 type CommentPage struct {
 	Comments []model.Comment
 	Total    int
 }
 
-// Trims the TAIL, not the head: the request is reversed, so what overflows at the front is exactly
-// what the pane was never going to show. Total stays untouched.
 func (p CommentPage) KeepLast() CommentPage {
-	// Total, so there is no boundary to argue about: max(0, …) is the floor that keeps a short
-	// list intact, and there is no comparison left whose equality case could be equivalent.
 	p.Comments = p.Comments[max(0, len(p.Comments)-CommentLimit):]
 	return p
 }
@@ -59,29 +50,16 @@ type Adapter interface {
 	Auth(ctx context.Context) model.AuthState
 	List(ctx context.Context, q Query) (Page, []model.Warning)
 	ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning)
-	// Oldest of the most recent first, capped by CommentLimit rather than a parameter: the pane has a
-	// fixed height and a query costs what it returns.
 	Comments(ctx context.Context, ref model.RepoRef, number int) (CommentPage, []model.Warning)
 	Approve(ctx context.Context, ref model.RepoRef, number int) []model.Warning
 	Merge(ctx context.Context, ref model.RepoRef, number int, req MergeRequest) []model.Warning
-	// Not approve/merge under another name: it changes what the PR integrates against, and moving the
-	// base integrates nothing, so there is no SHA to pin. An empty branch warns instead of an empty flag.
 	Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning
-	// From the forge and nowhere else: the local clone only holds the refs it fetched, which are not
-	// the ones the forge can integrate. Free text would let a typo through silently.
 	Branches(ctx context.Context, ref model.RepoRef) ([]string, []model.Warning)
 }
 
-// A struct rather than loose parameters because the three only make sense together: a pin without a
-// mode is not a merge, and deleting the branch without a pin is a blind merge.
 type MergeRequest struct {
-	// Not optional: `gh pr merge` without a strategy flag falls into an interactive prompt that hangs.
-	Mode MergeMode
-	// The adapter MUST pin the merge to it: between the refresh and the keypress the branch can have
-	// advanced. Empty means "the forge did not report it", which warns and never merges unpinned.
-	HeadSHA string
-	// A POST-integration effect: on GitHub the flag that asks for it also names the branch. If the
-	// delete fails the merge already happened, so the result is NOT a failed merge.
+	Mode         MergeMode
+	HeadSHA      string
 	DeleteBranch bool
 }
 
@@ -94,8 +72,6 @@ type PageResult struct {
 	First    bool
 }
 
-// Each page goes out through emit, which must be safe for concurrent use and returns false to stop
-// that list (e.g. when its header did not change).
 func Stream(ctx context.Context, a Adapter, emit func(PageResult) bool) {
 	var wg sync.WaitGroup
 	for _, q := range Streams {
@@ -214,8 +190,6 @@ func (m MergeMode) Label() string {
 	}
 }
 
-// Adapters check this before building their argv: an unknown mode has to be an explicit warning, not
-// an empty flag, or the CLI hangs on a prompt.
 func (m MergeMode) Valid() bool {
 	switch m {
 	case MergeCommit, Rebase, Squash:
@@ -229,8 +203,6 @@ func ErrUnknownMergeMode(mode MergeMode) error {
 	return fmt.Errorf("unknown merge mode %q: expected merge, rebase or squash", string(mode))
 }
 
-// Without the pin the source branch can have advanced between the read and the keypress, so a forge
-// that does not report a head SHA is one we cannot merge safely from here.
 var ErrMissingHeadSHA = errors.New(
 	"the forge did not report the head commit, so the merge cannot be pinned to what was reviewed")
 
@@ -270,18 +242,12 @@ type Outcome struct {
 	HasItem     bool
 
 	DeleteBranch bool
-	// Separate from Msg because a failed delete is not a failed merge: the item IS merged, and
-	// "merge failed" would send the user looking for a forge state that does not exist.
-	DeleteMsg string
+	DeleteMsg    string
 
-	// FromBase is filled by whoever held the read, not by the adapter: the forge never looks at the old
-	// base, it only writes the new one, and the warning has to be able to say "main → release/2.0".
 	Base     string
 	FromBase string
 }
 
-// The executor gets the RE-READ, not the copy the TUI held: it is the read closest to the action.
-// It also gets the action's raw warnings, because a post-process must not lose the original reason.
 func runOn(seed Outcome, ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, exec func(cur model.Item) []model.Warning) (Outcome, []model.Warning) {
 	out := seed
 	out.Kind, out.ID = kind, model.With(ref.Forge, ref.Host, ref.Project, number)
@@ -304,8 +270,6 @@ func runOn(seed Outcome, ctx context.Context, a Adapter, kind ActionKind, ref mo
 }
 
 func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRef, number int, req MergeRequest) Outcome {
-	// An unknown action is NOT dispatched, and the cut is BEFORE `runOn`, which re-reads and would
-	// cost a round trip. No flags either: not a conflict, not a perm — it is the caller's bug. ADR 0008.
 	if kind != ActionApprove && kind != ActionMerge {
 		return Outcome{
 			Kind:         kind,
@@ -320,8 +284,7 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 		Outcome{Mode: req.Mode, DeleteBranch: req.DeleteBranch},
 		ctx, a, kind, ref, number,
 		func(cur model.Item) []model.Warning {
-			// The `default` that used to catch an unknown Kind is gone: RunAction cuts before here, and two
-			// places saying the same thing drift.
+			// No `default` for an unknown Kind: RunAction cuts before here and two places drift.
 			if kind == ActionApprove {
 				return a.Approve(ctx, ref, number)
 			}
@@ -330,8 +293,6 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 		},
 	)
 
-	// The delete rides in the SAME command, so its failure surfaces as the whole command's even though
-	// the merge happened: runOn's re-read tells them apart without an extra call.
 	if kind == ActionMerge && req.DeleteBranch && out.HasItem {
 		if !out.OK && state.Derive(out.Item) == state.StateMerged {
 			out.OK, out.Conflict, out.Perm, out.Msg = true, false, false, ""
@@ -344,8 +305,6 @@ func RunAction(ctx context.Context, a Adapter, kind ActionKind, ref model.RepoRe
 	return out
 }
 
-// Shares runOn's path with approve/merge: same guards, same reasons to refuse, and only the
-// adapter asked for differs. And no SHA pin, not by oversight: moving the base integrates nothing.
 func RunRetarget(ctx context.Context, a Adapter, ref model.RepoRef, number int, branch string) Outcome {
 	if strings.TrimSpace(branch) == "" {
 		return Outcome{
@@ -399,8 +358,6 @@ func classifyAction(warns []model.Warning) (ok, conflict, perm bool, msg string)
 	case hasKind(warns, "selfreview"):
 		return false, false, true, state.SelfReviewReason
 	case hasKind(warns, "unmergeable"):
-		// Not a conflict: colliding branches do not fix themselves, so the canonical reason, not the CLI's
-		// English. Not a permission either: a rebase fixes it, and a denial would cost the merge for good.
 		return false, false, false, state.UnmergeableReason
 	case hasKind(warns, "notfound"), hasKind(warns, "conflict"),
 		hasKind(warns, "ratelimit"), hasKind(warns, "network"), hasKind(warns, "timeout"):

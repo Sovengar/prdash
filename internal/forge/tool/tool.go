@@ -13,11 +13,8 @@ import (
 	"time"
 )
 
-// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const DefaultTimeout = time.Duration(30e9)
 
-// Same reason and same fix as in gitcmd and herdr: a child that inherited the pipe keeps it open.
-// 250ms as a literal, same coverage argument as DefaultTimeout above.
 const pipeCloseGrace = time.Duration(250e6)
 
 type Runner struct {
@@ -48,7 +45,6 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-// stdout comes back even on failure: some CLIs (`gh pr checks`) print valid output with a non-zero exit.
 func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 	timeout := r.Timeout
 	if timeout <= 0 {
@@ -59,7 +55,6 @@ func (r *Runner) Run(ctx context.Context, args ...string) (string, error) {
 
 	cmd := exec.CommandContext(cctx, r.Bin, args...)
 	cmd.Env = Env(r.Extra...)
-	// Without this the timeout cannot cut the read: see pipeCloseGrace.
 	cmd.WaitDelay = pipeCloseGrace
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
@@ -126,8 +121,6 @@ func HTTPStatus(msg string) int {
 	return 0
 }
 
-// The order is a precedence table between contradicting signals: rate-limit before the code (403
-// means both), unmergeable before it (409 too), self-review before that (422 is validation).
 func Kind(err error) string {
 	if err == nil {
 		return ""
@@ -137,12 +130,9 @@ func Kind(err error) string {
 	if isRateLimitText(msg) {
 		return "ratelimit"
 	}
-	// Before the HTTP code for the same reason as rate limit: GitHub answers 409 both to a branch
-	// rejection and to a state a refresh would fix.
 	if isUnmergeableText(msg) {
 		return "unmergeable"
 	}
-	// The only reason a forge vetoes an approval, and neither a network failure nor a state conflict.
 	if isSelfReviewText(msg) {
 		return "selfreview"
 	}
@@ -160,8 +150,7 @@ func Kind(err error) string {
 	case strings.Contains(msg, "409"), strings.Contains(msg, "conflict"),
 		strings.Contains(msg, "already closed"), strings.Contains(msg, "already merged"):
 		return "conflict"
-		// Its own class: the request is well formed and its content is not. Neither a conflict (a refresh
-		// does not help, the value is still bad) nor a permission (that would disable it for good).
+		// Its own class: well-formed request, bad content — a refresh does not help and it is not a permission.
 	case strings.Contains(msg, "422"):
 		return "validation"
 	case strings.Contains(msg, "401"), strings.Contains(msg, "unauthorized"),
@@ -178,8 +167,6 @@ func Kind(err error) string {
 	}
 }
 
-// Unrecognised text falls into the generic bucket, which is the right behaviour on the unknown: it
-// classifies worse, it does not lie better.
 func isUnmergeableText(lower string) bool {
 	return strings.Contains(lower, "not mergeable") ||
 		strings.Contains(lower, "cannot be cleanly created") ||
@@ -225,8 +212,6 @@ func kindForHTTP(code int) string {
 	return ""
 }
 
-// The forge CLIs do not pass the API's reason on stderr: there is one line with the whole argv.
-// `errors[].message` wins over `message`, which GitHub uses for "Validation Failed".
 func APIMessage(body string) string {
 	var payload struct {
 		Message any `json:"message"`

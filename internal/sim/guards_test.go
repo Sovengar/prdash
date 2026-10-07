@@ -10,8 +10,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// INFRASTRUCTURE failures: no disk, no HOME, repo gone.
-
 // A file where a directory was expected denies a write without needing permissions.
 func blockWithAFile(t *testing.T, path string) {
 	t.Helper()
@@ -23,7 +21,6 @@ func blockWithAFile(t *testing.T, path string) {
 	}
 }
 
-// os.UserCacheDir fails with neither XDG_CACHE_HOME nor HOME.
 func TestWithoutCacheDirSimulationIsImpossibleAndTheErrorSaysSo(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")
@@ -68,7 +65,6 @@ func TestWithoutTMPDIRTheSimulationDirectoryIsNotPrepared(t *testing.T) {
 	_ = review
 }
 
-// The ORDER is the point: the clone is what fails, not the checkout.
 func TestRepoThatNoLongerExistsFailsOnCloneNotCheckout(t *testing.T) {
 	// The repo Locator gives does not exist, which is stronger than deleting it afterwards.
 	s := newService(t, fakeLocator{ok: true, place: Place{
@@ -87,7 +83,6 @@ func TestRepoThatNoLongerExistsFailsOnCloneNotCheckout(t *testing.T) {
 	}
 }
 
-// The asymmetry with the clone error.
 func TestBranchMissingFromTheCloneFailsOnMaterialize(t *testing.T) {
 	repo, _ := simRepoMount(t)
 
@@ -97,8 +92,7 @@ func TestBranchMissingFromTheCloneFailsOnMaterialize(t *testing.T) {
 		itemBranch string
 		missing    string
 	}{
-		// In both cases ONE of the two is missing and the other is fine, so the error has to name the one that
-		//failed.
+		// In both cases ONE of the two is missing: the error has to name the one that failed.
 		{"the item's branch is missing", "main", "feat/inexistente", "feat/inexistente"},
 		{"the base is missing", "base/inexistente", "feat/x", "base/inexistente"},
 	} {
@@ -157,7 +151,6 @@ func TestGitSimThatProducesNoImageSaysSo(t *testing.T) {
 	}
 }
 
-// The chain end to end, with no mocks.
 func TestSimulatePropagatesStageFailureAndSaysWhereItCameFrom(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "repo-that-does-not-exist")
 	s := newService(t, fakeLocator{ok: true, place: Place{Repo: missing, Branch: "prdash/pr-7"}},

@@ -41,8 +41,7 @@ func TestWithNoRowsNotEvenALoadingNoticeIsPainted(t *testing.T) {
 		}
 	}
 
-	// This is what separates `avail <= 0` from `avail <= 1`: with the floor at one, a single row still
-	//has room.
+	// This separates `avail <= 0` from `avail <= 1`: with the floor at one a single row still has room.
 	withText := states[1:4]
 	for _, e := range withText {
 		for _, avail := range []int{1, 2} {
@@ -112,8 +111,7 @@ func TestTheCutRowIsRecomposedInItsPlace(t *testing.T) {
 			t.Errorf("with %d rows the block comes out with no cut mark: %q", rows,
 				firstLineWith(plain, 160))
 		}
-		// The LAST row of the CONTENT, not of the box: the box's last row is the bottom border with the
-		//legend.
+		// The last row of the content, not of the box: the box's last row is the bottom border.
 		withTheMarks := []string{}
 		for _, l := range strings.Split(plain, "\n") {
 			if strings.Contains(l, "…") {
@@ -138,8 +136,7 @@ func TestTheCutRowIsRecomposedInItsPlace(t *testing.T) {
 				rows, withTheMarks[0], firstLineWith(lastOfText, 90))
 		}
 
-		// commentRow only branches on `idx == 0`, so the index passed to the recompose decides whether
-		//that row still carries the author's name.
+		// commentRow branches only on `idx == 0`, so the recompose index decides if the row carries the author.
 		firstOfText := ""
 		for _, l := range strings.Split(plain, "\n") {
 			if strings.Contains(l, "─") {
@@ -193,8 +190,7 @@ func TestTheSplitIsTheSameWhenTheBudgetIsExact(t *testing.T) {
 	}
 }
 
-// allocate starts at one row per comment, so a comment asking for ZERO rows would be left with a
-// dangling index.
+// allocate starts at one row per comment, so a comment asking for zero rows would dangle an index.
 func TestNobodyAsksForZeroRows(t *testing.T) {
 	bodies := []model.Comment{
 		{Author: "alice"},

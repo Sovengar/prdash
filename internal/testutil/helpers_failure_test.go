@@ -10,12 +10,10 @@ import (
 
 const failureCaseEnv = "PRDASH_TESTUTIL_FAILURE_CASE"
 
-// The seven t.Fatal paths.
 func TestTheHelpersAbortLoudlyInsteadOfReturningThings(t *testing.T) {
 	if c := os.Getenv(failureCaseEnv); c != "" {
 		runFailureCase(t, c)
-		// If the helper did NOT abort we get here, and `t.Failed()` is what has to be checked rather
-		//than taking the case as good.
+		// If the helper did NOT abort we get here, and t.Failed() is what has to be checked.
 		if !t.Failed() {
 			t.Fatalf("case %q did NOT abort: the helper returned instead of failing", c)
 		}
@@ -67,8 +65,7 @@ func runFailureCase(t *testing.T, c string) {
 		RunGit(t, repo, "checkout", "no-such-branch")
 
 	case "missing-dir":
-		// The guard that has already passed for real: without it git would run in the process's own
-		// directory.
+		// The guard that has already passed for real: without it git would run in the process's own directory.
 		RunGit(t, filepath.Join(t.TempDir(), "does-not-exist"), "status")
 
 	case "empty-dir":
@@ -107,8 +104,7 @@ func runFailureCase(t *testing.T, c string) {
 		InitBare(t, filepath.Join(blocked, "repo.git"))
 
 	case "broken-conformance":
-		// An adapter that does not support an operation has to SAY SO, not return an empty list as if
-		//nothing were there.
+		// An adapter that does not support an operation has to SAY SO, not return an empty list.
 		RunConformance(t, &failingAdapter{broken: "no-warning"},
 			ConformanceOptions{Unsupported: true})
 	}

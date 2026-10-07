@@ -5,16 +5,14 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	_ "image/jpeg" // the jpeg registration is what makes the image decodable
-	_ "image/png"  // git-sim takes PNG too and the registration costs nothing
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 	"strings"
 )
 
-// Two vertical pixels per cell, which is what makes a commit graph readable.
 const halfBlock = "▀"
 
-// Decoded by content rather than by extension, so a file with the wrong suffix still loads.
 func Load(path string) (image.Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -28,8 +26,6 @@ func Load(path string) (image.Image, error) {
 	return img, nil
 }
 
-// Box average, not nearest neighbour: a point sample breaks the thin strokes of a commit graph,
-// which is the detail being looked at. Each cell resets its own colours, so text is not smudged.
 func Cells(img image.Image, w, h int) []string {
 	if img == nil || w <= 0 || h <= 0 {
 		return nil
@@ -54,13 +50,10 @@ func Cells(img image.Image, w, h int) []string {
 	return lines
 }
 
-// Assumes 1x2 cells; for the terminal's real ratio see FitCells.
 func Fit(img image.Image, maxCols, maxRows int) (cols, rows int) {
 	return FitCells(img, 1, 2, maxCols, maxRows)
 }
 
-// The height is paid double: 16:9 with 1x2 cells needs 3.56 columns per row, or two commits read as
-// a strip of ellipses. The largest fitting size is used: the empty cells make it read as finished.
 func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows int) {
 	if img == nil || maxCols <= 0 || maxRows <= 0 {
 		return max(maxCols, 0), max(maxRows, 0)
@@ -84,13 +77,10 @@ func FitCells(img image.Image, cellW, cellH, maxCols, maxRows int) (cols, rows i
 	return maxCols, max(int(float64(maxCols)/perRow), 1)
 }
 
-// Sending the image to Herdr unresized would send 1920x1080 to paint an 800px rectangle.
 func Resize(img image.Image, w, h int) *image.RGBA {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	// The nil and the zero-sized image are dropped inside rgba, not by a check here: asking a nil for
-	// its bounds panics, so a check AFTER the call covered nothing.
 	src := rgba(img)
 	if src == nil {
 		return nil
@@ -111,8 +101,6 @@ func rgba(img image.Image) *image.RGBA {
 	return out
 }
 
-// Integer fractions can land empty on a much larger destination, and there the corner pixel is
-// copied instead of leaving black: noise in a tiny image reads as a speck the render really had.
 func shrink(src *image.RGBA, w, h int) *image.RGBA {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	sb := src.Bounds()

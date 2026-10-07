@@ -18,8 +18,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// ENOSPC on the render directory is real —a small tmpfs swallows a big repo— and the warning must not
-// talk about git.
+// ENOSPC on the render directory is real (a small tmpfs swallows a big repo) and the warning must not talk about git.
 func TestFullDiskIsWarnedAsWhatItIsAndNotAsAGitFailure(t *testing.T) {
 	repo, _ := simRepoMount(t)
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 7)
@@ -28,8 +27,7 @@ func TestFullDiskIsWarnedAsWhatItIsAndNotAsAGitFailure(t *testing.T) {
 	s := newService(t, fakeLocator{ok: true, place: Place{Repo: repo, Branch: "main-origin"}},
 		fakeSim(t, writeJPEG(t)))
 
-	// The mkdir is counted and inspected, because an injected Mkdir that is never called proves
-	// nothing.
+	// The mkdir is counted: an injected Mkdir that is never called proves nothing.
 	calls := 0
 	s.Mkdir = func(path string, perm fs.FileMode) error {
 		calls++
@@ -75,8 +73,7 @@ func TestFullDiskIsWarnedAsWhatItIsAndNotAsAGitFailure(t *testing.T) {
 	}
 }
 
-// The most important of the three: its consequence is not a warning but a `.part` the size of the
-// JPEG that `prune` never deletes.
+// Its consequence is not a warning but a `.part` the size of the JPEG that `prune` never deletes.
 func TestUnclosedTempIsDeletedAndNothingIsPublished(t *testing.T) {
 	dir := t.TempDir()
 	dst := filepath.Join(dir, "destino.jpg")
@@ -95,8 +92,7 @@ func TestUnclosedTempIsDeletedAndNothingIsPublished(t *testing.T) {
 		t.Errorf("it wrote %q, want %q", broken.written, content)
 	}
 
-	// And the temporary is gone. This is the assertion that matters: a `.part` weighs as much as the
-	// JPEG it was going to become.
+	// A `.part` weighs as much as the JPEG it was going to become.
 	if _, err := os.Stat(dst + ".part"); !os.IsNotExist(err) {
 		t.Errorf("the temp %s was left behind: it weighs what the image weighs and `prune` only "+
 			"looks at the `.jpg`", dst+".part")
@@ -211,7 +207,6 @@ func TestImageDisappearingBeforeLstatDoesNotBreakThePrune(t *testing.T) {
 		}
 	}
 
-	// And the whole listing failing.
 	calm := t.TempDir()
 	fakeImage(t, calm, "a.jpg", base)
 	pruneWith(calm, 0, func(string) ([]os.DirEntry, error) {

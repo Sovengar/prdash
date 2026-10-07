@@ -36,7 +36,6 @@ func TestHelperProcessExitsWithCode(t *testing.T) {
 	os.Exit(code)
 }
 
-// Herdr's stderr JSON carries two things and both are used: a stable code and a message for humans.
 func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -54,7 +53,6 @@ func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
 			`{"code":"E_PLAN","message":"the plan does not fit"}`,
 			"E_PLAN", "the plan does not fit",
 		},
-		// Code only: the message comes from the exec error, not the server.
 		{
 			"code only",
 			`{"error":{"code":"E_SOLO"}}`,
@@ -75,14 +73,12 @@ func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
 			`{"message":"algo falló"}`,
 			"", "algo falló",
 		},
-		// An explicitly empty message with a code present: the empty message must NOT overwrite the one
-		// from the error.
+		// An empty message must NOT overwrite the one from the error.
 		{
 			"code with empty message",
 			`{"error":{"code":"E_VACIO","message":""}}`,
 			"E_VACIO", "exit status 3",
 		},
-		// JSON that is not Herdr's: no code and no message, so it is shown as the CLI printed it.
 		{
 			"foreign JSON",
 			`{"other":"cosa"}`,
@@ -124,7 +120,6 @@ func TestNewErrorTakesCodeAndMessageFromTheServer(t *testing.T) {
 	}
 }
 
-// The exit code comes from the exec error and is only read if the error IS an exec one.
 func TestNewErrorTakesExitCodeOnlyWhenItHasOne(t *testing.T) {
 	e := newError([]string{"herdr"}, exitErrorFor(t, 3), nil)
 	if e.Exit != 3 {
@@ -148,7 +143,6 @@ func TestNewErrorTakesExitCodeOnlyWhenItHasOne(t *testing.T) {
 	}
 }
 
-// The first line is shown, not the whole dump.
 func TestNewErrorKeepsOnlyTheFirstStderrLine(t *testing.T) {
 	stderr := "error: no such workspace\ngoroutine 1 [running]:\n\therdr/main.go:42"
 	e := newError([]string{"herdr"}, errors.New("exit status 1"), []byte(stderr))

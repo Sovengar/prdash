@@ -35,8 +35,6 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-// GraphQL exposes `ID!` values as strings and REST as numbers. A null, missing or non-numeric
-// value reads as 0 and the consumer decides whether to drop the item: a number is never invented.
 type flexInt int
 
 func (f *flexInt) UnmarshalJSON(b []byte) error {
@@ -59,8 +57,6 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// The bool pointers separate "the repo has it off" from "the response did not carry the field", which
-// is the difference between offering three modes and offering none.
 type ghPRNodeRepository struct {
 	NameWithOwner string `json:"nameWithOwner"`
 	Name          string `json:"name"`
@@ -73,27 +69,22 @@ type ghPRNodeRepository struct {
 }
 
 type ghPRNode struct {
-	Number         int    `json:"number"`
-	Title          string `json:"title"`
-	URL            string `json:"url"`
-	State          string `json:"state"`
-	IsDraft        bool   `json:"isDraft"`
-	ReviewDecision string `json:"reviewDecision"`
-	UpdatedAt      string `json:"updatedAt"`
-	HeadRefName    string `json:"headRefName"`
-	BaseRefName    string `json:"baseRefName"`
-	// gh assumes the branch is in the target repo, so `--delete-branch` on a fork PR deletes nothing
-	// while gh reports success — and the warning would lie exactly on the most-watched items.
+	Number            int    `json:"number"`
+	Title             string `json:"title"`
+	URL               string `json:"url"`
+	State             string `json:"state"`
+	IsDraft           bool   `json:"isDraft"`
+	ReviewDecision    string `json:"reviewDecision"`
+	UpdatedAt         string `json:"updatedAt"`
+	HeadRefName       string `json:"headRefName"`
+	BaseRefName       string `json:"baseRefName"`
 	IsCrossRepository bool   `json:"isCrossRepository"`
 	Mergeable         string `json:"mergeable"`
-	// This is what lets the merge be pinned: without it the branch may have moved since the last read.
-	HeadRefOid string `json:"headRefOid"`
-	// A pointer on purpose: `additions` is `Int!`, so if the field arrived the query asked for it. Absent
-	// means the answer had none (REST fallback), leaving the diffstat unknown rather than zero.
-	Additions    *int `json:"additions"`
-	Deletions    int  `json:"deletions"`
-	ChangedFiles int  `json:"changedFiles"`
-	Author       struct {
+	HeadRefOid        string `json:"headRefOid"`
+	Additions         *int   `json:"additions"`
+	Deletions         int    `json:"deletions"`
+	ChangedFiles      int    `json:"changedFiles"`
+	Author            struct {
 		Login string `json:"login"`
 	} `json:"author"`
 	Repository ghPRNodeRepository `json:"repository"`
@@ -196,8 +187,6 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	return it
 }
 
-// Known requires ALL THREE flags: with one missing, the answer came from a shape that does not carry
-// them all, and assuming the absent ones are false would hide the one mode the repo may well allow.
 func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 	if r.MergeCommitAllowed == nil || r.RebaseMergeAllowed == nil || r.SquashMergeAllowed == nil {
 		return model.MergeRules{}
@@ -210,8 +199,6 @@ func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 	}
 }
 
-// UNKNOWN is not a yes, it is "not computed yet", and GitHub returns it the first time every time.
-// Translating it to mergeable would announce a conflict that does not exist.
 func mergeableFromGH(v string) model.Mergeability {
 	switch strings.ToUpper(strings.TrimSpace(v)) {
 	case "CONFLICTING":
@@ -396,25 +383,19 @@ func ParseGHChecks(raw string) (model.Checks, error) {
 }
 
 type glMR struct {
-	IID    flexInt `json:"iid"`
-	Title  string  `json:"title"`
-	WebURL string  `json:"webUrl"`
-	State  string  `json:"state"`
-	// Separate from State, which is the forge's enum ("opened") and does not cover it: without this a draft
-	// MR was indistinguishable from an open one.
-	Draft bool `json:"draft"`
-	// The detailed one, not `mergeStatus`: the simple one cannot tell "collides" from "pipeline
-	// missing", so a red CI is announced as a branch conflict. GitLab computes it per MR anyway.
-	DetailedMergeStatus string `json:"detailedMergeStatus"`
-	SourceBranch        string `json:"sourceBranch"`
-	TargetBranch        string `json:"targetBranch"`
-	Approved            bool   `json:"approved"`
-	UpdatedAt           string `json:"updatedAt"`
-	// A pointer because GitLab declares it nullable and returns null while the diff is uncomputed;
-	// absent and null both mean "cannot be pinned".
-	DiffHeadSha *string `json:"diffHeadSha"`
-	Squash      *bool   `json:"squash"`
-	DiffStats   *[]struct {
+	IID                 flexInt `json:"iid"`
+	Title               string  `json:"title"`
+	WebURL              string  `json:"webUrl"`
+	State               string  `json:"state"`
+	Draft               bool    `json:"draft"`
+	DetailedMergeStatus string  `json:"detailedMergeStatus"`
+	SourceBranch        string  `json:"sourceBranch"`
+	TargetBranch        string  `json:"targetBranch"`
+	Approved            bool    `json:"approved"`
+	UpdatedAt           string  `json:"updatedAt"`
+	DiffHeadSha         *string `json:"diffHeadSha"`
+	Squash              *bool   `json:"squash"`
+	DiffStats           *[]struct {
 		Additions flexInt `json:"additions"`
 		Deletions flexInt `json:"deletions"`
 	} `json:"diffStats"`
@@ -531,15 +512,11 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	if mr.DiffHeadSha != nil {
 		it.HeadSHA = *mr.DiffHeadSha
 	}
-	// GitLab does not expose the merge strategies in GraphQL and reading them over REST would cost a
-	// call per repository, so the rules stay unknown, which restricts nothing.
 	it.Merge = model.MergeRules{}
 	it.UpdatedAt = parseTime(mr.UpdatedAt)
 	return it
 }
 
-// The enum is accepted in both spellings because REST lowercases it and GraphQL does not: a conflict
-// that does not exist is a false warning. `need_rebase` is NOT a conflict.
 func mergeableFromGL(v string) model.Mergeability {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "conflict", "broken_status":
@@ -551,8 +528,6 @@ func mergeableFromGL(v string) model.Mergeability {
 	}
 }
 
-// The file count comes from the length of the list and can therefore be short: GitLab collapses
-// diffs past its size and row limits, so on a huge MR the numbers are a minimum, not an exact figure.
 func diffFromGLMR(mr glMR) model.DiffStat {
 	if mr.DiffStats == nil {
 		return model.DiffStat{}
@@ -575,17 +550,15 @@ func glReviewDecision(mr glMR) string {
 }
 
 type glBasicMR struct {
-	IID    flexInt `json:"iid"`
-	Title  string  `json:"title"`
-	WebURL string  `json:"web_url"`
-	State  string  `json:"state"`
-	Draft  bool    `json:"draft"`
-	// It arrives in the REST list response, so reading it costs nothing. The deprecated `merge_status` is
-	// ignored on purpose: it cannot tell a conflict from a red pipeline.
-	DetailedMergeStatus string `json:"detailed_merge_status"`
-	SourceBranch        string `json:"source_branch"`
-	TargetBranch        string `json:"target_branch"`
-	UpdatedAt           string `json:"updated_at"`
+	IID                 flexInt `json:"iid"`
+	Title               string  `json:"title"`
+	WebURL              string  `json:"web_url"`
+	State               string  `json:"state"`
+	Draft               bool    `json:"draft"`
+	DetailedMergeStatus string  `json:"detailed_merge_status"`
+	SourceBranch        string  `json:"source_branch"`
+	TargetBranch        string  `json:"target_branch"`
+	UpdatedAt           string  `json:"updated_at"`
 	Author              struct {
 		Username string `json:"username"`
 	} `json:"author"`

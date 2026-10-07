@@ -1,5 +1,3 @@
-// GitHub comments and GitLab notes arrive with different field names over the same shape, so they
-// normalise into one model type through one conversion function.
 package parse
 
 import (
@@ -9,7 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// Inventing a name would be worse than saying we do not know who wrote it.
 const unknownAuthor = "unknown"
 
 type commentNode struct {
@@ -32,8 +29,6 @@ func (n commentNode) author() string {
 	return unknownAuthor
 }
 
-// The system marker stays in the model and is not filtered here: how many nodes were requested is
-// the adapter's business, not the response format's.
 func (n commentNode) comment() model.Comment {
 	return model.Comment{
 		Author:    n.author(),
@@ -105,8 +100,6 @@ func ParseGLComments(raw string) ([]model.Comment, int, error) {
 	return notes, len(notes), nil
 }
 
-// GitLab system notes are the MR's action history, not conversation, and mixed in they eat the pane's
-// five rows with noise the detail already shows another way.
 func toComments(nodes []commentNode) []model.Comment {
 	out := make([]model.Comment, 0, len(nodes))
 	for _, n := range nodes {
@@ -118,8 +111,6 @@ func toComments(nodes []commentNode) []model.Comment {
 	return out
 }
 
-// Bots put them before their text, and they are the first line of a good part of GitHub
-// conversations, so picking a representative line without skipping them reads invisible metadata.
 func isHTMLComment(line string) bool {
 	t := strings.TrimSpace(line)
 	return strings.HasPrefix(t, "<!--") && strings.HasSuffix(t, "-->")

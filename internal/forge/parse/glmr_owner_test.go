@@ -38,8 +38,7 @@ func TestTheOwnerOfAGitLabMRIsWhatComesBeforeTheLastSlash(t *testing.T) {
 		}
 	}
 
-	// Deliberately NOT asserted: that `/group/project` gives an owner that is a path. It does, and it
-	//looks wrong, but it is the same string the API gives.
+	// Deliberately NOT asserted: `/group/project` gives a path-like owner, but it is the same string the API gives.
 	it := itemFromGLMR(makeMR("/group/project", "project"),
 		model.SectionReview, model.ReviewRequested)
 	t.Logf("full_path with a leading slash: owner %q, project %q",

@@ -32,7 +32,7 @@ func TestRenderCellsPadsBeforeStyle(t *testing.T) {
 func TestNoCellFillsItsColumn(t *testing.T) {
 	it := mkItem("github", "github.com", "APPCITTI/vsocial/backend/mobile-frontend",
 		strings.Repeat("t", colTitle+5), 1198, "")
-	it.ReviewKind = model.ReviewRequested // without this roleText returns "-"
+	it.ReviewKind = model.ReviewRequested
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, mkItems("APPCITTI/vsocial/backend/mobile-frontend")...)}, prefixCommon)
 	cells := itemCells(it, model.SectionReview, "me", lay)
 
@@ -266,11 +266,10 @@ func TestDiffColumnAppearsOnlyOnWideTerminals(t *testing.T) {
 	}
 }
 
-// The DIFF column carries two colours in the same cell.
 func TestDiffSpansColoursOnlyTheDigits(t *testing.T) {
 	cases := []struct {
 		plain string
-		want  []string // text of each span; nil = no spans (all plain)
+		want  []string
 	}{
 		{"+381 -36", []string{"+381", " ", "-36"}},
 		{"+1.2k -6.7k", []string{"+1.2k", " ", "-6.7k"}},
@@ -279,9 +278,9 @@ func TestDiffSpansColoursOnlyTheDigits(t *testing.T) {
 		{"-", nil},
 		{"no changes", nil},
 		{"unknown (forge did not report it)", nil},
-		{"+381", nil}, // truncated: without the deletions side
+		{"+381", nil},
 		{"+abc -def", nil},
-		{"381 36", nil}, // without a sign it is not a diffstat
+		{"381 36", nil},
 	}
 	for _, c := range cases {
 		spans := diffSpans(c.plain)

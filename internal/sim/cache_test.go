@@ -12,8 +12,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The case that proves it is a failure midway: a half-written destination would offer the popup a broken
-// image under the right name.
+// A half-written destination would offer the popup a broken image under the right name.
 func TestCopyFileToTempLeavesTheDestinationIntactAndNotTheTemp(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "origen.jpg")
@@ -92,8 +91,7 @@ func TestCopyFileNamesTheFailureAtEachPoint(t *testing.T) {
 			t.Errorf("%s: copyFile gave nil", c.name)
 			continue
 		}
-		// The message names the file involved. os already puts the path in its error, so this checks that
-		//keep's wrap does not swallow it.
+		// os already puts the path in its error: this checks keep's wrap does not swallow it.
 		base := c.dst
 		if c.name == "source does not exist" {
 			base = c.src
@@ -107,14 +105,12 @@ func TestCopyFileNamesTheFailureAtEachPoint(t *testing.T) {
 	}
 }
 
-// "By date" is what a table test would miss: the filename carries a UnixNano and makes it look like
-// name order is date order.
+// "By date" is what a table test would miss: the filename's UnixNano makes name order look like date order.
 func TestPruneKeepsTheNewestByDateNotByName(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 
-	// The names run opposite to the dates on purpose, so a prune sorting by name would keep exactly the
-	//three it must not.
+	// The names run opposite to the dates: a prune sorting by name would keep exactly the wrong three.
 	for i := 9; i >= 1; i-- {
 		name := itoa(i) + ".jpg"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
@@ -181,8 +177,7 @@ func TestPruneIgnoresWhatIsNotAnImageAndDoesNotWipeTheWholeCache(t *testing.T) {
 		}
 	}
 
-	// A file named exactly `.jpg` IS pruned, because prune decides by suffix and HasSuffix(".jpg",".jpg")
-	//is true. It was on the untouchable list, which is what broke the count below.
+	// A file named exactly `.jpg` IS pruned: HasSuffix(".jpg",".jpg") is true, which broke the count below.
 	extensionOnlyName := filepath.Join(dir, ".jpg")
 	if err := os.WriteFile(extensionOnlyName, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -229,8 +224,7 @@ func TestPruneWithFewerThanToKeepDoesNothingAndWithZeroDeletesAll(t *testing.T) 
 	if len(namesIn(t, dir)) != 2 {
 		t.Errorf("prune with keep=10 removed files: %v", namesIn(t, dir))
 	}
-	// A NEGATIVE keep is clamped to zero instead of panicking: `files[-1:]` gave "slice bounds out
-	// of range [-1:]". My first version asserted it did not panic; now I check it the other way.
+	// A NEGATIVE keep is clamped to zero: `files[-1:]` gave "slice bounds out of range".
 	prune(dir, -1)
 	if remain := len(namesIn(t, dir)); remain != 0 {
 		t.Errorf("with keep=-1 %d files are left, want 0 (negative reads as zero)", remain)
@@ -304,8 +298,7 @@ func TestKeepCopiesToCacheWithTheItemNameAndPrunesTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The image just saved cannot be deleted. My first version looked at `dst`, the image from the FIRST
-	//keep call, which is the oldest, and failed intermittently.
+	// The image just saved cannot be deleted: checking `dst` (the oldest) failed intermittently.
 	if _, err := os.Stat(last); err != nil {
 		t.Errorf("the prune deleted the image that was just saved: %v", err)
 	}

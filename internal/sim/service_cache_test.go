@@ -15,8 +15,7 @@ import (
 
 // keep and prune are the two that touch the user's disk, and they were the two untested.
 
-// The ORDER of the timestamps is checked, not just how many files are left: a count alone would pass
-// with the newest pruned and the oldest kept.
+// A count alone would pass with the newest pruned and the oldest kept.
 func TestPruneKeepsTheRecentAndDeletesTheOld(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-time.Hour)
@@ -186,8 +185,7 @@ func TestKeepCopiesTheImageAndPrunesAfterwards(t *testing.T) {
 	}
 }
 
-// Both must surface as errors and not as an empty dst: an empty dst with the error ignored would
-// have the popup open nothing.
+// An empty dst with the error ignored would have the popup open nothing.
 func TestKeepFailsWithMissingSourceAndImpossibleDestination(t *testing.T) {
 	dir := t.TempDir()
 	it := model.Item{Forge: "github", Number: 1, Ref: model.RepoRef{Project: "p"}}
@@ -247,8 +245,7 @@ func TestCacheDirFallsBackToDefaultAndIsMemoized(t *testing.T) {
 	}
 }
 
-// The order matters: without a Locator there is nowhere to look, and with a Locator but no clone
-// there is nothing to take refs from.
+// Without a Locator there is nowhere to look; with a Locator but no clone, nothing to take refs from.
 func TestSimulateRefusesWithoutLocatorAndWithoutClone(t *testing.T) {
 	it := model.Item{Forge: "github", Number: 1, Ref: model.RepoRef{Project: "p"}}
 
@@ -295,8 +292,7 @@ func TestAvailableAndRunnerDoNotBreakWithAnEmptyService(t *testing.T) {
 	}
 }
 
-// The decision is whether the process complained or hung, which is what separates two completely
-// different diagnoses.
+// Whether the process complained or hung separates two completely different diagnoses.
 func TestSimErrorMessageTellsComplainingFromHanging(t *testing.T) {
 	got := message("first\nsecond\nthird", errors.New("exit status 1"))
 	if !strings.Contains(got, "first") {
@@ -319,8 +315,7 @@ func TestSimErrorMessageTellsComplainingFromHanging(t *testing.T) {
 	}
 }
 
-// My first version assumed bin read an environment variable so a test could point it elsewhere:
-// it does not, and the test now checks the field.
+// bin does not read an environment variable: the test checks the field.
 func TestSimBinaryIsTheFieldOrTheCanonicalOneAndNothingElse(t *testing.T) {
 	if got := (&Runner{}).bin(); got != DefaultBin {
 		t.Errorf("with Bin empty it gave %q, want %q", got, DefaultBin)
@@ -341,8 +336,7 @@ func TestSimBinaryIsTheFieldOrTheCanonicalOneAndNothingElse(t *testing.T) {
 	_ = (&Runner{}).Available()
 }
 
-// The path and arguments are what make the failure reproducible without guessing which invocation
-// hit it.
+// The path and arguments make the failure reproducible without guessing the invocation.
 func TestSimErrorBringsWhatWasExecuted(t *testing.T) {
 	e := &Error{Args: []string{"config", "user.email"}, Dir: "/repos/proj", Msg: "no such repository", ExitCode: 128}
 	msg := e.Error()

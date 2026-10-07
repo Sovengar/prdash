@@ -1,4 +1,3 @@
-// The "mount review" action in the TUI, with fake mounters.
 package tui
 
 import (

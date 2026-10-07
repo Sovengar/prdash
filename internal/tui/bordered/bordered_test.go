@@ -33,8 +33,7 @@ func TestRenderWithTitleExactWidthAndCorners(t *testing.T) {
 	}
 }
 
-// Content wider than the interior is CLIPPED, not re-wrapped: wrapping would break the
-// geometry.
+// Content wider than the interior is clipped, not re-wrapped: wrapping would break the geometry.
 func TestRenderWithTitleClipsWithoutWrapping(t *testing.T) {
 	longText := strings.Repeat("x", 100)
 	out := RenderWithTitle(Rounded(), nil, "", longText, 12)
@@ -52,7 +51,6 @@ func TestRenderWithTitleClipsWithoutWrapping(t *testing.T) {
 	}
 }
 
-// The clip is ANSI-safe: the content's colour sequence is not corrupted.
 func TestRenderWithTitleClipKeepsANSI(t *testing.T) {
 	content := "\x1b[31m" + strings.Repeat("ab", 40) + "\x1b[0m"
 	out := RenderWithTitle(Rounded(), nil, "", content, 10)
@@ -68,7 +66,6 @@ func TestRenderWithTitleClipKeepsANSI(t *testing.T) {
 	}
 }
 
-// A border with an empty fill character (a lipgloss.Border with none set).
 func TestBorderWithNoCharacterFillsWithSpace(t *testing.T) {
 	emptyBorder := lipgloss.Border{TopLeft: "┌", Top: "", TopRight: "┐", Left: "│", Right: "│", BottomLeft: "└", Bottom: "", BottomRight: "┘"}
 	out := RenderWithTitle(emptyBorder, nil, "", "hello", 8)
@@ -133,7 +130,6 @@ func TestATitleWiderThanTheInteriorIsClipped(t *testing.T) {
 	}
 }
 
-// A nil border colour leaves it unstyled.
 func TestTheBorderColorIsApplied(t *testing.T) {
 	withColor := color.RGBA{R: 0x1b, G: 0x2b, B: 0x34, A: 0xff}
 	out := RenderWithTitle(Rounded(), withColor, "t", "hello", 10)
@@ -141,8 +137,7 @@ func TestTheBorderColorIsApplied(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("lines = %d, want 3", len(lines))
 	}
-	// With a colour there is an ANSI sequence: without one the border would be invisible on a dark
-	// terminal.
+	// With a colour there is an ANSI sequence: without one the border is invisible on a dark terminal.
 	for i, l := range lines {
 		if !strings.Contains(l, "\x1b[") {
 			t.Errorf("line %d has no ANSI with a border colour: %q", i, ansi.Strip(l))
@@ -179,7 +174,7 @@ func TestRenderWithTitleEmptyContent(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("lines = %d, want 3", len(lines))
 	}
-	if got := ansi.Strip(lines[1]); got != "│      │" { // interior = 8-2
+	if got := ansi.Strip(lines[1]); got != "│      │" {
 		t.Errorf("empty interior line = %q, want border + interior fill", got)
 	}
 }
@@ -210,8 +205,7 @@ func TestRenderWithTitlesBottomCaption(t *testing.T) {
 	}
 }
 
-// The content's padding is the caller's, not the box's: a line of spaces is indistinguishable
-// from an empty one.
+// The content's padding is the caller's, not the box's: a line of spaces looks empty.
 func TestRenderWithTitlePadsToTheGivenHeight(t *testing.T) {
 	out := RenderWithTitle(Rounded(), nil, "", strings.Repeat("\n", 2), 8)
 	if got := len(strings.Split(out, "\n")); got != 5 {

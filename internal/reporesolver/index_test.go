@@ -11,7 +11,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// The three discards are different and all three matter.
 func TestTheIndexIgnoresWhatIsNotARepoWithAParsableRemote(t *testing.T) {
 	root := t.TempDir()
 
@@ -97,8 +96,7 @@ func TestTheIndexDoesNotEnterGitDirsNorWorktrees(t *testing.T) {
 	}
 }
 
-// Proved with the real thing, not a double: filepath.Abs on a RELATIVE root whose working
-// directory is gone.
+// Proved with the real thing, not a double: filepath.Abs on a relative root whose cwd is gone.
 func TestAnInaccessibleRootDoesNotBreakTheIndex(t *testing.T) {
 	vanished := filepath.Join(t.TempDir(), "is-valid")
 	if err := os.MkdirAll(vanished, 0o755); err != nil {
@@ -167,8 +165,6 @@ func TestARemoteWithAnEmptyPartDoesNotBecomeARepo(t *testing.T) {
 		}
 	}
 
-	// The good path, because otherwise "everything is rejected" would count as a test.
-	// Three forms that my first version put on the rejected list.
 	for _, good := range []string{
 		"https://github.com/acme/project.git",
 		"https://github.com/acme/project//.git",
@@ -196,8 +192,7 @@ func TestARemoteWithAnEmptyPartDoesNotBecomeARepo(t *testing.T) {
 	}
 }
 
-// It delegates to the package's REAL parsing, with the same hosts table production uses, so it does
-// not test a copy.
+// Delegates to the REAL parsing with production's hosts table, so it does not test a copy.
 func parseRemoteForTest(raw string) (model.RepoRef, bool) {
 	return ParseRemoteURL(raw, testHosts(), nil)
 }

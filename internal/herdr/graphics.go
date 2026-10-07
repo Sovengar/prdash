@@ -17,8 +17,6 @@ import (
 
 var ErrNoGraphics = errors.New("herdr: pane graphics unavailable")
 
-// Better to fall to half-blocks than to leave the popup half painted.
-// 5s as a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const graphicsTimeout = time.Duration(5e9)
 
 const (
@@ -26,8 +24,6 @@ const (
 	defaultCellHeightPx = 2
 )
 
-// Named and ours, so it can be removed without touching anything foreign: the layer belongs to the
-// pane, and what is not prdash's does not get touched.
 const GraphicsLayer = "prdash-sim"
 
 type Placement struct {
@@ -37,22 +33,15 @@ type Placement struct {
 	Rows int // altura en celdas
 }
 
-// Checked BEFORE sending, not left for the server to reject: a degenerate rectangle is worse than
-// not drawing, because the server still has to decide what to do with it.
 func (p Placement) Empty() bool { return p.Cols <= 0 || p.Rows <= 0 }
 
 type GraphicsInfo struct {
-	// The ratio between them is what decides how many columns per row an image needs to avoid
-	// distortion, and it is not 2:1 but whatever the terminal measures.
 	CellWidthPx  int
 	CellHeightPx int
-	// An invisible pane does not show its layer, so the image has to go to half-blocks.
-	PaneVisible bool
-	MaxLayers   int
+	PaneVisible  bool
+	MaxLayers    int
 }
 
-// Over the socket because `herdr pane graphics` is not a subcommand: the socket is the only API.
-// One connection per request because the server closes it after each response.
 type Graphics struct {
 	Socket  string
 	PaneID  string
@@ -85,21 +74,15 @@ func (g *Graphics) pane() string {
 	return g.env("HERDR_PANE_ID")
 }
 
-// The method's existence is deduced from the pane id it is called with, so it cannot be asserted
-// without asking, and asking costs a trip to the socket.
 func (g *Graphics) Available() bool {
 	return graphicsReady(g.env("HERDR_ENV"), g.socket(), g.pane()) && g.probe()
 }
 
-// Separate on purpose: the policy is a pure function of three strings and can be checked whole,
-// while the question is the part that costs a socket trip.
 func (g *Graphics) probe() bool {
 	_, err := g.Info(context.Background())
 	return err == nil
 }
 
-// "Outside Herdr" is checked FIRST: the other way round, a process outside Herdr with the variables
-// set would still write to a socket that may belong to another process.
 func graphicsReady(herdrEnv, socket, pane string) bool {
 	if herdrEnv != "1" {
 		return false
@@ -121,8 +104,6 @@ func (g *Graphics) Info(ctx context.Context) (GraphicsInfo, error) {
 	if g.pane() == "" {
 		return info, ErrNoGraphics
 	}
-	// `call` already unwraps the envelope, so the payload is deserialised directly: one less level of
-	// nesting is one less "{} result result" for someone to write by mistake.
 	var res struct {
 		CellWidthPx  int  `json:"cell_width_px"`
 		CellHeightPx int  `json:"cell_height_px"`
@@ -144,8 +125,6 @@ func (g *Graphics) CellSize(ctx context.Context) (cellW, cellH int) {
 	return cellSizeFrom(g.Info(ctx))
 }
 
-// Two degradations that mean the same thing —no measurement— so the condition is an OR and an
-// exact 0 must fall to the approximation instead of being used as given.
 func cellSizeFrom(info GraphicsInfo, err error) (cellW, cellH int) {
 	if err != nil || info.CellWidthPx <= 0 || info.CellHeightPx <= 0 {
 		return defaultCellWidthPx, defaultCellHeightPx
@@ -153,8 +132,6 @@ func cellSizeFrom(info GraphicsInfo, err error) (cellW, cellH int) {
 	return info.CellWidthPx, info.CellHeightPx
 }
 
-// Sent unscaled: the caller already fitted it to the rectangle, and rescaling again would throw
-// away detail. PNG in base64 because that is what the documented API accepts.
 func (g *Graphics) SetImage(ctx context.Context, layer string, img image.Image, p Placement) error {
 	if img == nil || p.Empty() {
 		return ErrNoGraphics
@@ -181,7 +158,6 @@ func (g *Graphics) SetImage(ctx context.Context, layer string, img image.Image, 
 	return g.call(ctx, "pane.graphics.set", params, nil)
 }
 
-// The layer sits above the pane's content, so leaving it would leave the image on top of the UI.
 func (g *Graphics) Clear(ctx context.Context, layer string) error {
 	if g.pane() == "" {
 		return ErrNoGraphics
@@ -259,15 +235,11 @@ func decodeResponse(line []byte, out any) error {
 		return nil
 	}
 	if len(env.Result) == 0 {
-		// For a method that DOES expect a result, none being there is an invalid response: a socket
-		// pointing at another program answering `{}` would make probe() report the layer as working.
 		return errors.New("herdr: the response has no result field")
 	}
 	return json.Unmarshal(env.Result, out)
 }
 
-// git-sim's JPEG is re-encoded because the API does not accept jpeg: it weighs more, and that is
-// what the terminal can decode.
 func encodePNG(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {

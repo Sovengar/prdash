@@ -124,7 +124,6 @@ func TestFilterBranchesFiltersOnTheWholeNameAndCaseInsensitively(t *testing.T) {
 	}
 }
 
-// The filter shrinks the view and the cursor is clamped to it.
 func TestClampRetargetCursorLeavesNoCursorOutside(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 
@@ -253,7 +252,6 @@ func TestClosingThePopupInvalidatesTheInFlightListing(t *testing.T) {
 	}
 }
 
-// The filter clears rune by rune, not by grapheme.
 func TestBackspaceDeletesOneRuneAndNoMore(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "release/2.0")
 	m = pressFilter(t, m, "fi")

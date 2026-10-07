@@ -6,8 +6,7 @@ func testHosts() map[string]string {
 	return map[string]string{"github.com": "github"}
 }
 
-// An entry starting with `://` is neither a schemed URL nor SCP, and is not normalised as if it
-// were.
+// An entry starting with `://` is neither a schemed URL nor SCP, and is not normalised.
 func TestAMissingSchemeDoesNotSlipThroughTheSCPBranch(t *testing.T) {
 	cases := []struct {
 		raw  string
@@ -27,8 +26,7 @@ func TestAMissingSchemeDoesNotSlipThroughTheSCPBranch(t *testing.T) {
 		}
 	}
 
-	// The good side of the same boundary: a scheme at position one or more goes through the URL branch
-	//and is normalised. With `> 0` this would also work, which is why it is pinned.
+	// A scheme at position one or more goes through the URL branch: pinned because `> 0` would also work.
 	for _, raw := range []string{"https://github.com/acme/widget", "ssh://git@github.com/acme/widget.git"} {
 		ref, ok := ParseRemoteURL(raw, testHosts(), nil)
 		if !ok {
@@ -46,10 +44,10 @@ func TestAnSCPWithAnEmptyUserIsNotARemote(t *testing.T) {
 	cases := []string{
 		"@github.com:acme/widget",
 		"@github.com",
-		"git@github.com",       // no path behind it
-		"git@github.com:acme",  // a single path segment
-		"git@github.com:acme/", // empty segment at the end
-		"git@github.com:/acme", // empty segment at the start
+		"git@github.com",
+		"git@github.com:acme",
+		"git@github.com:acme/",
+		"git@github.com:/acme",
 	}
 	for _, raw := range cases {
 		if ref, ok := ParseRemoteURL(raw, testHosts(), nil); ok {

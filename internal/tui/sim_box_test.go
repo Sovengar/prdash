@@ -11,7 +11,6 @@ import (
 	"prdash/internal/sim"
 )
 
-// The padding decides the box's HEIGHT.
 func TestPadLinesFillsUpToTheAskedHeight(t *testing.T) {
 	for _, have := range []int{0, 1, 3, 5, 12, 40} {
 		lines := make([]string, have)
@@ -57,7 +56,6 @@ func TestPadLinesFillsUpToTheAskedHeight(t *testing.T) {
 	}
 }
 
-// The sim popup's height is FIXED.
 func TestTheSimBoxMeasuresWhatTheFillCommands(t *testing.T) {
 	restore := simKinds
 	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase, sim.Kind("other")}
@@ -92,7 +90,6 @@ func TestTheSimBoxMeasuresWhatTheFillCommands(t *testing.T) {
 	}
 }
 
-// The cursor is the row enter picks.
 func TestOnlyOneRowOfTheSelectorCarriesTheCursor(t *testing.T) {
 	restore := simKinds
 	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase, sim.Kind("other")}
@@ -121,7 +118,6 @@ func TestOnlyOneRowOfTheSelectorCarriesTheCursor(t *testing.T) {
 	}
 }
 
-// Each strategy's label is padded.
 func TestTheSelectorFlowStartsAtAFixedColumn(t *testing.T) {
 	restore := simKinds
 	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase, sim.Kind("12345678")}
@@ -152,13 +148,11 @@ func TestTheSelectorFlowStartsAtAFixedColumn(t *testing.T) {
 				simKinds[i], flujos[i], simKinds[0], flujos[0])
 		}
 	}
-	// All three rows land in the SAME column.
 	if flujos[0] != flujos[1] || flujos[1] != flujos[2] {
 		t.Errorf("the flows start at columns %v: the label is not padded to the same width", flujos)
 	}
 }
 
-// The merge and rebase arrows point in opposite directions.
 func TestTheMergeArrowAndTheRebaseOnePointInOppositeDirections(t *testing.T) {
 	restore := simKinds
 	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase}

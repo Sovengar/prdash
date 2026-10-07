@@ -20,8 +20,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// With the image in the graphics layer it has to be placed again — Herdr places by cells, not by
-		// Relative — or it stays in the old rectangle, which is where the box was before the resize.
 		if m.sim.viaGraphics {
 			m.republishSimImage()
 		} else {
@@ -36,8 +34,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case authMsg:
 		if msg.cycle != m.cycle {
-			// Stale cycle: its data is dropped but the bomb is ALWAYS re-armed, or channel readers are lost
-			// and the refresh dies.
 			return m.withPump(nil)
 		}
 		if st := m.statuses[msg.forge]; st != nil {
@@ -63,8 +59,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case refreshDoneMsg:
 		if msg.cycle != m.cycle {
-			// Stale cycle (cycles should not overlap). It touches no data, no `loading` and no tick chain;
-			// it only re-arms the bomb because it consumed a channel event.
 			return m.withPump(nil)
 		}
 		m.loading = false
@@ -90,8 +84,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case toastTickMsg:
-		// Prunes the expired warnings and re-arms the tick. It does not touch the events channel: it is a
-		// clock, not a reader.
 		m.toast.update()
 		return m, tickToast()
 
@@ -101,8 +93,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.withPump(nil)
 
 	case reviewCleanupMsg:
-		// Produced by reviewCleanupCmd, not the events channel: it consumes no reader so none is re-armed
-		// (arming one would leak a goroutine per merge). Same pattern as notifyMsg.
 		m.applyReviewCleanup(msg)
 		return m, nil
 
@@ -115,8 +105,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.withPump(nil)
 
 	case commentsTickMsg:
-		// The tick is always re-armed, whether anything was queried or not: that is what keeps the chain
-		// alive and makes the next selection change noticeable without having to remember it at the change site.
 		return m, m.requestComments()
 
 	case commentsMsg:
@@ -129,7 +117,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// One reader in, exactly one armed back out.
 func (m Model) withPump(cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	m.releaseReader()
 	return m, tea.Batch(cmd, m.armReader())
@@ -141,14 +128,11 @@ func (m *Model) releaseReader() {
 	}
 }
 
-// The re-read item is the most recent state the forge has — it is read AFTER the action — so it
-// always applies. The cycle is per item so an older page cannot overwrite it.
+// The re-read item is the most recent state the forge has, so it always applies.
 func (m *Model) applyAction(out forge.Outcome, cycle int) tea.Cmd {
 	m.actionBusy = false
 	if out.HasItem {
 		m.actionCycle[out.Item.ID()] = cycle
-		// An action can write to the conversation, and this is the ONLY invalidation of that cache: the
-		// inbox refresh does not clear it, because re-asking every cycle would make the card flicker.
 		delete(m.comments, out.Item.ID())
 		m.applyItemUpdate(out.Item)
 	}
@@ -159,26 +143,18 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) tea.Cmd {
 	case out.Conflict:
 		m.setNotice("forge conflict: "+out.Msg, levelError)
 	case out.Unmergeable:
-		// The reason already comes translated and says what to do, so the header only names the action:
-		// "forge conflict" there would lie, because a refresh does not rebase a branch.
 		m.setNotice(string(out.Kind)+" refused: "+out.Msg, levelError)
 	case out.OK:
-		// The branch delete is warned about even when the merge went: the notice has to say both things,
-		// because "merge ok" alone leaves it unknown whether the branch it was asked to delete is gone.
 		notice := actionDoneNotice(out)
 		level := levelOK
 		if out.DeleteMsg != "" {
 			notice += " · branch not deleted: " + out.DeleteMsg
 			level = levelWarn
 		} else if stale := m.staleReviewNotice(out.Item); stale != "" && out.Kind == forge.ActionRetarget {
-			// Same for a mounted review: moving the base does not touch it, so it stands with whatever the item
-			// had. Warned, not fixed, because the worktree is the user's.
 			notice += " · " + stale
 			level = levelWarn
 		}
 		m.setNotice(notice, level)
-		// Only a merge that actually went triggers the worktree cleanup. The base warning is captured here and
-		// travels in the command so the notice recomposes on top of it.
 		if triggersReviewCleanup(out) {
 			return m.reviewCleanupCmd(out.Item, notice, level)
 		}
@@ -188,13 +164,11 @@ func (m *Model) applyAction(out forge.Outcome, cycle int) tea.Cmd {
 	return nil
 }
 
-// Only a merge that went. Isolated as the trigger so a test can pin it deterministically.
 func triggersReviewCleanup(out forge.Outcome) bool {
 	return out.Kind == forge.ActionMerge && out.OK
 }
 
-// In the background so the Update handler does not block on a git subprocess, and the result
-// arrives with the base warning captured, so the notice recomposes on it.
+// In the background so the Update handler does not block on a git subprocess.
 func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) tea.Cmd {
 	if m.reviewRemover == nil {
 		return nil
@@ -208,21 +182,18 @@ func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) 
 	}
 }
 
-// A no-op (no review mounted, or the path already gone) re-emits nothing: the merge notice stays the
-// same and re-stacking it would only duplicate it.
+// A no-op re-emits nothing: re-stacking would duplicate the merge notice.
 func (m *Model) applyReviewCleanup(msg reviewCleanupMsg) {
 	if !msg.removed && msg.reason == "" && msg.err == nil {
 		return
 	}
 	text, level := reviewCleanupNotice(msg.base, msg.level, msg.removed, msg.reason, msg.err)
-	// The merge warning is UPDATED rather than stacked: the merge text must not appear twice.
 	m.setNoticeReplacing(msg.base, text, level)
 }
 
 // Never suppresses the merge's facts; it prefixes them with the worktree's outcome.
 func reviewCleanupNotice(base string, baseLevel noticeLevel, removed bool, reason string, err error) (string, noticeLevel) {
 	if err != nil {
-		// The merge did go: a failure to delete the worktree is a warning, not a failed action.
 		return base + " · could not remove the worktree: " + err.Error(), levelWarn
 	}
 	if removed {
@@ -245,25 +216,17 @@ func keptReviewNotice(reason string) string {
 	return "worktree kept: " + reason
 }
 
-// There is no full-screen view to open or close: the item's card is always in the bottom panel, so
-// every key works at all times.
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
-	// Merge is the only two-stage action. While armed any other key disarms, so an out-of-time `m`
-	// does not leave the view waiting for a second press.
 	if m.mergeArmed {
 		return m.handleMergeArmed(msg, key)
 	}
 
-	// The simulation overlay takes the whole keyboard while open: letting one through would fire an
-	// action on an item the user is no longer looking at.
 	if m.sim.state != simClosed {
 		return m.handleSimKey(msg, key)
 	}
 
-	// The retarget popup does the same, and comes after the simulation one because the two are
-	// mutually exclusive; the order only decides which wins if they ever overlap.
 	if m.retarget.state != retargetClosed {
 		return m.handleRetargetKey(msg, key)
 	}
@@ -325,15 +288,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// It does not move the cursor but it changes what the ITEM column measures and removes the
-// prefix line: without resyncing the scroll, the cursor would leave the window.
 func (m *Model) cyclePrefixMode() {
 	m.prefixMode = m.prefixMode.next()
 	m.syncScroll()
 }
 
-// A hard block prevents arming: it is a property of the forge. A soft block still arms, and
-// naming the mode IS the confirmation, because naming a strategy is having decided.
+// A hard block prevents arming; a soft block still arms and is named by the confirmation.
 func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	it, _, ok := m.canAction(forge.ActionMerge)
 	if !ok {
@@ -350,8 +310,7 @@ func (m Model) armMerge() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// No default mode, so the confirmation and the choice are one gesture. A key that is not a mode
-// CONSUMES the press: it used to delegate to handleKey, so `m` then `a` approved.
+// A key that is not a mode consumes the press: delegating once let `m` then `a` approve.
 func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	var mode forge.MergeMode
 	switch key {
@@ -362,8 +321,6 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 	case "s":
 		mode = forge.Squash
 	case "tab":
-		// `tab` with the merge armed toggles the delete and is not "next section": the armed state keeps
-		// waiting for the mode key, which is the only thing that can fire it.
 		m.deleteBranch = !m.deleteBranch
 		return m, nil
 	case "esc":
@@ -379,16 +336,14 @@ func (m Model) handleMergeArmed(msg tea.KeyPressMsg, key string) (tea.Model, tea
 		return m, nil
 	}
 
-	// A refresh may have moved the cursor between arming and confirming. If it is no longer the same
-	// item, the merge goes out on what the user confirmed or it does not go out.
+	// The merge goes out on the item the user confirmed, or it does not go out.
 	it, ok := m.selected()
 	if !ok || it.ID() != m.mergeArmedID {
 		m.disarmMerge()
 		m.setNotice("the selected item changed: press merge again", levelWarn)
 		return m, nil
 	}
-	// Checked against the copy on screen, not RunAction's re-read: refusing here a mode the repo
-	// no longer allows beats emitting a merge the forge rejects with a vaguer message.
+	// Refused here beats emitting a merge the forge rejects with a vaguer message.
 	if !forge.AllowsMode(it.Merge, mode) {
 		m.disarmMerge()
 		m.setNotice("the repository does not allow "+mode.Label()+" merges", levelWarn)
@@ -404,7 +359,7 @@ func (m *Model) disarmMerge() {
 	m.mergeBlockReason = ""
 }
 
-// No channel reader armed: the local refresh consumes no events, so the bomb keeps its single reader.
+// No channel reader armed: the local refresh consumes no events.
 func (m Model) startRefresh() (tea.Model, tea.Cmd) {
 	if m.loading {
 		m.setNotice("refresh in progress", levelInfo)
@@ -414,8 +369,7 @@ func (m Model) startRefresh() (tea.Model, tea.Cmd) {
 	return updated, cmd
 }
 
-// Shared by arming a merge, opening the branch picker and executing it: arming an action that then
-// cannot be executed would leave the user with a confirmation that can only end in disappointment.
+// Checked before arming: a confirmation that cannot execute ends in disappointment.
 func (m *Model) canAction(kind forge.ActionKind) (model.Item, forge.Adapter, bool) {
 	it, ok := m.selected()
 	if !ok {
@@ -440,8 +394,7 @@ func (m *Model) canActionOn(kind forge.ActionKind, it model.Item) (forge.Adapter
 		m.setNotice(string(kind)+" disabled: "+reason, levelWarn)
 		return nil, false
 	}
-	// No forge allows approving your own: cut here, before spending the CLI call and its re-read, and
-	// without waiting for the rejection. The reason already says what happened, so it carries no prefix.
+	// Cut before spending the CLI call: no forge allows approving your own.
 	if reason := m.selfDenied[it.ID()]; reason != "" && kind == forge.ActionApprove {
 		m.setNotice(reason, levelWarn)
 		return nil, false
@@ -457,8 +410,7 @@ func (m *Model) canActionOn(kind forge.ActionKind, it model.Item) (forge.Adapter
 	return a, true
 }
 
-// The branch is named only when the forge did not complain, the only case where it can be
-// asserted as deleted: a fork PR never deletes it.
+// Named only when the forge did not complain: a fork PR never deletes it.
 func actionDoneNotice(out forge.Outcome) string {
 	switch out.Kind {
 	case forge.ActionMerge:
@@ -488,8 +440,7 @@ func (m *Model) startAction(kind forge.ActionKind, req forge.MergeRequest) tea.C
 		})
 }
 
-// `actionBusy` is set HERE because that is what stops two actions stepping on each other, and
-// two functions setting it would forget once.
+// `actionBusy` is set here only, so two functions cannot forget one of them.
 func (m *Model) launchAction(kind forge.ActionKind, it model.Item, a forge.Adapter, notice string, exec func(context.Context) forge.Outcome) tea.Cmd {
 	m.actionBusy = true
 	m.setNotice(notice, levelInfo)
@@ -554,23 +505,20 @@ func mountNotice(res executor.Result, err error) (string, noticeLevel) {
 	return "the review layout requires Herdr; the worktree was mounted at " + res.Worktree.Path, levelWarn
 }
 
-// All cursor movement goes through here: moving without syncScroll could leave the row outside the
-// window with the selection elsewhere on screen.
+// All cursor movement goes through here so the selection can never leave the window.
 func (m *Model) moveCursor(row int) {
 	m.cursor = row
 	m.clampCursor()
 	m.syncScroll()
 }
 
-// Moving the cursor is not enough: the auto-scroll would put the row under the top edge, taking the
-// prefix line and the column header off screen.
+// Resets the scroll too: the auto-scroll would otherwise hide the prefix line and the header.
 func (m *Model) goTop() {
 	m.cursor = 0
 	m.scroll = 0
 }
 
-// Moving only the cursor would leave the list nearly still and the detail panel jumping from item to
-// item.
+// Moves the scroll too, or the list barely moves while the detail jumps.
 func (m *Model) pageBy(delta int) {
 	m.cursor += delta
 	m.scroll += delta
@@ -591,16 +539,11 @@ func (m Model) View() tea.View {
 	lay := m.layout()
 	it, ok := m.selected()
 	v = m.compose(lay, m.listSection(lay), m.detailSection(it, ok, lay.detailLines))
-	// Only the interior, so no border is stepped on. There is no `if len(toasts) > 0`: overlayToasts
-	// returns the view intact with no warnings, so the guard only lived in the allowlist.
 	v.text = overlayToasts(v.text, m.toast.blocks(m.contentWidth()), m.contentWidth(), v.rows)
-	// The popup goes after the toasts so it ends up above them: it is the layer the user just opened, and
-	// a warning must not cover it.
+	// Popups after the toasts, so a warning cannot cover what the user just opened.
 	if box, ok := m.simOverlay(); ok {
 		v.text = overlayCentered(v.text, box, m.contentWidth())
 	}
-	// The retarget popup goes last for the same reason the simulation one goes after the toasts, and in
-	// the same order between the two: if they ever overlapped, the one opened later wins.
 	if box, ok := m.retargetOverlay(); ok {
 		v.text = overlayCentered(v.text, box, m.contentWidth())
 	}

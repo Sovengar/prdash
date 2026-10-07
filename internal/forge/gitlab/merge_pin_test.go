@@ -46,8 +46,7 @@ func TestMRFieldsAskForThePin(t *testing.T) {
 	if !strings.Contains(mrFields, "diffHeadSha") {
 		t.Error("mrFields does not ask for diffHeadSha, so the pin could never be satisfied")
 	}
-	// The negative assertion documents a decision, not a wish: if the schema ever grows it, the test
-	// says so.
+	// The negative assertion documents a decision: if the schema ever grows mergeMethod, the test says so.
 	if strings.Contains(mrFields, "mergeMethod") {
 		t.Log("mrFields asks for mergeMethod: the instance supports it, rules filtering is possible")
 	}

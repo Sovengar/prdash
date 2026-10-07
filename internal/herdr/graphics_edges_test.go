@@ -47,7 +47,6 @@ func TestNoKnownPaneInfoOrClearTouchTheSocket(t *testing.T) {
 	srv.stop()
 }
 
-// Real: Herdr restarts while the image is being written, and the socket answers RST.
 func TestSocketDyingWithRSTOnWriteIsReportedAsLayerFailureNotMissingPane(t *testing.T) {
 	g := graphicsWithBrokenWrite(t)
 
@@ -61,8 +60,7 @@ func TestSocketDyingWithRSTOnWriteIsReportedAsLayerFailureNotMissingPane(t *test
 	if !strings.Contains(err.Error(), "graphics") {
 		t.Errorf("the reason %q does not say the graphics layer failed", err)
 	}
-	// The reason for the WRITE failure is in the message, which is what tells this apart from the
-	// others.
+	// The write failure's reason is in the message, which tells this apart from the others.
 	if !strings.Contains(err.Error(), "broken pipe") {
 		t.Errorf("the reason %q does not carry the cause of the failed write", err)
 	}
@@ -93,8 +91,7 @@ func TestUnserializableParamFailsBeforeTouchingTheSocket(t *testing.T) {
 		!strings.Contains(err.Error(), "unsupported") {
 		t.Errorf("the error %q does not say the parameter cannot be serialized", err)
 	}
-	// The server saw nothing: the call has to fail BEFORE connecting, because a server that
-	// answered would prove nothing.
+	// The call has to fail BEFORE connecting: a server that answered would prove nothing.
 	srv.mu.Lock()
 	seen := len(srv.requests)
 	srv.mu.Unlock()
@@ -105,7 +102,6 @@ func TestUnserializableParamFailsBeforeTouchingTheSocket(t *testing.T) {
 	srv.stop()
 }
 
-// The difference between "no Herdr" and "Herdr is somewhere else".
 func TestEmptySocketComesFromTheEnvironmentAndIsNotGuessed(t *testing.T) {
 	t.Setenv("HERDR_SOCKET_PATH", "")
 	t.Setenv("HERDR_PANE_ID", "pane-1")
@@ -123,8 +119,7 @@ func TestEmptySocketComesFromTheEnvironmentAndIsNotGuessed(t *testing.T) {
 	if !errors.Is(err, ErrNoGraphics) {
 		t.Errorf("the error %v is not ErrNoGraphics", err)
 	}
-	// The message does NOT name the environment variable, and that gap is written down on purpose:
-	//socket() returns "" and the Dial fails with an unhelpful message.
+	// The message does NOT name the variable on purpose: socket() returns "" and Dial fails unhelpfully.
 	if !strings.Contains(err.Error(), "graphics") {
 		t.Errorf("the error %q does not say the graphics layer failed", err)
 	}
@@ -134,8 +129,7 @@ func TestEmptySocketComesFromTheEnvironmentAndIsNotGuessed(t *testing.T) {
 	}
 }
 
-// The embedded net.Conn is NOT nil: call does a deferred Close and a nil embedded interface
-// panics there.
+// The embedded net.Conn is NOT nil: call's deferred Close panics on a nil interface.
 type connWithBrokenWrite struct{ net.Conn }
 
 func (connWithBrokenWrite) Write([]byte) (int, error) {
@@ -151,8 +145,7 @@ func graphicsWithBrokenWrite(t *testing.T) *Graphics {
 	})
 	broken := connWithBrokenWrite{Conn: client}
 	return &Graphics{
-		// Socket is pinned: without it call() reads the ambient HERDR_SOCKET_PATH and returns a bare
-		// ErrNoGraphics before dialing, so in CI the broken write under test is never reached.
+		// Socket is pinned: without it call() returns a bare ErrNoGraphics before dialing, so the broken write is never reached.
 		Socket:  "/tmp/herdr.sock",
 		PaneID:  "pane-1",
 		Timeout: 2 * time.Second,

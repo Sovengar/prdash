@@ -32,8 +32,7 @@ func modelInSim(t *testing.T, phase simState) (Model, *stubSimulator) {
 	return m, fake
 }
 
-// The sweep is deliberately exhaustive and not "the keys I care about": a transition table with a
-// hole in it is a keypress that does nothing, with no error.
+// The sweep is exhaustive on purpose: a transition table with a hole is a keypress that does nothing, with no error.
 func TestEveryKeyInEveryPhaseClosesOrAdvancesAndAlwaysEndsOnSomethingClosable(t *testing.T) {
 	keys := []string{
 		"q", "ctrl+c", "esc", "o", "enter", "up", "down", "j", "k", "tab", "right", "left",
@@ -58,8 +57,7 @@ func TestEveryKeyInEveryPhaseClosesOrAdvancesAndAlwaysEndsOnSomethingClosable(t 
 					f.name, key, esc.sim.state)
 			}
 
-			// Closing leaves the panel EMPTY, with no image and no cells, so reopening does not show the previous
-			//simulation.
+			// Closing leaves the panel EMPTY, with no image and no cells, so reopening does not show the previous simulation.
 			advances := f.phase == simChoosing && key == "enter"
 			if !advances && got.sim.state != simClosed {
 				t.Errorf("%s + %q: did not close the popup (state=%d)", f.name, key, got.sim.state)
@@ -100,8 +98,7 @@ func TestQAndQuitCloseAndCancelTheRenderAndAbortTheTUI(t *testing.T) {
 	}
 }
 
-// My first version asserted something false: that esc keeps the render in flight and q invalidates it.
-// Both invalidate it.
+// My first version asserted something false: that esc keeps the render in flight and q invalidates it; both invalidate it.
 func TestEscAndQuitDifferOnlyInThatQuitLeavesTheTUI(t *testing.T) {
 	m, _ := modelInSim(t, simRendering)
 	m.simSeq = 7
@@ -122,8 +119,7 @@ func TestEscAndQuitDifferOnlyInThatQuitLeavesTheTUI(t *testing.T) {
 	}
 }
 
-// o is the only key that does NOT close. While choosing or rendering, o closes; with an image it
-// opens it.
+// o is the only key that does NOT close: while choosing or rendering it closes, with an image it opens it.
 func TestOOpensTheImageOnlyWhenThereIsOneAndClosesItOtherwise(t *testing.T) {
 	m, _ := modelInSim(t, simShowing)
 	m.sim.image = "/tmp/imagen-de-prueba.jpg"
@@ -170,8 +166,7 @@ func TestEnterInTheChoicePhaseStartsTheRenderAndInTheOthersCloses(t *testing.T) 
 	if got.sim.state != simRendering {
 		t.Fatalf("enter did not move to the rendering phase (state=%d)", got.sim.state)
 	}
-	// The command is nil on purpose: the render is a goroutine publishing on the events channel, not a
-	//tea.Cmd, because it takes seconds.
+	// The command is nil on purpose: the render is a goroutine publishing on the events channel, not a tea.Cmd.
 	if cmd != nil {
 		t.Error("enter returned a tea.Cmd: the render would run in the update loop and freeze " +
 			"the keyboard with the popup up")
@@ -198,8 +193,7 @@ func TestEnterInTheChoicePhaseStartsTheRenderAndInTheOthersCloses(t *testing.T) 
 	}
 }
 
-// The `default` exists because a key arrives that was not foreseen, and a keypress that does
-// nothing leaves the popup stuck.
+// The `default` exists because an unforeseen key arrives, and a keypress that does nothing leaves the popup stuck.
 func TestAKeyThatIsNotAMovementClosesThePopupAndDoesNotHangThere(t *testing.T) {
 	for _, key := range []string{"x", "space", "1", "?", "F5", "ctrl+n"} {
 		m, fake := modelInSim(t, simChoosing)
@@ -217,8 +211,7 @@ func TestAKeyThatIsNotAMovementClosesThePopupAndDoesNotHangThere(t *testing.T) {
 	}
 }
 
-// This is a consequence of rebase being excluded: with a single strategy there is no menu, so the
-// arrows move nothing and enter must not swallow the choice.
+// A consequence of rebase being excluded: with a single strategy there is no menu, so enter must not swallow the choice.
 func TestWithASingleStrategyTheArrowsDoNothingAndEnterDoesNotEatTheChoice(t *testing.T) {
 	if len(simKinds) != 1 {
 		t.Skipf("there are now %d strategies and this test is for the single one case", len(simKinds))
@@ -285,8 +278,7 @@ func TestOpeningTheSimulatorDeniesTheThreeThingsAndNamesThem(t *testing.T) {
 	}
 }
 
-// It enters through a pageMsg rather than withItems+rebuild, because selected() reads m.rows(), the
-// rows of the VISIBLE inbox section.
+// It enters through a pageMsg rather than withItems+rebuild, because selected() reads m.rows(), the VISIBLE section.
 func withSelection(t *testing.T, m Model, it model.Item) Model {
 	t.Helper()
 	return send(t, m,

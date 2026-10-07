@@ -69,7 +69,6 @@ func TestSaveSnapshotWithoutPathWritesNothing(t *testing.T) {
 	m.applySnapshot(snapshotWith(mkItem("github", "github.com", "acme/widget", "one", 1, "")))
 	m.rebuild()
 
-	// No path: it writes nothing. And does not fail.
 	m.cachePath = ""
 	before := entriesIn(t, dir)
 	m.saveSnapshot()
@@ -77,13 +76,11 @@ func TestSaveSnapshotWithoutPathWritesNothing(t *testing.T) {
 		t.Errorf("with no cache path files appeared: %v", after)
 	}
 
-	// With a path it writes, and it writes THERE.
 	m.cachePath = filepath.Join(dir, "snapshot.json")
 	m.saveSnapshot()
 	if !waitFile(t, m.cachePath) {
 		t.Fatalf("with a cache path it did not write the snapshot to %s", m.cachePath)
 	}
-	// The file it wrote is valid JSON, which is the only thing that makes it good.
 	raw, err := os.ReadFile(m.cachePath)
 	if err != nil {
 		t.Fatalf("the written snapshot could not be read: %v", err)
@@ -110,7 +107,6 @@ func snapshotWith(items ...model.Item) cache.File {
 	}}}
 }
 
-// A stream can arrive from a forge that is no longer in the configuration.
 func TestAStreamOfAnUnconfiguredForgeDoesNotPanic(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 
@@ -190,7 +186,6 @@ func TestTheForgeStateIsOnlyStampedWithHost(t *testing.T) {
 		t.Errorf("with host it gave %q, want github.com", got)
 	}
 
-	// An empty host does NOT erase a known one.
 	m.applySnapshot(cache.File{Streams: []cache.Stream{{Forge: "github", Host: ""}}})
 	if got := m.statuses["github"].host; got != "github.com" {
 		t.Errorf("a snapshot without host erased the known host: it is now %q. "+

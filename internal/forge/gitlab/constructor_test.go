@@ -42,7 +42,6 @@ func TestNewFallsBackToDefaultsAndTheHostGoesInTheEnvironment(t *testing.T) {
 	if got := custom.runner.Bin; got != "/opt/glab" {
 		t.Errorf("with a binary gave %q", got)
 	}
-	// And the default.
 	if got := New("", "").runner.Bin; got != "glab" {
 		t.Errorf("with no binary gave %q, want glab", got)
 	}
@@ -96,8 +95,7 @@ exit 1
 		t.Error("a nonexistent binary gave an empty Reason")
 	}
 
-	// A good session with unexpected output: OK=true and an empty login, and that is the honest
-	// answer.
+	// A good session with unexpected output is OK=true with an empty login: the honest answer.
 	strange := glabScript(t, dir, "glab-strange", "#!/bin/sh\necho 'something else'\nexit 0\n")
 	auth = New("git.umane.example", strange).Auth(context.Background())
 	if !auth.OK {
@@ -108,7 +106,6 @@ exit 1
 	}
 }
 
-// The regex points at "Logged in to <host> as <login>".
 func TestTheLoginIsExtractedFromGlabsFormat(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -130,7 +127,6 @@ func TestTheLoginIsExtractedFromGlabsFormat(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s: gave %q, want %q", c.name, got, c.want)
 		}
-		// It never prints text containing the token, which is what would break the comparison.
 		if strings.ContainsAny(got, "()") {
 			t.Errorf("%s: the login carries parentheses: %q", c.name, got)
 		}

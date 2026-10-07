@@ -1,13 +1,10 @@
-// The view's height budget: which boxes are visible and how much height is left for each body.
-// One source shared by the render, the scroll and the tests, because the parts must add up.
 package tui
 
 const (
 	detailShare   = 2 // 2/5 = 40% of the height
 	minListRows   = 3
 	minDetailRows = 6
-	// The bar wraps to the inner width, so it is several lines in a narrow terminal, but never more than
-	// this cap: the layout clips hints instead of recomputing them.
+	// The bar wraps to the inner width but never past this cap: the layout clips hints, not recomputes them.
 	maxHintLines = 3
 )
 
@@ -20,16 +17,12 @@ type layout struct {
 }
 
 const (
-	// 1 spinner/forge-status line + 2 border lines, precomputed: a const decl carries no coverage,
-	// so `+` here would be a mutant no test can reach (ADR 0011).
 	headerLines    = 3
 	listChrome     = 2
 	detailChrome   = 2
 	keybindsChrome = 2
 )
 
-// The detail keeps its 40% while the body can stay at minListRows, and degrades in order if not:
-// detail to its minimum, then the header, then the hints to one line, then the hints box.
 func computeLayout(height, hintAvailable int, show bool) layout {
 	if !show || height <= 0 {
 		return layout{}

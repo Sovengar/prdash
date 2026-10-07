@@ -16,8 +16,6 @@ type view struct {
 	rows []bool
 }
 
-// Every box has exactly one border line above and one below, so its interior is the middle lines: the
-// only place a warning can land without stepping on a border.
 type box struct {
 	text      string
 	paintable bool
@@ -25,7 +23,6 @@ type box struct {
 
 func (b box) lines() int { return strings.Count(b.text, "\n") + 1 }
 
-// Borders are left out on purpose, which is exactly what keeps a warning from breaking a frame.
 type stack struct {
 	parts []string
 	rows  []bool
@@ -56,8 +53,6 @@ func (m Model) sectionLines(title string, content []string, paintable bool) box 
 }
 
 func (m Model) layout() layout {
-	// The third argument used to carry `m.height > 0` and that guard was unreachable: it is the check
-	// computeLayout already does. What matters is the other asymmetry: a zero height means "paint whole".
 	return computeLayout(m.height, len(m.hintLines()), true)
 }
 
@@ -75,7 +70,6 @@ func (m Model) compose(lay layout, boxes ...box) view {
 	return s.view()
 }
 
-// The refresh indicator goes first so it survives the clipping at narrow widths.
 func (m Model) headerSection() box {
 	parts := make([]string, 0, 2)
 	if m.loading {
@@ -85,8 +79,6 @@ func (m Model) headerSection() box {
 	return m.sectionLines("PRDash", []string{strings.Join(parts, "  ")}, true)
 }
 
-// Filled to the reserved height so the box does not shrink: otherwise the detail panel would dance
-// when an item is added.
 func (m Model) listSection(lay layout) box {
 	all := m.listLines(m.contentWidth())
 
@@ -104,8 +96,6 @@ func (m Model) listSection(lay layout) box {
 	return m.sectionLines(m.legend(), body, true)
 }
 
-// Each segment carries its full style, because the border rewraps every segment with its colour and a
-// reset in the middle would not restore the border's own.
 func (m Model) legend() string {
 	parts := make([]string, 0, len(m.inbox.Sections))
 	for _, sec := range m.inbox.Sections {
@@ -147,8 +137,6 @@ func (m Model) keybindsSection(hintLines int) box {
 
 const hintSep = " · "
 
-// With a merge armed the box stops being help and becomes the confirmation, so it replaces the bar
-// instead of competing with it. It lives here and not in a toast, which expires after 4s.
 func (m Model) hintLines() []string {
 	if m.mergeArmed {
 		return wrapHint(m.mergeConfirmText(), m.contentWidth(), func(s string) string { return styleWarn.Render(s) })
@@ -170,8 +158,6 @@ func wrapHint(text string, width int, paint func(string) string) []string {
 	return lines
 }
 
-// The branch delete is in the same box because it is the same decision, named with `tab` before
-// the key that fires it. Unknown rules offer all three: not knowing is not forbidding.
 func (m Model) mergeConfirmText() string {
 	it, _ := m.selected()
 	parts := make([]string, 0, 4)
@@ -196,8 +182,6 @@ func (m Model) deleteLabel() string {
 	return "delete branch: no (tab)"
 }
 
-// Not from the config on purpose: there are three and they share the keyboard space with the rest of
-// the view, so making them configurable would give one key four meanings depending on state.
 func modeKey(mode forge.MergeMode) string {
 	switch mode {
 	case forge.MergeCommit:

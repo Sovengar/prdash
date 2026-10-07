@@ -199,8 +199,7 @@ func TestClipTopClipsFromTheTopAndLeavesNoGaps(t *testing.T) {
 	if got := clipTop(lines, 2); len(got) != 2 {
 		t.Fatalf("with 2 rows for 4 lines = %d, want 2", len(got))
 	}
-	// With no rows there is no clipping possible, so the entry comes back whole: it is a
-	// passthrough.
+	// With no rows there is no clipping possible, so the entry comes back whole.
 	for _, rows := range []int{0, -1} {
 		if got := clipTop(lines, rows); len(got) != len(lines) {
 			t.Errorf("rows=%d returned %d lines, want the %d intact (no clipping possible)", rows, len(got), len(lines))
@@ -214,7 +213,6 @@ func TestClipTopClipsFromTheTopAndLeavesNoGaps(t *testing.T) {
 	}
 }
 
-// The detail is a two-column card and its geometry is the whole point.
 func TestTheDetailFieldsAreNeitherSteppedOnNorEaten(t *testing.T) {
 	long := detailField{key: "checks", value: strings.Repeat("x", 200)}
 
@@ -232,8 +230,7 @@ func TestTheDetailFieldsAreNeitherSteppedOnNorEaten(t *testing.T) {
 		}
 	}
 
-	// The cell never drops below 24 however narrow the interior, because below that the label does
-	// not fit.
+	// The cell never drops below 24: below that the label does not fit.
 	for _, inner := range []int{10, 20, 28, 30} {
 		if cell := max(24, (inner-detailGap)/2); cell != 24 {
 			t.Errorf("inner %d gave a cell of %d columns, want the minimum of 24", inner, cell)
@@ -309,8 +306,7 @@ func TestRelTimeDoesNotInventANegativeNumber(t *testing.T) {
 	}
 }
 
-// The unit boundaries are pinned as exact durations: a boundary only `time.Since` can produce
-// is a boundary no test can hold still.
+// The unit boundaries are pinned as exact durations: one only `time.Since` could produce is untestable.
 func TestRelativeSincePinsTheUnitBoundaries(t *testing.T) {
 	for _, c := range []struct {
 		d    time.Duration

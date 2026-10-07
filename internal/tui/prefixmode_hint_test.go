@@ -14,7 +14,7 @@ func TestTheHintNamesTheCurrentMode(t *testing.T) {
 		key  string
 		hint string
 	}{
-		{"", "p prefix: common"}, // the initial state, without pressing anything
+		{"", "p prefix: common"},
 		{"p", "p prefix: full"},
 		{"p", "p prefix: leaf"},
 		{"p", "p prefix: common"},
@@ -32,7 +32,6 @@ func TestTheHintNamesTheCurrentMode(t *testing.T) {
 	}
 }
 
-// The same promise at the widths where the bar actually fits.
 func TestTheHintNamesTheModeAtUsableWidths(t *testing.T) {
 	for _, width := range []int{44, 56, 64, 80, 100, 160} {
 		m := newTestModel(t, ghAdapter())
@@ -68,14 +67,13 @@ func TestTheHintFollowsTheModeRebind(t *testing.T) {
 	}
 }
 
-// With the merge armed the hints box stops being help.
 func TestTheHintDoesNotQueueInTheMergeConfirmation(t *testing.T) {
 	// The merge fixture is what registers the items in the adapter: without it the guard would cut.
 	f := newMergeFixture(t, mergeItems()...)
 	m := f.m
 	m = press(t, m, "p")
-	m = press(t, m, "p") // leaf
-	m = press(t, m, "m") // arms the merge: the box becomes the Confirmation
+	m = press(t, m, "p")
+	m = press(t, m, "m")
 	if !m.mergeArmed {
 		t.Fatal("the merge did not arm: the test would prove nothing")
 	}

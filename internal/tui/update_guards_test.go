@@ -57,8 +57,7 @@ func TestAMessageThatIsNeitherAKeyNorAnEventIsIgnoredAndBreaksNothing(t *testing
 	}
 }
 
-// commentsTickMsg does NOT go through the event bomb (it consumes no channel reader) and still has
-// to re-arm its tick.
+// commentsTickMsg does NOT go through the event bomb (it consumes no reader) and still has to re-arm its tick.
 func TestTheCommentsTickRearmsEvenWhenThereIsNothingToFetch(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -82,7 +81,7 @@ func TestTheCommentsTickRearmsEvenWhenThereIsNothingToFetch(t *testing.T) {
 }
 
 func TestAnActionOnAnUnknownForgeIsRefusedAndSaid(t *testing.T) {
-	m := newTestModel(t) // with no adapters: the forges map is empty
+	m := newTestModel(t)
 	it := mkItem("github", "github.com", "acme/widget", "one", 7, "")
 
 	a, ok := m.canActionOn(forge.ActionApprove, it)
@@ -96,8 +95,7 @@ func TestAnActionOnAnUnknownForgeIsRefusedAndSaid(t *testing.T) {
 	if !strings.Contains(av, "github") {
 		t.Errorf("the notice %q does not name the forge: without the name the user does not know which", av)
 	}
-	// The level is error and not a warning: waiting does not fix it. Checked on the rendered text
-	//rather than on the toast's type because that is what the view shows.
+	// The level is error and not a warning: waiting does not fix it; checked on the rendered text because that is what the view shows.
 	if level := paintedLevel(m, "unknown forge"); level != "error" {
 		t.Errorf("the notice comes out at level %q, want error: a forge that does not come back is not "+
 			"transient and waiting does not fix it", level)
@@ -211,8 +209,7 @@ func TestTheQuitActionIsResolvedByTheConfigAndTheOverlayEatsItFirst(t *testing.T
 	}
 }
 
-// The most useful of the three mount warnings because it gives the next action: the mount worked and
-// the layout did not.
+// The most useful of the three mount warnings because it gives the next action: the mount worked, the layout did not.
 func TestAMountThatRequiresHerdrWarnsWithWhereTheWorktreeEndedUp(t *testing.T) {
 	av, level := mountNotice(executor.Result{
 		Worktree: worktree.Worktree{Path: "/wt/prdash-pr-7", Label: "prdash-pr-7"},

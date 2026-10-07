@@ -33,8 +33,6 @@ var sectionOrder = []model.Section{
 	model.SectionMentions,
 }
 
-// Each identity lands in its most authoritative section; the rest of its appearances are dropped.
-// Ties on attention score break by update time, then by number.
 func Build(inputs []ForgeResult) Inbox {
 	collected, warnings := collectBySection(inputs)
 	authority := assignAuthority(collected)
@@ -58,10 +56,6 @@ func collectBySection(inputs []ForgeResult) (map[model.Section][]model.Item, []m
 	return collected, warnings
 }
 
-// sectionOrder walks sections from best to worst authority, so the FIRST writer of an identity
-// wins and the loop needs no comparison at all: the old `rank(kind) < rank(prev)` had an
-// equality case no input can reach (distinct sections have distinct ranks), which made its
-// boundary mutant one no test could kill.
 func assignAuthority(collected map[model.Section][]model.Item) map[model.ID]model.Section {
 	best := map[model.ID]model.Section{}
 	for _, kind := range sectionOrder {
@@ -109,8 +103,6 @@ func (in Inbox) Empty() bool {
 	return true
 }
 
-// The score key has its operands swapped because the most urgent item goes first; a tie falls to the
-// update time (the newest one first) and then to the number.
 func sortItems(items []model.Item) {
 	slices.SortStableFunc(items, func(a, b model.Item) int {
 		sa, sb := state.Derive(a).Score(), state.Derive(b).Score()

@@ -1,5 +1,3 @@
-// prdash — cross-forge inbox of PRs/MRs. Read-only: it queries GitHub through `gh` and a
-// self-managed GitLab through `glab`, and shows created-by-me, review and mentions.
 package main
 
 import (
@@ -21,8 +19,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// The shell: pick the mode, warn about config, delegate. What is left are the three things that
-// cannot be abstracted without inventing something worse: read os.Args, load config, exit.
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -35,16 +31,12 @@ const (
 	modeWorktrees
 )
 
-// The mode is the ONLY way to say what to do: an earlier version also had a `print bool`, and
-// `run` ended up reading both, so any divergence surfaced as a mode that cannot happen.
 type opts struct {
 	mode mode
 	sub  string
 	args []string
 }
 
-// Own FlagSet, because `flag.Parse` mutates the global one forever. The subcommand is read BEFORE
-// the flags: the paths are absolute, so reading flags first would eat `--orphans` as a prdash flag.
 func parseOpts(args []string) (opts, error) {
 	o := opts{mode: modeTUI, sub: "list"}
 
@@ -57,8 +49,6 @@ func parseOpts(args []string) (opts, error) {
 		return o, nil
 	}
 
-	// Own FlagSet, not the global singleton: a test using the global would contaminate the rest of the
-	// suite, and test order within a binary is not guaranteed.
 	fs := flag.NewFlagSet("prdash", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // `run` formats the errors, on the caller's stderr
 	print := fs.Bool("print", false, "print the inbox and exit")
@@ -72,8 +62,6 @@ func parseOpts(args []string) (opts, error) {
 	return o, nil
 }
 
-// Three injected inputs and a returned exit code instead of os.Exit, which is what makes the whole
-// body testable.
 func run(args []string, stdout, stderr io.Writer) int {
 	o, err := parseOpts(args)
 	if err != nil {
@@ -83,7 +71,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	cfg, warn := config.Load()
 	if warn != "" {
-		// Warn without aborting: bad config degrades to defaults and the UI must still come up.
 		_, _ = fmt.Fprintln(stderr, "prdash:", warn)
 	}
 
@@ -93,11 +80,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	adapters := buildAdapters(cfg)
 	if len(adapters) == 0 {
-		// Not fatal: the inbox just comes up empty, which is what makes opening it useful to see WHY.
 		_, _ = fmt.Fprintln(stderr, "prdash: no forges enabled in the config")
 	}
 
-	// One executor for all three modes, the review registry and the simulator.
 	ex := buildExecutor(cfg)
 
 	if o.mode == modePrint {
@@ -113,15 +98,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// Own function so that `run` does not depend on a terminal: `tea.NewProgram(m).Run` needs a TTY, so
-// without this the `return 0` path of a UI that DOES start was untestable while the failure path was.
 var startTUI = func(m tea.Model) error {
 	_, err := tea.NewProgram(m).Run()
 	return err
 }
 
-// Its own function because wiring is where things get forgotten: a missing SetX among the
-// seven still compiles. The executor is a parameter so the four consumers are ONE instance.
 func wire(cfg config.Config, adapters []forge.Adapter, ex *executor.Executor) tui.Model {
 	model := tui.New(cfg, adapters)
 	model.SetMounter(ex)
@@ -132,7 +113,6 @@ func wire(cfg config.Config, adapters []forge.Adapter, ex *executor.Executor) tu
 	return model
 }
 
-// Bitbucket is registered even when not operational, so the inbox can report it.
 func buildAdapters(cfg config.Config) []forge.Adapter {
 	var adapters []forge.Adapter
 	if cfg.Forges.GitHub.Enabled {

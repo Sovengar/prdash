@@ -6,8 +6,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// Without these two in the parsing, the pin can never be satisfied and the mode filter has no
-// data.
+// Without these two in the parsing, the pin can never be satisfied and the mode filter has no data.
 func TestGHNodeCarriesThePinAndTheRules(t *testing.T) {
 	raw := `{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},
 		"nodes":[{"number":7,"title":"T","url":"https://github.com/acme/widget/7",
@@ -41,8 +40,7 @@ func TestGHNodeCarriesThePinAndTheRules(t *testing.T) {
 	}
 }
 
-// The REST fallback does not carry the flags; marking Known with all three false would be a
-// lie.
+// The REST fallback does not carry the flags; marking Known with all three false would be a lie.
 func TestGHNodeWithoutRulesStaysUnknown(t *testing.T) {
 	raw := `{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},
 		"nodes":[{"number":7,"title":"T","url":"u","state":"OPEN","isDraft":false,
@@ -102,8 +100,7 @@ func TestGLNodeCarriesThePin(t *testing.T) {
 	if items[0].HeadSHA != "beef1234" {
 		t.Errorf("HeadSHA = %q, want beef1234", items[0].HeadSHA)
 	}
-	// GitLab does not expose the strategies over GraphQL, so they arrive unknown: no filtering
-	// rather than filtering on nothing.
+	// GitLab does not expose the strategies over GraphQL, so they arrive unknown: no filtering rather than filtering on nothing.
 	if items[0].Merge.Known {
 		t.Errorf("Merge = %+v, want Known=false on GitLab", items[0].Merge)
 	}

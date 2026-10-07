@@ -19,8 +19,7 @@ func TestToastGeometryBoundsTheWidth(t *testing.T) {
 				t.Errorf("message of %d columns with %d available gave a width of %d, want <= %d",
 					len(message), available, width, toastMaxWidth)
 			}
-			// The free space OVERRIDES the minimum, not the other way round: with 9 free columns the box is 9 even
-			//if the minimum is larger.
+			// The free space OVERRIDES the minimum: with 9 free columns the box is 9 even if the minimum is larger.
 			if available > toastMinAvailable && width > available {
 				t.Errorf("with %d free columns the box measures %d: it overflows", available, width)
 			}
@@ -29,8 +28,7 @@ func TestToastGeometryBoundsTheWidth(t *testing.T) {
 					available, width, toastMinWidth)
 			}
 
-			// The wrap width is EXACTLY the usable width minus the icon gap, with no floor of its own, which is
-			//why the minimum that comes out is 6 (8-2) and not 4.
+			// The wrap width is EXACTLY the usable width minus the icon gap, with no floor of its own, hence 6 (8-2) not 4.
 			want := max(width-toastFrame, toastMinInner) - toastIconGap
 			if wrapAt != want {
 				t.Errorf("with a width of %d the text splits at %d, want %d (the usable minus the icons gap)",
@@ -103,8 +101,7 @@ func TestToastGeometryTheTextFitsInTheBox(t *testing.T) {
 					length, len(line), width)
 			}
 		}
-		// The box is painted at exactly the width the geometry says. The border is three-byte characters,
-		//so len() counts bytes and a 24-wide box measures 72.
+		// The box is painted at exactly the geometry width; the three-byte border means len() counts bytes and a 24-wide box measures 72.
 		for _, line := range strings.Split(stripANSI(renderToast(t, message, 1000)), "\n") {
 			if lineWidth := ansi.StringWidth(line); lineWidth != width {
 				t.Errorf("a message of %d columns gave a line of %d in a box of %d: geometry and painting do not match",
@@ -113,8 +110,7 @@ func TestToastGeometryTheTextFitsInTheBox(t *testing.T) {
 		}
 	}
 
-	// The wrapper breaks BY WORDS, so a single word wider than the box comes out whole and the box
-	//clips it, which is right: breaking a word across lines misreads.
+	// The wrapper breaks BY WORDS, so a word wider than the box comes out whole and the box clips it: breaking a word misreads.
 	for length := toastMaxWidth; length < toastMaxWidth+20; length++ {
 		message := strings.Repeat("z", length)
 		width, _ := toastGeometry(message, icon, 1000)
@@ -150,8 +146,7 @@ func TestToastGeometryTheEstimateIsTheSumOfItsParts(t *testing.T) {
 	}
 }
 
-// Every current icon is one column, so a hardcoded 1 would give the same answer today and break
-// tomorrow.
+// Every current icon is one column, so a hardcoded 1 would give the same answer today and break tomorrow.
 func TestToastGeometryTheIconPushesAccordingToItsWidth(t *testing.T) {
 	short := strings.Repeat("z", 30)
 	for _, icon := range []string{"i", "ii", "iii", "✨", "⚠️"} {
@@ -190,7 +185,6 @@ func TestToastColumnIsGluedToTheRightWithAir(t *testing.T) {
 			if x < 0 {
 				t.Errorf("toastColumn(%d, %d) = %d: a negative column leaves", width, bw, x)
 			}
-			// Only asserted when it fits.
 			if bw <= width-1 && x+bw > width-1 {
 				t.Errorf("toastColumn(%d, %d) = %d: the box ends at column %d and the view has %d, it leaves to the right",
 					width, bw, x, x+bw, width)
@@ -209,11 +203,9 @@ func TestToastColumnIsGluedToTheRightWithAir(t *testing.T) {
 	}
 }
 
-// The +1 is the edge that matters: the last row (index anchor) is the lowest there is, so anchor+1
-// rows fit from it counting up.
+// The +1 is the edge that matters: the last row (index anchor) is the lowest, so anchor+1 rows fit from it counting up.
 func TestToastBlockHeightNeverExceedsWhatIsLeft(t *testing.T) {
-	// anchor starts at 0 on purpose: it comes from len(lines)-1 over a strings.Split, which always
-	//returns at least one line, so anchor is never negative.
+	// anchor starts at 0 on purpose: it comes from len(lines)-1 over a strings.Split, which always returns at least one line.
 	for anchor := 0; anchor <= 50; anchor++ {
 		for bh := 0; bh <= 50; bh++ {
 			got := toastBlockHeight(bh, anchor)

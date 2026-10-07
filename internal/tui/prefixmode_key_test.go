@@ -21,7 +21,6 @@ func TestPrefixModeCyclesWithTheKey(t *testing.T) {
 	}
 }
 
-// With the action reassigned the key is NOT hard-wired.
 func TestPrefixModeComesFromTheConfig(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.cfg.Keybindings["prefix-mode"] = "P"
@@ -71,7 +70,6 @@ func TestPrefixModeIsNotResetByTheSectionChange(t *testing.T) {
 	}
 }
 
-// p is only a view cycle.
 func TestPrefixModeFiresNoOtherActions(t *testing.T) {
 	m := listModelWithItems(t, "acme/widget")
 	m.loading = false
@@ -99,7 +97,6 @@ func TestPrefixModeFiresNoOtherActions(t *testing.T) {
 	}
 }
 
-// The side effect that does matter: changing the mode keeps the cursor and the window.
 func TestPrefixModeKeepsTheCursorAndTheWindow(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	items := make([]model.Item, 0, 30)
@@ -108,7 +105,7 @@ func TestPrefixModeKeepsTheCursorAndTheWindow(t *testing.T) {
 			"APPCITTI/vsocial/backend/svc"+strconv.Itoa(i), "T", 100+i, ""))
 	}
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, items, false))
-	m.height = 12 // window short: obliga a desplazar
+	m.height = 12
 
 	m = press(t, m, "end")
 	before, offset := m.cursor, m.scroll
@@ -116,7 +113,7 @@ func TestPrefixModeKeepsTheCursorAndTheWindow(t *testing.T) {
 		t.Fatalf("the cursor (=%d) or the scroll (=%d) did not move: the test would prove nothing", before, offset)
 	}
 
-	m = press(t, m, "p") // common -> full: the list loses the prefix line
+	m = press(t, m, "p")
 
 	if m.cursor != before {
 		t.Errorf("changing mode moved the cursor to %d, want %d", m.cursor, before)

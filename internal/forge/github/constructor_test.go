@@ -33,7 +33,6 @@ func TestNewFallsBackToDefaultsAndTheHostGoesInTheArgvNotTheEnvironment(t *testi
 				"thing `gh` accepts in every command", v)
 		}
 	}
-	// And the binary.
 	if a.runner.Bin != "gh" {
 		t.Errorf("no binary gave %q, want gh", a.runner.Bin)
 	}
@@ -42,8 +41,7 @@ func TestNewFallsBackToDefaultsAndTheHostGoesInTheArgvNotTheEnvironment(t *testi
 	if corporate.Host() != "git.umane.example" {
 		t.Errorf("with a host gave %q", corporate.Host())
 	}
-	// The exact argv is read from the script itself, which writes what it receives; inspecting the
-	//adapter is not enough because gh accepts --hostname too.
+	// The exact argv is read from the script because gh also accepts --hostname, so inspecting the adapter is not enough.
 	echo := filepath.Join(t.TempDir(), "gh-echo")
 	log := filepath.Join(t.TempDir(), "argv")
 	if err := os.WriteFile(echo, []byte("#!/bin/sh\necho \"$@\" > "+log+"\necho ok\n"), 0o755); err != nil {
@@ -107,7 +105,6 @@ exit 4
 		t.Errorf("a bad session brings login %q", auth.Login)
 	}
 
-	// A missing binary: OK=false with an error, not a panic.
 	auth = New("github.com", filepath.Join(dir, "does-not-exist")).Auth(context.Background())
 	if auth.OK {
 		t.Error("a nonexistent binary gave OK=true")
@@ -116,8 +113,7 @@ exit 4
 		t.Error("a nonexistent binary gave an empty Reason")
 	}
 
-	// Unexpected output with a zero exit: the session is valid and the login is empty; treating it
-	// otherwise would invent a failure.
+	// Unexpected output with a zero exit is a valid session with an empty login; treating it otherwise would invent a failure.
 	strange := script(t, dir, "gh-strange", "#!/bin/sh\necho 'something else'\nexit 0\n")
 	auth = New("github.com", strange).Auth(context.Background())
 	if !auth.OK {
@@ -128,8 +124,7 @@ exit 4
 	}
 }
 
-// The regex demands a space after "account": `gh auth status` has an "Active account: true" line
-// with the same word.
+// The regex demands a space after "account": `gh auth status` has an "Active account: true" line with the same word.
 func TestTheLoginIsNotConfusedWithTheActiveAccountLine(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -144,8 +139,7 @@ func TestTheLoginIsNotConfusedWithTheActiveAccountLine(t *testing.T) {
 		{"without the word", "something else", ""},
 		{"empty", "", ""},
 		{"only spaces", "   \n  ", ""},
-		// A token glued with no space gives "user", not "user(GH_TOKEN)": the regex's character class
-		//stops at the parenthesis.
+		// A token glued with no space gives "user": the regex's character class stops at the parenthesis.
 		{"token glued", "account user(GH_TOKEN)", "user"},
 	}
 	for _, c := range cases {
@@ -153,8 +147,7 @@ func TestTheLoginIsNotConfusedWithTheActiveAccountLine(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s: gave %q, want %q", c.name, got, c.want)
 		}
-		// It never returns "true", which is the value that would turn the viewer into a concrete
-		// account.
+		// It never returns "true", which would turn the viewer into a concrete account.
 		if got == "true" {
 			t.Errorf("%s: returned \"true\" as the login", c.name)
 		}

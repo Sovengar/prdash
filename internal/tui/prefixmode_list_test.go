@@ -22,7 +22,6 @@ func listOf(m Model) []string {
 	return lines
 }
 
-// The prefix line per mode: in common there is one, in the other two there is not.
 func TestListLinesPaintThePrefixOnlyInCommon(t *testing.T) {
 	for _, mode := range []prefixMode{prefixFull, prefixLeaf} {
 		m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
@@ -66,7 +65,6 @@ func TestFullAndLeafPaintTheWholeReferenceOrTheLeaf(t *testing.T) {
 	}
 }
 
-// Removing the prefix line returns that height to the list.
 func TestFullAndLeafRecoverThePrefixLine(t *testing.T) {
 	m := listModelWithItems(t, "APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/backend/web-app")
 
@@ -101,7 +99,6 @@ func TestCommonWithNoCommonPrefixLooksLikeFull(t *testing.T) {
 	}
 }
 
-// Degrading to common must not repeat the path in two places.
 func TestCommonWithNoCommonPrefixDoesNotRepeatThePathTwice(t *testing.T) {
 	m := listModelWithItems(t, "acme/one", "other/one")
 	m.prefixMode = prefixCommon

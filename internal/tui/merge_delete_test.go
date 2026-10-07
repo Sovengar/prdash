@@ -105,7 +105,6 @@ func TestDeleteToggleStaysForTheSession(t *testing.T) {
 	}
 }
 
-// With the merge armed tab is the toggle; OUTSIDE it cycles sections.
 func TestTabOutsideTheArmedMergeCyclesSections(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	before := f.m.activeSection
@@ -133,7 +132,6 @@ func TestDeleteOnlyTravelsWithAMerge(t *testing.T) {
 	}
 }
 
-// The result says what happened to the branch, not only that the merge worked.
 func TestMergeNoticeNamesTheBranch(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")

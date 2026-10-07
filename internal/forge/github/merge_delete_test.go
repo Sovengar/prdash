@@ -8,13 +8,12 @@ import (
 	"prdash/internal/forge"
 )
 
-// Sending it always would be worse than not sending it: in a repo with a merge queue gh rejects
-// the whole command.
+// Sending --delete-branch always would be worse: in a repo with a merge queue gh rejects the whole command.
 func TestMergeAsksForTheBranchDeletion(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		delete bool
-		want   bool // should --delete-branch appear?
+		want   bool
 	}{
 		{"requested", true, true},
 		{"off", false, false},

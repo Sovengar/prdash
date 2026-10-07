@@ -48,8 +48,6 @@ func TestAStreamWithNoChangesIsNotRepaginatedWholeAndSaysSo(t *testing.T) {
 		}
 	}
 
-	// With the shortcut, streamForge sends ONE page per stream with the unchanged mark and an EMPTY
-	//list, and does not page further.
 	pages := map[testutil.FakeKey][]forge.Page{}
 	prev := map[streamKey]streamHead{}
 	for _, q := range forge.Streams {
@@ -139,8 +137,7 @@ func TestOpeningTheBrowserWithURLReturnsACommandNotAFailureNotice(t *testing.T) 
 
 var _ = time.Second
 
-// A tea.Cmd that is only checked with "not nil" checks nothing: the content of the message is the
-// whole point.
+// A tea.Cmd checked only with "not nil" checks nothing: the content of the message is the whole point.
 func TestTheTickChainReturnsItsMessageAndNotJustANonNil(t *testing.T) {
 	m := newTestModel(t)
 	cmd := m.commentsCmd()

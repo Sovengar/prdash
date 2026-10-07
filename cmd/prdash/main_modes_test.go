@@ -12,11 +12,7 @@ import (
 	"prdash/internal/review/executor"
 )
 
-// `main` was at 23.5% because it was the only place that decided the mode, loaded the config and
-//built the TUI, and `main` cannot be called from a test.
-
-// The case that forces it: `prdash worktrees remove --orphans`. With prdash's flags read first,
-// --orphans is eaten as a prdash flag instead of the subcommand's.
+// With prdash's flags read first, --orphans would be eaten as a prdash flag instead of the subcommand's.
 func TestTheSubcommandIsCheckedBeforeTheFlags(t *testing.T) {
 	got, err := parseOpts([]string{"worktrees", "remove", "--orphans", "--dry-run"})
 	if err != nil {
@@ -69,8 +65,7 @@ func TestTheSubcommandIsCheckedBeforeTheFlags(t *testing.T) {
 	}
 }
 
-// Not only that parsing works but that two calls do NOT contaminate each other: the global flag set
-// is a singleton that flag.Parse mutates forever, and test order is not guaranteed.
+// The global flag set is a singleton that flag.Parse mutates forever, and test order is not guaranteed.
 func TestTheFlagParserIsNotTheGlobalOne(t *testing.T) {
 	got, err := parseOpts([]string{"--print"})
 	if err != nil || got.mode != modePrint {
@@ -117,8 +112,7 @@ func TestAnUnknownFlagIsAUsageError(t *testing.T) {
 	}
 }
 
-// The default must be the TUI: a --print default would turn every flagless invocation into a
-// network query.
+// The default must be the TUI: a --print default would turn every flagless run into a network query.
 func TestWithNoArgsTheTUIIsRequested(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -137,8 +131,7 @@ func TestWithNoArgsTheTUIIsRequested(t *testing.T) {
 	}
 }
 
-// Five SetX calls in a row, and a missing one does NOT break compilation: the model comes up
-// anyway and the failure only surfaces when the user presses the key.
+// A missing SetX does not break compilation: the failure only surfaces when the user presses the key.
 func TestTheWiringInjectsTheFiveModelPieces(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	cfg := config.Defaults()
@@ -163,8 +156,7 @@ func TestTheWiringInjectsTheFiveModelPieces(t *testing.T) {
 		t.Error("wire did not inject the remover: a merge would not delete the worktree")
 	}
 
-	// The four review pieces are the SAME executor instance, which cannot be asserted by comparing
-	//private fields and prevents "works in the tests, breaks in production".
+	// The four review pieces are the same executor instance, which prevents "works in tests, breaks in production".
 	if m, ok := w.Mounter.(*executor.Executor); !ok || m != ex {
 		t.Errorf("the mounter is not the executor it was given: %T", w.Mounter)
 	}
@@ -218,8 +210,7 @@ func TestBuildAdaptersRespectsWhatIsEnabled(t *testing.T) {
 	}
 }
 
-// The code is 2, not 1: "wrong usage" and "it failed" are different things and a script calling
-// prdash needs to tell them apart.
+// The code is 2, not 1: a script must tell "wrong usage" from "it failed".
 func TestRunReturnsTheUsageCodeWithoutDoingAnything(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
@@ -243,8 +234,7 @@ func TestRunWithoutForgesProceedsWithWarningAndDoesNotOpenTheTUI(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, config.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The key is `[forge...]` singular, which is what the parser reads. My first version used
-	//`[forges...]` and the whole config was ignored.
+	// The key is [forge...] singular: [forges...] is silently ignored by the parser.
 	toml := "[forge.github]\nenabled = false\n\n[forge.gitlab]\nenabled = false\n" +
 		"\n[forge.bitbucket]\nenabled = false\n"
 	if err := os.WriteFile(filepath.Join(dir, config.DirName, config.FileName), []byte(toml), 0o644); err != nil {
@@ -271,8 +261,7 @@ func TestRunWithoutForgesProceedsWithWarningAndDoesNotOpenTheTUI(t *testing.T) {
 }
 
 func TestAnUnreadableConfigWarnsButDoesNotAbort(t *testing.T) {
-	// The directory is the CONFIG one, not the cache one. The first version pinned XDG_CACHE_HOME and
-	//wrote config.toml there, so the config was never found.
+	// The directory is the config one: pinning XDG_CACHE_HOME leaves config.toml never found.
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())

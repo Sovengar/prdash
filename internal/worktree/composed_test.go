@@ -7,8 +7,6 @@ import (
 	"prdash/internal/herdr"
 )
 
-// One thing: what wins when the two sources disagree.
-
 func emptySpec() Spec {
 	return Spec{Repo: "/repos/acme", Branch: "feat/x", Path: "/wt/acme-feat-x", Label: "prdash/acme#1"}
 }
@@ -17,7 +15,6 @@ func emptyInfo() herdr.WorktreeInfo {
 	return herdr.WorktreeInfo{}
 }
 
-// If Herdr says nothing, the caller's wins.
 func TestComposedWithoutHerdrDataKeepsWhatTheCallerAsked(t *testing.T) {
 	spec := emptySpec()
 	wt := composed(spec, emptyInfo())
@@ -40,7 +37,6 @@ func TestComposedWithoutHerdrDataKeepsWhatTheCallerAsked(t *testing.T) {
 	}
 }
 
-// For path, branch and containers, what Herdr said wins when it said something.
 func TestComposedHerdrWinsWhereItSaysSomething(t *testing.T) {
 	spec := emptySpec()
 	info := herdr.WorktreeInfo{
@@ -76,8 +72,7 @@ func TestComposedHerdrWinsWhereItSaysSomething(t *testing.T) {
 
 // The label is the EXCEPTION: it is the caller's.
 func TestComposedTheLabelIsTheCallersNotHerdrs(t *testing.T) {
-	// Every Herdr field set at once and distinct from each other, which is the only way the
-	// precedence shows: if two matched, either order would pass.
+	// Every Herdr field distinct, the only way the precedence shows: if two matched, either order would pass.
 	info := herdr.WorktreeInfo{
 		Path:           "/wt/moved",
 		Branch:         "branch-de-herdr",

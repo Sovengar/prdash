@@ -65,13 +65,10 @@ func TestLoadWrongVersionIsSilent(t *testing.T) {
 	}
 }
 
-// json.Marshal's error is the only non-disk one in the sequence, and it is what makes the helper
-// take `any`. A truncated leftover would read as "no cache" and cost a full refetch.
 func TestSavingJSONFailsWithAValueThatCannotBeSerializedAndLeavesNoFile(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "sub", "cache.json")
 
 	err := saveJSON(target, map[string]any{
-		// A channel cannot be serialised, and no File or Memo contains one.
 		"channel": make(chan int),
 	})
 
@@ -83,14 +80,11 @@ func TestSavingJSONFailsWithAValueThatCannotBeSerializedAndLeavesNoFile(t *testi
 		!strings.Contains(err.Error(), "unsupported") {
 		t.Errorf("the error %q does not say the value cannot be serialised", err)
 	}
-	// No half-written file: Load treats unreadable JSON as "no cache", so a leftover would cost a
-	// full refetch.
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Errorf("%s was left behind after a serialisation failure: the reader would treat it as "+
 			"an empty cache instead of an error", target)
 	}
-	// The parent directory IS created, because MkdirAll goes before the marshalling: the order is
-	// "prepare first".
+	// The parent directory IS created: MkdirAll runs before the marshalling.
 	if _, err := os.Stat(filepath.Dir(target)); err != nil {
 		t.Errorf("the parent directory was not created: %v. MkdirAll runs before the marshalling "+
 			"and is not undone", err)

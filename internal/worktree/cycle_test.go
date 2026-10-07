@@ -16,8 +16,7 @@ func mountWorktreeWithBranch(t *testing.T, root, label, branch string) Worktree 
 	testutil.InitRepo(t, repo)
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
 
-	// The branch has to exist and must NOT be main: git does not allow two worktrees on the same
-	//branch and the main repo already has it.
+	// The branch must not be main: git does not allow two worktrees on the same branch.
 	if branch == "main" {
 		branch = "pr-" + label
 	}
@@ -224,8 +223,7 @@ func TestRemoveRefusesToTouchWhatItDoesNotOwn(t *testing.T) {
 	testutil.InitRepo(t, foreign)
 	testutil.CommitFile(t, foreign, "importante.txt", "do not delete me", "important")
 
-	// shouldRemain says what has to happen to the path afterwards, because it is not the same in the three
-	//cases: a path that does not exist cannot "stay there".
+	// shouldRemain differs per case: a path that does not exist cannot "stay there".
 	dir := filepath.Join(root, "prdash-carpeta-vacia")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

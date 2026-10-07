@@ -13,10 +13,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// The two missing ends of Mount both ask the same question: what is cleaned when something is
-//missing.
-
-// It fails only on RecordReview, the point under test.
 type failingRecordResolver struct {
 	resolverWithBare
 	err     error
@@ -58,7 +54,6 @@ func (mountingHerdr) MountLayout(context.Context, herdr.Container, plan.Plan) ([
 }
 func (mountingHerdr) Notify(context.Context, string, herdr.NotifyOptions) error { return nil }
 
-// What is checked is that the mount survives.
 func TestIfTheReviewCannotBeRecordedItWarnsAndTheReviewStaysMounted(t *testing.T) {
 	res := &failingRecordResolver{err: errors.New("no space left on device")}
 	e := &Executor{Resolver: res, Worktrees: &saneProvisioner{}, Herdr: mountingHerdr{}}
@@ -86,8 +81,7 @@ func TestIfTheReviewCannotBeRecordedItWarnsAndTheReviewStaysMounted(t *testing.T
 	if len(got.Warnings) != 1 {
 		t.Errorf("warnings = %v, want only the record one: the layout's are not there", got.Warnings)
 	}
-	// The record was ATTEMPTED. Without this an implementation that never called RecordReview would
-	// pass.
+	// The record was ATTEMPTED: otherwise an implementation that never called RecordReview would pass.
 	if len(res.records) != 1 {
 		t.Fatalf("it attempted to record %d times, want 1", len(res.records))
 	}
@@ -97,7 +91,6 @@ func TestIfTheReviewCannotBeRecordedItWarnsAndTheReviewStaysMounted(t *testing.T
 	}
 }
 
-// The good path, so the previous is a contrast and not the only case.
 func TestIfRecordingSucceedsThereIsNoWarningNorCleanup(t *testing.T) {
 	res := &failingRecordResolver{} // no error
 	e := &Executor{Resolver: res, Worktrees: &saneProvisioner{}, Herdr: mountingHerdr{}}

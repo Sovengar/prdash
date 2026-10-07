@@ -10,8 +10,6 @@ func ParseGHBranches(out string) []string {
 	return branchLines(out)
 }
 
-// NDJSON because glab has no `--jq`: a single-value decoder would swallow the first page and
-// drop the rest. A line that is not an object with a name is skipped, not fatal.
 func ParseGLBranches(out string) ([]string, error) {
 	var names []string
 	var lastErr error

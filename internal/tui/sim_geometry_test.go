@@ -28,7 +28,6 @@ func TestCellSizeUsesTheMeasuredOneOrNeverAZero(t *testing.T) {
 	}
 }
 
-// The popup leaves room at the sides and top and bottom.
 func TestSimMaxColsAndRowsRespectTheFloor(t *testing.T) {
 	for _, w := range []int{0, 10, 20, 40, 80, 200} {
 		for _, h := range []int{0, 1, 3, 6, 10, 20, 50, 200} {
@@ -61,7 +60,6 @@ func TestSimMaxColsAndRowsRespectTheFloor(t *testing.T) {
 	}
 }
 
-// Two different boxes with two different rules.
 func TestSimBoxGivesMarginToTheFrameAndTheBoxToTheImage(t *testing.T) {
 	m := send(t, newTestModel(t, ghAdapter()), tea.WindowSizeMsg{Width: 100, Height: 30})
 	wantWidth := min(m.contentWidth(), simChooserWidth)
@@ -170,7 +168,6 @@ func TestRenderSimCellsDoesNotRepaintTheSameThing(t *testing.T) {
 	})
 }
 
-// The image goes in the graphics layer.
 func TestPublishSimImagePutsTheImageRightInTheGap(t *testing.T) {
 	g := &fakeGraphics{available: true, cellW: 9, cellH: 19}
 	m := showSim(t, solidSim(16, 9, black))
@@ -198,14 +195,12 @@ func TestPublishSimImagePutsTheImageRightInTheGap(t *testing.T) {
 	if g.layer != simLayer {
 		t.Errorf("the image was published on layer %q, want %q", g.layer, simLayer)
 	}
-	// The image goes rescaled to the gap's pixel size, using the MEASURED cell: sending the
-	// original would stretch it.
+	// The image goes rescaled to the gap's pixel size with the MEASURED cell: the original would stretch it.
 	if b := g.sets[0].img.Bounds(); b.Dx() != pl.cols*g.cellW || b.Dy() != pl.rows*g.cellH {
 		t.Errorf("the sent image measures %dx%d px, want %dx%d (the room times the measured cell %dx%d): sending the original would be 1920x1080 to paint a rectangle of 800",
 			b.Dx(), b.Dy(), pl.cols*g.cellW, pl.rows*g.cellH, g.cellW, g.cellH)
 	}
-	// The measured cell is kept for the next render: without keeping it, every render would
-	// assume 1x2 and the height would drift.
+	// The measured cell is kept for the next render, or every render would assume 1x2 and the height would drift.
 	if m.sim.cellW_px != g.cellW || m.sim.cellH_px != g.cellH {
 		t.Errorf("the measured cell ended at %dx%d, want %dx%d: without storing it 1x2 is assumed again",
 			m.sim.cellW_px, m.sim.cellH_px, g.cellW, g.cellH)
@@ -236,7 +231,6 @@ func TestSimKindsDoNotBreakWithASingleKind(t *testing.T) {
 	if m.sim.cursor != 0 {
 		t.Errorf("with a single kind, up gave the cursor %d, want 0", m.sim.cursor)
 	}
-	// The selector stays usable: choosing confirms.
 	if m.sim.cursor != 0 {
 		t.Errorf("with a single kind the cursor = %d, want 0", m.sim.cursor)
 	}

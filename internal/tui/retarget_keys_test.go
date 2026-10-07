@@ -13,8 +13,7 @@ import (
 func modelInRetarget(t *testing.T, phase retargetState) Model {
 	t.Helper()
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
-	// Both all and view are filled because view is DERIVED from all: anything that reapplies the
-	//filter rebuilds it from all.
+	// Both all and view are filled because view is DERIVED from all: reapplying the filter rebuilds it from all.
 	branches := []string{"main", "release/2.0", "feat/x"}
 	m.retarget = retargetPanel{
 		state:  phase,
@@ -131,8 +130,7 @@ func TestQAndQuitCloseAndAbandonThePopup(t *testing.T) {
 }
 
 func TestWithAnEmptyFilterJAndKNavigateAndWithAFilterTheyTypeItsLetters(t *testing.T) {
-	// `k` is tested with the cursor mid-list and not at zero, because clampRetargetCursor CLAMPS
-	//instead of wrapping.
+	// `k` is tested with the cursor mid-list because clampRetargetCursor CLAMPS instead of wrapping.
 	m := modelInRetarget(t, retargetChoosing)
 	if before := m.retarget.cursor; pressModel(t, m, "j").retarget.cursor == before {
 		t.Error("with an empty filter, j did not move the cursor")
@@ -168,8 +166,7 @@ func TestWithAnEmptyFilterJAndKNavigateAndWithAFilterTheyTypeItsLetters(t *testi
 	if deleted.retarget.query != "" {
 		t.Errorf("ctrl+u left the filter as %q", deleted.retarget.query)
 	}
-	// The cursor is explicitly back at ZERO because applyQuery returns it to the top when it reapplies
-	//the filter, and k/j clamp rather than wrap.
+	// The cursor is back at ZERO because applyQuery returns it to the top and k/j clamp rather than wrap.
 	toNavigate := pressModelRetarget(t, deleted, "j")
 	toNavigate.retarget.cursor = 0
 	if afterVar := pressModelRetarget(t, toNavigate, "j"); afterVar.retarget.cursor != 1 {
@@ -185,8 +182,6 @@ func TestWithAnEmptyFilterJAndKNavigateAndWithAFilterTheyTypeItsLetters(t *testi
 	}
 }
 
-// This is the case a filtered-to-zero listing produces: the user types something that matches
-// nothing and presses enter.
 func TestEnterWithNoSelectionDoesNothing(t *testing.T) {
 	m := modelInRetarget(t, retargetChoosing)
 	m.retarget.view = nil

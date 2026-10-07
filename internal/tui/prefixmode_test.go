@@ -75,11 +75,8 @@ func TestNewRefLayoutSizesITEMByMode(t *testing.T) {
 		want int
 		why  string
 	}{
-		// "backend/api-gateway#100" = 23 runes + gap.
 		{prefixCommon, 24, "the longest suffix + gap"},
-		// "APPCITTI/vsocial/backend/api-gateway#100" = 40 runes + gap, capped.
 		{prefixFull, itemWidthCap, "the full reference + gap, capped at the ceiling"},
-		// "api-gateway#100" = 15 runes + gap.
 		{prefixLeaf, 16, "the longest sheet + gap"},
 	} {
 		if got := newRefLayout(sections, tc.mode).cols[colRefIdx].width; got != tc.want {
@@ -125,7 +122,6 @@ func TestFullClipsTheTailAndKeepsTheNumber(t *testing.T) {
 	}
 }
 
-// The limit of the mode, with its real case: two repos whose leaf repeats.
 func TestLeafDoesNotDisambiguateRepeatedLeaves(t *testing.T) {
 	items := mkItems("acme/one", "other/one")
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixLeaf)
@@ -150,7 +146,6 @@ func TestRefCellTextDoesNotRepeatThePathInTheLine(t *testing.T) {
 	}
 }
 
-// A real degradation of `full`.
 func TestFullLosesTheITEMColumnOnVeryNarrowTerminals(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")
 	segs := []inbox.Section{section(model.SectionReview, items...)}

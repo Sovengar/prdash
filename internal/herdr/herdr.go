@@ -1,5 +1,3 @@
-// Package herdr is the only coupling point with Herdr: it reads HERDR_ENV, invokes the binary and
-// parses its JSON. All Herdr output is data: server errors become a typed Error, never a panic.
 package herdr
 
 import (
@@ -106,8 +104,6 @@ type NotifyOptions struct {
 	Sound string // none|done|request (empty = Herdr default)
 }
 
-// Both ids come together because the native provisioning delivers them paired and the layout needs
-// them paired; with neither, the layout creates the workspace and takes both from there.
 type Container struct {
 	WorkspaceID string
 	PaneID      string

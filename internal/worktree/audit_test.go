@@ -171,7 +171,7 @@ func TestRemoveRefusesPathOutsideBase(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "prdash-pr-1")
 	testutil.RunGit(t, repo, "worktree", "add", "--quiet", outside, "feature")
 
-	g := NewGitDirect(t.TempDir()) // a different managed root
+	g := NewGitDirect(t.TempDir())
 	if err := g.Remove(context.Background(), outside); err == nil {
 		t.Fatal("it should not delete outside the managed root")
 	}

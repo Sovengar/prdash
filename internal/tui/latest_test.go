@@ -17,16 +17,14 @@ import (
 	"prdash/internal/testutil"
 )
 
-// A popup that cannot fit is not painted, and that is not an error: painting half would show a frame
-// with nothing in it.
+// A popup that cannot fit is not painted, not an error: painting half shows an empty frame.
 func TestASimulationPopupThatDoesNotFitIsNotPaintedAndIsNotAnError(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	g := &graphicsCounter{}
 	m.graphics = g
 	m.sim.state = simShowing
 
-	// A terminal BELOW the popup's minimum. simMaxCols and simMaxRows have floors
-	//(simMinCols/simMinRows), so what is really shown here is that the floor wins over the terminal.
+	// A terminal below the popup's minimum: the floor wins over the terminal.
 	m.width = simMinCols - 1
 	m.height = simMinRows - 1
 	cols, _ := m.simBox()
@@ -72,8 +70,7 @@ func TestAnImageThatCannotBeResizedIsNotPublished(t *testing.T) {
 	}
 }
 
-// republishSimImage runs on EVERY resize while the image is in the layer, so the image-less path is
-// not rare.
+// republishSimImage runs on every resize while the image is in the layer, so the image-less path is not rare.
 func TestRepublishWithoutAnImageDoesNothingNorFails(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	g := &graphicsCounter{}
@@ -109,8 +106,7 @@ func TestRepublishWithoutAnImageDoesNothingNorFails(t *testing.T) {
 	}
 }
 
-// The placeholder is not cosmetic: an item whose SourceBranch came back empty paints as
-// "the PR branch".
+// The placeholder is not cosmetic: an item with an empty SourceBranch paints as "the PR branch".
 func TestTheChooserSetsTheItemsBranchAndItsPlaceholderWhenThereIsNone(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	it := mkItem("github", "github.com", "acme/widget", "one", 7, "")
@@ -138,8 +134,7 @@ func TestTheChooserSetsTheItemsBranchAndItsPlaceholderWhenThereIsNone(t *testing
 	}
 }
 
-// A zero interval is the config with `refresh_interval = "0s"`, which is a MANUAL refresh: there is
-// no tick to arm and arming one would tick with no work.
+// A zero interval is a manual refresh: there is no tick to arm and arming one would tick with no work.
 func TestTheTickDoesNotArmWithZeroIntervalNorWithRefreshPaused(t *testing.T) {
 	for _, d := range []time.Duration{0, -time.Second, -time.Hour} {
 		m := newTestModel(t)
@@ -170,8 +165,7 @@ func TestTheToastsTickIsAClockAndNotAChannelReader(t *testing.T) {
 
 }
 
-// The case that really happens: the forge returns the branches AND a warning, and changing the base on
-// a partial list is worse than not changing it.
+// The forge returns the branches and a warning: changing the base on a partial list is worse.
 func TestABranchListingWithWarningsTurnsThemIntoAnErrorMessage(t *testing.T) {
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	m.retarget.state = retargetListing
@@ -278,8 +272,7 @@ func (i imageRotated) ColorModel() color.Model { return color.RGBAModel }
 func (i imageRotated) Bounds() image.Rectangle { return image.Rect(0, 0, i.w, i.h) }
 func (imageRotated) At(int, int) color.Color   { return color.RGBA{} }
 
-// This REPLACES the guard it documents: the inner gap is exactly what FitCells returned, and
-// FitCells floors at 1. What is checked is that the invariant HOLDS across widths 0 to 400.
+// This replaces the removed guard: it checks the inner gap invariant holds across widths 0 to 400.
 func TestThePopupsInteriorGapNeverDisappearsHoweverNarrowTheTerminal(t *testing.T) {
 	for _, state := range []simState{simShowing, simChoosing, simRendering} {
 		for _, width := range []int{0, 1, 2, 10, 20, 38, 40, 64, 80, 200, 400} {
@@ -322,8 +315,7 @@ func TestThePopupsInteriorGapNeverDisappearsHoweverNarrowTheTerminal(t *testing.
 	}
 }
 
-// The previous test proves the lower bound (never smaller than the minimum); this one proves the
-// other side, since a box wider than the terminal is cut and the popup looks split.
+// The other side of the previous test: a box wider than the terminal is cut and the popup looks split.
 func TestWithAHugeImageThePopupFitsTheTerminalAndDoesNotOverflowIt(t *testing.T) {
 	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 40}} {
 		m := newTestModel(t, &testutil.FakeAdapter{
@@ -345,8 +337,7 @@ func TestWithAHugeImageThePopupFitsTheTerminalAndDoesNotOverflowIt(t *testing.T)
 	}
 }
 
-// It exists because graphicsCapture does not count SetImage, and whether anything was published is
-// exactly what the guard's false means.
+// It exists because graphicsCapture does not count SetImage, and the guard's false means nothing published.
 type graphicsCount struct {
 	cellW, cellH int
 

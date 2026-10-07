@@ -23,7 +23,6 @@ func bareFixture(t *testing.T) (r *Resolver, ref model.RepoRef, dest, origin str
 		MemoPath: filepath.Join(t.TempDir(), "memo.json"),
 	})
 	r.cloneURL = func(model.RepoRef) string { return origin }
-	// The path comes from barePath, which includes forge and host.
 	dest = r.barePath(ref)
 	return r, ref, dest, origin
 }
@@ -56,7 +55,6 @@ func TestEnsureBareReusesWhatIsThereAndDoesNotCloneAgain(t *testing.T) {
 	}
 }
 
-// The case that makes the cleanup exist.
 func TestEnsureBareCleansLeftoversOfAFailedAttemptBeforeRetrying(t *testing.T) {
 	r, ref, dest, _ := bareFixture(t)
 	ctx := context.Background()
@@ -87,7 +85,6 @@ func TestEnsureBareCleansLeftoversOfAFailedAttemptBeforeRetrying(t *testing.T) {
 	}
 }
 
-// Not only the error: no temporary left behind.
 func TestEnsureBarePropagatesTheCloneFailureAndLeavesNoGarbage(t *testing.T) {
 	r, ref, dest, _ := bareFixture(t)
 	r.cloneURL = func(model.RepoRef) string { return "file:///no-existe/prueba.git" }
@@ -107,15 +104,13 @@ func TestEnsureBarePropagatesTheCloneFailureAndLeavesNoGarbage(t *testing.T) {
 		t.Errorf("EnsureBare left %d temps: %v", len(temps), temps)
 	}
 
-	// The failure is REPEATABLE: a clone that fails once does not leave the tree in a state that makes
-	//the next attempt fail for a different reason.
+	// The failure is REPEATABLE: the next attempt must fail for the same reason, not a different one.
 	r.cloneURL = func(model.RepoRef) string { return "file:///no-existe/prueba.git" }
 	_, err2 := r.EnsureBare(context.Background(), ref)
 	if err2 == nil {
 		t.Fatal("the second attempt gave nil")
 	}
-	// The messages are not identical (they carry the temporary's name, which changes) and the first
-	//version compared the whole strings.
+	// The messages are not identical: they carry the temporary's name, which changes.
 	if !strings.Contains(err2.Error(), "no-existe/prueba.git") {
 		t.Errorf("the second attempt gave %v: it fails again for another reason", err2)
 	}
@@ -129,7 +124,6 @@ func TestRemoveBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 	r, ref, dest, _ := bareFixture(t)
 	ctx := context.Background()
 
-	// It does not exist: nil, and nothing created on the way.
 	if err := r.RemoveBare(ref); err != nil {
 		t.Errorf("removing a bare that does not exist gave %v, want nil", err)
 	}
@@ -137,7 +131,6 @@ func TestRemoveBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 		t.Error("RemoveBare created the bare")
 	}
 
-	// It exists: it gets deleted.
 	if _, err := r.EnsureBare(ctx, ref); err != nil {
 		t.Fatal(err)
 	}
@@ -147,14 +140,12 @@ func TestRemoveBareDeletesWhatIsThereAndToleratesWhatIsNot(t *testing.T) {
 	if _, err := os.Stat(dest); err == nil {
 		t.Error("the bare is still on disk after removing it")
 	}
-	// And the parent survives, which is what stops two mounts of the same repo from stepping on each
-	// other.
+	// The parent survives, which stops two mounts of the same repo from stepping on each other.
 	if _, err := os.Stat(filepath.Dir(dest)); err != nil {
 		t.Errorf("RemoveBare took the parent directory with it: %v", err)
 	}
 
-	// Removing it twice does not fail the second time, which is what happens if the cleanup code is
-	// not idempotent.
+	// Removing it twice does not fail: the cleanup has to be idempotent.
 	if err := r.RemoveBare(ref); err != nil {
 		t.Errorf("the second time gave %v, want nil", err)
 	}

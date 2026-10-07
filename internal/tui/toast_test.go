@@ -22,7 +22,7 @@ func toastTestModel(t *testing.T) (Model, *time.Time) {
 
 func TestToastAppearsAndExpires(t *testing.T) {
 	m, now := toastTestModel(t)
-	m = press(t, m, "a") // with no selection: it launches a notice
+	m = press(t, m, "a")
 
 	if len(toastTexts(m)) == 0 {
 		t.Fatal("there should be a notice after the keypress")
@@ -79,8 +79,7 @@ func TestToastOverlaysView(t *testing.T) {
 	}
 }
 
-// The delicate invariant: compositing the overlay over lines must not widen them, or the
-// whole table misaligns.
+// The delicate invariant: compositing the overlay over lines must not widen them, or the whole table misaligns.
 func TestToastDoesNotBreakColumnWidths(t *testing.T) {
 	m, _ := toastTestModel(t)
 	item := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
@@ -302,11 +301,10 @@ func TestToastBorderMatchesLevel(t *testing.T) {
 	}
 }
 
-// replace must find its target even when it is not the newest.
 func TestToastReplaceFindsAnOlderToast(t *testing.T) {
 	m, now := toastTestModel(t)
 	m.toast.show("merge ok", toastSuccess)
-	m.toast.show("an action is running", toastInfo) // newer: the merge is not the last one
+	m.toast.show("an action is running", toastInfo)
 
 	*now = now.Add(time.Second)
 	m.toast.replace("merge ok", "merge ok · worktree removed", toastSuccess)

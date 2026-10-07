@@ -6,16 +6,14 @@ import (
 	"time"
 )
 
-// A flag with an empty value is NOT sent: `--cwd ""` tells Herdr "use the empty directory", which is
-// not the same as saying nothing, and that difference lands in the wrong repo.
+// An empty value is not the same as saying nothing: --cwd "" would tell Herdr to use the empty directory.
 func TestArgsWithOmitsEmptyValue(t *testing.T) {
 	base := args{"command"}
 
 	if got := base.with("--cwd", ""); !reflect.DeepEqual(got, args{"command"}) {
 		t.Errorf("with the empty value it gave %q, want only the command: an empty flag is not sent", got)
 	}
-	// The input list is not modified: the methods reuse it, and mutating it would leave flags
-	// behind.
+	// The input list is not modified: the methods reuse it.
 	before := append(args{}, base...)
 	base.with("--cwd", "/repo")
 	if !reflect.DeepEqual(base, before) {
@@ -31,7 +29,6 @@ func TestArgsWithOmitsEmptyValue(t *testing.T) {
 	}
 }
 
-// TestArgsWithIfAppendsWholeFlagOrNothing: a flag without a value either goes or it does not.
 func TestArgsWithIfAppendsWholeFlagOrNothing(t *testing.T) {
 	base := args{"command"}
 	if got := base.withIf(false, "--force"); !reflect.DeepEqual(got, args{"command"}) {
@@ -46,8 +43,7 @@ func TestArgsWithIfAppendsWholeFlagOrNothing(t *testing.T) {
 	}
 }
 
-// The FULL argv of each command with the whole list asserted. Not a golden of a drawing: a list, and
-// the list is the contract.
+// The full argv is asserted, not a golden: the list is the contract.
 func TestArgvOfEachCommand(t *testing.T) {
 	cases := []struct {
 		name string
@@ -84,8 +80,7 @@ func TestArgvOfEachCommand(t *testing.T) {
 			[]string{"worktree", "list", "--cwd", "/repo"},
 		},
 
-		// --force is opt-in: dropping a checkout with changes without asking is worse than not being
-		// able to.
+		// --force is opt-in: dropping a checkout with changes without asking is worse.
 		{
 			"worktree remove without force",
 			worktreeRemoveArgs("ws1", false),
@@ -131,8 +126,7 @@ func TestArgvOfEachCommand(t *testing.T) {
 				"--label", "et", "--no-focus"},
 		},
 
-		// The ratio is omitted when zero, because zero is Herdr's default and sending it would overwrite
-		// it.
+		// The ratio is omitted when zero: zero is Herdr's default and sending it would overwrite it.
 		{
 			"pane split without ratio",
 			splitArgs(SplitSpec{PaneID: "p1", Direction: "right"}),
@@ -169,8 +163,7 @@ func TestArgvOfEachCommand(t *testing.T) {
 			[]string{"pane", "split", "--pane", "p1", "--direction", "right"},
 		},
 
-		// The timeout is omitted when there is no deadline: a timeout of 0 means "no limit", not "as soon
-		// as possible".
+		// The timeout is omitted when there is no deadline: 0 means "no limit", not "as soon as possible".
 		{
 			"wait-output without timeout",
 			waitOutputArgs("p1", "ready", 0),
@@ -227,7 +220,6 @@ func TestArgvOfEachCommand(t *testing.T) {
 	}
 }
 
-// No value flag may carry an empty string, and no valueless flag may carry one.
 func TestArgvNeverCarriesAnEmptyValue(t *testing.T) {
 	argv := map[string][]string{
 		"worktree create":       []string(worktreeCreateArgs(WorktreeSpec{Cwd: "/a", Branch: "b", Path: "/c", Label: "d", NoFocus: true})),

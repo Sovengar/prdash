@@ -13,8 +13,7 @@ import (
 
 const mainInSubprocess = "PRDASH_TEST_MAIN"
 
-// The args go in the ENVIRONMENT, not the command line, because -test.run would be read as a
-// prdash flag.
+// The args go in the environment: on the command line -test.run would be read as a prdash flag.
 const argsInSubprocess = "PRDASH_TEST_ARGS"
 
 func TestRealMainExitsWithTheCodeMatchingTheArgs(t *testing.T) {
@@ -55,8 +54,7 @@ func TestRealMainExitsWithTheCodeMatchingTheArgs(t *testing.T) {
 			if c.want != "" && !strings.Contains(output, c.want) {
 				t.Errorf("the output does not contain %q:\n%s", c.want, output)
 			}
-			// The subprocess must NOT die of a panic: that leaves half the output in stderr and the exit
-			// code says nothing.
+			// The subprocess must not die of a panic: the exit code would say nothing.
 			if strings.Contains(output, "panic:") || strings.Contains(output, "goroutine ") {
 				t.Errorf("the subprocess panicked:\n%s", output)
 			}
@@ -64,7 +62,6 @@ func TestRealMainExitsWithTheCodeMatchingTheArgs(t *testing.T) {
 	}
 }
 
-// This is why the previous test exists: run returns 0 at the end of the happy path.
 func TestMainWithoutTerminalLeavesNoHungProcessAndDoesNotExitZero(t *testing.T) {
 	base := t.TempDir()
 	output, code := mainAsSubprocess(t, base)
@@ -112,7 +109,6 @@ func mainAsSubprocess(t *testing.T, base string, args ...string) (string, int) {
 	return string(out), code
 }
 
-// It does NOT run in the normal pass.
 func TestThatRunsTheRealMain(t *testing.T) {
 	if os.Getenv(mainInSubprocess) == "1" {
 		os.Args = append([]string{filepath.Base(os.Args[0])},
@@ -131,8 +127,7 @@ func asExitError(err error, dst **exec.ExitError) bool {
 	return ok
 }
 
-// Both halves of the same if, and the missing one was the "started" half: with a terminal-less
-// subprocess only the failure was reachable.
+// Both halves of the same if: with a terminal-less subprocess only the failure was reachable.
 func TestTheTUIThatStartsExitsZeroAndTheOneThatFailsExitsOne(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)

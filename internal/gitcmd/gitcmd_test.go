@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// Three pieces, not one, because each answers a different question about a git failure.
 func TestTheErrorMessageBringsWhatIsNeededToFixIt(t *testing.T) {
 	cases := []struct {
 		name string
@@ -51,8 +50,7 @@ func TestTheErrorMessageBringsWhatIsNeededToFixIt(t *testing.T) {
 	}
 }
 
-// Unwrap is what lets us say "this is not git's error": errors.As(err, &exitError) needs the
-// chain mounted.
+// Unwrap lets errors.As reach the *exec.ExitError that carries ExitCode.
 func TestTheErrorUnwrapsTheCause(t *testing.T) {
 	withoutCause := &Error{Args: []string{"x"}, Msg: "m"}
 	if withoutCause.Unwrap() != nil {
@@ -115,8 +113,7 @@ func TestRunBringsTheRealGitError(t *testing.T) {
 	}
 }
 
-// Returning what was written before the failure is the right behaviour for what prdash does with
-// git.
+// Returning what was written before the failure is right for what prdash does with git.
 func TestRunReturnsPartialOutputWhenItFails(t *testing.T) {
 	dir := t.TempDir()
 	partial := filepath.Join(dir, "git-partial")
@@ -200,7 +197,6 @@ func TestFirstLineCutsWhatDoesNotFitInTheToast(t *testing.T) {
 	}
 }
 
-// The most important thing Env does.
 func TestTheGitEnvironmentDoesNotInheritTheShellContext(t *testing.T) {
 	hostile := map[string]string{
 		"GIT_DIR":                          "/other/repo/.git",

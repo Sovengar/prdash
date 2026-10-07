@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// Audit decides which worktrees are prdash's and which are alive.
-
-// linkedGitDir's four negatives.
 func TestTheGitFileOfAWorktreeSaysWhereTheOriginIs(t *testing.T) {
 	base := t.TempDir()
 
@@ -98,7 +95,6 @@ func TestABrokenLinkIsAnOrphanAndAHealthyOneIsNot(t *testing.T) {
 	}
 }
 
-// The whole walk.
 func TestAuditOnlyReturnsWhatBelongsToPrdashAndFlagsTheBroken(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "worktrees")
@@ -164,8 +160,7 @@ func TestAuditOnlyReturnsWhatBelongsToPrdashAndFlagsTheBroken(t *testing.T) {
 		t.Errorf("the reason %q does not say the source repo is gone", r.Reason)
 	}
 
-	// The LABEL wins over the directory name, which is what makes the listing say
-	// "prdash-pr-1" and not the whole path.
+	// The label wins over the directory name, so the listing says "prdash-pr-1".
 	if v.Label != "prdash-pr-1" {
 		t.Errorf("Label = %q, want prdash-pr-1", v.Label)
 	}
@@ -179,7 +174,6 @@ func TestAuditOnlyReturnsWhatBelongsToPrdashAndFlagsTheBroken(t *testing.T) {
 	}
 }
 
-// An empty root is not an error.
 func TestAuditWithoutRootReturnsNothing(t *testing.T) {
 	if got := (&GitDirect{}).Audit(context.Background()); got != nil {
 		t.Errorf("without Base it returned %+v, want nil", got)

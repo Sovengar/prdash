@@ -10,8 +10,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// `gh pr checks` exits 8 (pending) or 1 (failing) and still prints the JSON; a runner that looked
-//at the exit code would discard it and classify an error.
+// `gh pr checks` exits 8 (pending) or 1 (failing) and still prints JSON; a runner that looked at the exit code would discard it.
 
 func ghThatLogs(t *testing.T, body string) (script, argsFile string) {
 	t.Helper()
@@ -34,7 +33,6 @@ func loggedArgs(t *testing.T, path string) string {
 	return string(raw)
 }
 
-// checksJSON are the checks from `gh pr checks --json name,state,bucket`.
 const checksJSON = `[{"name":"build","state":"FAILURE","bucket":"fail"},
 {"name":"lint","state":"SUCCESS","bucket":"pass"},
 {"name":"e2e","state":"PENDING","bucket":"pending"}]`
@@ -78,7 +76,6 @@ func TestChecksAreReadEvenWhenTheExitCodeIsAnError(t *testing.T) {
 
 // Two cases, not one, and the difference is which class the warning carries.
 func TestChecksWithoutJSONAreAWarningWithTheirKind(t *testing.T) {
-	// The command fails without JSON.
 	script, _ := ghThatLogs(t, "echo 'HTTP 403: Forbidden' >&2\nexit 1\n")
 	checks, warns := New("github.com", script).checks(context.Background(), "acme/proj", 42)
 	if len(warns) != 1 {
@@ -118,8 +115,7 @@ func TestTheRESTFallbackBringsAuthoredAndNotChecks(t *testing.T) {
 	if it.Number != 42 || it.Ref.Project == "" {
 		t.Errorf("the item was not read well: %+v", it)
 	}
-	// The stamp: section and forge identity. Without it the fallback returns items that belong
-	// nowhere.
+	// The stamp: without section and forge identity the fallback returns items that belong nowhere.
 	if it.Section != model.SectionAuthored {
 		t.Errorf("section = %q, want the authored one", it.Section)
 	}
@@ -140,7 +136,6 @@ func TestTheRESTFallbackBringsAuthoredAndNotChecks(t *testing.T) {
 
 // Both return false instead of an error, which is what lets the caller fall through.
 func TestTheRESTFallbackDoesNotKickInIfItFailsOrIsUnreadable(t *testing.T) {
-	// It fails.
 	script, _ := ghThatLogs(t, "echo 'boom' >&2\nexit 1\n")
 	if _, ok := New("github.com", script).restAuthored(context.Background()); ok {
 		t.Error("a failing fallback gave ok=true")
@@ -186,7 +181,6 @@ func TestReReadingAnItemWithoutAnOwnerWarnsWithoutCallingTheForge(t *testing.T) 
 	if _, err := os.Stat(argsFile); err != nil {
 		t.Error("with an owner the forge was not called")
 	}
-	// A PR that does not exist in a repo that does: also notfound, and the message says so.
 	if len(warns) != 1 || warns[0].Kind != "notfound" {
 		t.Errorf("a nonexistent PR gave %+v, want notfound", warns)
 	}
@@ -201,7 +195,6 @@ func TestReReadingAnItemWithoutAnOwnerWarnsWithoutCallingTheForge(t *testing.T) 
 	}
 }
 
-// My first version asserted the checks stayed and they did not.
 func TestTheGraphQLRollupSurvivesWhenChecksCannotBeRead(t *testing.T) {
 	script, _ := ghThatLogs(t, bodyOfFailingChecks())
 	it, warns := New("github.com", script).ItemState(context.Background(),

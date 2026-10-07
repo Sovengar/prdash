@@ -31,7 +31,6 @@ func TestWrapHintClipsToMaxHintLinesAndNothingMore(t *testing.T) {
 	}
 }
 
-// The zero width is the default.
 func TestWrapHintWithWidthOneAndZero(t *testing.T) {
 	for _, width := range []int{-10, 0, 1, 2} {
 		got := wrapHint("a text with a few words", width, func(s string) string { return s })
@@ -82,7 +81,6 @@ func manyLines() []string {
 	return out
 }
 
-// With the text giving EXACTLY maxHintLines the top edge is the identity.
 func TestWrapHintTheTopBudgetIsTheIdentity(t *testing.T) {
 	const width = 12
 	var palabras []string
@@ -92,7 +90,7 @@ func TestWrapHintTheTopBudgetIsTheIdentity(t *testing.T) {
 			break
 		}
 	}
-	palabras = palabras[:len(palabras)-1] // the last word is the one that overflows
+	palabras = palabras[:len(palabras)-1]
 	text := strings.Join(palabras, " ")
 	plain := wrapText(text, width)
 	if len(plain) != maxHintLines {
@@ -112,7 +110,6 @@ func TestWrapHintTheTopBudgetIsTheIdentity(t *testing.T) {
 	}
 }
 
-// With the budget EQUAL to the line count the identity holds.
 func TestKeybindsTheBudgetEdgeIsTheIdentity(t *testing.T) {
 	m := newTestModel(t)
 	m.mergeArmed = true

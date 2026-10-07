@@ -77,7 +77,6 @@ func TestNormalizeComparesWithoutCaseOrSeparators(t *testing.T) {
 	}
 }
 
-// A state with Z is recognised even though it is out of range.
 func TestDeriveNormalizesStatesWithZ(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget"}, 1)
 	it.State = "BUZZ"

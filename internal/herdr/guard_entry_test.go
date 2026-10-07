@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// The runner's outputs that are about INPUT rather than content: an empty argv, an unexpected output,
-//and a timeout.
-
 // A guard that never fires with a real plan, because the plan always brings a command.
 func TestEmptyArgvIsRefusedBeforeCallingHerdr(t *testing.T) {
 	f := &fakeCLI{env: map[string]string{"HERDR_ENV": "1"}}
@@ -173,8 +170,7 @@ func TestBlankBinaryIsLookedUpInPathAndGivesNoEmptyName(t *testing.T) {
 		t.Errorf("the herdr from the PATH received %q", logged)
 	}
 
-	// And with nothing in PATH the error stays readable, which is half the point of resolving the
-	// default.
+	// With nothing in PATH the error stays readable: half the point of resolving the default.
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)
 	t.Setenv("HERDR_BIN_PATH", "")

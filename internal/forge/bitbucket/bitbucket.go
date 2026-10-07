@@ -26,8 +26,6 @@ func (a *Adapter) Forge() string { return ForgeName }
 
 func (a *Adapter) Host() string { return a.host }
 
-// The reason says "not implemented", not "not authenticated": the first is not fixed at all, so
-// the wrong one sends the user looking for a token that already works.
 func (a *Adapter) Auth(context.Context) model.AuthState {
 	return model.AuthState{Forge: ForgeName, OK: false, Reason: "not implemented in this version"}
 }
@@ -56,8 +54,6 @@ func (a *Adapter) Retarget(context.Context, model.RepoRef, int, string) []model.
 	return a.unsupported("")
 }
 
-// The empty list is what makes the branch picker open and explain that the forge is missing instead
-// of opening with nothing in it.
 func (a *Adapter) Branches(context.Context, model.RepoRef) ([]string, []model.Warning) {
 	return nil, a.unsupported("")
 }

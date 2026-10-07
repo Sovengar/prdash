@@ -11,8 +11,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// The two branches that are the boundary between forge and the TUI.
-
 // The HeadSHA that travels is the one from the re-read, not the card's.
 func TestMergeActionsPassTheReReadHeadSHAAndNotTheCards(t *testing.T) {
 	seen := mkItem("github", "github.com", "acme/widget", 3)
@@ -168,13 +166,11 @@ func TestApprovingYourOwnIsRefusedWithAReason(t *testing.T) {
 	if strings.TrimSpace(out.Msg) == "" {
 		t.Fatal("with no reason: the user sees that the key does nothing")
 	}
-	// The reason is the CANONICAL one, not the CLI's text: the adapter may say whatever it wants
-	// —the text changes between versions—.
+	// The reason is the CANONICAL one, not the CLI's text, which changes between versions.
 	if out.Msg != state.SelfReviewReason {
 		t.Errorf("the reason is %q, want the canonical %q", out.Msg, state.SelfReviewReason)
 	}
-	// Classified as PERMISSION and not as a conflict, which is what stops the TUI from asking for
-	// a refresh that fixes nothing.
+	// Classified as PERMISSION and not as a conflict, which stops the TUI from asking for a refresh that fixes nothing.
 	if !out.Perm {
 		t.Errorf("the veto came out as %+v: without the permission mark the TUI would retry it "+
 			"on every refresh", out)
@@ -185,8 +181,7 @@ func TestApprovingYourOwnIsRefusedWithAReason(t *testing.T) {
 	}
 }
 
-// It embeds the project's FakeAdapter and only records whether a merge was asked for.
-// Embedding over a struct means the real methods still work.
+// It embeds the project's FakeAdapter, so the real methods still work and only merges are recorded.
 type mergeRecordingAdapter struct {
 	testutil.FakeAdapter
 	mergeCalled bool

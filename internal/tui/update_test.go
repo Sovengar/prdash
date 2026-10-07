@@ -14,11 +14,10 @@ func modelWithNewCycle(t *testing.T) Model {
 	t.Helper()
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	m.cycle = 1
-	m.beginRefresh() // leaves cycle at 2
+	m.beginRefresh()
 	return m
 }
 
-// The "but re-arms" half is the one that matters.
 func TestAStaleCycleMessageIsDiscardedButRearmsTheTimer(t *testing.T) {
 	cases := []struct {
 		name string
@@ -42,8 +41,7 @@ func TestAStaleCycleMessageIsDiscardedButRearmsTheTimer(t *testing.T) {
 		if got.loading != before {
 			t.Errorf("%s: a stale message touched `loading` (%v -> %v)", c.name, before, got.loading)
 		}
-		// And the pump is re-armed: withPump always returns a non-nil Cmd, and it is the only thing
-		// that does.
+		// The pump is re-armed: withPump always returns a non-nil Cmd, and it is the only thing that does.
 		if cmd == nil {
 			t.Errorf("%s: a stale message returns nil and kills the event timer", c.name)
 		}
@@ -86,7 +84,6 @@ func TestACurrentMessageDoesWhatItShould(t *testing.T) {
 	}
 }
 
-// The asymmetry with the channel's messages.
 func TestTheModelsMessagesDoNotRearmTheTimer(t *testing.T) {
 	m := modelWithNewCycle(t)
 	output, cmd := m.Update(notifyMsg{text: "something happened", level: levelWarn})
@@ -105,7 +102,6 @@ func TestTheModelsMessagesDoNotRearmTheTimer(t *testing.T) {
 }
 
 func TestTheTickFiresOnUnpausingAndNotWhilePaused(t *testing.T) {
-	// Paused: re-arms without asking.
 	m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	// paused() is `loading || actionBusy`; there is no flag of its own.
 	m.loading = true
@@ -134,8 +130,7 @@ func TestTheTickFiresOnUnpausingAndNotWhilePaused(t *testing.T) {
 	}
 }
 
-// Only a merge names its strategy: the mode lives in the notice because a merge is the action that
-// can be rebase, squash or merge commit, and the user has to know which one is about to run.
+// Only a merge names its strategy: it can be rebase, squash or merge commit, and the user has to know which one runs.
 func TestTheActionProgressNoticeNamesTheMergeModeAndNothingElseDoes(t *testing.T) {
 	cases := []struct {
 		kind forge.ActionKind

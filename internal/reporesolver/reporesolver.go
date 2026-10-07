@@ -1,5 +1,3 @@
-// Package reporesolver is the sole owner of prdash's path namespace. It never calls the forge
-// API, only git, so resolving an item does not depend on credentials.
 package reporesolver
 
 import (
@@ -25,8 +23,6 @@ type Options struct {
 	WorktreeDir string
 	MemoPath    string
 	Hosts       map[string]string
-	// Applied symmetrically when building the clone URL and when normalising remotes, so a
-	// subfolder instance resolves to the same Project as one at the host root.
 	Prefixes    map[string]string
 	CloneURL    func(model.RepoRef) string
 	ParseRemote func(string) (model.RepoRef, bool)
@@ -139,7 +135,6 @@ func (r *Resolver) RemoveBare(ref model.RepoRef) error {
 	return os.RemoveAll(dest)
 }
 
-// Never touches a branch that already exists: the work in progress is reused.
 func (r *Resolver) FetchReviewRef(ctx context.Context, repo string, it model.Item) (string, error) {
 	src, ok := ReviewRef(it)
 	if !ok {
@@ -262,16 +257,12 @@ func CloneURL(ref model.RepoRef, prefix string) string {
 	return fmt.Sprintf("https://%s/%s/%s.git", host, base, project)
 }
 
-// The subfolder prefix is stripped from the path so a remote at https://host/git/group/proj.git
-// normalises to the same Project as one at the host root.
 func ParseRemoteURL(raw string, hosts map[string]string, prefixes map[string]string) (model.RepoRef, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return model.RepoRef{}, false
 	}
 
-	// The "@" demands something before it: an SCP with an empty user is not a git remote. "://" is
-	// accepted at 0 because url.Parse rejects it anyway; ">= 0" is what keeps it out of SCP.
 	var host, path string
 	if i := strings.Index(raw, "://"); i >= 0 {
 		u, err := url.Parse(raw)

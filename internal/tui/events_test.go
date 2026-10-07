@@ -6,12 +6,10 @@ import (
 	"time"
 )
 
-// The event bomb is an invariant the rest of the model assumes, and not one test covers it: a
-//leak here is a goroutine per keypress.
+// The event bomb is an invariant the model assumes: a leak here is a goroutine per keypress.
 
 type markedEvent struct{ n int }
 
-// What matters is the "and only one".
 func TestTheTimerReadsOneEventAndOnlyOne(t *testing.T) {
 	ch := make(chan event, 3)
 	ch <- markedEvent{n: 1}
@@ -19,7 +17,6 @@ func TestTheTimerReadsOneEventAndOnlyOne(t *testing.T) {
 
 	cmd := waitForEvent(ch)
 
-	// The first Cmd takes the first one.
 	ev, ok := cmd().(markedEvent)
 	if !ok {
 		t.Fatal("the Cmd did not return an event")
@@ -27,7 +24,6 @@ func TestTheTimerReadsOneEventAndOnlyOne(t *testing.T) {
 	if ev.n != 1 {
 		t.Errorf("the event read is %+v, want the first one", ev)
 	}
-	// It does NOT take the second: it stays in the channel for the next Cmd.
 	if n := len(ch); n != 1 {
 		t.Errorf("%d events stay in the channel after one Cmd, want 1: it took more than one", n)
 	}
@@ -48,7 +44,6 @@ func TestTheTimerStopsWhenTheChannelCloses(t *testing.T) {
 		t.Errorf("with the channel closed the Cmd returned %v (%T), want nil: nil is what "+
 			"tells bubbletea there are no more messages", got, got)
 	}
-	// Asking more times does not revive the channel or return something else.
 	for i := range 3 {
 		if got := waitForEvent(ch)(); got != nil {
 			t.Errorf("call %d with the channel closed returned %v", i, got)
@@ -70,8 +65,7 @@ func TestPublishRespectsTheCancellation(t *testing.T) {
 		t.Fatal("the event never arrived")
 	}
 
-	// With the context ALREADY cancelled and nobody reading, it does not block. That is what proves
-	// it.
+	// With the context already cancelled and nobody reading, it does not block.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -91,8 +85,7 @@ func TestPublishRespectsTheCancellation(t *testing.T) {
 	// Publishing BLOCKS on purpose when the context is alive and there is no reader.
 }
 
-// The guard is the only thing between a double release and a counter that lies about how many
-// goroutines are parked on the channel, and the invariant says it cannot happen. This forces it.
+// The guard is the only thing between a double release and a counter that lies; this forces it.
 func TestReleasingMoreReadersThanAreArmedDoesNotGoNegative(t *testing.T) {
 	m := newTestModel(t)
 	m.readers = 0
@@ -133,7 +126,6 @@ func TestTheReaderCounterIsWhatAllowsAssertingTheInvariant(t *testing.T) {
 		t.Errorf("after arming twice the counter stayed at %d", m.readers)
 	}
 
-	// The armed Cmd reads from the MODEL's channel, not another one.
 	m.events <- markedEvent{n: 9}
 	got, ok := cmd().(markedEvent)
 	if !ok || got.n != 9 {

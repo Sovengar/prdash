@@ -9,14 +9,11 @@ import (
 	"prdash/internal/testutil"
 )
 
-// The three survivors in worktree.go were three negatives in the provisioning path.
-
 func TestTheWorktreeLabelIsTheSpecs(t *testing.T) {
 	repo := newRepo(t)
 	base := t.TempDir()
 
-	// Real branches: Create takes them from the repo, so an invented name fails before
-	// reaching the label and the test would prove nothing.
+	// Real branches: Create takes them from the repo, so an invented name fails before reaching the label.
 	for _, b := range []string{"with-label", "without-label", "label-same-as-dir",
 		"directorio-anidado", "w-temp-8837"} {
 		testutil.RunGit(t, repo, "branch", b)

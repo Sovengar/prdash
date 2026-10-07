@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// A zero in EITHER dimension draws nothing.
 func TestPlacementEmptyWithOneDimensionZero(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -43,7 +42,6 @@ func TestPlacementEmptyWithOneDimensionZero(t *testing.T) {
 	}
 }
 
-// All nine combinations are asserted.
 func TestGraphicsReadyIsThreeStringsAndOneDecision(t *testing.T) {
 	cases := []struct {
 		herdrEnv, socket, pane string
@@ -78,8 +76,7 @@ func TestGraphicsReadyIsThreeStringsAndOneDecision(t *testing.T) {
 
 // The ORDER of the conditions is not a detail.
 func TestGraphicsReadyDoesNotLookAtTheSocketWhenNotInside(t *testing.T) {
-	// There is no way to inject a socket that breaks, because the function takes strings. What is
-	//asserted is the consequence.
+	// No socket can be injected (the function takes strings); what is asserted is the consequence.
 	for _, herdrEnv := range []string{"", "0", "2", "true", "1x"} {
 		withoutSocket := graphicsReady(herdrEnv, "/no/such/socket", "w1:p1")
 		withSocket := graphicsReady(herdrEnv, "/run/herdr.sock", "w1:p1")
@@ -108,8 +105,7 @@ func TestHaveGraphicsTarget(t *testing.T) {
 	}
 }
 
-// A zero deadline is a deadline that already passed. With a real one the request is cut before
-// being sent.
+// A zero deadline is one that already passed: the request is cut before being sent.
 func TestGraphicsTimeoutForZeroAndNegativeIsNotZero(t *testing.T) {
 	for _, t0 := range []time.Duration{-time.Hour, -time.Second, -time.Nanosecond, 0} {
 		if got := graphicsTimeoutFor(t0); got != graphicsTimeout {
@@ -120,13 +116,11 @@ func TestGraphicsTimeoutForZeroAndNegativeIsNotZero(t *testing.T) {
 			t.Errorf("graphicsTimeoutFor(%v) returned a non-positive deadline: %v", t0, got)
 		}
 	}
-	// A positive deadline is honoured as given, neither clipped nor rounded.
 	for _, t0 := range []time.Duration{time.Nanosecond, time.Millisecond, 42 * time.Second, time.Hour} {
 		if got := graphicsTimeoutFor(t0); got != t0 {
 			t.Errorf("graphicsTimeoutFor(%v) = %v, want the same deadline", t0, got)
 		}
 	}
-	// The default is a real deadline, not zero.
 	if graphicsTimeout <= 0 {
 		t.Errorf("graphicsTimeout = %v: a non-positive default deadline makes the degradation not degrade", graphicsTimeout)
 	}
@@ -163,16 +157,14 @@ func TestCellSizeFromDegradesInTheThreeWays(t *testing.T) {
 		}
 	}
 
-	// The degradation is ALWAYS positive, which is the reason it exists: returning zero would be
-	// read as "no image".
+	// The degradation is ALWAYS positive: returning zero would be read as "no image".
 	for _, c := range cases {
 		gotW, gotH := cellSizeFrom(c.info, c.err)
 		if gotW <= 0 || gotH <= 0 {
 			t.Errorf("%s: returned %dx%d, and a zero-pixel cell is not a cell", c.name, gotW, gotH)
 		}
 	}
-	// The default approximation is a terminal's, 1x2. Not arbitrary: it is the ratio every terminal
-	// has.
+	// The default approximation is a terminal's 1x2: the ratio every terminal has.
 	if defaultCellWidthPx != 1 || defaultCellHeightPx != 2 {
 		t.Errorf("the default approximation is %dx%d, want 1x2 (what a text cell measures)",
 			defaultCellWidthPx, defaultCellHeightPx)

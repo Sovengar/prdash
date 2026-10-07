@@ -18,7 +18,6 @@ func retargetFixture(t *testing.T, branches ...string) (Model, *testutil.FakeAda
 	return send(t, m, waitMount(t, m).(branchesMsg)), a
 }
 
-// openRetargetFixture leaves the popup open with the listing not yet arrived.
 func openRetargetFixture(t *testing.T, branches ...string) (Model, *testutil.FakeAdapter) {
 	t.Helper()
 	a := ghAdapter()
@@ -42,7 +41,6 @@ func pressFilter(t *testing.T, m Model, word string) Model {
 	return m
 }
 
-// `e` opens the popup and what appears are the repository's branches.
 func TestEOpensTheSearcherAndBringsTheForgesBranches(t *testing.T) {
 	m, a := retargetFixture(t, "main", "develop", "release/2.0")
 
@@ -60,7 +58,6 @@ func TestEOpensTheSearcherAndBringsTheForgesBranches(t *testing.T) {
 	}
 }
 
-// The filter runs on the whole name, not the last segment.
 func TestTheFilterKeepsTheBranchesThatContainIt(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "fix/hunk-pane-argv", "release/2.0")
 
@@ -84,7 +81,6 @@ func TestTheFilterKeepsTheBranchesThatContainIt(t *testing.T) {
 	}
 }
 
-// What stops the two halves stepping on each other.
 func TestJAndKWithAFilterWriteAndNavigate(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "develop", "release/2.0", "fix/jj-one")
 
@@ -93,8 +89,7 @@ func TestJAndKWithAFilterWriteAndNavigate(t *testing.T) {
 		t.Fatalf("with an empty filter, `j` did not move the cursor (cursor=%d)", m.retarget.cursor)
 	}
 
-	// As soon as the filter has something, `j` types: otherwise `fix/jj-one` is impossible to
-	// write.
+	// As soon as the filter has something, `j` types: otherwise `fix/jj-one` is impossible to write.
 	m = pressFilter(t, m, "re")
 	m = press(t, m, "j")
 	if m.retarget.query != "rej" {
@@ -114,7 +109,7 @@ func TestJAndKWithAFilterWriteAndNavigate(t *testing.T) {
 func TestChoosingTheBaseItAlreadyHasSpendsNoCall(t *testing.T) {
 	m, a := retargetFixture(t, "main", "develop")
 
-	m = press(t, m, "enter") // main is the current base and the first one out
+	m = press(t, m, "enter")
 	if m.retarget.state != retargetClosed {
 		t.Errorf("state = %v, want the popup closed", m.retarget.state)
 	}
@@ -124,7 +119,6 @@ func TestChoosingTheBaseItAlreadyHasSpendsNoCall(t *testing.T) {
 	assertToast(t, m, "already main")
 }
 
-// The second press is the confirmation.
 func TestTheChangeIsConfirmedBeforeLeaving(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 
@@ -184,8 +178,7 @@ func TestEscInTheConfirmationGoesBackToTheList(t *testing.T) {
 	}
 }
 
-// Open, it takes the whole keyboard: a key that leaked through would have `j` approve the
-// PR.
+// Open, it takes the whole keyboard: a key that leaked through would have `j` approve the PR.
 func TestThePopupDoesNotLetKeysThroughToTheView(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 
@@ -225,7 +218,7 @@ func TestTheCacheExpires(t *testing.T) {
 	if m.retarget.state != retargetListing {
 		t.Errorf("state = %v, want it to ask again for an expired cache", m.retarget.state)
 	}
-	waitMount(t, m) // the second request comes out on its own, like the first
+	waitMount(t, m)
 	if a.BranchCallCount("acme/widget") != 2 {
 		t.Errorf("calls = %d, want 2: an expired cache is requested again", a.BranchCallCount("acme/widget"))
 	}
@@ -259,7 +252,7 @@ func TestThePopupAppliesToTheItemThatWasConfirmed(t *testing.T) {
 		t.Fatalf("the cursor is not on the other item: the test would prove nothing")
 	}
 
-	m = press(t, m, "down") // the popup keeps its keyboard
+	m = press(t, m, "down")
 	m = press(t, m, "enter")
 	m = press(t, m, "enter")
 	waitOutcome(t, m)
@@ -274,7 +267,7 @@ func TestThePopupAppliesToTheItemThatWasConfirmed(t *testing.T) {
 
 func TestALateListingIsNotPainted(t *testing.T) {
 	m, _ := retargetFixture(t, "main", "release/2.0")
-	m = press(t, m, "esc") // closed: the in-flight request goes stale
+	m = press(t, m, "esc")
 
 	m = send(t, m, branchesMsg{seq: m.branchSeq, names: []string{"other/cosa"}})
 
@@ -374,7 +367,7 @@ func TestThePopupDoesNotOpenWithTheMergeArmed(t *testing.T) {
 	m, a := retargetFixture(t, "main", "release/2.0")
 	m = press(t, m, "esc")
 
-	m = press(t, m, "m") // arms the merge
+	m = press(t, m, "m")
 	if !m.mergeArmed {
 		t.Fatal("the merge did not arm: the test would prove nothing")
 	}

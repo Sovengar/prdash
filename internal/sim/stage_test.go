@@ -65,7 +65,6 @@ func TestStageLeavesTheBaseActiveForMergeAndTheItemBranchForRebase(t *testing.T)
 	}
 }
 
-// The check goes BEFORE the clone; the order is what is pinned.
 func TestStageDoesNotCloneIfTheItemBranchIsUnknown(t *testing.T) {
 	repo, tmp := simRepoMount(t)
 	tmpBefore := countEntries(t, tmp)
@@ -88,7 +87,6 @@ func TestStageDoesNotCloneIfTheItemBranchIsUnknown(t *testing.T) {
 	}
 }
 
-// The NORMAL case, not the rare one: local before remote.
 func TestMaterializeUsesTheLocalBranchIfItAlreadyExists(t *testing.T) {
 	repo, tmp := simRepoMount(t)
 	s := New(locatorForStage())
@@ -112,7 +110,6 @@ func TestMaterializeUsesTheLocalBranchIfItAlreadyExists(t *testing.T) {
 	}
 }
 
-// The usual case for the item's branch.
 func TestMaterializeCreatesTheItemBranchFromTheRemote(t *testing.T) {
 	repo, tmp := simRepoMount(t)
 	s := New(locatorForStage())
@@ -166,8 +163,7 @@ func TestSimulationCloneIsTemporaryAndShared(t *testing.T) {
 	if strings.Contains(branches, "sim") || strings.Contains(branches, "tmp") {
 		t.Errorf("the simulation left branches in the source repo: %q", branches)
 	}
-	// The source repo still has ONE worktree, its own, because a simulation clone is not registered as
-	//one.
+	// A simulation clone is not registered as a worktree: the source repo still has ONE, its own.
 	lines := strings.Split(strings.TrimSpace(git(t, repo, "worktree", "list")), "\n")
 	if len(lines) != 1 {
 		t.Errorf("the simulation left worktrees in the source repo: %d", len(lines)-1)

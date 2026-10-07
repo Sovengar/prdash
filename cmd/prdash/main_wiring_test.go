@@ -15,8 +15,7 @@ import (
 	"prdash/internal/worktree"
 )
 
-// A path with a separator is looked up on disk and a bare name in the PATH, and that is because
-// they are two different configurations.
+// A path with a separator and a bare name are two different lookups, not one.
 func TestBinaryAvailabilityDistinguishesTheThreeCases(t *testing.T) {
 	for _, empty := range []string{"", "   ", "\t\n"} {
 		if binaryAvailable(empty) {
@@ -92,8 +91,7 @@ func TestHostsOfOnlyMapsWhatIsConfiguredAndInventsNoForge(t *testing.T) {
 	}
 }
 
-// The case that matters is Known:false WITH numbers: it arrives when the diffstat query fails and
-// the figures default to zero.
+// Known:false with numbers arrives when the diffstat query fails and the figures default to zero.
 func TestPrintDiffDistinguishesUnknownFromZero(t *testing.T) {
 	cases := []struct {
 		name string
@@ -119,8 +117,7 @@ func TestPrintDiffDistinguishesUnknownFromZero(t *testing.T) {
 	}
 }
 
-// state has three possible values and only two are used in the listing, so the default is the
-// notable one.
+// state has three values and only two are listed, so the default is the notable one.
 func TestTheAuditorMarksOrphansAndLeavesTheRestOk(t *testing.T) {
 	dir := t.TempDir()
 	repo := filepath.Join(dir, "wt")
@@ -199,8 +196,7 @@ func TestRemovalRefusesWhatIsNotAnOwnedWorktree(t *testing.T) {
 	}
 }
 
-// The point is not that each delete has a deadline (the global one already did that) but that a slow
-// item cannot spend the following ones'.
+// A slow item must not spend the following ones' budget, not merely have a deadline.
 func TestTheBudgetIsPerItemAndNotGlobal(t *testing.T) {
 	pr := testProvisioner(t, t.TempDir())
 
@@ -218,8 +214,7 @@ func TestTheBudgetIsPerItemAndNotGlobal(t *testing.T) {
 
 // Wiring is where a new config field ends up half-wired.
 func TestTheExecutorBuildUsesTheConfig(t *testing.T) {
-	// Emptying `tools.agent` does NOT leave it empty: ToolArgs falls back to the tool's default name,
-	//"opencode".
+	// Emptying tools.agent does not leave it empty: ToolArgs falls back to the default name.
 	cfg := config.Defaults()
 	cfg.Tools.Tuicr = "/opt/tuicr --dark"
 	cfg.Tools.Hunk = "hunk"

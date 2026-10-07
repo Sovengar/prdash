@@ -47,7 +47,7 @@ func TestSplitProjectSeparatesTwoPartsAndNothingMore(t *testing.T) {
 	for _, project := range []string{"", "repo", "/", "///"} {
 		owner, name := splitProject(project)
 		if owner == "" || name == "" {
-			continue // that is expected: it is not a repo
+			continue
 		}
 		t.Errorf("splitProject(%q) gave owner %q and name %q, and a single segment is not a repo",
 			project, owner, name)
@@ -188,8 +188,7 @@ func TestStampPutsTheReviewKindOnlyInReview(t *testing.T) {
 			t.Errorf("section %v: ReviewKind %q present=%v, want %v",
 				section, items[0].ReviewKind, has, want)
 		}
-		// The section is stamped ALWAYS, because without it the item does not know which column it
-		// belongs to.
+		// The section is stamped ALWAYS: without it the item does not know which column it belongs to.
 		if items[0].Section != section {
 			t.Errorf("section %v: ended up stamped as %v", section, items[0].Section)
 		}

@@ -231,7 +231,6 @@ OUT
 	if page.Total != 23 {
 		t.Errorf("total = %d, want 23 (it is not trimmed)", page.Total)
 	}
-	// The connection returns all 7 in chronological order and the trim keeps the LAST 5.
 	want := []string{"c2", "c3", "c4", "c5", "c6"}
 	for i, w := range want {
 		if page.Comments[i].Body != w {
@@ -260,8 +259,7 @@ func TestCommentsFailureIsWarning(t *testing.T) {
 	}
 }
 
-// commentFetch is precomputed (a const decl carries no coverage, ADR 0011): this pins the
-// formula so a change of forge.CommentLimit cannot leave the margin silently behind.
+// commentFetch is precomputed (a const decl carries no coverage, ADR 0011): this pins the formula against a change of forge.CommentLimit.
 func TestCommentFetchKeepsTheMargin(t *testing.T) {
 	if commentFetch != 3*forge.CommentLimit {
 		t.Errorf("commentFetch = %d, want 3 * forge.CommentLimit = %d", commentFetch, 3*forge.CommentLimit)

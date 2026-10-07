@@ -1,5 +1,3 @@
-// Package gitlab implements the self-managed GitLab forge over the `glab` CLI, with paginated
-// GraphQL and the Todos API. glab resolves its own host, so the paths are relative.
 package gitlab
 
 import (
@@ -20,9 +18,6 @@ const ForgeName = "gitlab"
 
 const pageSize = 50
 
-// Same reason as GitHub: the margin keeps an MR full of system notes from coming up short.
-// 15 = 3 * forge.CommentLimit, written as a literal because a const decl carries no coverage
-// (ADR 0011); TestCommentFetchKeepsTheMargin pins the formula against a future change of the limit.
 const commentFetch = 15
 
 type Adapter struct {
@@ -75,7 +70,6 @@ func (a *Adapter) graphqlArgs(query string) []string {
 	return []string{"api", "--hostname", a.host, "graphql", "-f", "query=" + query}
 }
 
-// Without `-X GET`, passing fields turns the request into a POST.
 func (a *Adapter) getArgs(endpoint string, fields ...string) []string {
 	args := []string{"api", "--hostname", a.host, "-X", "GET", endpoint}
 	for _, f := range fields {
@@ -146,8 +140,6 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 	return a.action(ctx, a.mrArgs("approve", number, ref.Project)...)
 }
 
-// `--auto-merge=false` is not optional: glab defaults it to true, so with a pipeline running the
-// command queued the MR and exited 0. `--sha` is the same trap the other way: an empty headSHA refuses.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	extra := []string{"--yes", "--auto-merge=false"}
 	if flag, ok := glabMergeFlag(req.Mode); ok {
@@ -159,8 +151,6 @@ func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req 
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingHeadSHA)}
 	}
 	extra = append(extra, "--sha", req.HeadSHA)
-	// The flag is `-d`/`--remove-source-branch`, not gh's `--delete-branch`, and it forces the
-	// behaviour on projects that leave "delete source branch" to their own default.
 	if req.DeleteBranch {
 		extra = append(extra, "--remove-source-branch")
 	}
@@ -180,8 +170,6 @@ func glabMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
-// A PUT, not `glab mr update --target-branch`: an EDIT command that opens an editor, and in a
-// subprocess it fails rather than hangs. Explicit because `-f` makes glab POST, which updates nothing.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -326,9 +314,6 @@ func restEndpoint(resource string) string {
 	return strings.TrimLeft(resource, "/")
 }
 
-// `diffStats` is one entry PER CHANGED FILE and the schema exposes no `changedFiles`, so the count
-// is the list's length. The merge strategies are deliberately not asked: unknown does not restrict.
-// One literal line, not a `+` chain: a package-level const decl carries no coverage (ADR 0011).
 const mrFields = `iid title webUrl state draft sourceBranch targetBranch approved updatedAt diffHeadSha squash detailedMergeStatus diffStats { additions deletions } author { username } project { fullPath name group { fullPath } }`
 
 const glConn = `pageInfo { hasNextPage endCursor } nodes { %s }`
@@ -354,8 +339,6 @@ func glAssignedQuery(cursor string) string {
 	)
 }
 
-// The iid goes as a string literal because the schema declares it `String!`: GraphQL does not
-// coerce an Int literal into a String. `last` rather than `first`, as on GitHub.
 func glNotesQuery(fullPath string, iid, last int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { `+
@@ -364,8 +347,6 @@ func glNotesQuery(fullPath string, iid, last int) string {
 	)
 }
 
-// An Int literal for a `String!` field is rejected with argumentLiteralsIncompatible and takes
-// the whole query down; flexInt only handles the iid arriving as a string in the RESPONSE.
 func glMRQuery(fullPath string, iid int) string {
 	return fmt.Sprintf(
 		`query { project(fullPath: "%s") { mergeRequest(iid: "%d") { %s } } }`,

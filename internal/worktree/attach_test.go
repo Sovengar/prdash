@@ -21,7 +21,7 @@ func TestAttachAdoptsTheWorkspaceThatIsAlreadyOpen(t *testing.T) {
 	runner := &fakeRunner{
 		available: true,
 		listResult: []herdr.WorktreeInfo{
-			{Path: "/wt/other", OpenWorkspaceID: "ws-other"}, // another checkout: ignored
+			{Path: "/wt/other", OpenWorkspaceID: "ws-other"},
 			{Path: spec.Path, OpenWorkspaceID: "ws-7"},
 		},
 		panes: map[string][]herdr.PaneInfo{
@@ -46,7 +46,6 @@ func TestAttachAdoptsTheWorkspaceThatIsAlreadyOpen(t *testing.T) {
 	}
 }
 
-// Checked by path.
 func TestAttachDoesNotAdoptTheWorkspaceOfAnotherCheckout(t *testing.T) {
 	spec := Spec{Repo: "/repos/acme", Branch: "feat/x", Path: "/wt/x", Label: "prdash/x"}
 	runner := &fakeRunner{
@@ -71,8 +70,7 @@ func TestAttachDoesNotAdoptTheWorkspaceOfAnotherCheckout(t *testing.T) {
 	}
 }
 
-// The case that justifies the whole check: the open_workspace_id is there, looks fine, and points
-// at nothing.
+// open_workspace_id can be present, look fine, and point at nothing.
 func TestAttachAClosedIDIsNotAdopted(t *testing.T) {
 	for _, c := range []struct {
 		name  string
@@ -149,7 +147,7 @@ func TestAttachWithAnEmptyWorkspaceIDDoesNotAdopt(t *testing.T) {
 	runner := &fakeRunner{
 		available: true,
 		listResult: []herdr.WorktreeInfo{
-			{Path: spec.Path, OpenWorkspaceID: ""}, // no open workspace
+			{Path: spec.Path, OpenWorkspaceID: ""},
 		},
 		workspace: herdr.WorkspaceInfo{WorkspaceID: "ws-new", RootPaneID: "ws-new:p0"},
 	}
@@ -199,8 +197,7 @@ func TestAttachOnlyOpensAWorkspaceWhenEverythingFails(t *testing.T) {
 	}
 }
 
-// The `break`: as soon as the checkout appears with an id that does not hold, the rest of the
-// list is not read.
+// The break: once the checkout appears with an id that does not hold, the rest is not read.
 func TestAttachABadIDStopsTheSearch(t *testing.T) {
 	spec := Spec{Repo: "/repos/acme", Branch: "feat/x", Path: "/wt/x"}
 	runner := &fakeRunner{
@@ -269,8 +266,7 @@ func TestReuseTheCallersLabelOverwritesTheCheckouts(t *testing.T) {
 	}
 }
 
-// Without a caller label the checkout's is kept, which is the DIRECTORY NAME, because that is what
-// Herdr reports.
+// Without a caller label the checkout's is kept, which is the directory name Herdr reports.
 func TestReuseWithoutACallerLabelKeepsTheCheckouts(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")

@@ -136,8 +136,7 @@ func TestMergeSecondKeyOnlyPicksItsOwnMode(t *testing.T) {
 	}
 }
 
-// It ALSO eats the key. It used to delegate to handleKey, which turned a mis-armed merge into an
-// approve: `m` then `a` approved the PR.
+// It also eats the key: delegating to handleKey once turned a mis-armed merge into an approve.
 func TestMergeArmedConsumesOtherKey(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	start := f.m.cursor
@@ -196,7 +195,7 @@ func TestMergeQuittingStillQuits(t *testing.T) {
 }
 
 func TestMergeArmedGuardsBeforeArming(t *testing.T) {
-	m := newTestModel(t, ghAdapter()) // no selection
+	m := newTestModel(t, ghAdapter())
 
 	m = press(t, m, "m")
 	if m.mergeArmed {
@@ -347,7 +346,7 @@ func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
 }
 
 func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
-	remove := &fakeRemover{} // (false, "", nil): no exists review montado
+	remove := &fakeRemover{}
 	m, cmd := applyMerge(t, remove)
 	if cmd == nil {
 		t.Fatal("with an injected remover a successful merge should return a command")
@@ -364,7 +363,7 @@ func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
 }
 
 func TestMergeCleanupNoopDoesNotDuplicateToast(t *testing.T) {
-	remove := &fakeRemover{} // (false, "", nil)
+	remove := &fakeRemover{}
 	m, cmd := applyMerge(t, remove)
 	before := len(toastTexts(m))
 	m, _ = runCleanup(t, m, cmd)

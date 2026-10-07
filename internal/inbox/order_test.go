@@ -7,10 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The two survivors are the order and the authority, and both are comparisons whose boundary
-//is a tie.
-
-// The order has three tie-breaks and the last one is the number.
 func TestTheOrderIsAttentionDateAndNumber(t *testing.T) {
 	date := time.Date(2026, 3, 17, 10, 0, 0, 0, time.UTC)
 
@@ -39,7 +35,6 @@ func TestTheOrderIsAttentionDateAndNumber(t *testing.T) {
 		return true
 	}
 
-	// The THIRD tie-break, the one you can see without thinking.
 	items := []model.Item{
 		item(4, "approved", date), item(2, "approved", date),
 		item(3, "approved", date), item(1, "approved", date),
@@ -79,7 +74,6 @@ func TestTheOrderIsAttentionDateAndNumber(t *testing.T) {
 		t.Errorf("with the number backwards and the date backwards it gave %v, want [1 9]", got)
 	}
 
-	// The FIRST tie-break, the one that kills a `>=`: attention beats everything else.
 	items = []model.Item{
 		item(1, "approved", date),
 		item(2, "approved", date.Add(time.Hour)),
@@ -98,11 +92,11 @@ func TestTheOrderIsAttentionDateAndNumber(t *testing.T) {
 	brokenChecks.Checks.State = model.ChecksFailing
 
 	items = []model.Item{
-		item(5, "", date),                  // pending
-		item(4, "approved", date),          // approved
-		item(3, "review_required", date),   // review pending
-		item(2, "changes_requested", date), // changes requested
-		brokenChecks,                       // broken checks
+		item(5, "", date),
+		item(4, "approved", date),
+		item(3, "review_required", date),
+		item(2, "changes_requested", date),
+		brokenChecks,
 	}
 	sortItems(items)
 	if got := numbers(items); !equal(got, []int{1, 2, 3, 4, 5}) {
@@ -110,7 +104,6 @@ func TestTheOrderIsAttentionDateAndNumber(t *testing.T) {
 	}
 }
 
-// An item in several sections stays in the most authoritative one.
 func TestTheSectionWithTheMostAuthorityKeepsTheItem(t *testing.T) {
 	mk := func(n int) model.Item {
 		it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com",
@@ -119,8 +112,7 @@ func TestTheSectionWithTheMostAuthorityKeepsTheItem(t *testing.T) {
 		return it
 	}
 
-	// All THREE declared sections: it stays in the first. Repeated twenty times because Go's map
-	//order is not guaranteed.
+	// Repeated twenty times because Go's map order is not guaranteed.
 	for i := range 20 {
 		best := assignAuthority(map[model.Section][]model.Item{
 			model.SectionMentions: {mk(1)},
@@ -143,7 +135,6 @@ func TestTheSectionWithTheMostAuthorityKeepsTheItem(t *testing.T) {
 		}
 	}
 
-	// A section prdash does NOT declare is not consulted at all: the item does not enter.
 	undeclared := model.Section("undeclared")
 	best := assignAuthority(map[model.Section][]model.Item{undeclared: {mk(3)}})
 	if got, ok := best[mk(3).ID()]; ok {
@@ -152,7 +143,6 @@ func TestTheSectionWithTheMostAuthorityKeepsTheItem(t *testing.T) {
 			"on what each adapter brings", got)
 	}
 
-	// The same item in a declared and an undeclared one: the declared wins.
 	best = assignAuthority(map[model.Section][]model.Item{
 		undeclared:            {mk(4)},
 		model.SectionMentions: {mk(4)},

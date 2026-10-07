@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// The missing guards are the MIDDLE of Simulate's chain.
-
 func gitSimFailing(t *testing.T, message string) string {
 	t.Helper()
 	return writeScript(t, t.TempDir(), "git-sim",
@@ -34,14 +32,12 @@ func TestWhenGitSimFailsTheErrorComesFromItNotFromStageNorCache(t *testing.T) {
 	if res.Path != "" {
 		t.Errorf("it returned an image %q despite the render's failure", res.Path)
 	}
-	// And the error does NOT mention the cache: that guard comes later, and a cache message in a
-	// clone failure sends you the wrong way.
+	// A cache message in a clone failure sends you the wrong way: that guard comes later.
 	if strings.Contains(err.Error(), "cache") {
 		t.Errorf("the error %q talks about the cache, which is a later stage", err)
 	}
 }
 
-// git-sim exits 0 and writes nothing.
 func TestIfRenderLeavesNoImageTheErrorSaysSoAndTheEmptyPathIsNotPropagated(t *testing.T) {
 	repo, _, it := fixture(t)
 	it.SourceBranch = "prdash/pr-7"
@@ -67,7 +63,6 @@ func TestIfRenderLeavesNoImageTheErrorSaysSoAndTheEmptyPathIsNotPropagated(t *te
 	}
 }
 
-// No debt left.
 func TestSimulationTempIsDeletedEvenIfTheRenderFails(t *testing.T) {
 	repo, _, it := fixture(t)
 	it.SourceBranch = "prdash/pr-7"
@@ -95,7 +90,6 @@ func TestSimulationTempIsDeletedEvenIfTheRenderFails(t *testing.T) {
 	}
 }
 
-// The ORDER is what matters.
 func TestUncreatableCacheFailsAfterRenderingAndSaysSo(t *testing.T) {
 	repo, _, it := fixture(t)
 	it.SourceBranch = "prdash/pr-7"
@@ -124,10 +118,8 @@ func TestUncreatableCacheFailsAfterRenderingAndSaysSo(t *testing.T) {
 	}
 }
 
-// The checkout error of each one.
 func TestReviewBranchIsActivatedForRebaseAndBaseForMerge(t *testing.T) {
 	repo, _ := simRepoMount(t)
-	// A base that is a branch name not in the clone.
 	source, tmp := simRepoMount(t)
 	_ = repo
 	for _, c := range []struct {
@@ -176,8 +168,7 @@ func TestCopyFileLeavesNoTempIfTheDestinationIsAnExistingDirectory(t *testing.T)
 	if err != nil || !info.IsDir() {
 		t.Errorf("the destination stopped being a directory: %v", err)
 	}
-	// The real prune does not touch the `.part` even if one were left, which is what makes a
-	// leftover harmless.
+	// The real prune does not touch the `.part`: that is what makes a leftover harmless.
 	leftovers := filepath.Join(dir, "other.part")
 	if err := os.WriteFile(leftovers, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -188,15 +179,13 @@ func TestCopyFileLeavesNoTempIfTheDestinationIsAnExistingDirectory(t *testing.T)
 	}
 }
 
-// The case is a symlink.
 func TestPruneWalkToleratesAnEntryThatCannotBeStatted(t *testing.T) {
 	dir := t.TempDir()
 	dangling := filepath.Join(dir, "colgado.jpg")
 	if err := os.Symlink(filepath.Join(dir, "no-existe.jpg"), dangling); err != nil {
 		t.Fatal(err)
 	}
-	// A real image that must NOT be lost, written after the link: a prune that used the directory
-	// order would take it.
+	// A real image that must NOT be lost: a prune using directory order would take it.
 	good := filepath.Join(dir, "buena.jpg")
 	if err := os.WriteFile(good, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -204,8 +193,7 @@ func TestPruneWalkToleratesAnEntryThatCannotBeStatted(t *testing.T) {
 
 	prune(dir, 0)
 
-	// The broken link stays: it is not an image and os.Remove would take it anyway, but leaving it
-	// makes the state visible.
+	// The broken link stays: leaving it makes the state visible.
 	if _, err := os.Stat(good); err == nil {
 		t.Error("the good image is still there: prune's walk stopped at the broken link")
 	}

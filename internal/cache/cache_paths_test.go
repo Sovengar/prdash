@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Path and MemoPath were at 0%. They do nothing exotic: they join a cache subdirectory.
-
 func TestTheCachePathsHangFromXDGAndNotFromTheProgram(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", dir)
@@ -53,7 +51,6 @@ func TestTheCachePathsHangFromXDGAndNotFromTheProgram(t *testing.T) {
 	}
 }
 
-// Path composes a path that does not exist yet, so this closes the round trip.
 func TestSavingAndReadingBackDoNotClobberEachOther(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", dir)
@@ -96,7 +93,6 @@ func TestSavingAndReadingBackDoNotClobberEachOther(t *testing.T) {
 	}
 }
 
-// Without HOME or XDG there is no path, and it says so. That is a minimal container.
 func TestWithoutEnvironmentVariablesThePathsDegrade(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")

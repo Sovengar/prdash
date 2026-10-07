@@ -8,10 +8,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The parsing branches that only show up with data the forge NEVER sends, which is why they are the
-//ones most likely to rot.
-
-// The hierarchy of the parse.
 func TestACheckWithAnUnknownBucketFallsToTheRawStateAndDoesNotInventACount(t *testing.T) {
 	for _, c := range []struct {
 		name        string
@@ -94,10 +90,8 @@ func TestGHChecksWithEmptyOutputInventsNoChecksAndDoesNotFail(t *testing.T) {
 	}
 }
 
-// A different case from an empty page.
 func TestGLGraphQLErrorsFromTheServerAreNotConfusedWithAnEmptyPage(t *testing.T) {
-	// The server's message comes through verbatim, and it is the only thing that tells "my query
-	// already ran" from a real failure.
+	// The server's message comes through verbatim, the only thing that tells "my query already ran" from a real failure.
 	raw := `{"errors":[{"message":"Field 'mergeRequest' doesn't exist on type 'Project'",` +
 		`"type":"undefinedField","path":["project"]}]}`
 	items, page, err := ParseGLGraphQL(raw)
@@ -121,7 +115,6 @@ func TestGLGraphQLErrorsFromTheServerAreNotConfusedWithAnEmptyPage(t *testing.T)
 	}
 }
 
-// The response carries neither data nor errors.
 func TestGLGraphQLWithAMissingConnectionDoesNotFailAndDoesNotLoseTheRest(t *testing.T) {
 	const mr = `{"iid":12,"title":"MR","webUrl":"u","state":"opened",` +
 		`"sourceBranch":"feat/a","targetBranch":"main",` +
@@ -155,8 +148,7 @@ func TestGLGraphQLWithAMissingConnectionDoesNotFailAndDoesNotLoseTheRest(t *test
 		t.Errorf("with no `data` it gave %d items and %v", len(items), err)
 	}
 
-	// Pagination is taken from the FIRST connection there is, which stops a second one from
-	// overwriting it.
+	// Pagination is taken from the FIRST connection there is, which stops a second one from overwriting it.
 	two := fmt.Sprintf(
 		`{"data":{"currentUser":{"authoredMergeRequests":null,`+
 			`"reviewRequestedMergeRequests":%s,`+
@@ -173,8 +165,7 @@ func TestGLGraphQLWithAMissingConnectionDoesNotFailAndDoesNotLoseTheRest(t *test
 	}
 }
 
-// The Todos API brings EVERY event a user has, so the action filter is what makes it a
-// mentions list.
+// The Todos API brings EVERY event a user has, so the action filter is what makes it a mentions list.
 func TestGLTodosIgnoresWhatIsNotAMention(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -208,8 +199,7 @@ func TestGLTodosIgnoresWhatIsNotAMention(t *testing.T) {
 		if len(items) != c.want {
 			t.Errorf("%s: %d items, want %d", c.name, len(items), c.want)
 		}
-		// The total the forge reports is the RESPONSE's, not the filtered mentions': a count that
-		// contradicts the column is not a bug.
+		// The total the forge reports is the RESPONSE's, not the filtered mentions': a count that contradicts the column is not a bug.
 		if total != 1 {
 			t.Errorf("%s: total = %d, want 1 (the response's events)", c.name, total)
 		}
@@ -221,7 +211,6 @@ func TestGLTodosIgnoresWhatIsNotAMention(t *testing.T) {
 	}
 }
 
-// A real case, not invented data.
 func TestAGitLabNodeWithoutIidIsDiscardedAndTheRestSurvive(t *testing.T) {
 	noIID := `{"title":"deleted MR","webUrl":"u","state":"opened",` +
 		`"sourceBranch":"feat/a","targetBranch":"main","author":{"username":"someone"}}`

@@ -15,7 +15,6 @@ func widthOf(t *testing.T, s string) int {
 
 func lines(s string) []string { return strings.Split(s, "\n") }
 
-// Every row of the result measures EXACTLY the requested width.
 func TestTheOuterWidthIsTheOneRequested(t *testing.T) {
 	contents := []string{
 		"",
@@ -128,7 +127,6 @@ func TestTheTitleAlignmentRespectsTheWidth(t *testing.T) {
 						width, title, alignCase.name, w, width)
 					continue
 				}
-				// The title's position is measured by counting the padding columns BEFORE it.
 				interiorLine := stripBorder(row)
 				pos := strings.Index(interiorLine, title)
 				if pos < 0 {
@@ -194,7 +192,6 @@ func TestTheContentIsClippedAndPaddedToTheInterior(t *testing.T) {
 	}
 }
 
-// Empty content does not disappear, it gives a row with the borders.
 func TestEmptyContentGivesARowWithAnEmptyInterior(t *testing.T) {
 	for _, content := range []string{"", "\n", "\n\n"} {
 		expected := strings.Count(content, "\n") + 1
@@ -219,7 +216,6 @@ func TestEmptyContentGivesARowWithAnEmptyInterior(t *testing.T) {
 	}
 }
 
-// A border with an empty fill paints spaces.
 func TestABorderWithoutFillCharactersUsesSpaces(t *testing.T) {
 	b := lipgloss.Border{
 		TopLeft: "+", Top: "", TopRight: "+",
@@ -234,15 +230,14 @@ func TestABorderWithoutFillCharactersUsesSpaces(t *testing.T) {
 	}
 }
 
-// strings.Repeat with a NEGATIVE count is a PANIC, and the clip above guarantees the difference
-// is never negative, which is what replaced the guard.
+// strings.Repeat with a negative count panics; the clip guarantees the difference is never negative.
 func TestThePaddingCannotAskForTooFewSpaces(t *testing.T) {
 	contents := []string{
 		"",
-		"\x1b[31m\x1b[0m",           // escapes with no visible text
-		"\x1b[31m\x1b[0m\x1b[32m",   // chained escapes
-		"\x1b[31mtext\x1b[0m",       // normal escapes
-		"\x1b[31m\x1b[0m\n\x1b[32m", // two rows, the second with escapes only
+		"\x1b[31m\x1b[0m",
+		"\x1b[31m\x1b[0m\x1b[32m",
+		"\x1b[31mtext\x1b[0m",
+		"\x1b[31m\x1b[0m\n\x1b[32m",
 		"\x1b[31m" + strings.Repeat("x", 100) + "\x1b[0m",
 		"\x1b[1m\x1b[4m\x1b[31mábc\x1b[0m",
 		"áéíóú" + "\x1b[0m",

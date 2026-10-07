@@ -7,7 +7,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The leaf of a project path is what comes AFTER the last separator.
 func TestRefLeafCutsAtTheLastSeparator(t *testing.T) {
 	cases := []struct {
 		project string
@@ -54,7 +53,6 @@ func TestRefLeafCutsAtTheLastSeparator(t *testing.T) {
 	}
 }
 
-// The prefix has to be a strict directory for ALL of them.
 func TestSectionPrefixWithProjectsOfDifferentDepth(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -67,8 +65,7 @@ func TestSectionPrefixWithProjectsOfDifferentDepth(t *testing.T) {
 		{"one without slashes first", []string{"widget", "acme/a"}, ""},
 		{"both without slashes", []string{"a", "b"}, ""},
 		{"three profundidades", []string{"x/y/z", "x/y", "x/y"}, "x"},
-		// And the prefix has NO trailing slash: it is a prefix, not a path, and whoever joins it adds the
-		// separator.
+		// The prefix has NO trailing slash: whoever joins it adds the separator.
 		{"the prefix has no trailing slash", []string{"a/b/c", "a/b/d"}, "a/b"},
 		{"a single common segment", []string{"a/b", "a/c"}, "a"},
 		{"nothing in common", []string{"a/b", "c/d"}, ""},
@@ -86,8 +83,7 @@ func TestSectionPrefixWithProjectsOfDifferentDepth(t *testing.T) {
 		})
 	}
 
-	// And with a single item there is no prefix: nobody to share it with, and putting the name there
-	// would duplicate the row.
+	// With a single item there is no prefix: putting the name there would duplicate the row.
 	if got := sectionPrefix([]model.Item{{Ref: model.RepoRef{Project: "acme/widget"}}}); got != "" {
 		t.Errorf("sectionPrefix with one item gave %q, want empty", got)
 	}

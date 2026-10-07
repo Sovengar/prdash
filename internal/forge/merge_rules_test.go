@@ -26,8 +26,7 @@ func TestAllowedModesReadsTheRepository(t *testing.T) {
 	}
 }
 
-// GitLab does not publish the strategies over GraphQL; filtering with no data would be worse than
-// not filtering.
+// GitLab does not publish the strategies over GraphQL; filtering with no data would be worse than not filtering.
 func TestAllowedModesDoesNotRestrictWhatItDoesNotKnow(t *testing.T) {
 	got := AllowedModes(model.MergeRules{})
 	want := []MergeMode{Rebase, MergeCommit, Squash}

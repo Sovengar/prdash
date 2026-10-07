@@ -348,7 +348,7 @@ func TestStaleResultIsDiscarded(t *testing.T) {
 	m = press(t, m, "enter")
 	stale := m.simSeq
 
-	m = press(t, m, "esc") // the popup closes
+	m = press(t, m, "esc")
 	m = send(t, m, simMsg{seq: stale, kind: sim.KindMerge, res: f.res})
 
 	if m.sim.state != simClosed {
@@ -430,7 +430,7 @@ func TestSimulateNeedsATargetBranch(t *testing.T) {
 
 func TestAnArmedMergeSwallowsTheSimulateKey(t *testing.T) {
 	m := simModel(t, &fakeSimulator{available: true})
-	m = press(t, m, "m") // arms the merge
+	m = press(t, m, "m")
 	if !m.mergeArmed {
 		t.Fatal("the merge did not arm")
 	}

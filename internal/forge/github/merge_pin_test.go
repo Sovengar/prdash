@@ -9,8 +9,7 @@ import (
 	"prdash/internal/forge"
 )
 
-// Without `--match-head-commit`, gh merges whatever HEAD is at that moment, and between the inbox
-// refresh and the keypress the branch can have advanced.
+// Without `--match-head-commit`, gh merges whatever HEAD is at that moment, which can have advanced since the inbox refresh.
 func TestMergePinsTheHeadCommit(t *testing.T) {
 	for _, mode := range []forge.MergeMode{forge.MergeCommit, forge.Rebase, forge.Squash} {
 		dir := t.TempDir()

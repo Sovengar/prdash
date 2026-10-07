@@ -79,7 +79,6 @@ func TestMergeOnConflictingBranchesStillArmsButSays(t *testing.T) {
 	}
 }
 
-// When the forge does not say (GitHub UNKNOWN) the result stays quiet.
 func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -105,7 +104,6 @@ func TestMergeWithoutMergeabilityDataStaysQuiet(t *testing.T) {
 	}
 }
 
-// The refusal's warning has to say what to do.
 func TestMergeRefusedForConflictingBranchesSaysRebase(t *testing.T) {
 	it := mergeItems()[1]
 	f := newMergeFixture(t, it)

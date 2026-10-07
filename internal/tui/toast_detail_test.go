@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// Three guards, three places, same shape: an exact edge that can break.
-
-// Clipping from the top with ZERO rows leaves the detail whole.
 func TestClipTopWithZeroRowsLeavesTheWholeDetail(t *testing.T) {
 	three := []string{"state: open", "review: aprobado", "rol: autor"}
 
@@ -33,7 +30,6 @@ func TestClipTopWithZeroRowsLeavesTheWholeDetail(t *testing.T) {
 	}
 }
 
-// The warning anchors to the LAST row of the view.
 func TestTheNoticeSticksToTheBottomOnTheLastRow(t *testing.T) {
 	const rowCount, width = 12, 40
 

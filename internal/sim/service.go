@@ -15,14 +15,11 @@ import (
 	"prdash/internal/gitcmd"
 )
 
-// It does not include the review worktree because the simulation never touches it — it works in a
-// temporary clone — and so it should not look like it can.
 type Place struct {
 	Repo   string
 	Branch string
 }
 
-// A port rather than a direct dependency because the review orchestrator is what knows about repos.
 type Locator interface {
 	Locate(it model.Item) (Place, bool)
 }
@@ -40,12 +37,8 @@ type Service struct {
 	Locator  Locator
 	Runner   *Runner
 	CacheDir string
-	// The third injected field: the three exist because environment failures cannot be staged in a
-	// test. This one only fails when the filesystem says so (ENOSPC, EDQUOT, EIO) — real, not stageable.
-	Mkdir func(path string, perm fs.FileMode) error
-	// git-sim behaving is not the interesting half; git failing is, and without this field there was
-	// no way to provoke it. Runner.Bin stands up a fake git that passes everything but one subcommand.
-	Git *gitcmd.Runner
+	Mkdir    func(path string, perm fs.FileMode) error
+	Git      *gitcmd.Runner
 }
 
 func New(locator Locator) *Service {
@@ -66,7 +59,6 @@ func (s *Service) gitRunner() *gitcmd.Runner {
 	return s.Git
 }
 
-// $XDG_CACHE_HOME/prdash/sim.
 func DefaultCacheDir() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
@@ -96,8 +88,6 @@ func (s *Service) cacheDir() (string, error) {
 	return dir, nil
 }
 
-// Everything happens in a temporary clone: git-sim needs a HEAD on a real branch and the
-// review's worktree is the review's cwd. Cloned with --shared and deleted, so a crash leaves nothing.
 func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Result, error) {
 	if s.Locator == nil {
 		return Result{}, errors.New("no local repository is known for this item")
@@ -138,8 +128,6 @@ func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Resul
 	return Result{Kind: kind, Path: path, Ref: spec.Ref, Base: base}, nil
 }
 
-// `--shared`, and both branches materialised as local: `git clone` only brings HEAD's branch and
-// leaves the rest as origin/ refs, which git-sim accepts but does not draw.
 func (s *Service) stage(ctx context.Context, place Place, kind Kind, base, tmp string) (string, Spec, error) {
 	if place.Branch == "" {
 		return "", Spec{}, errors.New("the review branch is unknown; mount the review first")
@@ -167,11 +155,7 @@ func (s *Service) stage(ctx context.Context, place Place, kind Kind, base, tmp s
 	return path, Spec{Kind: kind, Ref: ref}, nil
 }
 
-// The local branch wins over the remote ref, because a work clone can have a base behind the remote's
-// and comparing against the wrong one gives a graph that is nobody's.
 func (s *Service) materialize(ctx context.Context, dir, name string) error {
-	// An already-local branch is left alone. That is the normal case, and it is also correct: the local
-	// base is the one the review was compared against.
 	if _, err := s.gitRunner().Run(ctx, dir, "rev-parse", "--verify", "--quiet", name+"^{commit}"); err == nil {
 		return nil
 	}
@@ -201,8 +185,6 @@ func (s *Service) keep(image string, it model.Item, kind Kind) (string, error) {
 	return dst, nil
 }
 
-// An interface because Close is the only copy error that is not a disk error and cannot be
-// provoked: everything written goes through the page cache, so io.Copy finishes even if the disk fills.
 type writer interface {
 	io.Writer
 	io.Closer
@@ -219,8 +201,6 @@ func copyFile(src, dst string) error {
 
 func createTemp(ruta string) (writer, error) { return os.Create(ruta) }
 
-// Only the creator is injected: the rename and the delete stay on os and are testable for real,
-// since a `dst` that is already a non-empty directory fails the rename.
 func copyPublishing(in io.Reader, dst string, crea func(string) (writer, error)) error {
 	tmp := dst + ".part"
 	out, err := crea(tmp)
@@ -236,8 +216,6 @@ func copyPublishing(in io.Reader, dst string, crea func(string) (writer, error))
 		_ = os.Remove(tmp)
 		return err
 	}
-	// The rename cleans up too, and the asymmetry shows: the temporary is a `.part` in the cache directory
-	// and `prune` only looks at `.jpg`, so a `.part` left behind is deleted by nobody.
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
 		return err
@@ -245,8 +223,6 @@ func copyPublishing(in io.Reader, dst string, crea func(string) (writer, error))
 	return nil
 }
 
-// The listing is injected because DirEntry.Info only fails if the file vanishes between ReadDir
-// and the lstat, and races cannot be forced. What matters is that the prune CARRIES ON past a dead entry.
 func prune(dir string, keep int) {
 	pruneWith(dir, keep, os.ReadDir)
 }
@@ -272,8 +248,6 @@ func pruneWith(dir string, keep int, listing func(string) ([]os.DirEntry, error)
 		}
 		files = append(files, aged{path: filepath.Join(dir, e.Name()), mod: info.ModTime()})
 	}
-	// No early return: the cut is total, min(keep, len(files)) leaves an empty tail when there is
-	// nothing to prune, and the order of the local slice is never observable.
 	for i := 1; i < len(files); i++ {
 		for j := i; j > 0 && files[j].mod.After(files[j-1].mod); j-- {
 			files[j], files[j-1] = files[j-1], files[j]

@@ -193,8 +193,7 @@ func TestScrollForSettlesTheWindowOnTheCursor(t *testing.T) {
 		{"a window bigger than the content goes above", 0, 0, 4, 10, 0},
 		{"the scroll never stays negative", -5, 0, 60, 10, 0},
 		{"the scroll never goes past the end", 99, 59, 60, 10, 50},
-		// A zero-height window is degenerate but defined, and it is what tells the
-		// `target <= current` boundary mutant from the real condition.
+		// A zero-height window is degenerate but defined, and tells the `target <= current` boundary mutant.
 		{"view zero: the arithmetic stays defined", 5, 5, 10, 0, 6},
 	}
 	for _, c := range cases {
@@ -266,8 +265,7 @@ func TestVisibleListBoundsTheWindowToTheContent(t *testing.T) {
 	}
 }
 
-// Rows are numbered with `row` so the cursor and the scroll find them, and the scroll depends on it
-// matching the real position.
+// Rows are numbered with `row` so the cursor and scroll find them; the scroll depends on it matching.
 func TestListLinesComposeTheBodyInOrder(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{
@@ -344,8 +342,7 @@ func TestListLinesEmptyPaintsTheEmptyState(t *testing.T) {
 	}
 }
 
-// Not a test of syncScroll's `view <= 0` guard: that case cannot be reached, and the reason is here
-// so nobody re-adds it.
+// Not a test of syncScroll's `view <= 0` guard: it cannot be reached, noted so nobody re-adds it.
 func TestSyncScrollDoesNotBreakInTinyTerminals(t *testing.T) {
 	m := longModel(t, 60)
 	m = press(t, m, "end")
@@ -381,8 +378,7 @@ func TestSyncScrollDoesNotBreakInTinyTerminals(t *testing.T) {
 	}
 }
 
-// pad on a string that ALREADY fits must add nothing: adding would push the cell past its column and
-// the table would dance as text is written.
+// pad on a string that already fits must add nothing: it would push the cell past its column.
 func TestPadAndTruncateMeasureInRunesAndInWidths(t *testing.T) {
 	if got := pad("ab", 4); got != "ab  " {
 		t.Errorf("pad(ab,4) = %q, want \"ab  \"", got)
@@ -426,8 +422,7 @@ func TestPadAndTruncateMeasureInRunesAndInWidths(t *testing.T) {
 	}
 }
 
-// Shared with the graphics layer on purpose (see overlay.go): if the frame and the image computed
-// their own position they would land in different rectangles, and only when they happened to agree.
+// Shared with the graphics layer on purpose: separate positions would land in different rectangles.
 func TestCenteredOriginPlacesTheBox(t *testing.T) {
 	cases := []struct {
 		name                      string
@@ -457,8 +452,7 @@ func TestCenteredOriginPlacesTheBox(t *testing.T) {
 }
 
 func TestOverlayCenteredClipsTheBoxThatDoesNotFit(t *testing.T) {
-	// A background WIDER than the scroll, because the overlay clips the line where the box needs room
-	// rather than deleting the line: with a shorter background the box text would stick to the end of the line.
+	// A background wider than the scroll: the overlay clips where the box needs room rather than deleting the line.
 	background := "aaaa\naaaa\naaaa\naaaa"
 	got := overlayCentered(background, "1\n2\n3\n4\n5\n6", 10)
 	lines := strings.Split(got, "\n")
@@ -506,8 +500,7 @@ func TestTheRowPaintsOnlyTheCellsThatFit(t *testing.T) {
 	}
 }
 
-// The `inner-2` listLines passes to the header is the list's quietest decision: it does not show in
-// the width (the header is always shorter than the rows) but in WHICH columns appear.
+// The `inner-2` listLines passes to the header shows in which columns appear, not in the width.
 func TestTheHeaderShowsOnlyTheColumnsThatFit(t *testing.T) {
 	m := longModel(t, 6)
 	for width := 20; width <= 140; width += 2 {
@@ -590,8 +583,7 @@ func TestTheCursorMarkerGoesInItsOwnRow(t *testing.T) {
 	}
 }
 
-// Both items sit in the active section with the same UpdatedAt, so the order between them is
-// deterministic by number.
+// Both items share UpdatedAt, so their order is deterministic by number.
 func TestDetailPaneShowsSelectedItem(t *testing.T) {
 	m := newTestModel(t, ghAdapter(), &testutil.FakeAdapter{ForgeName: "gitlab", HostName: "gitlab.example.com"})
 	first := mkItem("github", "github.com", "acme/widget", "GitHub PR", 1, "")

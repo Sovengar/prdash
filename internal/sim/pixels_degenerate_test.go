@@ -57,7 +57,6 @@ func TestRgbaReturnsNilForWhatCannotBeAveraged(t *testing.T) {
 	}
 }
 
-// An area of zero rows does not yield a column.
 func TestFitCellsWithZeroAreaInventsNoColumns(t *testing.T) {
 	img := solid(16, 9, black)
 
@@ -79,7 +78,6 @@ func TestFitCellsWithZeroAreaInventsNoColumns(t *testing.T) {
 	}
 }
 
-// An image without one of its dimensions cannot be related to anything.
 func TestFitCellsWithOneZeroDimensionGivesTheWholeArea(t *testing.T) {
 	cases := []struct {
 		name string
@@ -116,14 +114,12 @@ func TestFitCellsBothBranchesAgreeAtTheBoundary(t *testing.T) {
 				maxRows, maxCols, cols, rows, maxCols, maxRows)
 		}
 
-		// The pair the other branch would give, computed by hand, is the same: that is what kills the
-		// mutation.
+		// The other branch would give the same pair: that is what kills the mutation.
 		if other := max(int(float64(maxCols)/perRow), 1); other != rows {
 			t.Errorf("at the boundary the other branch would give %d rows and the chosen one %d: "+
 				"they do not match and the guard mutant would show", other, rows)
 		}
 
-		// One column less: the width takes over and the height drops by one.
 		if maxRows >= 2 {
 			if c1, r1 := FitCells(img, 1, 2, maxCols-1, maxRows); r1 != maxRows-1 {
 				t.Errorf("with %d rows and %d columns it gave %dx%d, want %d rows: "+

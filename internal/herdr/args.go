@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// Pure, because an argv is the contract with the CLI and an inline guard can only be checked by
-// running it. A flag with an empty value is NOT sent: `--cwd ""` tells Herdr "use the empty dir".
 type args []string
 
 func (a args) with(flag, value string) args {
@@ -47,7 +45,6 @@ func workspaceCreateArgs(spec WorkspaceSpec) args {
 		withIf(spec.NoFocus, "--no-focus")
 }
 
-// Opt-in for a version reason: some builds require it to close the worktree group and reject it otherwise.
 func workspaceCloseArgs(workspaceID string, group bool) args {
 	return args{"workspace", "close", workspaceID}.withIf(group, "--group")
 }
@@ -87,7 +84,6 @@ func paneListArgs(workspaceID string) args {
 	return args{"pane", "list"}.with("--workspace", workspaceID)
 }
 
-// The empty sound is Herdr's default, and sending an empty one is an error.
 func notifyArgs(title string, opts NotifyOptions) args {
 	return args{"notification", "show", title}.
 		with("--body", opts.Body).

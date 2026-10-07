@@ -9,8 +9,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// `gh pr edit --base` is the documented way and it fails today before touching anything, on a
-// deprecated Projects (classic) query that only errors in some repos.
+// `gh pr edit --base` fails today on a deprecated Projects (classic) query that only errors in some repos, so the API is used.
 func TestRetargetUsesTheAPINotPrEdit(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "gh")

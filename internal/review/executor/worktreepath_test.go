@@ -13,8 +13,7 @@ func reviewWith(worktree string) cache.ReviewRecord {
 }
 
 func TestTheActiveWorktreeWinsOverTheCanonicalPath(t *testing.T) {
-	// The resolver's memo has a default path that does NOT depend on WorktreeDir; without this Setenv
-	//the test reads the user's memo.
+	// The memo's default path does not depend on WorktreeDir; without this the test reads the user's memo.
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	wtDir := t.TempDir()
 	ref := model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget",
@@ -34,7 +33,6 @@ func TestTheActiveWorktreeWinsOverTheCanonicalPath(t *testing.T) {
 		t.Errorf("with no active review it gave %q, want the canonical path %q", got, canonical)
 	}
 
-	// An active review WITH a worktree wins, even when it is not the canonical path.
 	active := wtDir + "/moved-a-mano"
 	if err := resolver.RecordReview(it, reviewWith(active)); err != nil {
 		t.Fatalf("RecordReview: %v", err)
@@ -46,7 +44,6 @@ func TestTheActiveWorktreeWinsOverTheCanonicalPath(t *testing.T) {
 			got, active)
 	}
 
-	// An active review WITHOUT a worktree falls back to the canonical path, which is all there is.
 	if err := resolver.RecordReview(it, reviewWith("")); err != nil {
 		t.Fatalf("RecordReview without a worktree: %v", err)
 	}
@@ -56,8 +53,6 @@ func TestTheActiveWorktreeWinsOverTheCanonicalPath(t *testing.T) {
 			"this returned the empty string", got, canonical)
 	}
 
-	// An active review of ANOTHER item: this one falls back to its canonical path, because the record
-	// is per item.
 	other := model.NewItem(ref, 8)
 	other.Title = "other"
 	canonical8 := resolver.WorktreePath(ref, 8)

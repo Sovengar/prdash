@@ -62,7 +62,6 @@ func TestTheOpenerIsChosenPerPlatformAndNotTakenFromTheSystem(t *testing.T) {
 	}
 }
 
-// The two boundaries of the input.
 func TestAnEmptyURLDoesNotOpenAndOneWithSpacesIsNotSplit(t *testing.T) {
 	for _, so := range []string{"linux", "darwin", "windows"} {
 		bin, args := browserCommand(so, "")
@@ -93,7 +92,6 @@ func TestAnEmptyURLDoesNotOpenAndOneWithSpacesIsNotSplit(t *testing.T) {
 	}
 }
 
-// The three things the function does NOT do.
 func TestTheURLIsNeitherDecoratedNorClipped(t *testing.T) {
 	url := "https://github.com/acme/project/pull/1?tab=readme#diff-123"
 	_, args := browserCommand("linux", url)
@@ -123,7 +121,6 @@ func TestTheURLIsNeitherDecoratedNorClipped(t *testing.T) {
 	}
 }
 
-// This is the default.
 func TestAnEmptyURLSaysThereIsNothingAndRunsNothing(t *testing.T) {
 	m := newTestModel(t)
 	msg, ok := m.openBrowserCmd("")().(notifyMsg)
@@ -139,7 +136,6 @@ func TestAnEmptyURLSaysThereIsNothingAndRunsNothing(t *testing.T) {
 	if strings.HasPrefix(msg.text, "opening ") {
 		t.Errorf("the notice says %q, which is the happy-path text with a URL behind it", msg.text)
 	}
-	// With a URL this path is not taken: the text has to carry the URL.
 	opened := []string{}
 	m.openURL = func(url string) error {
 		opened = append(opened, url)
@@ -161,7 +157,6 @@ func TestAnEmptyURLSaysThereIsNothingAndRunsNothing(t *testing.T) {
 		t.Errorf("opening fine is info, neither an error nor a warning: %v", notice.level)
 	}
 
-	// And with an empty URL nothing is opened, which is the other side of the guard.
 	opened = nil
 	empty := m.openBrowserCmd("")()
 	if len(opened) != 0 {

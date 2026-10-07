@@ -65,8 +65,7 @@ enabled = false
 		t.Fatal(err)
 	}
 
-	// `--print` is the only path of `run` testable without a TUI; the other ends in
-	// tea.NewProgram(...).Run(), which needs a terminal.
+	// --print is the only path of run testable without a terminal.
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"--print"}, &stdout, &stderr)
 
@@ -80,14 +79,12 @@ enabled = false
 	if strings.Contains(stdout.String(), "no forges") {
 		t.Errorf("the warning went to stdout, which is what a script reads: %q", stdout.String())
 	}
-	// `--print` promises a table, so with no adapters it prints the headers: that is what tells
-	// "nothing to do" from "no forges".
+	// --print prints the headers even with no adapters, which tells "nothing to do" from "no forges".
 	if strings.TrimSpace(stdout.String()) == "" {
 		t.Error("stdout is empty: --print must print the table even with nothing to show")
 	}
 }
 
-// The same pattern as Herdr's layout and for the same reason.
 func TestAFailingRemovalDoesNotSinkTheRestOfTheBatch(t *testing.T) {
 	base, owned, _ := worktreeFixture(t)
 	other := filepath.Join(base, "prdash-pr-2")
@@ -107,8 +104,7 @@ func TestAFailingRemovalDoesNotSinkTheRestOfTheBatch(t *testing.T) {
 	if code != 1 {
 		t.Errorf("code = %d with a failed removal, want 1", code)
 	}
-	// stdout names ONLY what was deleted: a failure there would make a script count a worktree that
-	// is still on disk.
+	// stdout names only what was deleted, so a script does not count a worktree still on disk.
 	if !strings.Contains(stdout.String(), "worktree removed: "+owned) {
 		t.Errorf("stdout does not say that %s was removed:\n%s", owned, stdout.String())
 	}
@@ -135,8 +131,7 @@ func TestAFailingRemovalDoesNotSinkTheRestOfTheBatch(t *testing.T) {
 	}
 }
 
-// It copies a real worktree's .git to another path in the same repo, to get a second worktree
-// without paying for a git worktree add.
+// Copies a real worktree's .git to get a second worktree without a git worktree add.
 func writeAsWorktree(t *testing.T, source, target string) error {
 	t.Helper()
 	gitdir, err := os.ReadFile(filepath.Join(source, ".git"))
@@ -149,7 +144,6 @@ func writeAsWorktree(t *testing.T, source, target string) error {
 	return os.WriteFile(filepath.Join(target, ".git"), gitdir, 0o644)
 }
 
-// A branch worth having for what it does NOT do.
 func TestTheWorktreesSubcommandBuildsNeitherAdaptersNorExecutor(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
@@ -174,8 +168,7 @@ func TestTheWorktreesSubcommandBuildsNeitherAdaptersNorExecutor(t *testing.T) {
 		t.Errorf("exit code is %d, want 0: no worktrees is not a failure.\n%s",
 			code, stderr.String())
 	}
-	// It says so instead of exiting with an empty map: the subcommand is a script and its output is
-	// read.
+	// It says so instead of exiting with an empty map: the subcommand's output is read by scripts.
 	if !strings.Contains(stdout.String()+stderr.String(), "worktree") {
 		t.Errorf("the output does not mention worktrees:\nstdout: %s\nstderr: %s",
 			stdout.String(), stderr.String())

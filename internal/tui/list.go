@@ -1,5 +1,3 @@
-// The active section is composed ENTIRELY as loose lines and then clipped to the window.
-// Scrolling the rows alone would leave the header orphaned from its items.
 package tui
 
 import (
@@ -16,12 +14,8 @@ func (m *Model) listLines(inner int) []listLine {
 	problems := m.sectionProblems(m.activeSection)
 	var lines []listLine
 
-	// One layout for the active section only: sizing every section would waste width on suffixes
-	// that are not on screen, and measuring per line would make the table dance as text is written.
 	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: items}}, m.prefixMode)
 
-	// The common path gets its own line instead of repeating per row: that is what leaves room for
-	// the ITEM suffix. Without a common path the line is not painted and ITEM carries the full path.
 	if prefix := lay.prefixOf(m.activeSection); prefix != "" {
 		lines = append(lines, listLine{text: "  " + styleDim.Render("· "+prefix+"/"), row: -1})
 	}

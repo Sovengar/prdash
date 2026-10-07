@@ -9,7 +9,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// What the formula says and nothing more.
 func TestCenteredOriginPutsTheBoxInTheMiddle(t *testing.T) {
 	cases := []struct {
 		areaW, areaH int
@@ -39,7 +38,6 @@ func TestCenteredOriginPutsTheBoxInTheMiddle(t *testing.T) {
 				"of the background cuts on the left with a negative width",
 				c.areaW, c.areaH, c.boxW, c.boxH, x, y)
 		}
-		// And the box either fits or leaves by the bottom and the right, never by the top or the left.
 		if y+c.boxH > c.areaH+1 && c.boxH <= c.areaH {
 			t.Errorf("area %dx%d, box %dx%d: the box escapes at the bottom (%d > %d) without "+
 				"being taller than the area", c.areaW, c.areaH, c.boxW, c.boxH,
@@ -76,7 +74,6 @@ func TestTheOverlayDoesNotEscapeThroughTheTopNorTheLeft(t *testing.T) {
 				"the view, only clip it where needed", i, w)
 		}
 	}
-	// The top frame is WHOLE, with both corners, on the row the arithmetic says.
 	wantRow := (20 - 5) / 2
 	above := rows[wantRow]
 	if ansi.StringWidth(above) != 60 {
@@ -123,7 +120,6 @@ func TestTheOverlayDoesNotEscapeThroughTheTopNorTheLeft(t *testing.T) {
 	}
 }
 
-// The invalidation counter is monotonic.
 func TestTheBranchSequenceIncrementsOnEveryRequestAndEveryClose(t *testing.T) {
 	// The adapter is needed because fetchBranches starts a goroutine.
 	adapt := &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"}
@@ -147,8 +143,7 @@ func TestTheBranchSequenceIncrementsOnEveryRequestAndEveryClose(t *testing.T) {
 		prev = m.branchSeq
 	}
 
-	// And closing raises the counter too, so an in-flight listing is not accepted after the popup
-	// closed.
+	// Closing raises the counter too, so an in-flight listing is not accepted after the popup closed.
 	m.retarget.all = []string{"main", "feat/x"}
 	m.closeRetarget()
 	if m.branchSeq != prev+1 {
@@ -157,8 +152,7 @@ func TestTheBranchSequenceIncrementsOnEveryRequestAndEveryClose(t *testing.T) {
 	}
 }
 
-// The `y+boxH > height` condition centeredOrigin used to have is unreachable: with the box
-// inside the area, adding boxH gives (height+boxH)/2, at most the area exactly when boxH <= height.
+// The `y+boxH > height` guard centeredOrigin used to have is unreachable: (height+boxH)/2 <= height when boxH <= height.
 func TestTheEscapeThroughTheBottomGuardCannotFire(t *testing.T) {
 	for altura := range -20 {
 		for altoCaja := range -20 {

@@ -77,13 +77,11 @@ func TestKindHTTPFirst(t *testing.T) {
 
 func TestKindUnmergeableIsNotConflict(t *testing.T) {
 	unmergeable := map[string]string{
-		// GitHub
 		"× Pull request acme/widget#6 is not mergeable: the merge commit cannot be cleanly created.": "unmergeable",
 		"HTTP 409: Head branch was modified. Review and try the merge again.":                        "unmergeable",
-		// GitLab
-		"405 Method Not Allowed: The merge request cannot merge.":    "unmergeable",
-		"You need to rebase the branch before you can merge.":        "unmergeable",
-		"Branch is not up to date. Please update it before merging.": "unmergeable",
+		"405 Method Not Allowed: The merge request cannot merge.":                                    "unmergeable",
+		"You need to rebase the branch before you can merge.":                                        "unmergeable",
+		"Branch is not up to date. Please update it before merging.":                                 "unmergeable",
 		// Text that is not recognised does NOT go into the new bucket: it is conservative classification.
 		"something entirely new happened": "network",
 	}

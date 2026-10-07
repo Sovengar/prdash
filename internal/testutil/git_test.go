@@ -10,7 +10,6 @@ import (
 
 // The safety net of the whole suite.
 func TestGitHelpersDoNotTouchTheRealRepo(t *testing.T) {
-	// A real repo is set up and queried in its directory.
 	repo := filepath.Join(t.TempDir(), "repo")
 	InitRepo(t, repo)
 	CommitFile(t, repo, "base.txt", "base", "base")
@@ -29,7 +28,6 @@ func TestGitHelpersDoNotTouchTheRealRepo(t *testing.T) {
 	}
 }
 
-// The filter's effect, with real git.
 func TestGitEnvDoesNotLetTheInheritedGITDirRedirectTheWrites(t *testing.T) {
 	// The victim is a WORKING repo, not a bare one: that is the case that really breaks.
 	victim := filepath.Join(t.TempDir(), "victim")
@@ -68,8 +66,7 @@ func TestGitEnvDoesNotLetTheInheritedGITDirRedirectTheWrites(t *testing.T) {
 	}
 }
 
-// git runs without the test environment's GIT_* localisation vars, which would point it
-// somewhere else.
+// git runs without the test environment's GIT_* localisation vars, which would point it elsewhere.
 func cleanGitEnv(t *testing.T, args ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -94,7 +91,6 @@ func TestRequireDirRefusesWhatIsNotADirectory(t *testing.T) {
 		t.Error("a plain file should not serve as a git directory")
 	}
 
-	// And a real directory passes.
 	if err := checkDir(t.TempDir()); err != nil {
 		t.Errorf("a real directory should serve: %v", err)
 	}

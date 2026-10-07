@@ -16,12 +16,10 @@ func TestRunAppliesTheDefaultTimeout(t *testing.T) {
 	if _, err := shRunner(0).Run(context.Background(), "-c", "echo ok"); err != nil {
 		t.Errorf("timeout=0 should use the default, but it failed: %v", err)
 	}
-	// Negative: a malformed Runner, which the default also fixes.
 	if _, err := shRunner(-time.Second).Run(context.Background(), "-c", "sleep 1"); err != nil {
 		t.Errorf("a negative timeout should fall back to the default, but it failed: %v", err)
 	}
-	// Run does not touch the Runner's Timeout: mutating it would make the second Run use the
-	// default instead of the configured one.
+	// Run does not touch the Runner's Timeout: mutating it would make the second Run use the default.
 	r := shRunner(0)
 	if _, err := r.Run(context.Background(), "-c", "echo ok"); err != nil {
 		t.Fatal(err)
@@ -79,7 +77,6 @@ func TestRunReturnsStdoutEvenWhenItFails(t *testing.T) {
 	}
 }
 
-// The precondition of the classification chain.
 func TestKindIgnoresTheHTTPCodeThatSeparatesNothing(t *testing.T) {
 	// Text with no HTTP code is classified by its wording, not by a fake 0.
 	for msg, want := range map[string]string{
@@ -147,8 +144,7 @@ func TestHTTPStatusRebuildsTheCode(t *testing.T) {
 		"HTTP 403 without a status text":       403,
 		"receiving 200 but it is not a status": 0,
 		"status code: 422 with a colon":        422,
-		// Something that looks like a code but is not. A false positive here is not a 0: it is a code
-		// printed as if it were one.
+		// Something that looks like a code but is not: a false positive here is a code printed as if it were one.
 		"X-Status-Code: 409 in a header":  0,
 		"status_code 404 with underscore": 0,
 		"HTTP 40x4 is not a code":         0,

@@ -84,8 +84,7 @@ func TestBuildSplitsPanesToTheRight(t *testing.T) {
 	}
 }
 
-// The editor is not omitted even when its availability cannot be checked: its ORDER may be
-// useful.
+// The editor is not omitted even without availability: its ORDER may be useful.
 func TestBuildKeepsEditorWithoutAvailability(t *testing.T) {
 	p := Build(sampleItem(), sampleWorktree(), sampleTools(), Env{Available: map[string]bool{}})
 
@@ -137,7 +136,6 @@ func TestBuildEmptyArgvOmitsPane(t *testing.T) {
 	if len(p.Tabs[1].Panes) != 1 {
 		t.Fatalf("the Edit tab is left with Hunk alone: %+v", p.Tabs[1])
 	}
-	// "Agent" is still the label plan.go gives the agent pane.
 	if !hasWarning(p.Warnings, "Agent") {
 		t.Fatalf("the agent warning is missing: %v", p.Warnings)
 	}
@@ -159,8 +157,7 @@ func TestBuildHunkDiffsTheWorkingTree(t *testing.T) {
 	}
 }
 
-// The target branch still reaches the pane through the environment, even though it is no longer
-// an argument.
+// The target branch still reaches the pane through the environment, not as an argument.
 func TestBuildInjectsBaseEnv(t *testing.T) {
 	it := sampleItem()
 	it.TargetBranch = "develop"
@@ -293,7 +290,6 @@ func hasWarning(warns []string, needle string) bool {
 	return false
 }
 
-// What getting this wrong costs.
 func TestBinaryOfAnUnknownKindReturnsEmptyNotAnotherKindsBinary(t *testing.T) {
 	tools := Tools{}
 
@@ -344,8 +340,7 @@ func TestBinaryOfAnUnknownKindReturnsEmptyNotAnotherKindsBinary(t *testing.T) {
 		t.Errorf("the hunk Kind changed to %q with argv of other panes set", got)
 	}
 
-	// An OVERRIDE with an EMPTY argv is the opposite of an override: it is an explicit DISABLE, and it
-	//returns empty instead of the binary.
+	// An OVERRIDE with an EMPTY argv is an explicit DISABLE: it returns empty instead of the binary.
 	disabled := Tools{Agent: Tool{Override: true}}
 	if got := disabled.Binary(KindAgent); got != "" {
 		t.Errorf("a disabled pane gave binary %q: it would be launched the same as if it were not "+

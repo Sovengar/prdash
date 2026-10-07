@@ -103,8 +103,7 @@ func TestListStampsEachItemWithTheSectionBeingQueried(t *testing.T) {
 	}
 }
 
-// A different case from broken JSON, and the difference matters: GraphQL answers 200 with an
-// errors array.
+// A different case from broken JSON: GraphQL answers 200 with an errors array.
 func TestListWithGraphQLErrorsGivesAWarningAndNoItems(t *testing.T) {
 	const withErrors = `{"errors":[{"message":"Field 'reviewDecision' doesn't exist on ` +
 		`type 'PullRequest'","type":"INTERNAL"}]}`

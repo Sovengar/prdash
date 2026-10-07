@@ -11,11 +11,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// The three remaining EnsureBare branches are disk failures, and all three are provoked by making a
-//directory read-only.
-
-// The asymmetry with the good path is the point: if RemoveAll succeeded, the test would be
-// measuring nothing.
 func TestEnsureBareCleansLeftoversItCannotRemoveAndSaysSo(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
 	if err := os.MkdirAll(cloneDir, 0o755); err != nil {
@@ -47,7 +42,6 @@ func TestEnsureBareCleansLeftoversItCannotRemoveAndSaysSo(t *testing.T) {
 	}
 }
 
-// CloneDir under a file, which happens when someone points the cache at the wrong path.
 func TestEnsureBarePreparesTheParentAndPropagatesIt(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
 	if err := os.WriteFile(cloneDir, []byte("blocker"), 0o644); err != nil {
@@ -64,8 +58,7 @@ func TestEnsureBarePreparesTheParentAndPropagatesIt(t *testing.T) {
 	}
 }
 
-// The rarest failure in the chain and the one that slips through: the clone is whole and the publish
-// is what fails.
+// The rarest failure in the chain: the clone is whole and the publish is what fails.
 func TestTheCloneRenamePropagatesTheFailureAndLeavesNoTemp(t *testing.T) {
 	cloneDir := filepath.Join(t.TempDir(), "clones")
 	r, ref, dest := resolverWithCloneDir(t, cloneDir)
@@ -80,8 +73,6 @@ func TestTheCloneRenamePropagatesTheFailureAndLeavesNoTemp(t *testing.T) {
 		t.Fatal("the fixture is no good: the destination would look like a repo")
 	}
 
-	// With a writable parent, EnsureBare clears the leftovers and succeeds — the recovery path, which
-	//has to be checked first.
 	if _, err := r.EnsureBare(context.Background(), ref); err != nil {
 		t.Fatalf("the recovery path failed: %v", err)
 	}
@@ -141,8 +132,7 @@ func resolverWithCloneDir(t *testing.T, cloneDir string) (*Resolver, model.RepoR
 	return r, ghRef(), r.barePath(ghRef())
 }
 
-// The way to provoke it is real and not a double: filepath.Abs of a relative root whose working
-// directory is gone.
+// Provoked for real, not with a double: filepath.Abs of a relative root whose cwd is gone.
 func TestARelativeRootWithADeletedWorkingDirectoryDoesNotDropTheWholeIndex(t *testing.T) {
 	good := filepath.Join(t.TempDir(), "bueno")
 	testutil.InitRepo(t, good)
@@ -206,8 +196,7 @@ func TestAFailedCloneLeavesNoTempAndSaysToClone(t *testing.T) {
 			"diagnosis leads to looking at the disk instead of the remote", err)
 	}
 
-	// NOT "the clone tree is empty": it cannot be, because the parent's MkdirAll creates the host
-	// path before cloning, and removing it would throw away work the next attempt needs.
+	// NOT "the clone tree is empty": MkdirAll creates the host path before cloning.
 	final := r.barePath(ref)
 	for _, p := range []string{final, final + ".tmp-"} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
@@ -237,8 +226,7 @@ func TestABranchThatCannotBeCreatedIsReportedWithoutLeavingAHalfBranch(t *testin
 		t.Fatalf("the happy path failed: %v", err)
 	}
 	testutil.RunGit(t, repo, "branch", "-D", branch)
-	// The SUBDIRECTORY has to be blocked too, not just refs/heads: the branch is named
-	//`prdash/pr-7`, so git writes the lock at refs/heads/prdash/pr-7.lock.
+	// The subdirectory is blocked too: the lock is written at refs/heads/prdash/pr-7.lock.
 	refsPrdash := filepath.Join(repo, ".git", "refs", "heads", "prdash")
 	if err := os.MkdirAll(refsPrdash, 0o755); err != nil {
 		t.Fatal(err)

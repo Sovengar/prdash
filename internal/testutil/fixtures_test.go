@@ -11,8 +11,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// It ends in a clone rather than in checking the remote exists: the question is "does a git clone of
-// this fixture bring the content?", which is what the tests using it ask.
+// It ends in a clone, not in checking the remote exists: the tests ask whether a clone brings the content.
 func TestTheFixtureSetsUpARepoThatCanBeClonedAndPushed(t *testing.T) {
 	base := t.TempDir()
 
@@ -47,8 +46,7 @@ func TestTheFixtureSetsUpARepoThatCanBeClonedAndPushed(t *testing.T) {
 		t.Errorf("re-pointing left two origins: %q", r)
 	}
 
-	// Cloned for real, not rebuilt by hand: what is checked is that the result is usable, not that the
-	//push worked.
+	// Cloned for real, not rebuilt by hand: what matters is that the result is usable.
 	clone := filepath.Join(base, "clone")
 	RunGit(t, base, "clone", bare, clone)
 	if !RefExists(t, clone, "refs/heads/main") {
@@ -66,8 +64,6 @@ func TestTheFixtureSetsUpARepoThatCanBeClonedAndPushed(t *testing.T) {
 	}
 }
 
-// The no-arguments form is the rare default, since `Push(t, dir, "-u", "origin", "main")` is an
-// args case.
 func TestPushWithCustomArgsAndWithoutArgs(t *testing.T) {
 	base := t.TempDir()
 	bare := filepath.Join(base, "o.git")
@@ -82,8 +78,7 @@ func TestPushWithCustomArgsAndWithoutArgs(t *testing.T) {
 		t.Fatal("the push with flags did not reach the remote")
 	}
 
-	// The result is NOT checked here: without --set-upstream and a destination git fails and RunGit
-	//would abort the test, so this only asserts the call is built and runs.
+	// The result is NOT checked: without --set-upstream and a destination git fails and RunGit aborts.
 	if got := RunGit(t, repo, "config", "remote.origin.url"); got != bare {
 		t.Fatalf("the remote was not set: %q", got)
 	}
@@ -105,12 +100,10 @@ func TestRunGitBringsTheOutputAndFailsWithTheCommandItWasAsked(t *testing.T) {
 	if got := RunGit(t, repo, "rev-parse", "--is-inside-work-tree"); got != "true" {
 		t.Errorf("git rev-parse gave %q, want true inside a freshly created repo", got)
 	}
-	// With a bare TempDir git finds no repo, which is what gitEnv's isolation guarantees and what keeps
-	//the fixtures from hanging onto the repo the code is being read from.
+	// With a bare TempDir git finds no repo: gitEnv's isolation keeps fixtures off the code's own repo.
 }
 
-// Three reasons, each preventing a different damage; the empty dir is the grave one, because git
-// would run in the real repo and write its config.
+// Three reasons; the empty dir is the grave one: git would run in the real repo and write its config.
 func TestCheckDirExplainsEachRefusalSeparately(t *testing.T) {
 	err := checkDir("")
 	if err == nil {
@@ -146,8 +139,7 @@ func TestCheckDirExplainsEachRefusalSeparately(t *testing.T) {
 	}
 }
 
-// The difference is not `--bare` but `-b main`: both force main as the initial branch, and without
-// that the fixtures depend on the global config of whoever runs them.
+// The difference is `-b main`: without it the fixtures depend on the global config of whoever runs them.
 func TestInitBareAndInitRepoCreateWhatTheySay(t *testing.T) {
 	base := t.TempDir()
 
@@ -170,8 +162,7 @@ func TestInitBareAndInitRepoCreateWhatTheySay(t *testing.T) {
 	if got := RunGit(t, bare, "rev-parse", "--is-bare-repository"); got != "true" {
 		t.Errorf("InitBare did not create a bare repo: %q", got)
 	}
-	// `--is-inside-work-tree` answers FALSE inside a bare; the name misleads, since it asks whether the
-	//current directory is inside a work tree, not whether the repo has one.
+	// `--is-inside-work-tree` answers FALSE inside a bare; the name misleads.
 	if got := RunGit(t, bare, "rev-parse", "--is-inside-work-tree"); got != "false" {
 		t.Errorf("inside the bare, --is-inside-work-tree gave %q, want false", got)
 	}
@@ -180,8 +171,7 @@ func TestInitBareAndInitRepoCreateWhatTheySay(t *testing.T) {
 	}
 }
 
-// The message matters because some tests find the commit by its text; a fixed message would make two
-// tests indistinguishable.
+// Some tests find the commit by its text, so the messages have to be distinguishable.
 func TestCommitFileCreatesTheParentsAndNotes(t *testing.T) {
 	dir := t.TempDir()
 	InitRepo(t, dir)
@@ -205,8 +195,7 @@ func TestCommitFileCreatesTheParentsAndNotes(t *testing.T) {
 	}
 }
 
-// This is the path the three adapters take when unconfigured, so it was as untested as the other
-// half.
+// The path the three adapters take when unconfigured, so it was as untested as the other half.
 func TestTheConformanceSuiteAcceptsAnAdapterThatSaysUnsupported(t *testing.T) {
 	a := inertAdapter()
 	RunConformance(t, a, ConformanceOptions{Unsupported: true})
@@ -220,8 +209,7 @@ func TestTheConformanceSuiteAcceptsAnAdapterThatSaysUnsupported(t *testing.T) {
 	}
 }
 
-// A dumb predicate with a consequence: looking at the message instead of the kind would force every
-// adapter to phrase its `unsupported` one specific way.
+// Looking at the message instead of the kind would force every adapter to phrase unsupported one way.
 func TestHasKindLooksOnlyAtTheKind(t *testing.T) {
 	warns := []model.Warning{
 		{Forge: "gh", Kind: "ratelimit", Msg: "whatever"},
@@ -387,8 +375,7 @@ func warnUnsupported() []model.Warning {
 	return []model.Warning{{Forge: "broken", Kind: "unsupported", Msg: "a double break"}}
 }
 
-// The half of RunConformance that can be tested in process; the other half, the real t.Error, is
-// checked by subprocess.
+// The half of RunConformance testable in process; the real t.Error is checked by subprocess.
 func TestTheReportIsCalledOncePerViolationAndNeverWithoutViolations(t *testing.T) {
 	var said []string
 	reportViolations(inertAdapter(), ConformanceOptions{Unsupported: true},

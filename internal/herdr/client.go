@@ -12,12 +12,8 @@ import (
 	"time"
 )
 
-// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const DefaultTimeout = time.Duration(30e9)
 
-// 250ms on purpose, not a second: this is a TUI, what does not answer the keyboard reads as a
-// hang, and a process that has not closed its pipes in 250ms is not going to. Literal for the
-// same coverage reason as DefaultTimeout above.
 const pipeCloseGrace = time.Duration(250e6)
 
 type execFunc func(ctx context.Context, args ...string) (stdout, stderr []byte, err error)
@@ -37,7 +33,6 @@ type Client struct {
 
 func New() *Client { return &Client{Bin: defaultBin(), getenv: os.Getenv} }
 
-// An undeterminable version does not block on drift: it is assumed compatible.
 func (c *Client) Available() bool {
 	if c.env("HERDR_ENV") != "1" {
 		return false
@@ -67,8 +62,6 @@ func (c *Client) env(key string) string {
 	return os.Getenv(key)
 }
 
-// The port never touches the session when it cannot do it with guarantees. Reads (list, version) do
-// not go through here.
 func (c *Client) guard(args ...string) error {
 	if !c.Available() {
 		return &Error{Args: args, Msg: "herdr unavailable (requires HERDR_ENV=1 and version >= " + MinVersion.String() + ")"}
@@ -94,8 +87,6 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, []byte, error
 	cmd := exec.CommandContext(cctx, bin, args...)
 	cmd.Env = os.Environ()
 
-	// Measured before adding it: the context kills the process but its CHILD inherits the descriptors
-	// and holds the pipe, so `cmd.Run` never returns.
 	cmd.WaitDelay = pipeCloseGrace
 
 	var out, errb bytes.Buffer
@@ -113,8 +104,6 @@ func (c *Client) result(ctx context.Context, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// The message comes from ONE of two sources, never mixed: the server's `message` when stderr is
-// a Herdr reply, the first stderr line otherwise. It used to start from the line and be overwritten.
 func newError(args []string, err error, stderr []byte) *Error {
 	e := &Error{Args: args, Err: err}
 	var exit *exec.ExitError
@@ -175,7 +164,6 @@ func (c *Client) WorkspaceCreate(ctx context.Context, spec WorkspaceSpec) (Works
 	return parseWorkspaceCreated(out)
 }
 
-// linked worktrees (some versions require it).
 func (c *Client) WorkspaceClose(ctx context.Context, workspaceID string, group bool) error {
 	if err := c.guard("workspace", "close"); err != nil {
 		return err
@@ -195,8 +183,6 @@ func (c *Client) TabCreate(ctx context.Context, spec TabSpec) (TabInfo, error) {
 	return parseTabCreated(out)
 }
 
-// The only way to name the tab the container already created (the worktree's root pane):
-// `tab create --label` only applies to tabs its caller creates.
 func (c *Client) TabRename(ctx context.Context, tabID, label string) error {
 	if err := c.guard("tab", "rename"); err != nil {
 		return err
@@ -216,8 +202,6 @@ func (c *Client) PaneSplit(ctx context.Context, spec SplitSpec) (PaneInfo, error
 	return parsePaneSplit(out)
 }
 
-// Fire-and-forget: the command plus Enter is sent to the pane's shell and nothing waits. The argv
-// is joined into one quoted shell line so an argument with spaces does not break.
 func (c *Client) PaneRun(ctx context.Context, paneID string, argv []string) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("pane run: empty argv")

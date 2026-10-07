@@ -7,8 +7,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// A zero height degrades the layout to layout{} (bodyLines 0) and that must not empty the list:
-// "no reserved height" is not "no content", the whole list is painted instead of a clipped slice.
+// A zero height degrades to layout{} but must not empty the list: "no reserved height" is not "no content".
 func TestZeroBodyHeightPaintsWholeList(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, numberedItems(4, "mine/repo"), false))

@@ -124,7 +124,6 @@ func TestMountLayoutSendsCwdAndEnvToEverySplit(t *testing.T) {
 	}
 }
 
-// If the container points at a workspace Herdr no longer knows, the mount must fail naming it.
 func TestMountLayoutFailsOnDeadWorkspace(t *testing.T) {
 	f := newFakeLayout()
 	base := f.respond

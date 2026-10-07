@@ -8,7 +8,6 @@ import (
 	"prdash/internal/cache"
 )
 
-// The most obvious thing in the world and exactly what nobody tests.
 func TestTheExplicitMemoPathWins(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", xdg)
@@ -24,7 +23,6 @@ func TestTheExplicitMemoPathWins(t *testing.T) {
 	if _, err := os.Stat(explicit); err != nil {
 		t.Fatalf("with an explicit MemoPath it did not write to the given path: %v", err)
 	}
-	// And it was NOT written to the default path.
 	if _, err := os.Stat(defaultPath); err == nil {
 		t.Fatalf("with an explicit MemoPath it ALSO wrote to the default path (%s): "+
 			"the given path is being ignored", defaultPath)
@@ -38,7 +36,6 @@ func TestWithoutMemoPathTheDefaultIsUsed(t *testing.T) {
 
 	defaultPath := filepath.Join(xdg, cache.DirName, cache.MemoFileName)
 
-	// Written with one resolver and read with another.
 	r := New(Options{})
 	r.store.SetRoute("clave", "/ruta/recordada")
 
@@ -53,7 +50,6 @@ func TestWithoutMemoPathTheDefaultIsUsed(t *testing.T) {
 	}
 }
 
-// The default path carries the product's subdirectory.
 func TestTheDefaultPathIsTheCacheOneAndNoOther(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", xdg)
@@ -72,8 +68,7 @@ func TestTheDefaultPathIsTheCacheOneAndNoOther(t *testing.T) {
 	}
 }
 
-// If the cache directory cannot be determined, New does not fail: the whole repo is built without
-// memo persistence.
+// If the cache directory cannot be determined, New does not fail: no memo persistence.
 func TestAnUnreadableDefaultPathDoesNotBreakNew(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("HOME", "")

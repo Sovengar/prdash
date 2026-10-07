@@ -8,7 +8,6 @@ import (
 
 var black = color.RGBA{A: 255}
 
-// A cell is twice as tall as wide, so a 16:9 image needs 3.56 columns per row.
 func TestFitKeepsTheAspectOfAWideImage(t *testing.T) {
 	img := solid(1920, 1080, black)
 

@@ -13,9 +13,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// The three remaining ones share one property: they are DEGRADATION.
-
-// The reason for the Planner field is not testability.
 func TestThePlanIsBuiltWithThePlannerWhenThereIsOne(t *testing.T) {
 	it := model.NewItem(model.RepoRef{Project: "o/r"}, 7)
 	wt := worktree.Worktree{Path: "/wt/pr-7", Branch: "feat/x", Label: "prdash-pr-7"}
@@ -40,8 +37,7 @@ func TestThePlanIsBuiltWithThePlannerWhenThereIsOne(t *testing.T) {
 	if receivedItem.Number != 7 {
 		t.Errorf("the Planner received item %+v", receivedItem)
 	}
-	// The worktree arrives mapped to the three fields, because those are what the plan uses to build
-	// the argv.
+	// The worktree arrives mapped to the three fields the plan uses to build the argv.
 	for name, value := range map[string]string{
 		"Path": receivedWt.Path, "Branch": receivedWt.Branch, "Label": receivedWt.Label,
 	} {
@@ -62,12 +58,10 @@ func TestThePlanIsBuiltWithThePlannerWhenThereIsOne(t *testing.T) {
 	}
 }
 
-// What makes this a degradation and not a failure.
 func TestWithoutHerdrTheWorktreeIsStillMountedAndWarned(t *testing.T) {
 	wt := worktree.Worktree{Path: "/wt", Branch: "b", Label: "prdash-pr-1"}
 	res := Result{}
 
-	// No Herdr port at all.
 	e := &Executor{}
 	if e.mountLayout(context.Background(), wt, plan.Plan{}, &res) {
 		t.Error("without Herdr the layout was reported mounted")
@@ -89,7 +83,6 @@ func TestWithoutHerdrTheWorktreeIsStillMountedAndWarned(t *testing.T) {
 	}
 }
 
-// failingHerdr is a port that IS available but does not mount.
 type failingHerdr struct {
 	err   error
 	warns []string
@@ -103,7 +96,6 @@ func (h *failingHerdr) MountLayout(context.Context, herdr.Container, plan.Plan) 
 
 func (h *failingHerdr) Notify(context.Context, string, herdr.NotifyOptions) error { return nil }
 
-// The two paths of mountLayout with Herdr available.
 func TestTheLayoutContributesItsWarningsAndTheFailureAddsMore(t *testing.T) {
 	wt := worktree.Worktree{Path: "/wt", Branch: "b", Label: "prdash-pr-1"}
 	ctx := context.Background()
@@ -120,8 +112,7 @@ func TestTheLayoutContributesItsWarningsAndTheFailureAddsMore(t *testing.T) {
 	if len(res.Warnings) != 0 {
 		t.Errorf("the happy path gave warnings %v", res.Warnings)
 	}
-	// The container that reaches the layout is the worktree's, which is what connects the pane to the
-	// right directory.
+	// The container reaching the layout is the worktree's, which connects the pane to the right directory.
 	if fake.container.WorkspaceID != wt.WorkspaceID || fake.container.PaneID != wt.RootPaneID {
 		t.Errorf("the container reaching the layout is not the worktree's: %+v", fake.container)
 	}
@@ -141,8 +132,7 @@ func TestTheLayoutContributesItsWarningsAndTheFailureAddsMore(t *testing.T) {
 		t.Errorf("the layout's warning did not arrive: %v", res.Warnings)
 	}
 
-	// And on failure: the layout's warnings plus the failure's, and the two texts have to be
-	// distinguishable.
+	// On failure: the layout's warnings plus the failure's, and the two texts have to be distinguishable.
 	withFailure := &Executor{Herdr: &failingHerdr{err: errors.New("the socket does not respond")}}
 	res = Result{}
 	if withFailure.mountLayout(ctx, wt, plan.Plan{}, &res) {
@@ -189,7 +179,6 @@ func (r *recordingResolver) RemoveBare(model.RepoRef) error {
 	return nil
 }
 
-// It implements the minimum of Resolver to be embeddable.
 type fakeRepoResolver struct{}
 
 func (fakeRepoResolver) ResolveLocal(model.RepoRef) (string, bool) { return "", false }
@@ -213,13 +202,11 @@ func TestLabelCarriesTheNumberAndPrefixThatMarkOwnership(t *testing.T) {
 	if got := Label(7); got != "prdash-pr-7" {
 		t.Errorf("Label(7) gave %q", got)
 	}
-	// Two different numbers give two different labels, which is what stops two reviews from
-	// colliding.
+	// Two different numbers give two different labels, which stops two reviews from colliding.
 	if Label(7) == Label(8) {
 		t.Error("two numbers gave the same label")
 	}
-	// The label is what Owned recognises, and that is the link between the name and the
-	// provisioning.
+	// The label is what Owned recognises: the link between the name and the provisioning.
 	if !strings.HasPrefix(Label(1), worktree.LabelPrefix) {
 		t.Errorf("Label(1) = %q does not start with %q: Owned would not recognise it",
 			Label(1), worktree.LabelPrefix)

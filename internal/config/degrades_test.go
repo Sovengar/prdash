@@ -8,9 +8,7 @@ import (
 	"time"
 )
 
-// LoadFrom's contract is not "load the config" but DEGRADE: anything that fails returns the
-//defaults.
-
+// LoadFrom's contract is not "load the config" but DEGRADE: any failure returns the defaults.
 func TestLoadFromDegradesToDefaultsAndWarns(t *testing.T) {
 	dir := t.TempDir()
 
@@ -56,8 +54,7 @@ func TestLoadFromDegradesToDefaultsAndWarns(t *testing.T) {
 	}
 }
 
-// The asymmetry with the above is deliberate and reads backwards from how it sounds: an absent
-// config is the normal case and warns nothing, an unreadable one warns.
+// Deliberately backwards from how it sounds: an absent config warns nothing, an unreadable one warns.
 func TestAMissingConfigDegradesSilentlyAndAnEmptyOneDoesToo(t *testing.T) {
 	dir := t.TempDir()
 
@@ -82,8 +79,6 @@ func TestAMissingConfigDegradesSilentlyAndAnEmptyOneDoesToo(t *testing.T) {
 	}
 }
 
-// The most expensive of the four failures, which is why the important assertion is not the one
-// about the error.
 func TestATOMLThatDoesNotParseWarnsAndDoesNotKeepHalfOfWhatItRead(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "broken.toml")
@@ -117,8 +112,7 @@ this-is-not-a-key
 	}
 }
 
-// Per-field degradation is where "degrade with a warning" does NOT apply: an invalid
-// `refresh_interval` is one bad key, not a broken file.
+// Per-field degradation: an invalid `refresh_interval` is one bad key, not a broken file.
 func TestAnInvalidValueIsIgnoredAndAValidOneIsApplied(t *testing.T) {
 	dir := t.TempDir()
 	def := Defaults()

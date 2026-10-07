@@ -12,10 +12,7 @@ import (
 	"prdash/internal/testutil"
 )
 
-// The case that fails the rename is NOT a race, which is what it looks like: the mounts come from
-//Bubbletea's single update goroutine and are serialised by construction.
-
-// The script derives dest from the temporary it was handed, rather than through the environment.
+// The rename failure is NOT a race: the mounts are serialised by Bubbletea's single update goroutine.
 func gitPublishingTheCloneFirst(t *testing.T, source string) *gitcmd.Runner {
 	t.Helper()
 	dir := t.TempDir()
@@ -36,8 +33,7 @@ func gitPublishingTheCloneFirst(t *testing.T, source string) *gitcmd.Runner {
 	return &gitcmd.Runner{Bin: script, Timeout: gitcmd.DefaultTimeout}
 }
 
-// The reason it warns is that `dest` being occupied means something unexpected, which deserves a
-// warning rather than an assumption.
+// It warns because `dest` being occupied means something unexpected.
 func TestAFailedRenameLeavesNoTempKeepsTheForeignCloneAndAllowsRetry(t *testing.T) {
 	base := t.TempDir()
 
@@ -66,8 +62,7 @@ func TestAFailedRenameLeavesNoTempKeepsTheForeignCloneAndAllowsRetry(t *testing.
 			"without warning, and whoever occupies it may have lost its work", published)
 	}
 
-	// ENOTEMPTY and EXDEV are different repairs (an occupant and a different device) and without
-	//the system's reason the diagnosis is the same for both.
+	// ENOTEMPTY and EXDEV are different repairs, so the system's reason has to survive.
 	if !strings.Contains(err.Error(), "publish the bare clone") {
 		t.Errorf("the warning %q does not say the publish failed", err)
 	}
@@ -91,7 +86,6 @@ func TestAFailedRenameLeavesNoTempKeepsTheForeignCloneAndAllowsRetry(t *testing.
 		t.Errorf("%d temps left after a failed publish: %v", len(temps), temps)
 	}
 
-	// The foreign clone stays whole and usable, which is what makes the warning the right call.
 	if !isRepo(dest) {
 		t.Errorf("EnsureBare ran over the clone that was already at %s: an occupant is "+
 			"not necessarily garbage", dest)

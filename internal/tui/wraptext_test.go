@@ -7,19 +7,18 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// If the text fits it comes out WHOLE, spaces and all.
 func TestWrapTextDoesNotTouchWhatAlreadyFits(t *testing.T) {
 	for _, tc := range []struct{ text, wants string }{
 		{"ab cd", "ab cd"},
 		{"a  b", "a  b"},
 		{"a   b   c", "a   b   c"},
 		{"a\tb", "a\tb"},
-		{"ab  cd", "ab  cd"}, // two spaces: 6 columns, and with max 6 it fits
+		{"ab  cd", "ab  cd"},
 		{"  with  LEADING  and  tail  ", "  with  LEADING  and  tail  "},
 	} {
 		for _, max := range []int{1, 4, 5, 6, 10, 100} {
 			if ansi.StringWidth(tc.text) > max {
-				continue // this max does not fit, it is not the case being asserted
+				continue
 			}
 			got := wrapText(tc.text, max)
 			if len(got) != 1 {
@@ -39,7 +38,6 @@ func TestWrapTextDoesNotTouchWhatAlreadyFits(t *testing.T) {
 		t.Errorf("a text of %d columns with width %d gave %q, want the line untouched",
 			ansi.StringWidth(text), width, got)
 	}
-	// One column less and the wrapper starts working, and its work shows.
 	if got := wrapText(text, width-1); len(got) == 1 && got[0] == text {
 		t.Errorf("a text of %d columns with width %d came back intact: it should not, it does not fit",
 			ansi.StringWidth(text), width-1)
@@ -87,8 +85,7 @@ func TestWrapTextNonPositiveWidthDoesNotSplit(t *testing.T) {
 			}
 		}
 	}
-	// Empty or spaces only gives ONE line, not none: an empty list would make the caller print
-	// an extra blank line.
+	// Empty or spaces only gives ONE line, not none: an empty list would make the caller print an extra blank line.
 	for _, text := range []string{"", "   ", "\t"} {
 		if got := wrapText(text, 10); len(got) != 1 {
 			t.Errorf("wrapText(%q, 10) returned %q, want one line", text, got)

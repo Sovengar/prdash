@@ -177,7 +177,6 @@ func TestSimulateNeedsATargetBranch(t *testing.T) {
 	}
 }
 
-// A base that is not in the clone cannot be compared, and saying so is the point.
 func TestSimulateFailsWhenTheBaseIsNotInTheClone(t *testing.T) {
 	repo, _, it := fixture(t)
 	it.TargetBranch = "release/9"
@@ -189,7 +188,6 @@ func TestSimulateFailsWhenTheBaseIsNotInTheClone(t *testing.T) {
 	}
 }
 
-// A clone with the base only as a remote ref is still usable.
 func TestMaterializeFallsBackToTheRemoteRef(t *testing.T) {
 	repo, _, it := fixture(t)
 	clone := filepath.Join(t.TempDir(), "clone")

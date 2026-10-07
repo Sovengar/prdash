@@ -46,8 +46,7 @@ func TestStaleWorkspaceFailsAndDoesNotFakeAMount(t *testing.T) {
 
 // The temptation here is to take the first match.
 func TestTabIsLookedUpByThePaneThatWasPassed(t *testing.T) {
-	// A workspace with SEVERAL panes where the requested one is not the first; the fixture has at
-	//least three and the request goes to the last on purpose.
+	// The fixture has at least three panes and the request goes to the last on purpose.
 	multi := `{"id":"cli:pane:list","result":{"type":"pane_list","panes":[
 	  {"pane_id":"w18:p1","workspace_id":"w18","tab_id":"w18:t1","cwd":"/repo","label":"shell"},
 	  {"pane_id":"w18:p2","workspace_id":"w18","tab_id":"w18:t2","cwd":"/repo","label":"vi"},
@@ -88,13 +87,11 @@ func TestTabIsLookedUpByThePaneThatWasPassed(t *testing.T) {
 			"returning the first pane's renames the wrong tab", requested, got, want)
 	}
 
-	// A pane that is not in the list has no tab, which is what makes the mount skip it.
 	if got := c.tabOf(ctx, panes[0].WorkspaceID, "w18:no-existe"); got != "" {
 		t.Errorf("a pane that is not in the list gave tab %q, want empty", got)
 	}
 }
 
-// The trap is in what the plan does NOT set.
 func TestPlanDirectionIsRespected(t *testing.T) {
 	cases := []struct {
 		dir  string

@@ -130,7 +130,6 @@ func TestOverlayToastsDoNotBreakAFrame(t *testing.T) {
 	}
 }
 
-// landRow's boundary.
 func TestOverlayToastsABoxAsTallAsTheWindow(t *testing.T) {
 	const width, rowCount = 40, 10
 	before, rows := testView(width, rowCount)
@@ -163,7 +162,6 @@ func TestOverlayToastsABoxAsTallAsTheWindow(t *testing.T) {
 	}
 }
 
-// The box's width comes from its FIRST line.
 func TestOverlayToastsTheBoxIsAlwaysARectangle(t *testing.T) {
 	m := newToastManager()
 	for _, level := range []toastLevel{toastSuccess, toastError, toastInfo, toastWarning, toastLevel(9)} {

@@ -6,14 +6,12 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// If the page that closed the pagination is discarded, the `more` flag survives the end of the
-// cycle as residue, and consulting it would freeze the tick for good.
+// If the page that closed the pagination is discarded, the `more` flag survives as residue and would freeze the tick.
 func TestAutoRefreshSurvivesStalePagination(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionAuthored, "",
 		[]model.Item{mkItem("github", "github.com", "acme/widget", "One", 1, "")}, true))
 
-	// The cycle ends with `more` still pending: the page that closed it never arrived.
 	m = send(t, m, refreshDoneMsg{cycle: m.cycle})
 	if m.loading {
 		t.Fatal("the cycle should have finished")

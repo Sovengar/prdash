@@ -85,8 +85,7 @@ const fixtureNotification = `{
   "result": {"type": "notification_show", "shown": true, "reason": ""}
 }`
 
-// Herdr's versioning decides whether a capability is usable, so a misplaced `>` disables or
-// enables it wrongly.
+// A misplaced `>` disables or enables a capability wrongly: the versioning decides usability.
 func TestVersionAtLeastComparesCascade(t *testing.T) {
 	min := Version{Major: 0, Minor: 9, Patch: 3}
 	cases := []struct {
@@ -121,15 +120,12 @@ func TestVersionAtLeastComparesCascade(t *testing.T) {
 	if !(Version{99, 0, 0, ""}).AtLeast(min) {
 		t.Error("a very high major should meet any 0.x minimum")
 	}
-	// Only a minimum with a positive major reaches the major-below return: every 0.x minimum
-	// falls through to the minor comparison, which is why this case uses its own minimum.
+	// Only a positive-major minimum reaches the major-below return: 0.x minimums fall through to the minor comparison.
 	if (Version{0, 9, 3, ""}).AtLeast(Version{1, 0, 0, ""}) {
 		t.Error("0.9.3 should not meet a 1.0.0 minimum")
 	}
 }
 
-// Herdr's message is what the TUI shows, and the three added parts are the code, the dir and the
-// exit.
 func TestErrorComposesTheMessageWithWhatIsThere(t *testing.T) {
 	cases := []struct {
 		name string
@@ -170,8 +166,7 @@ func TestErrorComposesTheMessageWithWhatIsThere(t *testing.T) {
 			}
 		})
 	}
-	// The cause is preserved by Unwrap, which is what allows classifying without depending on the
-	// text.
+	// The cause is preserved by Unwrap: classifying without depending on the text.
 	cause := os.ErrNotExist
 	err := &Error{Msg: "x", Err: cause}
 	if !errors.Is(err, cause) {
@@ -288,8 +283,7 @@ func TestHerdrErrorThatIsNotJSONGetsNoCodeOrReasonAndInventsNone(t *testing.T) {
 		{"plain CLI text", "workspace_limit\n"},
 		{"plain text with spaces", "pane w18:p1 not found"},
 		{"usage help", "usage: herdr pane graphics set [--pane ID]"},
-		// JSONs that do not carry what is looked for. An `error` with no `message` is NOT here: the code
-		//is still read.
+		// An `error` with no `message` is NOT here: the code is still read.
 		{"error that is not an object", `{"error":"algo"}`},
 		{"map without error or code", `{"other":"value"}`},
 		// JSON-RPC's code is a NUMBER —{"code":-32601,...}.

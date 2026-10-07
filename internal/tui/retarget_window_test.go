@@ -31,7 +31,6 @@ func TestBranchCacheFreshAtTheExactTTLStillServes(t *testing.T) {
 	}
 }
 
-// The window moves just enough to follow the cursor.
 func TestRetargetWindowForFollowsTheCursor(t *testing.T) {
 	const rows = 5
 
@@ -66,25 +65,19 @@ func TestRetargetWindowForFollowsTheCursor(t *testing.T) {
 		}
 	}
 
-	// The cases that say the most, one by one.
-	// The cursor exactly on the last visible row: the window does not move.
 	if got := retargetWindowFor(4, 4, rows, 20); got != 4 {
 		t.Errorf("with the cursor on the last visible row it gave window %d, want 4: there is nothing to move", got)
 	}
 	if got := retargetWindowFor(4, 5, rows, 20); got != 4 {
 		t.Errorf("with the cursor one row inside the window it gave %d, want 4: it stays visible", got)
 	}
-	// The real edge, the cursor on the first row OUTSIDE the window.
 	if got := retargetWindowFor(4, 9, rows, 20); got != 5 {
 		t.Errorf("with the cursor on the first row outside it gave window %d, want 5: it drops exactly", got)
 	}
-	// Two rows out and the window drops two, not all the way to the cursor.
 	if got := retargetWindowFor(4, 11, rows, 20); got != 7 {
 		t.Errorf("with the cursor two rows outside it gave window %d, want 7", got)
 	}
-	// Zero rows is degenerate but defined, and it is what tells the `cursor <= win` boundary
-	// mutant from the real condition: at cursor == win the true condition falls through to the
-	// second branch and lands one row lower.
+	// Zero rows is degenerate but defined, and it is what tells the `cursor <= win` boundary mutant from the real condition.
 	if got := retargetWindowFor(4, 4, 0, 20); got != 5 {
 		t.Errorf("with zero rows and cursor on win it gave window %d, want 5", got)
 	}
@@ -99,7 +92,6 @@ func TestRetargetWindowForFollowsTheCursor(t *testing.T) {
 	}
 }
 
-// The slice to the window is floored on both sides.
 func TestRetargetVisibleFromClipsOnBothSides(t *testing.T) {
 	view := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 

@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// The parts have to add up to the terminal height, because the view fills it exactly and any
-// mismatch pushes the hints or the header off screen.
+// The parts must add up to the terminal height, or a mismatch pushes the hints or header off screen.
 func TestComputeLayoutTheSumIsTheHeight(t *testing.T) {
 	for _, show := range []bool{true, false} {
 		for _, hintAvailable := range []int{-1, 0, 1, 2, 3, 4, 10} {
@@ -32,8 +31,7 @@ func TestComputeLayoutTheSumIsTheHeight(t *testing.T) {
 						"it cannot disappear", height, hintAvailable, lay.bodyLines)
 				}
 
-				// THE FORMULA: everything reserved plus the body gives the exact height, except when the height
-				//is below what is reserved.
+				// The formula: reserved plus body gives the exact height, except when the height is below reserved.
 				reservado := listChrome + detailChrome + lay.detailLines
 				if lay.showHeader {
 					reservado += headerLines
@@ -47,8 +45,7 @@ func TestComputeLayoutTheSumIsTheHeight(t *testing.T) {
 						"The mismatch pushes a box off screen, and the symptom shows up in another box",
 						height, hintAvailable, lay.bodyLines, reservado, wants)
 				}
-				// No height is NEGATIVE. A detail at -1 lines is not a small detail: the renderer sees an
-				//invalid box.
+				// No height is negative: a detail at -1 lines is an invalid box to the renderer.
 				if lay.detailLines < 0 {
 					t.Errorf("height %d, keybinds %d: the detail ended at %d lines: a negative height is not a height",
 						height, hintAvailable, lay.detailLines)
@@ -66,7 +63,6 @@ func TestComputeLayoutTheSumIsTheHeight(t *testing.T) {
 						height, hintAvailable, lay.detailLines, lay.bodyLines, minDetailRows)
 				}
 
-				// When the height works out, the sum is exact.
 				if height > reservado {
 					if got := lay.bodyLines + reservado; got != height {
 						t.Errorf("altura %d, atajos %d: body %d + reservado %d = %d, want %d",

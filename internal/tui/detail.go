@@ -15,15 +15,12 @@ func (m *Model) detailPane(rows int) []string {
 	return m.detailLines(it, ok, rows)
 }
 
-// Kept as data rather than as pre-laid-out text so the panel can choose the arrangement.
 type detailField struct{ key, value string }
 
 const labelWidth = 14
 
 const detailGap = 4
 
-// Always in the grid, not only when the fields do not fit one column: in a single column the card
-// took 16 of the ~18 lines the 40% gives. A URL you cannot copy is no use.
 func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	if !ok {
 		return []string{styleDim.Render("no selection: move the cursor onto an item")}
@@ -37,15 +34,9 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 		{"Author", orDash(it.Author)},
 		{"Source", orDash(it.SourceBranch)},
 		{"Target", orDash(it.TargetBranch)},
-		// There is no Number field because refLabel already ends in "#42": a whole grid row to repeat the
-		// number three columns away. Draft takes that space, since it brings a datum that was not there.
 	}
-	// Review and Role go last on purpose: they are the two that say whether the action applies, and if the
-	// clip eats them the card stops answering the question it exists for.
 	status := []detailField{
 		{"State", state.Derive(it).String()},
-		// Draft is not inside State because they are different questions. State is attention priority, and by
-		// its precedence an approved draft comes out as "approved" and the draft is lost.
 		{"Draft", yesNo(it.IsDraft)},
 		{"Checks", checksDetail(it.Checks)},
 		{"Diff", diffDetail(it.Diff)},
@@ -59,13 +50,9 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	url := []string{fullWidthField(detailField{"URL", orDash(it.URL)}, inner)}
 	avisos := m.detailWarnings(it)
 
-	// The comments' budget is computed before composing them because it decides how many rows each may
-	// spend: without it a block of five four-line comments would drop out of an 18-row panel.
 	avail := commentBudget(rows, len(grid), len(url), len(avisos))
 	comments := m.commentLines(it, avail, inner)
 
-	// What goes first is what can be asked for again, then the most recent; the diffstat is last,
-	// because a datum just lost is worse than one never painted.
 	withGap := []string{title, ""}
 	noGap := []string{title}
 	layouts := [][]string{
@@ -109,8 +96,6 @@ func withoutField(fields []detailField, key string) []detailField {
 	return out
 }
 
-// The forge's veto is sticky until a refresh lifts it, so it earns a row. The own-approval veto is
-// NOT painted: it would repeat the Role field on every render.
 func (m *Model) detailWarnings(it model.Item) []string {
 	if reason := m.denied[it.ID()]; reason != "" {
 		return []string{"", styleWarn.Render("  action disabled: " + reason)}
@@ -121,8 +106,6 @@ func (m *Model) detailWarnings(it model.Item) []string {
 	return nil
 }
 
-// The reason decides what the operator does: "not authenticated" is fixed by resuming the token and
-// "not implemented" is not fixed at all. Confusing them costs a whole debugging session.
 func authReason(auth model.AuthState) string {
 	if auth.Reason != "" {
 		return auth.Reason
@@ -130,14 +113,10 @@ func authReason(auth model.AuthState) string {
 	return "not authenticated"
 }
 
-// It exists for the URL: a self-managed GitLab URL with a subfolder goes past 80 characters, so
-// in half a column you read 40 and get a useless remainder.
 func fullWidthField(f detailField, inner int) string {
 	return label(f.key, styleDiffText(truncate(f.value, max(1, inner-labelWidth))))
 }
 
-// Its own function because that arithmetic was hidden in the composition: a bigger budget gives a
-// block clipTop trims at the end, so the trim cancelled out. NEGATIVE is correct: it paints nothing.
 func commentBudget(rows, gridLines, urlLines, warningLines int) int {
 	return rows - gridLines - urlLines - 2 - warningLines
 }
@@ -161,7 +140,6 @@ func detailCell(f detailField, width int) (string, int) {
 	return label(f.key, styleDiffText(value)), labelWidth + utf8.RuneCountInString(value)
 }
 
-// The END of the detail is the part that says whether the action applies, so that is what survives.
 func clipTop(lines []string, rows int) []string {
 	if rows <= 0 {
 		return lines
@@ -230,8 +208,6 @@ func relativeTime(t time.Time) string {
 	return relativeSince(time.Since(t))
 }
 
-// Takes the elapsed duration instead of a timestamp so the unit boundaries are testable inputs:
-// a boundary that only `time.Since` can produce is a boundary no test can pin.
 func relativeSince(d time.Duration) string {
 	if d < time.Minute {
 		return "now"
@@ -252,7 +228,6 @@ func orDash(s string) string {
 	return s
 }
 
-// Not orDash: a false here is the answer, not a missing datum.
 func yesNo(b bool) string {
 	if b {
 		return "yes"

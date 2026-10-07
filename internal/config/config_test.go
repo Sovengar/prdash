@@ -193,7 +193,7 @@ clone_base = "repo"
 }
 
 func TestDefaultsClonePrefix(t *testing.T) {
-	// APIBase's default is "/api/v4/", with the trailing slash: no prefix must be derived.
+	// APIBase's default is "/api/v4/", trailing slash included: no prefix must be derived.
 	if got := Defaults().Forges.GitLab.ClonePrefix(); got != "" {
 		t.Fatalf("gitlab default ClonePrefix = %q, want empty (root)", got)
 	}
@@ -305,8 +305,7 @@ func TestBitbucketEnabledAppliesAsTheOnlyForgeOfTheBlock(t *testing.T) {
 	}
 }
 
-// The keybindings merge ignores an empty value on purpose: a keys map is written per action, and
-// an empty one would delete the shortcut.
+// The keybindings merge ignores an empty value on purpose: it would delete the shortcut.
 func TestTheEmptyKeybindingsDoNotDisableShortcuts(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kb.toml")
@@ -323,7 +322,6 @@ func TestTheEmptyKeybindingsDoNotDisableShortcuts(t *testing.T) {
 	if cfg.Keybindings["quit"] != def["quit"] {
 		t.Errorf("quit = %q, want the default %q: an empty value does not disable the shortcut", cfg.Keybindings["quit"], def["quit"])
 	}
-	// A real value DOES overwrite.
 	if cfg.Keybindings["merge"] != "x" {
 		t.Errorf("merge = %q, want \"x\"", cfg.Keybindings["merge"])
 	}
@@ -343,18 +341,18 @@ func TestExpandOnlyTouchesATildeAtTheStart(t *testing.T) {
 	cases := map[string]string{
 		"~/dev":     filepath.Join(home, "dev"),
 		"~/":        filepath.Join(home),
-		"~":         "~",         // a bare ~ is not converted
-		"~user/dev": "~user/dev", // another user's home: unknown
-		"~x":        "~x",        // the second letter is not a separator
-		"a~b":       "a~b",       // the ~ is not at the start
-		"/a~/b":     "/a~/b",     // same, inside an absolute path
-		"~a/b":      "~a/b",      // second letter not a separator
-		"~a":        "~a",        // same, without a slash
-		"":          "",          // empty is left alone
-		"/abs":      "/abs",      // no tilde
-		"relative":  "relative",  // no tilde
-		"dev/":      "dev/",      // no tilde
-		"~~/dev":    "~~/dev",    // double tilde: the second is not a separator
+		"~":         "~",
+		"~user/dev": "~user/dev",
+		"~x":        "~x",
+		"a~b":       "a~b",
+		"/a~/b":     "/a~/b",
+		"~a/b":      "~a/b",
+		"~a":        "~a",
+		"":          "",
+		"/abs":      "/abs",
+		"relative":  "relative",
+		"dev/":      "dev/",
+		"~~/dev":    "~~/dev",
 	}
 	for in, want := range cases {
 		if got := expand(in); got != want {
@@ -494,8 +492,7 @@ func TestHintsWithDynamicState(t *testing.T) {
 	}
 }
 
-// The anti-drift guard: an action added to DefaultKeybindings and not to hintOrder makes the bar
-// lie.
+// The anti-drift guard: an action in DefaultKeybindings but not hintOrder makes the bar lie.
 func TestHintsCoverAllKeybindings(t *testing.T) {
 	bar := strings.Join(Defaults().Hints(nil), " ")
 	for action, key := range DefaultKeybindings() {
@@ -527,8 +524,7 @@ func TestDefaultKeybindingsCoverActions(t *testing.T) {
 	}
 }
 
-// Two actions sharing a key is a silent failure: ActionForKey resolves alphabetically by
-// action, so which one wins is arbitrary.
+// Two actions sharing a key is a silent failure: ActionForKey resolves alphabetically.
 func TestDefaultKeybindingsAreNotRepeated(t *testing.T) {
 	owner := map[string]string{}
 	for action, key := range DefaultKeybindings() {

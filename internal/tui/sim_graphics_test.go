@@ -172,8 +172,7 @@ func TestTheRealCellRatioMakesTheImageBigger(t *testing.T) {
 	}
 }
 
-// The layer lives above the pane's content, so not clearing it on close leaves the image
-// over the TUI.
+// The layer lives above the pane's content, so not clearing it on close leaves the image over the TUI.
 func TestClosingThePopupClearsTheLayer(t *testing.T) {
 	path := writeJPEG(t)
 	f := &fakeSimulator{available: true, res: sim.Result{Kind: sim.KindMerge, Path: path}}

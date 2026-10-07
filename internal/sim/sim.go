@@ -1,5 +1,3 @@
-// Package sim renders a simulation with git-sim. It is a renderer, not a simulator, and the picture
-// is the only trace of that work, so nothing here reads its output to decide anything.
 package sim
 
 import (
@@ -16,30 +14,21 @@ import (
 type Kind string
 
 const (
-	KindMerge Kind = "merge"
-	// activa.
+	KindMerge  Kind = "merge"
 	KindRebase Kind = "rebase"
 )
 
-// git-sim.
 func (k Kind) String() string { return string(k) }
 
-// The ref is not the same branch in both cases, which is why the asker supplies it: a merge
-// integrates the ref into the active branch, a rebase rebases it onto it.
 type Spec struct {
 	Kind Kind
 	Ref  string
 }
 
 const (
-	DefaultBin = "git-sim"
-	// A healthy render takes a couple of seconds; the limit exists for the failure mode where git-sim hangs
-	// handing the image to the desktop viewer, which never returns without a display. 60s as a literal
-	// because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
+	DefaultBin     = "git-sim"
 	DefaultTimeout = time.Duration(60e9)
 
-	// Same reason and same fix as in herdr: a child holding our pipes keeps `cmd.Run` from returning.
-	// 250ms as a literal, same coverage argument as DefaultTimeout above.
 	pipeCloseGrace = time.Duration(250e6)
 )
 
@@ -88,8 +77,6 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
-// The global options go BEFORE the subcommand, whose group rejects them. `--quiet` cannot be asked
-// with `--output-only-path`: the path is printed only when git-sim is not silent.
 func (r *Runner) args(spec Spec, mediaDir string) []string {
 	return []string{
 		"--output-only-path",
@@ -99,8 +86,6 @@ func (r *Runner) args(spec Spec, mediaDir string) []string {
 	}
 }
 
-// The image only exists while workdir/media is still there, and its characteristic failure is not
-// finishing badly but not finishing: the timeout is the only recovery.
 func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec) (string, error) {
 	if spec.Kind != KindMerge && spec.Kind != KindRebase {
 		return "", fmt.Errorf("sim: unknown kind %q", spec.Kind)
@@ -120,8 +105,6 @@ func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec
 	cmd := exec.CommandContext(cctx, r.bin(), args...)
 	cmd.Dir = workdir
 	cmd.Env = env()
-	// Without this the timeout only kills the process: a render that leaves a child with the descriptors
-	// open keeps `cmd.Run` waiting.
 	cmd.WaitDelay = pipeCloseGrace
 
 	var out, errb bytes.Buffer
@@ -142,8 +125,6 @@ func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec
 	return image, nil
 }
 
-// git_sim_auto_open=false is not optional: git-sim ends by handing the image to the desktop
-// viewer, which never returns without a display. It has no command-line form, only git_sim_* env vars.
 func env() []string {
 	var out []string
 	for _, kv := range os.Environ() {
@@ -167,8 +148,6 @@ func message(stderr string, err error) string {
 	return "unknown error"
 }
 
-// The last non-empty line: with --output-only-path it is the only one written, but a manim complaining
-// on stdout must not displace the result.
 func imagePath(out string) string {
 	lines := strings.Split(out, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {

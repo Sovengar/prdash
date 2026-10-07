@@ -1,5 +1,3 @@
-// Package config loads prdash's XDG configuration. The TOML file is optional and a malformed one
-// degrades to defaults with a warning: config never aborts the startup.
 package config
 
 import (
@@ -29,10 +27,8 @@ type GitHubConfig struct {
 }
 
 type GitLabConfig struct {
-	Enabled bool
-	Host    string
-	// Not just documentation: it also derives the clone/web URL root when CloneBase is empty, because
-	// glab resolves its own host and API base but a git clone does not.
+	Enabled   bool
+	Host      string
 	APIBase   string
 	CloneBase string
 	TokenEnv  string // name of the token env var (glab reads it)
@@ -72,11 +68,9 @@ type Forges struct {
 }
 
 type Tools struct {
-	Tuicr string
-	Hunk  string
-	Agent string
-	// A shell command, not a review tool, so it can be anything the shell understands (typically the
-	// `vi` that expands to `nvim .`).
+	Tuicr  string
+	Hunk   string
+	Agent  string
 	Editor string
 	GH     string
 	Glab   string
@@ -151,7 +145,6 @@ type autoReviewFile struct {
 	Allowlist []string `toml:"allowlist"`
 }
 
-// Never fails: any error degrades to defaults.
 func Load() (Config, string) {
 	path, err := Path()
 	if err != nil {
@@ -244,9 +237,7 @@ func DefaultKeybindings() Keybindings {
 		"section-next": "tab",
 		"open-browser": "o",
 		"prefix-mode":  "p",
-		// `retarget` is `e`, from "edit target branch", the name the action has in the docs; it was the
-		// free letter with the clearest name and the alternatives were taken or read as something else.
-		"retarget": "e",
+		"retarget":     "e",
 	}
 }
 
@@ -355,8 +346,6 @@ type hint struct {
 	label  string
 }
 
-// The only source of the hint bar. The order is not cosmetic: clipping cuts the tail, so in a
-// narrow terminal only the head survives — which is why `quit` opens the list and cannot be first.
 var hintOrder = []hint{
 	{action: "quit", label: "quit"},
 	{action: "section-next", label: "section"},
@@ -366,18 +355,12 @@ var hintOrder = []hint{
 	{action: "simulate", label: "simulate"},
 	{action: "open-browser", label: "open"},
 	{action: "refresh", label: "refresh"},
-	// Here rather than at the end, because clipping cuts the tail. Not a guarantee: in a 40-column
-	// terminal the mode name goes with it, since "common" is the longest name.
 	{action: "prefix-mode", label: "prefix"},
-	// BEHIND `prefix-mode`, not next to merge: clipping cuts the tail, so anything added before
-	// the mode makes the mode name the first thing lost. The short label is deliberate; the popup has the long.
 	{action: "retarget", label: "edit base"},
 	{key: "j/k", label: "move"},
 	{key: "pgup/dn", label: "page"},
 }
 
-// The `prefix-mode` hint has to say which mode the ITEM column is in, and only the TUI knows that.
-// A placeholder the TUI substituted would leave the config's own view of the bar with a raw marker.
 type HintState map[string]string
 
 func (c Config) Hints(state HintState) []string {

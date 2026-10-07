@@ -34,7 +34,7 @@ const headSHA = "9f1c0de"
 func TestMergePassesTheStrategyFlag(t *testing.T) {
 	for _, tc := range []struct {
 		mode forge.MergeMode
-		want string // "" = no strategy flag must appear
+		want string
 	}{
 		{forge.MergeCommit, ""},
 		{forge.Rebase, "--rebase"},
@@ -66,8 +66,7 @@ func TestMergePassesTheStrategyFlag(t *testing.T) {
 	}
 }
 
-// A silent bug: glab defaults --auto-merge to true, so with a pipeline running the command did
-// not merge, it queued the MR and exited 0.
+// A silent bug: glab defaults --auto-merge to true, so with a pipeline running it queued the MR and exited 0 instead of merging.
 func TestMergeDisablesAutoMerge(t *testing.T) {
 	for _, mode := range []forge.MergeMode{forge.MergeCommit, forge.Rebase, forge.Squash} {
 		dir := t.TempDir()

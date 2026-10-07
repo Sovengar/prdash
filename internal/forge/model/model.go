@@ -23,8 +23,6 @@ func (s Section) String() string {
 	}
 }
 
-// Not String(): that is the long data-mode name (--print) and must not change, while the border
-// legend needs one word per section to fit.
 func (s Section) Legend() string {
 	switch s {
 	case SectionAuthored:
@@ -70,8 +68,6 @@ type DiffStat struct {
 
 func (d DiffStat) Total() int { return d.Additions + d.Deletions }
 
-// Known separates "the repo forbids squash" from "we do not know": without it a repo with all
-// three disabled is indistinguishable from one that allows them. Unknown restricts nothing.
 type MergeRules struct {
 	Known       bool
 	MergeCommit bool
@@ -79,8 +75,6 @@ type MergeRules struct {
 	Squash      bool
 }
 
-// A permissive default, not data from a repo, which is exactly why Known=false is what
-// distinguishes it from rules actually read from the forge.
 func MergeRulesAll() MergeRules {
 	return MergeRules{Known: true, MergeCommit: true, Rebase: true, Squash: true}
 }
@@ -110,35 +104,27 @@ func With(forge, host, project string, number int) ID {
 }
 
 type Item struct {
-	Section      Section
-	Forge        string
-	Host         string
-	Ref          RepoRef
-	Number       int
-	Title        string
-	Author       string
-	ReviewKind   ReviewKind
-	SourceBranch string
-	TargetBranch string
-	URL          string
-	State        string // raw forge state: open/merged/closed…
-	// A field of its own rather than a State value: State is the forge's enum (OPEN in GitHub, opened
-	// in GitLab) and a derived "draft" there forced every adapter to translate it exactly.
-	IsDraft bool
-	// Matters for one concrete thing: deleting the branch when merging a fork PR deletes nothing, so a
-	// warning saying otherwise is lying on the items most closely watched.
+	Section        Section
+	Forge          string
+	Host           string
+	Ref            RepoRef
+	Number         int
+	Title          string
+	Author         string
+	ReviewKind     ReviewKind
+	SourceBranch   string
+	TargetBranch   string
+	URL            string
+	State          string // raw forge state: open/merged/closed…
+	IsDraft        bool
 	IsFork         bool
 	ReviewDecision string // forge review decision: APPROVED/…
 	Checks         Checks
 	Diff           DiffStat
-	// Empty means "the forge did not report it", not "there is none": a merge that needs it refuses
-	// instead of integrating blind.
-	HeadSHA string
-	Merge   MergeRules
-	// Separate from Merge because they are different questions: what the repo ALLOWS versus what
-	// the forge can DO with the item as it stands.
-	Mergeable Mergeability
-	UpdatedAt time.Time
+	HeadSHA        string
+	Merge          MergeRules
+	Mergeable      Mergeability
+	UpdatedAt      time.Time
 }
 
 func NewItem(ref RepoRef, number int) Item {
@@ -154,7 +140,6 @@ func (it Item) ID() ID {
 	return With(it.Forge, it.Host, it.Ref.Project, it.Number)
 }
 
-// Body stays raw with its markdown: the same body reads differently depending on the rows that fit.
 type Comment struct {
 	Author    string
 	Body      string
@@ -165,9 +150,7 @@ type AuthState struct {
 	Forge  string
 	OK     bool
 	Reason string
-	// Empty when the adapter cannot infer it. Lets our own items be recognised without depending on
-	// which section they arrived in.
-	Login string
+	Login  string
 }
 
 type Warning struct {

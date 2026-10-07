@@ -9,7 +9,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// Complementary: Valid says it cannot be done, Label returns the name as given.
 func TestAMergeWithAnUnknownModeIsNotPresentedAsAKnownMode(t *testing.T) {
 	for _, c := range []struct {
 		mode forge.MergeMode
@@ -59,7 +58,6 @@ func TestAMergeWithAnUnknownModeIsNotPresentedAsAKnownMode(t *testing.T) {
 	}
 }
 
-// Composing on the current warning instead of stacking a second copy of the same text.
 func TestReplaceSwapsTheLiveNoticeAndDoesNotDuplicateTheText(t *testing.T) {
 	tm := &toastManager{now: func() time.Time { return time.Unix(0, 0) }}
 
@@ -73,8 +71,7 @@ func TestReplaceSwapsTheLiveNoticeAndDoesNotDuplicateTheText(t *testing.T) {
 		t.Errorf("the text ended up as %q", tm.toasts[0].message)
 	}
 
-	// And with a `prev` that is not there: it stacks, it is not lost. A lost warning is the worst
-	// outcome.
+	// With a `prev` that is not there it stacks, it is not lost: a lost warning is the worst outcome.
 	tm.replace("a text that no longer exists", "another notice", toastWarning)
 	if len(tm.toasts) != 2 {
 		t.Errorf("a missing `prev` left %d notices, want 2: the new one stacks", len(tm.toasts))
@@ -123,8 +120,7 @@ func TestTheHeaderShowsTheSpinnerFirstAndTheForgeStatusBehind(t *testing.T) {
 			quieto.headerSection().text)
 	}
 
-	// And the narrow terminal, which is the reason for the order: the spinner survives and the forge
-	// statuses go.
+	// The narrow terminal is the reason for the order: the spinner survives and the forge statuses go.
 	narrow := new(t)
 	narrow.loading = true
 	narrow.width = 40
@@ -133,7 +129,6 @@ func TestTheHeaderShowsTheSpinnerFirstAndTheForgeStatusBehind(t *testing.T) {
 	}
 }
 
-// The negative case of compactCount.
 func TestANegativeCountIsNotPresentedAsARoundedOne(t *testing.T) {
 	for _, c := range []struct {
 		n    int
@@ -159,7 +154,6 @@ func TestANegativeCountIsNotPresentedAsARoundedOne(t *testing.T) {
 	}
 }
 
-// diffSpans only colours text that really is two signed digits.
 func TestADiffstatThatIsNotTwoSignedDigitsIsNotPainted(t *testing.T) {
 	for _, c := range []struct {
 		name   string

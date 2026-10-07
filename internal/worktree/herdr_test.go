@@ -158,8 +158,7 @@ func TestHerdrNativeCreateReusesExistingWorktree(t *testing.T) {
 	}
 }
 
-// The checkout is on disk from an earlier session but its workspace is closed, so
-// `worktree list` returns no open_workspace_id: that is what detached the review.
+// A closed workspace makes worktree list return no open_workspace_id, which detaches the review.
 func TestHerdrNativeReuseAdoptsCheckoutWithNoOpenWorkspace(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -172,7 +171,7 @@ func TestHerdrNativeReuseAdoptsCheckoutWithNoOpenWorkspace(t *testing.T) {
 
 	runner := &fakeRunner{
 		available:  true,
-		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", Label: "origin.git"}}, // without open_workspace_id
+		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", Label: "origin.git"}},
 		workspace:  herdr.WorkspaceInfo{WorkspaceID: "w1C", TabID: "w1C:t1", RootPaneID: "w1C:p1"},
 	}
 
@@ -218,8 +217,7 @@ func TestHerdrNativeReuseFailsWhenWorkspaceCannotBeOpened(t *testing.T) {
 	}
 }
 
-// Herdr can return an open_workspace_id that no longer exists: it keeps it in its persisted session
-// and a closed workspace leaves it pointing at nothing.
+// Herdr can return an open_workspace_id that no longer exists, pointing at nothing.
 func TestHerdrNativeReuseIgnoresStaleOpenWorkspaceId(t *testing.T) {
 	repo := newRepo(t)
 	testutil.RunGit(t, repo, "branch", "feature")
@@ -233,7 +231,7 @@ func TestHerdrNativeReuseIgnoresStaleOpenWorkspaceId(t *testing.T) {
 	runner := &fakeRunner{
 		available:  true,
 		listResult: []herdr.WorktreeInfo{{Path: dest, Branch: "feature", OpenWorkspaceID: "w1B"}},
-		panesErr:   map[string]error{"w1B": errWorkspaceProbe}, // Herdr: workspace_not_found
+		panesErr:   map[string]error{"w1B": errWorkspaceProbe},
 		workspace:  herdr.WorkspaceInfo{WorkspaceID: "w1D", TabID: "w1D:t1", RootPaneID: "w1D:p1"},
 	}
 
@@ -312,7 +310,7 @@ func TestHerdrNativeRemoveRefusesPathOutsideBase(t *testing.T) {
 		available:  true,
 		listResult: []herdr.WorktreeInfo{{Path: outside, OpenWorkspaceID: "w99"}},
 	}
-	h := NewHerdrNative(runner, t.TempDir()) // a different managed root
+	h := NewHerdrNative(runner, t.TempDir())
 	if err := h.Remove(context.Background(), outside); err == nil {
 		t.Fatal("it should not delete outside the managed root")
 	}
@@ -439,8 +437,7 @@ func TestHerdrNativeRemoveIfCleanPropagatesRemoveError(t *testing.T) {
 	}
 }
 
-// The narrow band of destinations where Exists is true but the destination is not a worktree is
-// what decides between `herdr worktree create` and `reuse`.
+// Exists true but not a worktree is the narrow band that decides between create and reuse.
 func TestOnADestinationThatIsNotAWorktreeItDoesNotCreateOnTopNorAdopt(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
 	if err := os.MkdirAll(dest, 0o755); err != nil {
@@ -475,8 +472,7 @@ func TestOnADestinationThatIsNotAWorktreeItDoesNotCreateOnTopNorAdopt(t *testing
 	}
 }
 
-// Adopting another branch's checkout would mount the review on code nobody chose and present it as
-// if it were the item's.
+// Adopting another branch's checkout would mount the review on code nobody chose.
 func TestAdoptingAWorktreeOfAnotherBranchIsRefusedAndSaid(t *testing.T) {
 	repo := repoWithBranch(t)
 	testutil.RunGit(t, repo, "branch", "other")
@@ -527,8 +523,7 @@ func TestRemoveOfAWorktreeWithoutAnOpenWorkspaceDelegatesToTheGitScan(t *testing
 	}
 }
 
-// reuse has a single caller and that caller already checked Exists(spec.Path), which is exactly
-// ".git is a FILE"; so this branch is unreachable from Create and has to be called directly.
+// Create already checked Exists, so this reuse branch is unreachable and must be called directly.
 func TestReuseWithAGitThatIsADirectoryPropagatesTheInspectError(t *testing.T) {
 	repo := repoWithBranch(t)
 
@@ -551,8 +546,7 @@ func TestReuseWithAGitThatIsADirectoryPropagatesTheInspectError(t *testing.T) {
 	}
 }
 
-// `git worktree lock` is how git's record goes corrupt without the repo being gone: someone locks a
-// worktree and the directory disappears.
+// git worktree lock corrupts the record without the repo being gone: a locked entry whose directory vanishes.
 func TestALockedWorktreeIsPrunedAndItsResidueDeletedWithoutTouchingTheRest(t *testing.T) {
 	repo := repoWithBranch(t, "feat/x", "feat/y")
 
@@ -577,8 +571,7 @@ func TestALockedWorktreeIsPrunedAndItsResidueDeletedWithoutTouchingTheRest(t *te
 	if Exists(ours) {
 		t.Errorf("%s is still on disk after a Remove that did succeed", ours)
 	}
-	// A locked entry stays in git's record with the `locked` mark even when its directory is gone, and
-	//`git worktree prune` does not touch a locked entry.
+	// A locked entry stays in the record even when its directory is gone, and prune does not touch it.
 	var liveEntry string
 	for _, line := range strings.Split(
 		testutil.RunGit(t, repo, "worktree", "list"), "\n") {
@@ -606,8 +599,7 @@ func TestALockedWorktreeIsPrunedAndItsResidueDeletedWithoutTouchingTheRest(t *te
 	}
 }
 
-// The sibling of the previous one: `.git` is a file (Exists is true) but git cannot read the branch
-// from it.
+// .git is a file (Exists true) but git cannot read the branch from it.
 func TestReuseOnADestinationThatNoLongerHasGitRefusesAndDoesNotInventAWorktree(t *testing.T) {
 	repo := repoWithBranch(t)
 	dest := filepath.Join(t.TempDir(), "prdash-pr-7")
@@ -635,8 +627,7 @@ func TestReuseOnADestinationThatNoLongerHasGitRefusesAndDoesNotInventAWorktree(t
 	}
 }
 
-// Both of reuse's guards are literally the negation of what Create checks before calling it, so the
-// test has to jump over Create to reach them.
+// reuse's guards are the negation of Create's checks, so the test jumps over Create to reach them.
 func TestReuseOnADestinationWithoutGitRefuses(t *testing.T) {
 	repo := repoWithBranch(t)
 	dest := filepath.Join(t.TempDir(), "prdash-pr-7")

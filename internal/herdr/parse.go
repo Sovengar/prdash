@@ -200,7 +200,6 @@ func parseNotification(raw []byte) (bool, string, error) {
 
 var versionRe = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
 
-// ("herdr 0.9.1-preview.…").
 func parseVersion(raw []byte) (Version, bool) {
 	m := versionRe.FindSubmatch(raw)
 	if m == nil {
@@ -212,7 +211,6 @@ func parseVersion(raw []byte) (Version, bool) {
 	return Version{Major: major, Minor: minor, Patch: patch, Raw: strings.TrimSpace(string(raw))}, true
 }
 
-// Best-effort: the exact server shape is unverified, so both variants are accepted.
 func parseServerError(stderr []byte) (code, msg string) {
 	text := strings.TrimSpace(string(stderr))
 	if text == "" {

@@ -9,13 +9,9 @@ import (
 	"testing"
 )
 
-// The in-process half of the package's guards; the other half is the subprocess tests.
-
-// Each case checks something different.
 func TestTheGuardsReturnTheReason(t *testing.T) {
 	dir := t.TempDir()
 
-	// The reason comes from checkDir and the path prefix.
 	file := filepath.Join(dir, "file")
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -68,7 +64,6 @@ func TestTheGuardsReturnTheReason(t *testing.T) {
 	}
 }
 
-// The guard that cost the most.
 func TestInitBareRefusesTheEmptyDirectoryWithTheReasonForTheDamage(t *testing.T) {
 	err := initBare("")
 	if err == nil {
@@ -95,14 +90,12 @@ func TestInitBareRefusesTheEmptyDirectoryWithTheReasonForTheDamage(t *testing.T)
 	}
 }
 
-// Two guards that fail for different reasons.
 func TestCommitFileDistinguishesTheTwoWriteFailures(t *testing.T) {
 	dir := t.TempDir()
 	repo := filepath.Join(dir, "repo")
 	InitRepo(t, repo)
 
-	// The file's parent exists as a file, and the repo has to be real: with only the directory,
-	//git refuses.
+	// The file's parent exists as a file, and the repo has to be real: with only the directory git refuses.
 	blocked := filepath.Join(repo, "blocked")
 	if err := os.WriteFile(blocked, []byte("I am a file"), 0o644); err != nil {
 		t.Fatal(err)
@@ -111,7 +104,6 @@ func TestCommitFileDistinguishesTheTwoWriteFailures(t *testing.T) {
 	if err == nil {
 		t.Fatal("commitFile with a parent that is a file gave nil")
 	}
-	// The message NAMES the file that could not be written.
 	if !strings.Contains(err.Error(), "blocked/uploaded.txt") {
 		t.Errorf("the error %q does not say which file could not be written", err)
 	}

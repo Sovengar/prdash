@@ -22,8 +22,6 @@ const (
 	itemWidthCap = 34 // "group/subgroup/project#1234"
 )
 
-// Boxes are always drawn at an exact width, so without this the first render would come out at 0
-// columns.
 const defaultOuterWidth = 124
 
 var (

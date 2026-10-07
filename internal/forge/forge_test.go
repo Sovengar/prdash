@@ -72,7 +72,7 @@ func TestStreamEmitsPages(t *testing.T) {
 	var firsts, nexts int
 	forge.Stream(context.Background(), fake, func(p forge.PageResult) bool {
 		if p.Query.Section != model.SectionReview || p.Query.ReviewKind != model.ReviewRequested {
-			return true // ignore empty lists
+			return true
 		}
 		if len(p.Items) == 0 {
 			return true
@@ -104,7 +104,7 @@ func TestStreamStopsWhenEmitReturnsFalse(t *testing.T) {
 	}
 
 	forge.Stream(context.Background(), fake, func(p forge.PageResult) bool {
-		return p.Query.Section != model.SectionAuthored // stop at authored
+		return p.Query.Section != model.SectionAuthored
 	})
 
 	if got := fake.ListCallCount(); got > len(forge.Streams) {
@@ -214,8 +214,7 @@ func TestRunActionSelfReviewDenied(t *testing.T) {
 	}
 }
 
-// A rejection because the branches collide is not a state conflict, and confusing them is what made
-// the UI promise a refresh that fixes nothing.
+// A rejection because the branches collide is not a state conflict; confusing them made the UI promise a refresh that fixes nothing.
 func TestRunActionUnmergeableIsNotAConflict(t *testing.T) {
 	item := mkItem("github", "github.com", "acme/widget", 7)
 	item.HeadSHA = "abc1234" // without a pin the merge does not go through, and that is not what is being tested

@@ -136,7 +136,6 @@ func TestItemCellsKeepTheNumberWhenClipped(t *testing.T) {
 	}
 }
 
-// The integration test: with one section there is no common prefix.
 func TestListLinesShowThePrefixOnAFixedLine(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m = send(t, m, page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, mkItems(
@@ -174,7 +173,6 @@ func TestListLinesShowThePrefixOnAFixedLine(t *testing.T) {
 	}
 }
 
-// A section with a single item cannot declare a common prefix.
 func TestListLinesWithNoPrefixKeepThePath(t *testing.T) {
 	render := func(project string) []string {
 		m := newTestModel(t, ghAdapter())
@@ -186,13 +184,10 @@ func TestListLinesWithNoPrefixKeepThePath(t *testing.T) {
 		return lines
 	}
 
-	// A short path: it enters whole and uncut.
 	if !containsSubstring(render("g/p"), "g/p#100") {
 		t.Fatal("a short path in an items section was not painted whole")
 	}
 
-	// A long path: with no prefix to compensate it is clipped at the tail and the "#number"
-	// survives.
 	var cell string
 	for _, line := range render("APPCITTI/vsocial/backend/api-gateway") {
 		if strings.Contains(line, "APPCITTI") {
@@ -243,8 +238,7 @@ func TestRefColInvariantes(t *testing.T) {
 			}
 		}
 
-		// The invariants are checked in ALL THREE modes, not just common: tail clipping is only
-		//correct in common.
+		// The invariants are checked in ALL THREE modes, not just common: tail clipping is only correct in common.
 		for _, mode := range []prefixMode{prefixCommon, prefixFull, prefixLeaf} {
 			lay := newRefLayout(sections, mode)
 			w := lay.cols[colRefIdx].width

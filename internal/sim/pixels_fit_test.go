@@ -42,16 +42,13 @@ func TestFitCellsRespectsTheBoxAndUsesTheDimensionThatRules(t *testing.T) {
 	}
 }
 
-// The ratio that decides how many columns per row the image needs is the image's OVER the cell's,
-// not the reverse.
+// The ratio is the image's OVER the cell's, not the reverse.
 func TestFitCellsPreservesTheAspectRatio(t *testing.T) {
 	square := solid(100, 100, black)
 	cols, rows := FitCells(square, 1, 2, 100, 10)
 	if cols != 20 || rows != 10 {
 		t.Errorf("square in 1x2 cells gave %dx%d, want 20x10: the height rules (10 lines) and each line needs 2 columns", cols, rows)
 	}
-	// Square image, 9x19 cells: one cell is much taller than wide, so it takes 19/9 = 2.11 columns per
-	//row for the image to come out square.
 	cols, rows = FitCells(square, 9, 19, 100, 10)
 	if cols != 21 || rows != 10 {
 		t.Errorf("square in 9x19 cells gave %dx%d, want 21x10: 19/9 = 2.11 columns per line", cols, rows)
@@ -61,8 +58,7 @@ func TestFitCellsPreservesTheAspectRatio(t *testing.T) {
 	if cols != 71 || rows != 20 {
 		t.Errorf("16:9 in 1x2 cells gave %dx%d, want 71x20: 3.56 columns per line x 20 lines = 71, which fits in 80", cols, rows)
 	}
-	// With fewer rows the WIDTH takes over: the same calculation from the other side, which is why both
-	//cuts have to be right.
+	// With fewer rows the WIDTH takes over: both cuts have to be right.
 	cols, rows = FitCells(wide, 1, 2, 80, 30)
 	if cols != 80 || rows != 22 {
 		t.Errorf("16:9 in 1x2 cells with 30 rows gave %dx%d, want 80x22: the 107 columns no longer fit and the width rules", cols, rows)
@@ -74,7 +70,6 @@ func TestFitCellsPreservesTheAspectRatio(t *testing.T) {
 	}
 }
 
-// The three degradations. None may break the fit, and each has a reason.
 func TestFitCellsFallsBackToDefaultsWithoutBreaking(t *testing.T) {
 	img := solid(16, 9, black)
 
@@ -125,7 +120,6 @@ func TestFitIsFitCellsWithTheUsualCell(t *testing.T) {
 	}
 }
 
-// Box average, and in the one case where the truth is known without arithmetic the result equals it.
 func TestResizePromisesTheColorOfASingleColor(t *testing.T) {
 	red := color.RGBA{R: 200, G: 10, B: 20, A: 255}
 	for _, f := range []measures{{1, 1}, {2, 2}, {64, 64}, {640, 480}} {
@@ -204,11 +198,9 @@ func TestResizeWithoutOutputOrWithoutImageReturnsNil(t *testing.T) {
 	}
 }
 
-// Bounds does not only say the size, it says WHERE the image starts: a cropped PNG is half an
-// image returned by git-sim.
+// Bounds says WHERE the image starts: a cropped PNG is half an image returned by git-sim.
 func TestResizeRespectsTheBoundsOrigin(t *testing.T) {
-	// A big image with two very different halves and a crop that falls EXACTLY between them: an
-	//absolute-coordinate reader would take only one.
+	// A crop that falls EXACTLY between two different halves: an absolute-coordinate reader would take only one.
 	red := color.RGBA{R: 250, G: 0, B: 0, A: 255}
 	green := color.RGBA{R: 0, G: 250, B: 0, A: 255}
 	background := image.NewRGBA(image.Rect(0, 0, 100, 100))

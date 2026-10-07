@@ -7,11 +7,7 @@ import (
 	"testing"
 )
 
-// Kind decides what to do with a forge CLI's failure, and the whole package hangs on it: it answers
-//"is this retried", "is this a permission" and "what does the user see".
-
-// GitHub answers 403 for a permission AND for a rate limit, so without the text a rate limit is
-// classified as a permission.
+// GitHub answers 403 for a permission AND for a rate limit, so without the text a rate limit reads as a permission.
 func TestTheTextWinsOverTheHTTPCode(t *testing.T) {
 	cases := []struct {
 		name string
@@ -39,8 +35,7 @@ func TestTheTextWinsOverTheHTTPCode(t *testing.T) {
 			want: "unmergeable",
 		},
 		{
-			// The obvious reading is the wrong one: "Head branch was modified" is UNMERGEABLE, not a
-			//conflict, even though 409 and the word "modified" both point at conflict.
+			// The obvious reading is wrong: "Head branch was modified" is UNMERGEABLE, not a conflict, though 409 and "modified" both point at conflict.
 			name: "head branch was modified is unmergeable, not conflict",
 			err:  errors.New("gh: Head branch was modified. Review and try the merge again. (HTTP 409)"),
 			want: "unmergeable",
@@ -74,8 +69,7 @@ func TestTheTextWinsOverTheHTTPCode(t *testing.T) {
 	}
 }
 
-// The order matters for the same reason as the others: a 422 in GitHub is custom deployment
-// validation.
+// The order matters: a 422 in GitHub is custom deployment validation.
 func TestSelfRejectionIsLookedAtBeforeTheCode(t *testing.T) {
 	cases := []struct {
 		name string
@@ -211,15 +205,13 @@ func TestKindByTextWhenThereIsNoHTTPCodeToSayIt(t *testing.T) {
 		}
 	}
 
-	// Deliberately left out: "could not authenticate with the token" falls into `network`. Writing
-	//the test to force that synonym would be fitting the code to the test.
+	// Deliberately left out: "could not authenticate with the token" falls into `network`; forcing that synonym would fit the code to the test.
 	if got := Kind(errors.New("could not authenticate with the token")); got != "network" {
 		t.Errorf("a synonym that is not in the list gave %q; if the list is widened, it is "+
 			"widened with a real message and not with a test", got)
 	}
 
-	// The control: the two cases that DO carry an HTTP code still go through the code. If the text ran
-	//first, a "422 validation error" containing "conflict" would be misread.
+	// The control: messages that DO carry an HTTP code still go through the code, or a "422 conflict" would be misread.
 	if got := Kind(errors.New("HTTP 422 Unprocessable Entity: conflict on branch")); got != "validation" {
 		t.Errorf("with 422 and the word conflict in the body it gave %q, want validation: the "+
 			"code wins, and retrying an invalid approve burns quota without fixing anything", got)
@@ -241,8 +233,7 @@ func TestKindByTextForRateLimitAndConflictWhenThereIsNoHTTPCode(t *testing.T) {
 		}
 	}
 
-	// The asymmetry is why classifying well matters: an "already merged" classed as `network` does not
-	//retry; classed as `conflict` it does.
+	// The asymmetry is why classifying matters: "already merged" classed as `network` does not retry; as `conflict` it does.
 	for _, msg := range []string{"already merged", "abuse detection mechanism triggered"} {
 		if got := Kind(errors.New(msg)); got == "network" {
 			t.Errorf("%q fell into network, which is the class where nothing is done", msg)
@@ -250,8 +241,7 @@ func TestKindByTextForRateLimitAndConflictWhenThereIsNoHTTPCode(t *testing.T) {
 	}
 }
 
-// HTTPStatus only recognises a code when it comes with its pattern —"HTTP 404" — so these two
-// branches are only reachable with the bare code.
+// HTTPStatus only recognises a code with its pattern —"HTTP 404"—, so these two branches need the bare code.
 func TestKindWithABareCodeAndNoHTTPPattern(t *testing.T) {
 	for msg, want := range map[string]string{
 		"429":                 "ratelimit",

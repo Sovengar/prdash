@@ -16,16 +16,16 @@ func TestClipRunesMarksWhatWasLost(t *testing.T) {
 		n    int
 		want string
 	}{
-		{6, "abcdef"},   // fits exactly: intact
-		{7, "abcdef"},   // spare room: intact
-		{100, "abcdef"}, // lots of spare: intact
-		{1, "…"},        // only the mark fits
-		{2, "a…"},       // one character and the mark
+		{6, "abcdef"},
+		{7, "abcdef"},
+		{100, "abcdef"},
+		{1, "…"},
+		{2, "a…"},
 		{3, "ab…"},
 		{5, "abcd…"},
-		{0, ""},   // no room, no mark
-		{-1, ""},  // negative, no mark
-		{-50, ""}, // very negative, no mark
+		{0, ""},
+		{-1, ""},
+		{-50, ""},
 	}
 	for _, c := range cases {
 		if got := clipRunes([]rune(short), c.n); got != c.want {
@@ -45,8 +45,7 @@ func TestClipRunesMarksWhatWasLost(t *testing.T) {
 	if got := clipRunes(multibyte, 2); got != "ñ…" {
 		t.Errorf("clipRunes with 2 runes gave %q, want %q", got, "ñ…")
 	}
-	// The result can always be printed and measured: a cut in the middle of a utf-8 sequence breaks
-	// the width.
+	// The result is always printable and measurable: a cut mid-utf-8 sequence breaks the width.
 	for n := 1; n <= 8; n++ {
 		got := clipRunes([]rune("ñáéíóú"), n)
 		if !utf8Valid(got) {
@@ -91,7 +90,6 @@ func TestCommentBoxWidthRespectsTheFloorAndTheIndent(t *testing.T) {
 	}
 }
 
-// The padding is measured in COLUMNS, not bytes.
 func TestPadRightAlignsByColumnsNotByBytes(t *testing.T) {
 	for _, s := range []string{"", "a", "ab", "one", "a-label long"} {
 		for n := 0; n <= 20; n++ {
@@ -193,7 +191,6 @@ func TestAllocateSplitsTheRowsRegardlessOfArrivalOrder(t *testing.T) {
 				t.Errorf("allocate(%v, %d) distributed %d rows, more than the limit of %d",
 					c.need, c.budget, sum, limit)
 			}
-			// And never less than one row per comment that asked for something.
 			for i, r := range got {
 				if c.need[i] > 0 && r < 1 {
 					t.Errorf("allocate(%v, %d)[%d] = %d: a comment needs at least one row to be seen",
@@ -208,8 +205,7 @@ func TestAllocateSplitsTheRowsRegardlessOfArrivalOrder(t *testing.T) {
 		})
 	}
 
-	// The result does not depend on the input ORDER: the same numbers in another order allocate the
-	// same.
+	// The result does not depend on input order: the same numbers in another order allocate the same.
 	base := allocate([]int{6, 1, 1, 6, 1}, 12)
 	for _, perm := range [][]int{
 		{1, 6, 1, 6, 1},
@@ -259,14 +255,12 @@ func sameMultiset(a, b []int) bool {
 	return true
 }
 
-// The kind selector is circular.
 func TestTheSelectorCursorWrapsAroundBothWays(t *testing.T) {
 	restore := simKinds
 	simKinds = []sim.Kind{sim.KindMerge, sim.KindRebase, sim.Kind("other")}
 	t.Cleanup(func() { simKinds = restore })
 
-	// THREE kinds on purpose, the third being synthetic: with the two real ones, cursor-1 and
-	//cursor+1 would both land on the only one and the wrap would be untestable.
+	// Three kinds on purpose: with only two, cursor±1 would both land on the one and wrap would be untestable.
 	n := len(simKinds)
 	if n < 3 {
 		t.Fatalf("3 kinds are needed for +1 and -1 to be distinguishable, there are %d", n)

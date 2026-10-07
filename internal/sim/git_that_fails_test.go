@@ -11,8 +11,7 @@ import (
 	"prdash/internal/gitcmd"
 )
 
-// It fails by SUBCOMMAND and not by argument, because the staging reaches the failure AFTER
-// cloning: breaking clone too would test the clone error where the branch error belongs.
+// It fails by SUBCOMMAND, not by argument: breaking clone too would test the clone error where the branch error belongs.
 func gitFailingAt(t *testing.T, sub string) *gitcmd.Runner {
 	t.Helper()
 	dir := t.TempDir()
@@ -41,11 +40,9 @@ func serviceWithBadGit(t *testing.T, repo, branch, sub string) *Service {
 	return s
 }
 
-// All three in one test, because the value is in the comparison: each names its own subcommand and none
-// may name another's.
+// Each names its own subcommand and none may name another's: the value is in the comparison.
 func TestThreeStagingGitFailuresAreWarnedWithTheirSubcommandAndReason(t *testing.T) {
-	// Not the loose word "clone" but the full invocation gitcmd.Error prints. The loose word collides:
-	//"clone" appears inside "the simulation clone", and "branch" inside "create the branch".
+	// Not the loose word "clone" but the full invocation: "clone" collides with "the simulation clone".
 	for _, c := range []struct {
 		name   string
 		sub    string
@@ -95,8 +92,7 @@ func TestThreeStagingGitFailuresAreWarnedWithTheirSubcommandAndReason(t *testing
 						"user would go look at what did not fail", msg, n)
 				}
 			}
-			// And git's reason is inside the wrap, which is what tells "could not complete" from a generic
-			// failure.
+			// Git's reason is inside the wrap: what tells "could not complete" from a generic failure.
 			if !strings.Contains(msg, "did not complete") {
 				t.Errorf("the warning %q does not bring git's reason", msg)
 			}
@@ -107,7 +103,6 @@ func TestThreeStagingGitFailuresAreWarnedWithTheirSubcommandAndReason(t *testing
 	}
 }
 
-// Which branch appears in the warning is what this decides, and it is what the user needs to fix it.
 func TestCheckoutUsesTheBranchTheModeSaysAndTheMessageNamesIt(t *testing.T) {
 	for _, c := range []struct {
 		kind Kind
@@ -131,8 +126,7 @@ func TestCheckoutUsesTheBranchTheModeSaysAndTheMessageNamesIt(t *testing.T) {
 	}
 }
 
-// Called directly rather than through Simulate: Simulate asks for the cache dir AFTER cloning and
-// materialising, so the whole fixture would be built to never arrive.
+// Called directly, not through Simulate: Simulate asks for the cache dir AFTER cloning and materialising.
 func TestKeepWithoutCacheDirComplainsInsteadOfGuessingWhereToSave(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
@@ -153,8 +147,7 @@ func TestKeepWithoutCacheDirComplainsInsteadOfGuessingWhereToSave(t *testing.T) 
 	if !strings.Contains(err.Error(), "locate the simulation cache") {
 		t.Errorf("the warning %q does not say it is the simulation cache", err)
 	}
-	// And UserCacheDir's cause stays inside, because "no cache" and "the cache is in an unreadable
-	// place" are different.
+	// UserCacheDir's cause stays inside: "no cache" and "unreadable cache" are different.
 	if !strings.Contains(err.Error(), "HOME") {
 		t.Errorf("the warning %q does not bring os.UserCacheDir's cause, which is what names the "+
 			"missing variable", err)

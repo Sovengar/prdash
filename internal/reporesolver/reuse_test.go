@@ -10,8 +10,6 @@ import (
 	"prdash/internal/testutil"
 )
 
-// Both answer the same question: "is this already done?".
-
 // The memo holds resolved clones, so an empty path is not one of them.
 func TestRememberingAnEmptyPathDoesNotDirtyTheMemo(t *testing.T) {
 	memoPath := t.TempDir() + "/memo.json"
@@ -36,16 +34,14 @@ func TestRememberingAnEmptyPathDoesNotDirtyTheMemo(t *testing.T) {
 		t.Errorf("saving one project overwrote the other: %q", got)
 	}
 
-	// And it SURVIVES a new resolver over the same file, or the second execution would rebuild
-	// everything.
+	// It SURVIVES a new resolver over the same file, or the second execution would rebuild everything.
 	fresh := New(Options{MemoPath: memoPath})
 	if got, ok := fresh.store.Route(repoKey(ref)); !ok || got != route {
 		t.Errorf("the route was not recovered from a new resolver: (%q, %v)", got, ok)
 	}
 }
 
-// A truncated history of chained commits, because a review ref is ONE line of history and not
-// two branches.
+// A truncated history: a review ref is ONE line of history, not two branches.
 func TestTheReviewBranchIsReusedAndNotRecreated(t *testing.T) {
 	origin, repo := fixture(t)
 	const content = "first version"
@@ -73,8 +69,7 @@ func TestTheReviewBranchIsReusedAndNotRecreated(t *testing.T) {
 		t.Errorf("the branch points at %s and the ref at %s", head, expected)
 	}
 
-	// The second time: it reuses. What is asserted is that the branch is NOT recreated, because
-	// recreating it would lose uncommitted work.
+	// The branch is NOT recreated: recreating it would lose uncommitted work.
 	before := testutil.RunGit(t, repo, "rev-parse", branch)
 	again, err := r.FetchReviewRef(ctx, repo, it)
 	if err != nil {
@@ -88,7 +83,6 @@ func TestTheReviewBranchIsReusedAndNotRecreated(t *testing.T) {
 		t.Errorf("the branch moved from %s to %s between calls with the same ref", before, after)
 	}
 
-	// My first version read this backwards.
 	testutil.CommitFile(t, work, "pr.txt", content+" and something else", "revision 2")
 	testutil.Push(t, work, origin, "HEAD:"+reviewRefOf(it0(model.NewItem(ghRef(), 7))))
 	if _, err := r.FetchReviewRef(ctx, repo, it); err != nil {
@@ -111,8 +105,7 @@ func TestTheReviewBranchIsReusedAndNotRecreated(t *testing.T) {
 	}
 }
 
-// Failing rather than pretending: there is no such thing as a review ref without a forge to
-// ask.
+// Failing rather than pretending: there is no review ref without a forge to ask.
 func TestAForgeWithNoKnownReviewRefDoesNotAcceptTheRequest(t *testing.T) {
 	origin, repo := fixture(t)
 	r := newResolver(t, origin, ghRef())

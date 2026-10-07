@@ -20,8 +20,7 @@ func makeParentReadOnly(t *testing.T, parent string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		// Restored, or t.TempDir() cannot clean up and the failure is reported as an unrelated
-		// cleanup error.
+		// Restored, or t.TempDir() cannot clean up and reports an unrelated error.
 		_ = os.Chmod(parent, 0o755)
 	})
 }
@@ -52,7 +51,6 @@ func TestCreateFailsWhenTheDestinationParentCannotBeCreatedAndLeavesNothing(t *t
 	}
 }
 
-// The deletion that cannot delete.
 func TestRemovePropagatesTheFailureToRemoveTheCheckout(t *testing.T) {
 	for _, c := range []struct {
 		name  string
@@ -160,7 +158,6 @@ func TestRemoveIfCleanPropagatesTheRemovalFailureWhenItIsClean(t *testing.T) {
 
 func gitAt(root string) *GitDirect { return NewGitDirect(root) }
 
-// Audit's SkipDir.
 func TestAuditSkipsNestedGitDirectories(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "no-es-prdash")
@@ -192,7 +189,6 @@ func TestAuditSkipsNestedGitDirectories(t *testing.T) {
 	}
 }
 
-// The native provisioning delegates Audit to the scan and propagates its failures.
 func TestTheNativeProvisioningDelegatesAuditToTheScanAndPropagatesItsFailures(t *testing.T) {
 	root := t.TempDir()
 	repo := repoWithBranch(t, "feat/x")

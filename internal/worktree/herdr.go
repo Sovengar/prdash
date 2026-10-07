@@ -17,8 +17,7 @@ type HerdrRunner interface {
 	PaneList(ctx context.Context, workspaceID string) ([]herdr.PaneInfo, error)
 }
 
-// The checkout is tied to a Herdr workspace, the container the layout uses. Only inside Herdr;
-// prdash still resolves the fetch and the local branch.
+// Tied to a Herdr workspace only inside Herdr; prdash still resolves the fetch and branch.
 type HerdrNative struct {
 	client HerdrRunner
 	scan   *GitDirect
@@ -57,8 +56,7 @@ func (h *HerdrNative) Create(ctx context.Context, spec Spec) (Worktree, error) {
 	return composed(spec, info), nil
 }
 
-// Pure on purpose: precedence between two sources is what cannot be read by eye. For EACH FIELD
-// what Herdr said wins — lying here has no visible error. The label is the EXCEPTION.
+// Herdr's field wins over the caller's — a wrong precedence has no visible error. The label excepts.
 func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 	wt := Worktree{
 		ID:          spec.Path,
@@ -88,8 +86,7 @@ func composed(spec Spec, info herdr.WorktreeInfo) Worktree {
 	return wt
 }
 
-// The checkout must match the branch asked for: reusing another branch's checkout is a fake
-// mount. A checkout with no open workspace gets one, or the review detaches from its worktree.
+// Reusing another branch's checkout is a fake mount; a checkout with no open workspace gets one.
 func (h *HerdrNative) reuse(ctx context.Context, spec Spec) (Worktree, error) {
 	existing, ok, err := h.scan.inspect(ctx, spec.Path)
 	if err != nil {

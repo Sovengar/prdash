@@ -27,15 +27,11 @@ type FakeAdapter struct {
 	ItemStates    map[string]model.Item
 	StateWarnings map[string][]model.Warning
 
-	// Unconfigured, Comments returns an already-resolved EMPTY conversation, so a test that does not deal
-	// with comments does not meet a "loading…" that never ends.
 	Conversations   map[string]forge.CommentPage
 	CommentWarnings map[string][]model.Warning
 
 	ActionWarnings map[string][]model.Warning
 
-	// Unconfigured, Branches returns an already-resolved empty list, for the same reason: a test that does
-	// not talk about branches should not have to invent them to keep the picker from hanging.
 	BranchLists    map[string][]string
 	BranchWarnings map[string][]model.Warning
 
@@ -45,17 +41,11 @@ type FakeAdapter struct {
 	actionCalls  map[string]int
 	commentCalls int
 	MergeModes   map[forge.MergeMode]int
-	// A list and not a counter because the test's question is "which base did it move to?", which only
-	// the order answers.
-	Retargets   []string
-	branchCalls map[string]int
-	// A list and not a counter because the question is "this merge, with or without the delete?", and the
-	// list answers it without depending on the order the test fired the calls in.
+	Retargets    []string
+	branchCalls  map[string]int
 	MergeDeletes []bool
-	// For what a fixed-state fake cannot express: a merge that succeeds AND changes the item, which is
-	// the branch-delete case (merged even though the command exits with an error).
-	OnMerge func(*model.Item)
-	merged  bool
+	OnMerge      func(*model.Item)
+	merged       bool
 }
 
 var _ forge.Adapter = (*FakeAdapter)(nil)
@@ -64,7 +54,6 @@ func (f *FakeAdapter) Forge() string { return f.ForgeName }
 
 func (f *FakeAdapter) Host() string { return f.HostName }
 
-// Authenticated unless configured otherwise.
 func (f *FakeAdapter) Auth(_ context.Context) model.AuthState {
 	if f.AuthState.Forge == "" && !f.AuthState.OK && f.AuthState.Reason == "" {
 		return model.AuthState{Forge: f.ForgeName, OK: true}
@@ -99,8 +88,6 @@ func (f *FakeAdapter) ListCallCount() int {
 	return f.listCalls
 }
 
-// OnMerge applies only to reads AFTER a merge, which is what keeps the pre-merge re-read honest: that
-// re-read is the one that decides whether the merge goes.
 func (f *FakeAdapter) ItemState(_ context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	key := ref.Project + "#" + strconv.Itoa(number)
 	it := f.ItemStates[key]
@@ -135,13 +122,9 @@ func (f *FakeAdapter) Approve(_ context.Context, ref model.RepoRef, number int) 
 }
 
 func (f *FakeAdapter) Merge(_ context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
-	// The fake refuses to merge without a pin, like both real adapters, and BEFORE recording anything: a
-	// fake that accepted what production rejects would leave the real failure where no test reaches.
 	if req.HeadSHA == "" {
 		return []model.Warning{{Forge: f.ForgeName, Kind: "unsupported", Msg: forge.ErrMissingHeadSHA.Error()}}
 	}
-	// Mode and delete recorded separately so a test can assert with which strategy and with which
-	// housekeeping the merge was asked for, not only that it was asked for.
 	f.mu.Lock()
 	if f.MergeModes == nil {
 		f.MergeModes = map[forge.MergeMode]int{}
@@ -232,8 +215,6 @@ type ConformanceOptions struct {
 	MissingBinary bool
 }
 
-// A gate that cannot be tested does not distinguish a gate from a sign: with the checks in a list
-// and not touching the test, a test can hand it a broken adapter and see what comes out.
 func RunConformance(t testReport, a forge.Adapter, opts ConformanceOptions) {
 	t.Helper()
 	reportViolations(a, opts, func(v string) { t.Error(v) })
@@ -245,8 +226,6 @@ func reportViolations(a forge.Adapter, opts ConformanceOptions, report func(stri
 	}
 }
 
-// A list and not an error because there are several independent violations, and reporting only the
-// first forces a fix-and-rerun to find the next. A broken adapter has five or six.
 func ConformanceViolations(a forge.Adapter, opts ConformanceOptions) []string {
 	var violations []string
 	if a.Forge() == "" {
@@ -296,8 +275,6 @@ func ConformanceViolations(a forge.Adapter, opts ConformanceOptions) []string {
 	if warns := a.Retarget(ctx, ref, 1, "release/2.0"); opts.Unsupported && !hasKind(warns, "unsupported") {
 		violations = append(violations, fmt.Sprintf("%s: Retarget should report unsupported", a.Forge()))
 	}
-	// The picker opens even when the listing came back empty, so what is checked is the warning and
-	// that there are no branches: an empty list silently would be a different diagnosis.
 	if names, warns := a.Branches(ctx, ref); opts.Unsupported && !hasKind(warns, "unsupported") {
 		violations = append(violations, fmt.Sprintf("%s: Branches should report unsupported", a.Forge()))
 	} else if len(names) != 0 {

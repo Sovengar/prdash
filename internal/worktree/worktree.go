@@ -1,5 +1,3 @@
-// Package worktree provisions review worktrees: the port the orchestrator uses plus a direct-git
-// implementation. The native Herdr one fulfils the same contract, so the caller never knows which runs.
 package worktree
 
 import (

@@ -5,14 +5,11 @@ import (
 	"testing"
 )
 
-// The box does not enter whole, but it does not vanish either: the rows that fit are painted and
-// the rest of the box is dropped. A warning that disappears because it is taller than the view
-// says nothing, which is worse than a clipped one.
+// The box does not enter whole but does not vanish: the rows that fit are painted, and a warning that disappears says nothing.
 func TestOverlayToastsABoxTallerThanTheViewIsPaintedClipped(t *testing.T) {
 	const width, rowCount = 40, 2
 	before, rows := testView(width, rowCount)
 
-	// A real toast, one wrapped line, so the box is three rows tall in a view of two.
 	m := newToastManager()
 	m.show("careful", toastWarning)
 	boxes := m.blocks(width)

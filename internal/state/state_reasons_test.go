@@ -89,7 +89,6 @@ func TestTheConflictReasonNamesTheBranch(t *testing.T) {
 			t.Errorf("conflictedReason(%q) returned empty text", c.target)
 		}
 	}
-	// And the generic one carries NO invented branch name.
 	if strings.HasSuffix(conflictedReason(""), "with ") {
 		t.Error("the generic warning ends in \"with \": it looks like a branch got lost")
 	}
@@ -111,8 +110,7 @@ func TestTheCIReasonStartsWithTheCount(t *testing.T) {
 			t.Errorf("checksFailingReason(%+v) gave %q, want %q", c.checks, got, c.want)
 		}
 	}
-	// A known total never prints without counts: if Failing is zero and the total is not, the text
-	// has to say so.
+	// A known total never prints without counts: Failing zero and total non-zero must still say so.
 	if got := checksFailingReason(model.Checks{Total: 5, Failing: 0}); got == "CI is failing" {
 		t.Error("with 5 known checks the warning came out without figures: the data is lost")
 	}

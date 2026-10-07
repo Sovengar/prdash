@@ -22,8 +22,7 @@ func TestFindItemMatchesByIdentityAndDoesNotMixItemsFromDifferentForges(t *testi
 		t.Errorf("findItem of the second returned (%v, %v): %+v", got.Number, ok, got)
 	}
 
-	// An id that is not there: the ZERO value and false. The zero matters because a bare model.Item{}
-	// would otherwise look like a real item.
+	// An id that is not there gives the zero value: a bare model.Item{} would look like a real item.
 	id := gh.ID()
 	id.Project = "no/exists"
 	got, ok = findItem(items, id)
@@ -50,7 +49,6 @@ func TestTheSectionCycleCyclesAndTheActiveSectionIsRemembered(t *testing.T) {
 		t.Errorf("a full turn of the cycle ended at %v, want %v", m.activeSection, start)
 	}
 
-	// The position is remembered.
 	m2 := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 	k := streamKey{forge: "github", section: model.SectionReview, kind: model.ReviewRequested}
 	m2.streams[k] = &stream{}
@@ -69,8 +67,7 @@ func TestTheSectionCycleCyclesAndTheActiveSectionIsRemembered(t *testing.T) {
 		t.Errorf("back at review the cursor ended at %d, want 2: the position is remembered "+
 			"per section and is not reset", m2.cursor)
 	}
-	// The scroll is remembered in MEMORY, but with three items in a forty-row terminal there is nothing
-	//to scroll.
+	// The scroll is remembered in memory, but with three items in a forty-row terminal there is nothing to scroll.
 
 	m2.setActiveSection(model.SectionMentions)
 	if m2.cursor != 0 || m2.scroll != 0 {
@@ -101,8 +98,7 @@ func TestRequestCommentsRejectsTheThreeNegativesAndAlwaysRearmsTheTick(t *testin
 			return newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 		}},
 		{"unknown forge for the item", func(t *testing.T) Model {
-			// The item is selected with its forge present and THEN removed from the map. My first version
-			// built a gitlab-only model and selected a github item, so the fixture never arrived.
+			// The item is selected with its forge present and then removed: building a gitlab-only model never arrived.
 			m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 			m = withSelection(t, m, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 			if _, ok := m.selected(); !ok {

@@ -10,8 +10,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// GitLab has one output GitHub does not, and it is the one that matters: an empty list is not a
-//broken answer.
+// GitLab has one output GitHub does not: an empty list is not a broken answer.
 
 func glabReturning(t *testing.T, body string) string {
 	t.Helper()
@@ -20,8 +19,7 @@ func glabReturning(t *testing.T, body string) string {
 }
 
 func glabPrinting(output string) string {
-	// SINGLE quotes: with double ones the JSON's own quotes close them and the shell hands over the
-	//text without them.
+	// SINGLE quotes: with double ones the JSON's own quotes close them and the shell hands over the text without them.
 	return "printf '%s\\n' '" + output + "'"
 }
 
@@ -33,7 +31,6 @@ func onlyWarning(t *testing.T, warns []model.Warning, where string) model.Warnin
 	return warns[0]
 }
 
-// The EXACT shape glMRQuery asks for, with every field.
 const emptyGraphql = `{"data":{"project":{"mergeRequest":null}}}`
 
 // This is the case that happens in production.
@@ -54,8 +51,7 @@ func TestANonexistentMRSaysItDoesNotExistAndDoesNotReturnAFakeItem(t *testing.T)
 			t.Errorf("the warning %q does not mention %q", w.Msg, want)
 		}
 	}
-	// And the item is the zero value: an Item with the number set and nothing else would paint as a
-	// real one.
+	// And the item is the zero value: an Item with the number set and nothing else would paint as a real one.
 	if it.ID() != (model.ID{}) || it.Number != 0 || it.Title != "" || it.HeadSHA != "" {
 		t.Errorf("returned a half item instead of the zero value: %+v", it)
 	}
@@ -65,7 +61,6 @@ func TestANonexistentMRSaysItDoesNotExistAndDoesNotReturnAFakeItem(t *testing.T)
 	}
 }
 
-// The heredoc detail is not cosmetic.
 func TestOutputThatIsNotJSONInGitLabWarnsAndDoesNotBreak(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -89,7 +84,6 @@ func TestOutputThatIsNotJSONInGitLabWarnsAndDoesNotBreak(t *testing.T) {
 	}
 }
 
-// TWO functions with the same contract.
 func TestListWithUnreadableOutputWarnsAndDoesNotInventItems(t *testing.T) {
 	a := New("gitlab.example.com", glabReturning(t, "echo 'I am not json'"))
 
@@ -115,7 +109,6 @@ func TestListWithUnreadableOutputWarnsAndDoesNotInventItems(t *testing.T) {
 	}
 }
 
-// The same risk as GitHub but with a different output shape.
 func TestGitLabsConversationWithUnreadableOutputDoesNotInventNotes(t *testing.T) {
 	a := New("gitlab.example.com", glabReturning(t, "echo 'broken'"))
 	ref := model.RepoRef{Forge: "gitlab", Host: "gitlab.example.com", Project: "group/project"}
@@ -133,7 +126,6 @@ func TestGitLabsConversationWithUnreadableOutputDoesNotInventNotes(t *testing.T)
 	}
 }
 
-// All three operations have it.
 func TestAnEmptyProjectSaysNoAndDoesNotGoOutToAskTheForge(t *testing.T) {
 	a := New("gitlab.example.com", glabReturning(t,
 		"echo 'glab should not have called me' >&2\nexit 1"))
@@ -155,8 +147,7 @@ func TestAnEmptyProjectSaysNoAndDoesNotGoOutToAskTheForge(t *testing.T) {
 		t.Errorf("returned comments without project: %+v", page)
 	}
 
-	// The warning carries no binary URL: that is noise from one machine in a message the operator
-	// reads.
+	// The warning carries no binary URL: that is noise from one machine in a message the operator reads.
 	for _, w := range warns {
 		if strings.Contains(w.Msg, "glab") {
 			t.Errorf("the warning mentions the binary, which tells the user nothing: %q", w.Msg)
@@ -164,7 +155,6 @@ func TestAnEmptyProjectSaysNoAndDoesNotGoOutToAskTheForge(t *testing.T) {
 	}
 }
 
-// What is checked is that the warning does NOT mention an exit code.
 func TestAMissingBinarySaysNoAndDoesNotTryToRun(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-glab-here")
 	a := New("gitlab.example.com", missing)
@@ -180,7 +170,6 @@ func TestAMissingBinarySaysNoAndDoesNotTryToRun(t *testing.T) {
 	}
 }
 
-// The good path was untested, which is a needle in a haystack.
 func TestReadingTheStateOfAnExistingMRReturnsItStampedWithItsIdentity(t *testing.T) {
 	const liveMR = `{"data":{"project":{"mergeRequest":{"iid":12,"title":"Un MR",` +
 		`"webUrl":"https://gitlab.acme.example/g/p/-/merge_requests/12","state":"opened",` +
@@ -201,8 +190,7 @@ func TestReadingTheStateOfAnExistingMRReturnsItStampedWithItsIdentity(t *testing
 	if it.Title != "Un MR" || it.SourceBranch != "feat/a" || it.TargetBranch != "main" {
 		t.Errorf("the MR arrived incomplete: %+v", it)
 	}
-	// And the HeadSHA, which is what lets the merge be pinned; without it the merge would go out
-	// without --sha.
+	// The HeadSHA is what lets the merge be pinned; without it the merge would go out without --sha.
 	if it.HeadSHA != "abc123" {
 		t.Errorf("HeadSHA = %q, want abc123: without it the merge cannot be pinned", it.HeadSHA)
 	}
@@ -217,8 +205,7 @@ func TestReadingTheStateOfAnExistingMRReturnsItStampedWithItsIdentity(t *testing
 		t.Errorf("the ID does not carry the identity: %+v", it.ID())
 	}
 
-	// identity does NOT seal the project, same as GitHub; the two identity functions are line for
-//line identical.
+	// Identity does NOT seal the project, same as GitHub: the project comes from the item it is applied to.
 	if it.Ref.Project != "" {
 		t.Errorf("identity sealed the project (%q): the project comes from the item it is "+
 			"applied to, and sealing it here would imply the Item is self-contained", it.Ref.Project)

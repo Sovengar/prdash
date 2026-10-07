@@ -9,7 +9,6 @@ import (
 	"prdash/internal/review/plan"
 )
 
-// Two exits from the same `if err != nil` and both are warnings, not errors.
 func TestTabThatDoesNotOpenDoesNotDragTheRestAndNamesTheTab(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -118,7 +117,6 @@ func TestTabOfReturnsEmptyWithoutPaneAndDoesNotBreakTheLayout(t *testing.T) {
 	}
 }
 
-// The last boundary with the shell that is left: the variable list.
 func TestUnnamedEnvironmentVariableDoesNotEnterThePaneCommand(t *testing.T) {
 	good := plan.Pane{
 		Kind: plan.KindTuicr, Label: "TUICR", Cwd: "/wt",

@@ -8,7 +8,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The pane env is the contract with the review tools.
 func TestPaneEnvProvidesWhatItHasAndWhatItDoesNot(t *testing.T) {
 	base := func() (model.Item, Worktree) {
 		it := model.NewItem(model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}, 7)
@@ -84,8 +83,7 @@ func TestToolEffectiveFallsBackToTheDefaultBinary(t *testing.T) {
 		})
 	}
 
-	// The returned argv is not aliased to the Tool's: if the receiver mutates it, the change cannot
-	// leak back.
+	// The returned argv is not aliased to the Tool's: mutating it cannot leak back.
 	tool := Tool{Argv: []string{"tuicr"}}
 	got := tool.effective("default-bin", "extra")
 	got[0] = "other"

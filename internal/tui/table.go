@@ -1,5 +1,3 @@
-// Rows, columns and cells of the inbox. Each cell returns plain text and style separately, and
-// the render pads BEFORE styling, so ANSI codes never break the width.
 package tui
 
 import (
@@ -26,8 +24,6 @@ const (
 	colDiffIdx
 )
 
-// In priority order, dropped from the right at narrow widths. DIFF goes last: it is the only
-// column that can be lost without losing information.
 var tableColumns = []tableColumn{
 	{"FORGE", colForge},
 	{"ITEM", itemWidthMin},
@@ -50,8 +46,6 @@ type cell struct {
 	spans []span
 }
 
-// A column's width is its total size including the gap, not the room for its text: filling it
-// exactly would leave pad() nothing and the cell would touch the next one.
 func textWidth(w int) int {
 	return max(w-1, 1)
 }
@@ -77,8 +71,6 @@ func headerLine(l refLayout, innerWidth int) string {
 
 func itemCells(it model.Item, sec model.Section, viewer string, l refLayout) []cell {
 	refW := l.cols[colRefIdx].width
-	// Clipped to textWidth rather than to the width, which is what leaves the gap even when the text fills
-	// the column. Each column keeps its own clipping strategy (ITEM by the tail, the rest by the head).
 	return []cell{
 		{text: truncate(forgeBadge(it), textWidth(l.cols[colForgeIdx].width)), style: styleForge, width: l.cols[colForgeIdx].width},
 		{text: truncateTail(refCellText(it, l.mode, l.prefixOf(sec)), textWidth(refW)), style: styleRef, width: refW},
@@ -98,7 +90,6 @@ func renderCells(cells []cell, l refLayout, innerWidth int) string {
 	return b.String()
 }
 
-// Padding is measured on plain text, never on runes of an already coloured string.
 func renderCell(c cell) string {
 	if len(c.spans) == 0 {
 		return c.style.Render(pad(c.text, c.width))
@@ -107,8 +98,6 @@ func renderCell(c cell) string {
 	for _, s := range c.spans {
 		used += utf8.RuneCountInString(s.text)
 	}
-	// Padding goes at the end of the last span, measured on what that span occupies: `used` includes
-	// it, so without adding it back the cell measures less than its column.
 	slack := c.width - used
 	var b strings.Builder
 	last := len(c.spans) - 1
@@ -160,7 +149,6 @@ func refLabel(it model.Item) string {
 	return it.Ref.Project + "#" + strconv.Itoa(it.Number)
 }
 
-// "own" is the signal that approve is not going to work, before pressing it.
 func roleText(it model.Item, viewer string) string {
 	switch it.ReviewKind {
 	case model.ReviewRequested:
@@ -200,8 +188,6 @@ func styleChecks(c model.Checks) lipglossStyle {
 	}
 }
 
-// Compact so the width does not depend on whether the PR touches 40 lines or 40,000. An unknown
-// diffstat is "-": inventing a zero would read as "touches nothing".
 func diffColumnText(d model.DiffStat) string {
 	if !d.Known {
 		return "-"
@@ -209,8 +195,6 @@ func diffColumnText(d model.DiffStat) string {
 	return "+" + compactCount(d.Additions) + " -" + compactCount(d.Deletions)
 }
 
-// The text is formatted once, in plain, and both what is measured and what is coloured come from it,
-// so the width and the colour can never disagree.
 func diffCell(d model.DiffStat, width int) cell {
 	text := truncate(diffColumnText(d), textWidth(width))
 	if !d.Known {
@@ -219,8 +203,6 @@ func diffCell(d model.DiffStat, width int) cell {
 	return cell{width: width, spans: diffSpans(text)}
 }
 
-// Diff notation and nothing else: which lines are new and which disappeared. Nothing that does
-// not fit the shape is coloured, because colouring a non-number would lie about the datum.
 func diffSpans(plain string) []span {
 	add, rest, ok := strings.Cut(plain, " ")
 	if !ok || !isDiffCount(add, '+') {
@@ -237,8 +219,6 @@ func diffSpans(plain string) []span {
 	return spans
 }
 
-// Colouring AFTER clipping: the detail's grid width is computed on the plain text, so colouring first
-// would make truncate count the ANSI codes as if they were digits.
 func styleDiffText(plain string) string {
 	spans := diffSpans(plain)
 	if spans == nil {
@@ -265,17 +245,10 @@ func isDiffCount(s string, sign byte) bool {
 	return true
 }
 
-// Rounded in integer tenths rather than with fmt, because 9999 with one decimal comes out
-// "10.0k": four runes and no meaning. Rounding up out of the window falls back to integers.
 func compactCount(n int) string {
-	// Negatives are printed, not rounded. The old `n < 0` guard was a no-op — `n < 1000`
-	// already routes them to the same Itoa — and a no-op guard is a mutant no test can kill.
 	if n < 1000 {
 		return strconv.Itoa(n)
 	}
-	// `<= 9999` and not `< 10000`: the two spell the same set, but the boundary mutant of `<`
-	// survives at exactly 10000 because both sides render "10k" there, while the mutant of `<=`
-	// dies at 9999 ("9k" vs "10k").
 	if n <= 9999 {
 		if tenths := (n + 50) / 100; tenths < 100 {
 			return strconv.Itoa(tenths/10) + "." + strconv.Itoa(tenths%10) + "k"

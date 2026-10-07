@@ -9,8 +9,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// `glab mr update` is not broken, it is an EDIT command whose purpose is opening title and
-// description in an editor.
+// `glab mr update` is not broken: it is an EDIT command that opens title and description in an editor.
 func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsFile := recorder(t, dir, "glab")
@@ -21,8 +20,7 @@ func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 	}
 
 	got := strings.Join(readArgs(t, argsFile), " ")
-	// A nested project needs the %2F: without it the path splits in two and the request goes to the
-	// wrong place.
+	// A nested project needs the %2F: without it the path splits in two and the request goes to the wrong place.
 	if want := "-X PUT projects/grp%2Fproj/merge_requests/7"; !strings.Contains(got, want) {
 		t.Errorf("argv = %q, want %q with the project urlencoded", got, want)
 	}
@@ -32,8 +30,7 @@ func TestRetargetUsesTheAPINotMrUpdate(t *testing.T) {
 	if strings.Contains(got, "mr update") {
 		t.Errorf("argv = %q, must not use `glab mr update`: it is an editing command", got)
 	}
-	// The method has to be explicit: with -f glab falls back to POST, and a POST on the MR update
-	// route does not work.
+	// The method has to be explicit: with -f glab falls back to POST, which does not work on the MR update route.
 	if !strings.Contains(got, "--hostname gitlab.example.com") {
 		t.Errorf("argv = %q, want the host pinned", got)
 	}

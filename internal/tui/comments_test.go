@@ -135,8 +135,7 @@ func TestURLGetsItsOwnFullWidthRow(t *testing.T) {
 	}
 }
 
-// It derives from the item and the login, so it would show on every render of every one of your PRs
-// and repeat what the Role field already says.
+// It derives from the item and login, so it would repeat on every render what the Role field says.
 func TestSelfDenyTakesNoRoomInTheDetail(t *testing.T) {
 	m := newTestModel(t, ghAdapter())
 	m.width, m.height = 160, 45
@@ -199,8 +198,7 @@ func TestCommentsLiveInTheirOwnTitledBox(t *testing.T) {
 	}
 }
 
-// Against the panel's border its verticals overlap and every row comes out as `||`; a lighter grey
-// told them apart but goes yellowish on warm palettes.
+// Against the panel's border its verticals overlap as `||`; a lighter grey goes yellowish on warm palettes.
 func TestBoxIsInsetSoNestingReadsByShape(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 1)
 	rows := m.detailLines(mustSelected(t, m), true, m.layout().detailLines)
@@ -253,8 +251,7 @@ func ansiColors(line string) string {
 	return strings.Join(out, " ")
 }
 
-// What broke the dash closing the bottom line is that the count's style ends with a reset, and a reset
-// does not restore what was there: it takes the border's grey with it.
+// A reset does not restore what was there: the count's style reset takes the border's grey with it.
 func TestEveryBorderGlyphIsPainted(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "ok for me")}, 3)
 	rows := strings.Split(m.detailSection(mustSelected(t, m), true, m.layout().detailLines).text, "\n")
@@ -266,8 +263,7 @@ func TestEveryBorderGlyphIsPainted(t *testing.T) {
 	}
 }
 
-// The glyphs are multibyte, so the line is split into escape runs and text runs; what is looked for is a
-// glyph in a run that follows a reset and precedes another style.
+// The glyphs are multibyte, so the line is split into escape runs and text runs.
 func unpaintedBorderGlyphs(line string) string {
 	const glyphs = "─│╭╮╰╯"
 	seg := regexp.MustCompile(`\x1b\[[0-9;]*m|[^\x1b]+`)
@@ -301,8 +297,7 @@ func TestNoBoxWhenThereAreNoComments(t *testing.T) {
 	}
 }
 
-// One of the box's two rows is a border, and a clipped box does not look clipped: it looks like the
-// PR only has that comment.
+// A clipped box does not look clipped: it looks like the PR only has that comment.
 func TestBoxIsAllOrNothing(t *testing.T) {
 	list := []model.Comment{commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three")}
 	for _, tc := range []struct {
@@ -582,8 +577,7 @@ func TestCommentsAnnounceThereAreMore(t *testing.T) {
 		commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three"),
 		commentOf("dave", "four"), commentOf("erin", "five"),
 	}
-	// A known viewer means the item is not the user's and there are no action warnings, which is what
-	// actually leaves the panel room: the own-approval veto no longer takes rows.
+	// A known viewer leaves the panel room: the own-approval veto no longer takes rows.
 	m := modelWithComments(t, 45, list, 23)
 	m = send(t, m, authMsg{cycle: 1, forge: "github", auth: model.AuthState{Forge: "github", OK: true, Login: "reviewer"}})
 	it := mustSelected(t, m)
@@ -604,8 +598,7 @@ func TestCountLivesInTheBorder(t *testing.T) {
 	}
 	m := modelWithComments(t, 45, list, 23)
 	it := mustSelected(t, m)
-	// The forge's warning tightens the panel (a blank line plus text) to check that the count no longer
-	// depends on the budget. The own-approval veto no longer takes rows, so this is the only way to squeeze.
+	// The forge's warning tightens the panel to check the count no longer depends on the budget.
 	m.denied[it.ID()] = "the forge refused the action"
 	m = withConversation(t, m, it, forge.CommentPage{Comments: list, Total: 23})
 

@@ -1,5 +1,3 @@
-// Package github implements the GitHub forge over the `gh` CLI. The rich inbox (reviewDecision plus
-// checks) comes from paginated GraphQL; the REST search is the fallback.
 package github
 
 import (
@@ -19,10 +17,6 @@ const ForgeName = "github"
 
 const pageSize = 50
 
-// More than the pane shows (forge.CommentLimit), so a PR full of bot boilerplate does not come up
-// short. The margin costs the user nothing because the reply is already filtered and trimmed.
-// 15 = 3 * forge.CommentLimit, written as a literal because a const decl carries no coverage
-// (ADR 0011); TestCommentFetchKeepsTheMargin pins the formula against a future change of the limit.
 const commentFetch = 15
 
 type Adapter struct {
@@ -62,7 +56,6 @@ func loginFromAuthStatus(out string) string {
 	return m[1]
 }
 
-// The group demands a space after "account" so it cannot match the "Active account: true" line.
 var loginRe = regexp.MustCompile(`account ([^(\s]+)`)
 
 func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.Warning) {
@@ -91,8 +84,6 @@ func (a *Adapter) List(ctx context.Context, q forge.Query) (forge.Page, []model.
 
 func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) (model.Item, []model.Warning) {
 	owner, name := splitProject(ref.Project)
-	// Only the owner matters, so the second half of the condition was noise: a guard that reads as
-	// reachable when it is not is one someone will believe and later relax.
 	if owner == "" {
 		return model.Item{}, []model.Warning{a.warn("", "notfound", fmt.Errorf("invalid repo reference: %q", ref.Project))}
 	}
@@ -117,8 +108,6 @@ func (a *Adapter) ItemState(ctx context.Context, ref model.RepoRef, number int) 
 	return it, nil
 }
 
-// The conversation is fetched apart from the search: asking with every list multiplies the
-// queries by the number of PRs nobody is looking at.
 func (a *Adapter) Comments(ctx context.Context, ref model.RepoRef, number int) (forge.CommentPage, []model.Warning) {
 	owner, name := splitProject(ref.Project)
 	if owner == "" || name == "" {
@@ -140,8 +129,6 @@ func (a *Adapter) Approve(ctx context.Context, ref model.RepoRef, number int) []
 	return a.action(ctx, "pr", "review", strconv.Itoa(number), "--repo", ref.Project, "--approve")
 }
 
-// Always pinned with `--match-head-commit`: without it gh merges whatever HEAD is at that moment,
-// and the branch can have advanced between the refresh and the keypress. An empty headSHA refuses.
 func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req forge.MergeRequest) []model.Warning {
 	flag, ok := ghMergeFlag(req.Mode)
 	if !ok {
@@ -152,8 +139,6 @@ func (a *Adapter) Merge(ctx context.Context, ref model.RepoRef, number int, req 
 	}
 	args := []string{"pr", "merge", strconv.Itoa(number), "--repo", ref.Project,
 		flag, "--match-head-commit", req.HeadSHA}
-	// `--delete-branch` goes last because it names the branch, and with `--repo` gh deletes only the
-	// REMOTE. Not filtered: with a merge queue the forge's refusal is the exact answer.
 	if req.DeleteBranch {
 		args = append(args, "--delete-branch")
 	}
@@ -173,8 +158,6 @@ func ghMergeFlag(mode forge.MergeMode) (string, bool) {
 	}
 }
 
-// A PATCH, not `gh pr edit --base`, which fails today on a Projects (classic) deprecation that no
-// flag avoids. The reason comes from the body, and its 422 is validation: not a conflict, not a perm.
 func (a *Adapter) Retarget(ctx context.Context, ref model.RepoRef, number int, branch string) []model.Warning {
 	if strings.TrimSpace(branch) == "" {
 		return []model.Warning{a.warn("", "unsupported", forge.ErrMissingBaseBranch)}
@@ -190,8 +173,6 @@ func (a *Adapter) Branches(ctx context.Context, ref model.RepoRef) ([]string, []
 	if strings.TrimSpace(ref.Project) == "" {
 		return nil, []model.Warning{a.warn("", "notfound", fmt.Errorf("empty repo reference"))}
 	}
-	// per_page=100 with --paginate: the API defaults to 30 and gh follows the links, so a 200-branch
-	// repo would be seven calls at the default.
 	raw, err := a.runner.Run(ctx, "api", "repos/"+ref.Project+"/branches?per_page=100",
 		"--paginate", "--jq", ".[].name")
 	if err != nil {
@@ -204,8 +185,6 @@ func pullsEndpoint(project string, number int) string {
 	return "repos/" + project + "/pulls/" + strconv.Itoa(number)
 }
 
-// The CLI's message embeds the whole argv, tokens included, so it is only used when the body had
-// nothing readable.
 func failureMsg(body string, err error) string {
 	if msg := tool.APIMessage(body); msg != "" {
 		return msg
@@ -220,8 +199,6 @@ func (a *Adapter) action(ctx context.Context, args ...string) []model.Warning {
 	return nil
 }
 
-// `gh pr checks` exits 8 (pending) or 1 (failing) and still prints the JSON, so a parseable output
-// counts as a valid state, not as an error.
 func (a *Adapter) checks(ctx context.Context, project string, number int) (model.Checks, []model.Warning) {
 	raw, err := a.runner.Run(ctx, "pr", "checks", strconv.Itoa(number),
 		"--repo", project, "--json", "name,state,bucket")
@@ -294,10 +271,6 @@ func qualifierFor(q forge.Query) (string, bool) {
 	}
 }
 
-// `headRefOid` and the three `merge*Allowed` ride in the same item query, so pinning and mode
-// filtering cost no extra call, and so does `mergeable` for the collision warning.
-// One literal line, not a `+` chain: a package-level const decl carries no coverage (ADR 0011),
-// so every `+` here would be a mutation position no test can ever reach.
 const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName headRefOid additions deletions changedFiles author { login } repository { nameWithOwner name owner { login } mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
 
 func searchQuery(qualifier, cursor string) string {
@@ -320,8 +293,6 @@ func prQuery(owner, name string, number int) string {
 	)
 }
 
-// `last`, not `first`: the pane shows the end of the conversation. Nodes come in chronological
-// order, not reversed, so a thread reads downwards as it was written.
 func commentsQuery(owner, name string, number, last int) string {
 	return fmt.Sprintf(
 		`query { repository(owner: "%s", name: "%s") { pullRequest(number: %d) { `+

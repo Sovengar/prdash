@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// The three branches cover three shapes of input.
 func TestJoinProjectDoesNotPutOrphanSeparators(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -64,7 +63,6 @@ func TestSplitProjectSplitsAtTheLastSlashAndNotTheFirst(t *testing.T) {
 		if strings.Contains(b, "/") {
 			t.Errorf("%s: the name %q has slashes", c.name, b)
 		}
-		// Both halves together rebuild the original without the middle slash.
 		if a != "" && b != "" {
 			if joined := joinProject(a, b); joined != strings.Trim(c.path, "/") {
 				t.Errorf("%s: joinProject of the result gave %q, it does not rebuild %q",
@@ -74,7 +72,6 @@ func TestSplitProjectSplitsAtTheLastSlashAndNotTheFirst(t *testing.T) {
 	}
 }
 
-// What happens to an unparseable timestamp.
 func TestParseTimeOnlyAcceptsRFC3339AndTheRestGivesZero(t *testing.T) {
 	good := []string{
 		"2026-04-01T12:00:00Z",
@@ -111,8 +108,7 @@ func TestParseTimeOnlyAcceptsRFC3339AndTheRestGivesZero(t *testing.T) {
 		}
 	}
 
-	// The property that distinguishes it from time.Parse: the zero of a failed parse and the zero of
-	//a value that is zero differ.
+	// The property that distinguishes it from time.Parse: a failed parse and a zero value give the same zero.
 	if parseTime("") != parseTime("garbage") {
 		t.Error("the missing value and the unreadable one give different times, and they should not")
 	}
@@ -149,7 +145,6 @@ func TestProjectFromRefRemovesTheNumberSuffix(t *testing.T) {
 	}
 }
 
-// The difference with the other extractor.
 func TestSplitRepoURLTakesTheProjectOnlyFromTheAPIsPath(t *testing.T) {
 	cases := []struct {
 		name  string

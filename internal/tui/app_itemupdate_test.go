@@ -8,8 +8,6 @@ import (
 )
 
 // Without it, merging a PR would leave it looking unmerged until the next refresh.
-
-// The failure mergeItem exists for.
 func TestAnItemThatIsNotThereIsAddedAndTheSectionIsNotLost(t *testing.T) {
 	m := newTestModel(t)
 	original := model.Item{
@@ -50,7 +48,6 @@ func TestAnItemThatIsNotThereIsAddedAndTheSectionIsNotLost(t *testing.T) {
 	}
 }
 
-// The other side of that.
 func TestAnItemThatIsNotThereIsAddedToTheRightStream(t *testing.T) {
 	m := newTestModel(t)
 	m.rebuild()
@@ -94,7 +91,6 @@ func TestAnItemThatIsNotThereIsAddedToTheRightStream(t *testing.T) {
 	}
 }
 
-// The three things an update must not do.
 func TestUpdateNeitherDuplicatesNorDeletesTheRest(t *testing.T) {
 	m := newTestModel(t)
 	base := model.Item{
@@ -143,7 +139,6 @@ func TestUpdateNeitherDuplicatesNorDeletesTheRest(t *testing.T) {
 	}
 }
 
-// Both halves, and the default matters as much as the cases.
 func TestMergeItemKeepsWhatTheForgeDoesNotKnowAndChangesWhatItDoes(t *testing.T) {
 	old := model.Item{Section: model.SectionReview, ReviewKind: model.ReviewRequested, Title: "old"}
 
@@ -178,7 +173,6 @@ func TestMergeItemKeepsWhatTheForgeDoesNotKnowAndChangesWhatItDoes(t *testing.T)
 	}
 }
 
-// The difference between "no" and "not known".
 func TestOtherwiseTheDetailDoesNotShowADash(t *testing.T) {
 	if got := yesNo(true); got != "yes" {
 		t.Errorf("yesNo(true) gave %q", got)
@@ -186,7 +180,6 @@ func TestOtherwiseTheDetailDoesNotShowADash(t *testing.T) {
 	if got := yesNo(false); got != "no" {
 		t.Errorf("yesNo(false) gave %q, want \"no\": a false is an answer, not an absence", got)
 	}
-	// The difference with orDash is real: a false does NOT print as a dash.
 	if yesNo(false) == orDash("") {
 		t.Error("yesNo(false) comes out the same as orDash of an empty string: they are different things")
 	}

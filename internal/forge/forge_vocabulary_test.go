@@ -10,8 +10,7 @@ import (
 )
 
 func TestMergeModeIsValidatedBeforeBuildingTheArgv(t *testing.T) {
-	// The labels are NOT the mode names in the three cases: MergeCommit is confirmed as "merge
-	//commit", because that is what the user has to recognise.
+	// The labels are NOT the mode names: MergeCommit is confirmed as "merge commit", what the user has to recognise.
 	labels := map[MergeMode]string{
 		MergeCommit: "merge commit",
 		Rebase:      "rebase",
@@ -40,8 +39,7 @@ func TestMergeModeIsValidatedBeforeBuildingTheArgv(t *testing.T) {
 		if m != "" && !strings.Contains(err.Error(), string(m)) {
 			t.Errorf("the error %q does not name the mode %q", err, m)
 		}
-		// The valid list holds NAMES, not labels, and it matters: the error says "expected merge, rebase
-		//or squash" and that is what someone compares against.
+		// The valid list holds NAMES, not labels: the error says "expected merge, rebase or squash".
 		for _, ok := range []MergeMode{MergeCommit, Rebase, Squash} {
 			if !strings.Contains(err.Error(), string(ok)) {
 				t.Errorf("the error %q does not mention the valid mode %q", err, ok)
@@ -258,7 +256,6 @@ func TestFirstMsgTakesTheFirstOneAndInventsNothing(t *testing.T) {
 	}
 }
 
-// The reason is that an errors.Is on this error is.
 func TestAMergeReasonIsNotDeclaredTwoWays(t *testing.T) {
 	one := ErrUnknownMergeMode("nope")
 	other := ErrUnknownMergeMode("nope")
@@ -292,8 +289,7 @@ func itoa(n int) string {
 	return string(b)
 }
 
-// Complementary to Valid: Valid says it cannot be done, Label returns the name as given. Disguising
-// an unknown mode as a known one would have the UI confirm something the forge will reject.
+// Complementary to Valid: Label returns the name as given, never disguising an unknown mode as a known one.
 func TestTheNameOfAnUnknownModeIsReturnedAsIsAndNotDisguisedAsAKnownOne(t *testing.T) {
 	known := map[MergeMode]bool{MergeCommit: true, Rebase: true, Squash: true}
 

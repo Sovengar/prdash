@@ -1,5 +1,3 @@
-// Package tui implements prdash's cross-forge inbox in Bubbletea v2: three sections with each
-// forge's rich data, an item detail, refresh with progressive loading, and approve/merge.
 package tui
 
 import (
@@ -49,7 +47,6 @@ type forgeDoneMsg struct {
 
 type refreshDoneMsg struct{ cycle int }
 
-// cycle records the cycle in force when it was launched (see the policy in applyAction).
 type actionMsg struct {
 	cycle   int
 	outcome forge.Outcome
@@ -69,8 +66,6 @@ type mountMsg struct {
 	err    error
 }
 
-// `base` is the merge warning captured when it was triggered, so the cleanup composes on that
-// text rather than on the current one and does not overwrite what the merge brought.
 type reviewCleanupMsg struct {
 	base    string
 	level   noticeLevel
@@ -79,11 +74,8 @@ type reviewCleanupMsg struct {
 	err     error
 }
 
-// A clock rather than a channel reader, so it does not disturb the single-reader invariant.
 type commentsTickMsg struct{}
 
-// id is the one asked for, not the one under the cursor: the answer is stored anyway because it will be
-// needed again as soon as the selection returns, but it is only painted while still selected.
 type commentsMsg struct {
 	id   model.ID
 	page forge.CommentPage
@@ -94,32 +86,20 @@ type Mounter interface {
 	Mount(ctx context.Context, it model.Item) (executor.Result, error)
 }
 
-// 60s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const refreshTimeout = time.Duration(60e9)
 
-// 5m as a literal, same coverage argument as refreshTimeout above.
 const mountTimeout = time.Duration(300e9)
 
-// 60s as a literal, same coverage argument as refreshTimeout above.
 const actionTimeout = time.Duration(60e9)
 
-// Short because it must not leave the event hanging when the checkout does not answer.
-// 30s as a literal, same coverage argument as refreshTimeout above.
 const reviewCleanupTimeout = time.Duration(30e9)
 
-// A read of a single PR: past this the problem is the forge and not worth waiting for, and the rest of
-// the panel is still true. 20s as a literal, same coverage argument as refreshTimeout above.
 const commentsTimeout = time.Duration(20e9)
 
-// A clock and not an event, because looking is cheap: that spares it from being re-armed at every
-// site where the selection changes — keys, pages arriving, actions — and going unasked at one.
-// 200ms as a literal, same coverage argument as refreshTimeout above.
 const commentsPoll = time.Duration(200e6)
 
-// 10m as a literal, same coverage argument as refreshTimeout above.
 const maxBackoff = time.Duration(600e9)
 
-// The forge is unique per adapter, so it is enough with it plus section and kind.
 type streamKey struct {
 	forge   string
 	section model.Section
@@ -139,8 +119,6 @@ type streamHead struct {
 	complete bool
 }
 
-// The first page of a refresh matches the last complete cycle's header, so there is no need to keep
-// paging (the rest did not change either) and what is loaded is kept.
 func unchangedHead(prev streamHead, page forge.Page) bool {
 	return prev.complete && page.More && page.Next != "" && page.Next == prev.cursor
 }
@@ -178,17 +156,11 @@ type Model struct {
 	statuses map[string]*forgeStatus
 	inbox    inbox.Inbox
 
-	// Assigned by default: it carries the assigned work, and the rest is one `tab` away.
 	activeSection model.Section
-	// The active section's are the cursor/scroll fields.
-	pos map[model.Section]sectionPos
-	// Global rather than per section: the hint bar names it once and it applies to whatever is painted.
-	// Memory only, not persisted, so reopening the program goes back to common.
-	prefixMode prefixMode
+	pos           map[model.Section]sectionPos
+	prefixMode    prefixMode
 
 	cursor int
-	// The view cannot re-adjust it (View cannot mutate the model): syncScroll maintains it on cursor moves
-	// and rebuild when new data arrives.
 	scroll int
 
 	width, height int
@@ -196,26 +168,17 @@ type Model struct {
 	backoff       time.Duration
 	lastRefresh   time.Time
 
-	// Keeps a second auto-refresh chain from starting while one is already scheduled.
 	tickPending bool
 
-	// The invariant is 1: every channel event consumes a reader and withPump arms it back, and no branch
-	// that does not read the channel may arm one (or goroutines leak).
 	readers int
 
-	actionBusy bool
-	denied     map[model.ID]string
-	// Unlike `denied`, which the forge imposes and a successful refresh clears, this is a local deterministic
-	// rule: derived from the item and the viewer's login on every render, not stored.
-	selfDenied map[model.ID]string
-	// So a refresh page captured before the action cannot revert its re-read state (see
-	// reconcileFirstPage).
+	actionBusy  bool
+	denied      map[model.ID]string
+	selfDenied  map[model.ID]string
 	actionCycle map[model.ID]int
 
 	toast *toastManager
 
-	// The state and not just the list is what tells "this PR has no comments" from "I have not asked
-	// yet". Cached per item: re-asking every cycle would only make the card flicker.
 	comments map[model.ID]*commentState
 
 	cycle int
@@ -225,34 +188,20 @@ type Model struct {
 
 	simulator Simulator
 	graphics  Graphics
-	// Without it, testing the good path of `openBrowserCmd` means RUNNING it, and that launches the
-	// real browser on whoever runs the tests. A tea.Cmd is returned and then called.
-	openURL func(url string) error
-	sim     simPanel
-	simSeq  int
+	openURL   func(url string) error
+	sim       simPanel
+	simSeq    int
 
-	// Shares the capture rule with the simulation overlay —open, it takes the whole keyboard— and the two
-	// are mutually exclusive: neither opens from inside the other.
-	retarget  retargetPanel
-	branchSeq int
-	// Without it, opening the popup twice in a row on the same repo paginated the branches twice to change
-	// your mind once.
-	branchCache map[repoKey]branchCache
-	// nil means nobody to ask, and the warning is lost.
-	reviewLookup ReviewLookup
-	// A separate port from reviewLookup because a capability that deletes cannot inherit a "read-only and
-	// degradable" contract. nil means no auto-delete: the merge works and the worktree is kept.
+	retarget      retargetPanel
+	branchSeq     int
+	branchCache   map[repoKey]branchCache
+	reviewLookup  ReviewLookup
 	reviewRemover ReviewRemover
 
-	// mergeArmedID pins the item that was armed, because a refresh can move the cursor in between and the
-	// merge must go out on what the user confirmed, not on what is under it now.
-	mergeArmed   bool
-	mergeArmedID model.ID
-	// Not a veto: it is the line the confirmation teaches so the second press is informed.
+	mergeArmed       bool
+	mergeArmedID     model.ID
 	mergeBlockReason string
-	// Session-scoped, not per item, and toggled by `tab` while armed where it is visible. Starts true
-	// because deleting the branch of a merged PR is what the forges do on their own.
-	deleteBranch bool
+	deleteBranch     bool
 
 	events  chan event
 	ctx     context.Context
@@ -278,28 +227,26 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 	}
 
 	m := Model{
-		cfg:         cfg,
-		adapters:    adapters,
-		byForge:     byForge,
-		streams:     map[streamKey]*stream{},
-		statuses:    statuses,
-		denied:      map[model.ID]string{},
-		selfDenied:  map[model.ID]string{},
-		actionCycle: map[model.ID]int{},
-		comments:    map[model.ID]*commentState{},
-		events:      make(chan event, 256),
-		toast:       newToastManager(),
-		ctx:         ctx,
-		cancel:      cancel,
-		loading:     true,
-		cycle:       1, // Init fires the first cycle
-		readers:     1, // Init arms the first channel reader
-		// Assigned is the section shown on open: it carries the assigned work and the rest is one `tab` away.
+		cfg:           cfg,
+		adapters:      adapters,
+		byForge:       byForge,
+		streams:       map[streamKey]*stream{},
+		statuses:      statuses,
+		denied:        map[model.ID]string{},
+		selfDenied:    map[model.ID]string{},
+		actionCycle:   map[model.ID]int{},
+		comments:      map[model.ID]*commentState{},
+		events:        make(chan event, 256),
+		toast:         newToastManager(),
+		ctx:           ctx,
+		cancel:        cancel,
+		loading:       true,
+		cycle:         1, // Init fires the first cycle
+		readers:       1, // Init arms the first channel reader
 		activeSection: model.SectionReview,
 		pos:           map[model.Section]sectionPos{},
 		branchCache:   map[repoKey]branchCache{},
-		// Branch deletion asked for by default; `tab` in the merge confirmation turns it off.
-		deleteBranch: true,
+		deleteBranch:  true,
 	}
 	m.tickPending = cfg.RefreshInterval > 0
 	m.spinner = spinner.New(spinner.WithSpinner(spinner.Dot))
@@ -327,7 +274,6 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
-// Does not consume the events channel (it comes from tea.Every), so the single-reader invariant holds.
 func tickToast() tea.Cmd {
 	return tea.Every(toastTickInterval, func(time.Time) tea.Msg {
 		return toastTickMsg{}
@@ -356,8 +302,6 @@ func sendEvent(ctx context.Context, ch chan<- event, ev event) {
 	}
 }
 
-// The previous `more` is residue of the cycle that just ended: without clearing it, a lost page would
-// leave the indicator stuck and the auto-refresh paused for good. The new pages will set it again.
 func (m *Model) beginRefresh() (Model, tea.Cmd) {
 	m.loading = true
 	m.cycle++
@@ -390,8 +334,7 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 			wg.Add(1)
 			go func(a forge.Adapter) {
 				defer wg.Done()
-				// The QUERY is bounded by a timeout; the EMISSION uses the app's context, so a timeout discards
-				// neither pages nor a forge's end (both critical events) and does not hang the cycle.
+				// Query bounded by a timeout, emission by the app's context, so critical events are never dropped.
 				streamForge(ctx, appCtx, events, a, cycle, prev)
 			}(a)
 		}
@@ -401,8 +344,6 @@ func (m *Model) launchRefresh(cycle int) tea.Cmd {
 	return nil
 }
 
-// queryCtx bounds the query (timeout, cancellation); emitCtx bounds event delivery. The events are
-// critical: with emitCtx, which is the app's, they are not dropped when the query timeout expires.
 func streamForge(queryCtx, emitCtx context.Context, events chan<- event, a forge.Adapter, cycle int, prev map[streamKey]streamHead) {
 	sendEvent(emitCtx, events, authMsg{cycle: cycle, forge: a.Forge(), auth: a.Auth(queryCtx)})
 	forge.Stream(queryCtx, a, func(p forge.PageResult) bool {
@@ -425,7 +366,6 @@ func streamForge(queryCtx, emitCtx context.Context, events chan<- event, a forge
 	sendEvent(emitCtx, events, forgeDoneMsg{cycle: cycle, forge: a.Forge()})
 }
 
-// Nil when the refresh is disabled (interval 0).
 func (m *Model) tickCmd() tea.Cmd {
 	d := m.tickInterval()
 	if d <= 0 {
@@ -434,7 +374,6 @@ func (m *Model) tickCmd() tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-// One tick chain, no matter how many Update calls arrive.
 func (m *Model) armTick() tea.Cmd {
 	if m.tickPending || m.tickInterval() <= 0 {
 		return nil
@@ -451,8 +390,6 @@ func (m *Model) tickInterval() time.Duration {
 	return base + m.backoff
 }
 
-// Pagination is deliberately NOT consulted: the cycle is already paused while it pages, and a
-// `more` surviving the end of the cycle is residue whose consultation would freeze the tick for good.
 func (m *Model) paused() bool {
 	return m.loading || m.actionBusy
 }
@@ -466,7 +403,6 @@ func (m *Model) sectionLoadingMore(kind model.Section) bool {
 	return false
 }
 
-// An unchanged message keeps what is loaded and closes the stream's pagination.
 func (m *Model) applyPage(msg pageMsg) {
 	s := m.streams[msg.key]
 	if s == nil {
@@ -484,8 +420,6 @@ func (m *Model) applyPage(msg pageMsg) {
 		return
 	}
 
-	// Sealed here so the rules depending on them (the own-approval veto) do not depend on every adapter
-	// stamping them.
 	for i := range msg.items {
 		msg.items[i].Section = msg.key.section
 		if msg.key.section == model.SectionReview {
@@ -493,8 +427,6 @@ func (m *Model) applyPage(msg pageMsg) {
 		}
 	}
 
-	// An item seen in a successful refresh stops being denied: the permissions may be there now, or the
-	// user is retrying with fresh state.
 	for i := range msg.items {
 		delete(m.denied, msg.items[i].ID())
 	}
@@ -507,8 +439,6 @@ func (m *Model) applyPage(msg pageMsg) {
 	}
 	s.cursor = msg.next
 	s.more = msg.more
-	// A degraded fallback brings partial data and is not marked complete, so the incremental refresh
-	// does not freeze it.
 	if !msg.more && !hasDegraded(msg.warnings) {
 		s.complete = true
 	}
@@ -540,7 +470,6 @@ func (m *Model) applyItemUpdate(it model.Item) {
 	m.rebuild()
 }
 
-// ItemState does not know the inbox section.
 func mergeItem(old, fresh model.Item) model.Item {
 	if fresh.Section == "" {
 		fresh.Section = old.Section
@@ -551,7 +480,6 @@ func mergeItem(old, fresh model.Item) model.Item {
 	return fresh
 }
 
-// The rest of the page does win.
 func (m *Model) reconcileFirstPage(old, fresh []model.Item, cycle int) []model.Item {
 	if len(m.actionCycle) == 0 {
 		return fresh
@@ -582,8 +510,6 @@ func (m *Model) rebuild() {
 	m.inbox = inbox.Build(m.forgeResults())
 	m.refreshSelfDenied()
 	m.clampCursor()
-	// A refresh can change how many lines each section takes, so the scroll is readjusted to keep the
-	// cursor inside the window.
 	m.syncScroll()
 }
 
@@ -630,8 +556,6 @@ func (m *Model) viewerLogin(forgeName string) string {
 	return ""
 }
 
-// Derived from the item and the viewer's login, so a refresh bringing the item again re-marks it:
-// nothing has to remember to clear it. There is no merge veto: the author CAN merge.
 func (m *Model) refreshSelfDenied() {
 	denied := make(map[model.ID]string)
 	for _, it := range m.rows() {
@@ -651,14 +575,10 @@ func (m *Model) clampCursor() {
 	m.cursor = min(max(0, m.cursor), len(rows)-1)
 }
 
-// The inbox paints one section at a time, so the cursor and the navigation only walk that one; the
-// rest is summarised in the border legend's count.
 func (m *Model) rows() []model.Item {
 	return m.sectionItems(m.activeSection)
 }
 
-// Not the legend's order (Mine · Assigned · Mentioned, the inbox's authority order): the cycle starts
-// at the default section and the legend keeps the stacking order.
 var sectionCycle = []model.Section{
 	model.SectionReview,
 	model.SectionMentions,
@@ -674,14 +594,10 @@ func (m *Model) sectionCycleIndex() int {
 	return 0
 }
 
-// Always cycles, even to an empty section: its state and count are exactly what the user wants to be
-// able to see.
 func (m *Model) cycleSection() {
 	m.setActiveSection(sectionCycle[(m.sectionCycleIndex()+1)%len(sectionCycle)])
 }
 
-// The own-approval veto is recomputed: it derives from the visible items, and those are now another
-// section's.
 func (m *Model) setActiveSection(kind model.Section) {
 	if m.pos == nil {
 		m.pos = map[model.Section]sectionPos{}
@@ -790,8 +706,6 @@ func (m *Model) snapshot() cache.File {
 	for key := range m.streams {
 		keys = append(keys, key)
 	}
-	// The snapshot order is compared between runs, so the keys need one total order over the whole
-	// key: forge, then section, then kind.
 	slices.SortFunc(keys, func(a, b streamKey) int {
 		return cmp.Or(
 			cmp.Compare(a.forge, b.forge),
@@ -852,7 +766,6 @@ func (m *Model) recomputeBackoff() {
 	}
 }
 
-// Pagination can repeat the same warning on every page.
 func appendWarnings(dst, src []model.Warning) []model.Warning {
 	for _, w := range src {
 		dup := false
@@ -869,7 +782,6 @@ func appendWarnings(dst, src []model.Warning) []model.Warning {
 	return dst
 }
 
-// levelNone produces nothing: a warning with no level never gets painted.
 func toastForLevel(level noticeLevel) (toastLevel, bool) {
 	switch level {
 	case levelOK:
@@ -897,8 +809,6 @@ func (m *Model) setNotice(text string, level noticeLevel) {
 	}
 }
 
-// Because wiring is seven `SetX` calls and a missing one does NOT break compilation: the failure
-// surfaces on the keypress as a "missing dependency" naming none of the seven.
 type Wiring struct {
 	Mounter       Mounter
 	Simulator     Simulator

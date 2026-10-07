@@ -15,8 +15,7 @@ func TestCallWithoutResponseIsAGraphicsError(t *testing.T) {
 		t.Errorf("with the socket silently closed it gave %v, want ErrNoGraphics", err)
 	}
 
-	// The server sends half a reply and dies. NOT ErrNoGraphics, and that is the difference that matters:
-	//something arrived, so the PROTOCOL is what broke.
+	// Half a reply is NOT ErrNoGraphics: something arrived, so the protocol is what broke.
 	half := &fakeSocket{halfLine: true, response: `{"id":"x","result":{"cell_width_px":9}}`}
 	g = newTestGraphics(t, half)
 	err = g.call(context.Background(), "pane.graphics.info", nil, nil)

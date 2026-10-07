@@ -1,5 +1,3 @@
-// The ITEM column: which part of the project path is visible, and at what width. Long paths do
-// not fit a fixed column, and clipping from the head ate the repo name and the "#number".
 package tui
 
 import (
@@ -20,8 +18,6 @@ const (
 	prefixLeaf
 )
 
-// next() and String() come out of the same type on purpose: the hint cannot describe a mode the cycle
-// does not reach.
 func (p prefixMode) String() string {
 	switch p {
 	case prefixFull:
@@ -37,16 +33,12 @@ func (p prefixMode) next() prefixMode {
 	return (p + 1) % 3
 }
 
-// Computed once per render and handed to both the header and the rows: if each measured on its
-// own, the table would dance as text is written.
 type refLayout struct {
 	cols   []tableColumn
 	prefix map[model.Section]string
 	mode   prefixMode
 }
 
-// Only the active section is passed in, so no width is spent on suffixes that are off screen. The
-// mode is asked for explicitly: every caller has to say what it paints, which changes the width.
 func newRefLayout(sections []inbox.Section, mode prefixMode) refLayout {
 	l := refLayout{mode: mode, prefix: make(map[model.Section]string, len(sections))}
 	longest := 0
@@ -72,8 +64,6 @@ func (l refLayout) prefixOf(sec model.Section) string {
 	return l.prefix[sec]
 }
 
-// Aligned on "/" boundaries and never eating the last segment: the cell always keeps the project name
-// and its number.
 func sectionPrefix(items []model.Item) string {
 	if len(items) < 2 {
 		return ""
@@ -106,8 +96,6 @@ func refCellText(it model.Item, mode prefixMode, prefix string) string {
 	return refSuffix(it, prefix)
 }
 
-// Cut at the LAST separator, not the first, because the identifier is at the end. An empty project
-// gives "#n": a forge can return an unparsed reference, and the number still identifies the item.
 func refLeaf(it model.Item) string {
 	project := it.Ref.Project
 	if i := strings.LastIndex(project, "/"); i >= 0 {

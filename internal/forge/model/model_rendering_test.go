@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// The model's untested functions share one property: they are PRESENTATION and DEGRADATION.
-
-// The three cases validated together.
 func TestTheSectionHasTwoNamesAndOnlyOneIsForTheAPI(t *testing.T) {
 	cases := []struct {
 		section   Section
@@ -31,8 +28,7 @@ func TestTheSectionHasTwoNamesAndOnlyOneIsForTheAPI(t *testing.T) {
 
 // The test that saves the wrong refactorisation.
 func TestTheTwoNamesAreNotConfused(t *testing.T) {
-	// What is pinned is that they NEVER coincide: if they did, someone could delete Legend and
-	//delegate to String.
+	// They must NEVER coincide: if they did, someone could delete Legend and delegate to String.
 	for _, s := range []Section{SectionAuthored, SectionReview, SectionMentions} {
 		if s.Legend() == s.String() {
 			t.Errorf("%q: the legend and the title are the same text (%q). The legend goes "+
@@ -66,8 +62,7 @@ func TestTheLineTotalAddsBothFaces(t *testing.T) {
 	}
 }
 
-// MergeRulesAll returns the three strategies with Known at TRUE, which is wrong on purpose and is
-// what tells a permissive default from real rules.
+// MergeRulesAll returns the three strategies with Known true on purpose, which tells a permissive default from real rules.
 func TestThePermissiveMergeRulesSaySoWithTheirBit(t *testing.T) {
 	r := MergeRulesAll()
 	if !r.Known {

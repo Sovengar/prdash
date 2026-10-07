@@ -1,5 +1,3 @@
-// Package cache persists an inbox snapshot so the UI paints instantly at startup.
-// A corrupt or missing file is ignored silently: the cache is never a source of truth.
 package cache
 
 import (
@@ -15,7 +13,6 @@ const FileName = "inbox.json"
 
 const DirName = "prdash"
 
-// A snapshot from another version is ignored rather than migrated: the format is cheap to rebuild.
 const version = 1
 
 type Stream struct {
@@ -53,14 +50,11 @@ func Load(path string) (File, bool) {
 	return f, true
 }
 
-// Best-effort: losing the snapshot costs a refetch, not correctness.
 func Save(path string, f File) error {
 	f.Version = version
 	return saveJSON(path, f)
 }
 
-// One helper for both: two copies of a sequence drift. The `any` makes the error branch real —
-// marshalling a struct of strings and slices never fails, so a concrete type would make it dead code.
 func saveJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

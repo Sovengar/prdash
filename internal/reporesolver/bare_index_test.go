@@ -39,7 +39,6 @@ func TestEnsureBareCleansLeftoversOfAFailedAttempt(t *testing.T) {
 	}
 }
 
-// An empty directory is a leftover just as much as one with rubbish in it, and it is its own case.
 func TestEnsureBareAlsoWorksWithAnEmptyLeftover(t *testing.T) {
 	origin, _ := fixture(t)
 	ref := ghRef()
@@ -59,7 +58,6 @@ func TestEnsureBareAlsoWorksWithAnEmptyLeftover(t *testing.T) {
 
 // The ROOT is not pruned even if its name starts with a dot.
 func TestBuildIndexDoesNotEnterHiddenDirectoriesNorSkipTheRoot(t *testing.T) {
-	// Two different origins so the indexed repo can be told apart.
 	visibleOrigin := filepath.Join(t.TempDir(), "visible.git")
 	testutil.InitBare(t, visibleOrigin)
 	hiddenOrigin := filepath.Join(t.TempDir(), "hidden.git")
@@ -97,7 +95,6 @@ func TestBuildIndexDoesNotEnterHiddenDirectoriesNorSkipTheRoot(t *testing.T) {
 		},
 	})
 
-	// The hidden root is indexed: it was configured, so the user's will wins.
 	if got, ok := r.ResolveLocal(visibleRef); !ok || got != visible {
 		t.Errorf("ResolveLocal for the visible repo = %q, %v; want %q: a root is indexed even if its name starts with a dot",
 			got, ok, visible)

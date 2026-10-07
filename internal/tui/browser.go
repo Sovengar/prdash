@@ -18,15 +18,11 @@ func browserCommand(goos, url string) (string, []string) {
 	}
 }
 
-// Launched and detached: killing the opener on TUI exit would close the browser with it. The
-// empty URL is rejected first, because `xdg-open ""` starts and the toast would say "opening".
 func (m *Model) openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
 		if url == "" {
 			return notifyMsg{text: "nothing to open in this item", level: levelWarn}
 		}
-		// The double is checked before LookPath on purpose: a double that only replaced Start would
-		// still depend on the machine having an xdg-open, which a headless CI box does not.
 		if m.openURL != nil {
 			if err := m.openURL(url); err != nil {
 				return notifyMsg{text: "open browser: " + err.Error(), level: levelError}

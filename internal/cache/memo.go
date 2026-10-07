@@ -9,7 +9,6 @@ import (
 
 const MemoFileName = "memo.json"
 
-// A memo from another version is ignored rather than migrated.
 const memoVersion = 1
 
 type ReviewRecord struct {
@@ -33,7 +32,6 @@ func MemoPath() (string, error) {
 	return filepath.Join(dir, DirName, MemoFileName), nil
 }
 
-// A missing, corrupt or stale memo degrades to "empty": the memo caches resolved paths, so losing it costs a re-resolve.
 func LoadMemo(path string) (Memo, bool) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -52,7 +50,6 @@ func SaveMemo(path string, m Memo) error {
 	return saveJSON(path, m)
 }
 
-// The resolver and the executor share this file, so every read-modify-write goes through the mutex.
 type Store struct {
 	path string
 	mu   sync.Mutex
@@ -108,7 +105,6 @@ func (s *Store) saveLocked() {
 	if s.path == "" {
 		return
 	}
-	// Best-effort on purpose: a write that fails here costs a re-resolve later, nothing more.
 	_ = SaveMemo(s.path, s.memo)
 }
 

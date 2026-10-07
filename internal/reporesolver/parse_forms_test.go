@@ -43,8 +43,7 @@ func TestParseRemoteURLClassifiesFormsBeforeNormalizing(t *testing.T) {
 			if ok != c.ok {
 				t.Fatalf("ParseRemoteURL(%q) gave ok=%v, want %v (ref %+v)", c.raw, ok, c.ok, got)
 			}
-			// And when it says no it does not return half a repo: a half-filled RepoRef would paint as
-			// real.
+			// Saying no does not return half a repo: a half-filled RepoRef would paint as real.
 			if !ok && got != (model.RepoRef{}) {
 				t.Errorf("ParseRemoteURL(%q) said no but returned %+v", c.raw, got)
 			}
@@ -52,25 +51,19 @@ func TestParseRemoteURLClassifiesFormsBeforeNormalizing(t *testing.T) {
 	}
 }
 
-// The separators being looked for can appear BEFORE where they belong.
 func TestParseRemoteURLIsNotConfusedByASeparatorInTheWrongPlace(t *testing.T) {
 	hosts := map[string]string{"github.com": "github"}
 
-	// Each entry with its exact result, because what is asserted is that the separator decides.
 	cases := []struct {
 		raw  string
 		want model.RepoRef
 	}{
-		// With a scheme the scheme wins, and its `@` is the user, not an SCP separator.
 		{"https://git@github.com/acme/widget.git",
 			model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}},
-		// An `@` inside the path is legal in a git path and is NOT a user.
 		{"https://github.com/acme/wi@get.git",
 			model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/wi@get", Owner: "acme", Name: "wi@get"}},
-		// With a port in the host: the port stays with the host and is not read as an SCP separator.
 		{"ssh://git@github.com:22/acme/widget.git",
 			model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/widget", Owner: "acme", Name: "widget"}},
-		// A `:` inside an SCP path: the separator is the FIRST one and the rest are part of the path.
 		{"git@github.com:acme/wi:get.git",
 			model.RepoRef{Forge: "github", Host: "github.com", Project: "acme/wi:get", Owner: "acme", Name: "wi:get"}},
 	}

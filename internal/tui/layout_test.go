@@ -28,9 +28,9 @@ func TestComputeLayoutFillsTheHeight(t *testing.T) {
 
 func TestComputeLayoutDetailFortyPercent(t *testing.T) {
 	for _, tc := range []struct{ height, detail int }{
-		{40, 16}, // 16/40 = 40%
-		{30, 12}, // 12/30 = 40%
-		{24, 9},  // 9/24 = 37%, rounded down by the integer division
+		{40, 16},
+		{30, 12},
+		{24, 9},
 	} {
 		lay := computeLayout(tc.height, 1, true)
 		if lay.detailLines != tc.detail {

@@ -36,8 +36,6 @@ worktree_dir = "~"
 	}
 }
 
-// For each field a config that sets it and one that omits it, which is what makes the merge
-// useful.
 func TestTheConfigPathsAreAppliedAndTheMissingOnesAreNotTouched(t *testing.T) {
 	def := Defaults()
 
@@ -90,7 +88,6 @@ func TestAutoReviewParsesAndItsAbsenceLeavesThingsAsTheyWere(t *testing.T) {
 		t.Errorf("without [autoreview] the allowlist changed size")
 	}
 
-	// Present and complete.
 	path = filepath.Join(dir, "with-ar.toml")
 	writeConfig(t, path, `
 [autoreview]
@@ -108,8 +105,7 @@ allowlist = ["acme/seguro", "other/repo"]
 		t.Fatalf("the allowlist has %d entries, want 2: %v",
 			len(cfg.AutoReview.Allowlist), cfg.AutoReview.Allowlist)
 	}
-	// One config's slice is INDEPENDENT of another's: two LoadFrom of the same file do not share
-	//the allowlist's memory.
+	// One config's slice is INDEPENDENT of another's: two LoadFrom do not share memory.
 	other, warn := LoadFrom(path)
 	if warn != "" {
 		t.Fatal(warn)
@@ -119,8 +115,6 @@ allowlist = ["acme/seguro", "other/repo"]
 		t.Error("the allowlist is stored by reference between configs: mutating it would write " +
 			"into the other one's decoded TOML")
 	}
-	// A nil slice and an empty one are not the same: not in the contract, but a len() that treated
-	// them alike would.
 	empty, _ := LoadFrom(path)
 	other.AutoReview.Allowlist = nil
 	if len(empty.AutoReview.Allowlist) == 0 {
@@ -128,13 +122,11 @@ allowlist = ["acme/seguro", "other/repo"]
 	}
 }
 
-// `enabled = false` is a LINE and not a loose boolean because GitLab is the only forge where
-// disabling it changes the inbox.
+// `enabled = false` is a LINE, not a loose boolean: disabling GitLab changes the inbox.
 func TestDisablingAForgeInConfigMakesItDisappearFromTheInboxAndNotJustGetMarked(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "forges.toml")
 
-	// GitLab disabled: before this test nothing disabled it, and the branch was dead.
 	writeConfig(t, path, `
 [forge.gitlab]
 enabled = false
@@ -150,12 +142,10 @@ enabled = false
 	if !def.Forges.GitLab.Enabled {
 		t.Fatal("the fixture is useless: GitLab ships enabled by default")
 	}
-	// And GitHub is untouched: each forge is independent and disabling one does not disable the other.
 	if !cfg.Forges.GitHub.Enabled {
 		t.Error("disabling GitLab disabled GitHub")
 	}
 
-	// The inverse: a default of disabled would be re-enabled by `enabled = true`.
 	writeConfig(t, path, `
 [forge.gitlab]
 enabled = true
@@ -191,8 +181,7 @@ clone_base = "/tmp/bases"
 		t.Errorf("CloneBase = %q, want the override", cfg.Forges.GitHub.CloneBase)
 	}
 
-	// An empty string does NOT replace: that is the difference between "I did not set it" and "I set
-	// it empty".
+	// An empty string does NOT replace: "I did not set it" and "I set it empty" differ.
 	writeConfig(t, path, `
 [forge.github]
 host = ""
@@ -203,7 +192,6 @@ host = ""
 	}
 }
 
-// The other half of the guard, and the one that makes the previous useful.
 func TestAMissingForgeInConfigTouchesNothing(t *testing.T) {
 	def := Defaults()
 	dir := t.TempDir()

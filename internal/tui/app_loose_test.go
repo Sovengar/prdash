@@ -12,9 +12,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// The loose branches left in tui: one-line functions, cursor and view guards.
-
-// The piece that makes the wiring checkable.
 func TestWiringReturnsExactlyWhatTheModelHasWired(t *testing.T) {
 	full := newTestModel(t)
 	full.mounter = &wiringMounter{}
@@ -47,10 +44,9 @@ func TestWiringReturnsExactlyWhatTheModelHasWired(t *testing.T) {
 	}
 }
 
-// Honest degradation.
 func TestWithNoKnownHeightTheScrollAdvancesSixRows(t *testing.T) {
 	m := newTestModel(t)
-	m.height = 0 // terminal with no size yet
+	m.height = 0
 
 	if rows := m.pageRows(); rows != 6 {
 		t.Errorf("with no known height pageRows = %d, want 6", rows)
@@ -68,11 +64,9 @@ func TestWithNoKnownHeightTheScrollAdvancesSixRows(t *testing.T) {
 	}
 }
 
-// The end of a cycle.
 func TestAForgeThatFinishesLoadingStopsBeingInLoading(t *testing.T) {
 	m := modelWithLoadingStatuses(t)
 
-	// A current github forgeDoneMsg clears github's loading and NOT gitlab's.
 	output := send(t, m, forgeDoneMsg{cycle: 3, forge: "github"})
 	got := output
 	if got.statuses["github"].loading {

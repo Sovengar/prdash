@@ -11,8 +11,7 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The double records the format and the args SEPARATELY, which is what lets it check that abort
-// passes the args instead of concatenating them.
+// The double records format and args SEPARATELY, so it can check abort passes args, not concatenates.
 type testReporter struct {
 	helper  int
 	fatales []string
@@ -31,7 +30,6 @@ func (r *testReporter) Error(args ...any) {
 
 func (r *testReporter) passed() bool { return len(r.fatales) == 0 && len(r.errors) == 0 }
 
-// Three things in one line of code.
 func TestAbortWarnsWithThePrefixAndTheWholeError(t *testing.T) {
 	quiet := &testReporter{}
 	abort(quiet, nil)
@@ -57,8 +55,7 @@ func TestAbortWarnsWithThePrefixAndTheWholeError(t *testing.T) {
 	}
 }
 
-// What is checked is that fn runs ONCE, not that it warns: an idempotent mkdir is fine but a
-// git init is not.
+// What is checked is that fn runs ONCE: an idempotent mkdir is fine but a git init is not.
 func TestAbortWithPassesTheFunctionsErrorAndDoesNotCallItAgain(t *testing.T) {
 	calls := 0
 	quiet := &testReporter{}
@@ -91,8 +88,7 @@ func TestAbortWithPassesTheFunctionsErrorAndDoesNotCallItAgain(t *testing.T) {
 	}
 }
 
-// "Exactly" is the word that matters: a gate that reported everything in one Error would also
-// turn the test red, and a gate that reported nothing would let a broken adapter pass.
+// "Exactly" matters: one Error for everything also reddens, and reporting nothing lets a break pass.
 func TestTheConformanceGateRecordsOneErrorPerViolationAndDoesNotTakeThemAsGood(t *testing.T) {
 	broken := &FakeAdapter{
 		ForgeName: "broken",
@@ -124,7 +120,6 @@ func TestTheConformanceGateRecordsOneErrorPerViolationAndDoesNotTakeThemAsGood(t
 		if len(d.fatales) != 0 {
 			t.Errorf("%+v: the gate aborted the test instead of recording: %v", opts, d.fatales)
 		}
-		// Every violation arrives, and each ONE time.
 		for _, e := range expected {
 			n := 0
 			for _, recorded := range d.errors {
@@ -139,7 +134,6 @@ func TestTheConformanceGateRecordsOneErrorPerViolationAndDoesNotTakeThemAsGood(t
 	}
 }
 
-// The half that is not the failure.
 func TestTheGateStaysSilentWithACompliantAdapterAndMarksItAsAHelper(t *testing.T) {
 	good := inertAdapter()
 	opts := ConformanceOptions{Unsupported: true}
@@ -157,7 +151,6 @@ func TestTheGateStaysSilentWithACompliantAdapterAndMarksItAsAHelper(t *testing.T
 	}
 }
 
-// The violations that are not the opts'.
 func TestTheGateWithANonCompliantAdapterDoesNotSkipTheForgeAndTheHost(t *testing.T) {
 	nameless := &FakeAdapter{}
 	v := ConformanceViolations(nameless, ConformanceOptions{Unsupported: true})
@@ -169,8 +162,7 @@ func TestTheGateWithANonCompliantAdapterDoesNotSkipTheForgeAndTheHost(t *testing
 		t.Fatalf("the first two entries are not the forge and host ones: %v", v[:min(4, len(v))])
 	}
 
-	// The rest start with ": ", because the list formats with a.Forge() and an empty forge prints
-	//empty. My first version assumed the code avoided that and the test failed: it does not.
+	// The rest start with ": " because the list formats with an empty Forge.
 	for _, e := range v[2:] {
 		if !strings.HasPrefix(e, ": ") {
 			t.Errorf("the violation %q does not carry the empty-forge slot", e)

@@ -7,10 +7,8 @@ import (
 	"time"
 )
 
-// Herdr's CLI operations split in two for a reason that is not aesthetic: the ones that MODIFY the
-//session go through the guard.
+// The operations that MODIFY the session go through the guard: the split is not aesthetic.
 
-// The control case is at the end.
 func TestNoMutatingOperationTouchesTheSessionOutsideHerdr(t *testing.T) {
 	calls := 0
 	seen := [][]string{}
@@ -56,8 +54,7 @@ func TestNoMutatingOperationTouchesTheSessionOutsideHerdr(t *testing.T) {
 				"session has to refuse", op.name)
 		}
 	}
-	// And none of them reached the binary. This is the assertion that matters: a veto honoured in the
-	// message but not in the call is no veto.
+	// A veto honoured in the message but not in the call is no veto.
 	if len(seen) != 0 {
 		t.Errorf("%d calls to the binary ran while outside Herdr: %v", len(seen), seen)
 	}
@@ -109,8 +106,7 @@ func TestNoMutatingOperationTouchesTheSessionOutsideHerdr(t *testing.T) {
 			}
 		}
 	}
-	// MountLayout outside Herdr fails with an ERROR, not only with warnings: there is no layout to
-	// open.
+	// MountLayout fails with an ERROR, not warnings: there is no layout to open.
 	if _, err := outside.MountLayout(ctx, ref, testPlan()); err == nil {
 		t.Error("MountLayout outside Herdr gave nil")
 	}
@@ -224,14 +220,12 @@ func TestGraphicsClientIsBuiltAndReadsTheEnvironment(t *testing.T) {
 	}
 }
 
-// Same case in the normal client.
 func TestClientAlsoFallsBackToOsGetenvWithoutGetenv(t *testing.T) {
 	cNil := &Client{Bin: "herdr"}
 	t.Setenv("HERDR_ENV", "1")
 	if got := cNil.env("HERDR_ENV"); got != "1" {
 		t.Errorf("with getenv nil it gave %q, want 1", got)
 	}
-	// And without the variable.
 	t.Setenv("HERDR_ENV", "")
 	if got := cNil.env("HERDR_ENV"); got != "" {
 		t.Errorf("without the variable it gave %q", got)
@@ -283,8 +277,7 @@ func TestVersionIsQueriedOnceAndCached(t *testing.T) {
 			calls)
 	}
 
-	// With --version failing it is not blocked: that is the development build, where every operation
-	// would fail.
+	// With --version failing it is not blocked: that is the development build.
 	broken := &Client{
 		Bin:    "herdr",
 		getenv: func(k string) string { return map[string]string{"HERDR_ENV": "1"}[k] },

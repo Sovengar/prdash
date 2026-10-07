@@ -79,8 +79,6 @@ func TestAuthoredOnlyOpenByMe(t *testing.T) {
 	}
 }
 
-// TestReviewIncludesRequestedAndAssigned covers the "review / assigned includes requested review
-// and assignments" scenario.
 func TestReviewIncludesRequestedAndAssigned(t *testing.T) {
 	requested := mkItem("github", "github.com", "acme/widget", 10, "REVIEW_REQUIRED")
 	requested.ReviewKind = model.ReviewRequested
@@ -146,7 +144,7 @@ func TestDedupeWithinSection(t *testing.T) {
 	}
 }
 
-// Three levels of tie-break, and the tie-break matters because the list is what the user reads.
+// The tie-break matters because the list is what the user reads.
 func TestSortItemsBreaksTiesInACascade(t *testing.T) {
 	newer := mkItem("github", "github.com", "acme/widget", 9, "APPROVED")
 	older := mkItem("github", "github.com", "acme/widget", 1, "APPROVED")
@@ -159,8 +157,6 @@ func TestSortItemsBreaksTiesInACascade(t *testing.T) {
 		t.Errorf("with equal attention the most recent date wins, first = #%d", items[0].Number)
 	}
 
-	// Same attention and same date: the lowest number wins, so the order does not depend on input
-	// order.
 	smaller := mkItem("github", "github.com", "acme/widget", 3, "APPROVED")
 	bigger := mkItem("github", "github.com", "acme/widget", 7, "APPROVED")
 	smaller.UpdatedAt = time.Unix(1000, 0)
@@ -172,16 +168,12 @@ func TestSortItemsBreaksTiesInACascade(t *testing.T) {
 		t.Errorf("with everything equal the lowest number wins, first = #%d", items[0].Number)
 	}
 
-	// The same tie with the input ALREADY in the right order: the case that separates a real
-	//comparison from one that always says "yes".
 	items = []model.Item{newer, older}
 	sortItems(items)
 	if items[0].Number != 9 || items[1].Number != 1 {
 		t.Errorf("with the input already ordered a tie must not reorder it: %d, %d", items[0].Number, items[1].Number)
 	}
 
-	// Two items with the SAME number (different repos, so both survive dedupe) and the same
-	//attention and date; with different numbers the number decides.
 	tiedA := mkItem("github", "github.com", "acme/widget", 5, "APPROVED")
 	tiedB := mkItem("gitlab", "gitlab.example.com", "grp/proj", 5, "APPROVED")
 	tiedA.UpdatedAt = time.Unix(1000, 0)
@@ -193,7 +185,6 @@ func TestSortItemsBreaksTiesInACascade(t *testing.T) {
 			items[0].Ref.Project, items[1].Ref.Project)
 	}
 
-	// The whole cascade: changes requested beats approved even when it is older.
 	changes := mkItem("github", "github.com", "acme/widget", 1, "CHANGES_REQUESTED")
 	changes.UpdatedAt = time.Unix(500, 0)
 	approved := mkItem("github", "github.com", "acme/widget", 99, "APPROVED")
@@ -205,8 +196,7 @@ func TestSortItemsBreaksTiesInACascade(t *testing.T) {
 	}
 }
 
-// The order of sectionOrder is load-bearing: assignAuthority keeps the FIRST section that
-// mentions an identity, so "first" must mean "most authoritative".
+// sectionOrder is load-bearing: assignAuthority keeps the FIRST section, so first means most authoritative.
 func TestSectionOrderIsTheAuthorityOrder(t *testing.T) {
 	want := []model.Section{model.SectionAuthored, model.SectionReview, model.SectionMentions}
 	if len(sectionOrder) != len(want) {

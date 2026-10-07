@@ -27,8 +27,7 @@ type rpcServer struct {
 	closed   bool
 }
 
-// The socket lives in t.TempDir() because Unix sockets are paths and a long one goes past
-// sun_path's 108-byte limit.
+// The socket lives in t.TempDir(): a long Unix path goes past sun_path's 108-byte limit.
 func newServer(t *testing.T, script func(c net.Conn, request map[string]any)) (*Graphics, *rpcServer) {
 	t.Helper()
 
@@ -130,8 +129,6 @@ func mustJSON(v any) string {
 	return string(b)
 }
 
-// What is checked is the message as it travels: the jsonrpc, the id, the method and the params with
-// the pane_id.
 func TestRealSocketOpensAndAnswers(t *testing.T) {
 	g, s := newServer(t, respondWith(map[string]any{
 		"cell_width_px": 11, "cell_height_px": 22,
@@ -166,11 +163,8 @@ func TestRealSocketOpensAndAnswers(t *testing.T) {
 	}
 }
 
-// The commonest case of all: Herdr is not running, or HERDR_SOCKET_PATH points at a session that no
-// longer exists.
 func TestMissingSocketDegradesToErrNoGraphicsAndSaysSo(t *testing.T) {
-	// The path is inside a directory that does exist, so the failure is ENOENT of the socket and not of
-	//the directory; the same error to errors.Is, but a different meaning.
+	// The directory exists, so the failure is ENOENT of the socket, not of the directory.
 	missing := filepath.Join(t.TempDir(), "no-existe.sock")
 	g := &Graphics{Socket: missing, PaneID: "pane-1", Timeout: time.Second}
 
@@ -213,8 +207,7 @@ func TestServerClosingWithoutAnsweringDoesNotHang(t *testing.T) {
 	}
 }
 
-// The only test in the file that needs to wait, and it waits for real: a short timeout and a
-// check that the call comes back before it.
+// The only test that waits for real: a short timeout and a check the call comes back before it.
 func TestServerNotAnsweringIsCutByTheTimeout(t *testing.T) {
 	g, _ := newServer(t, dontAnswer)
 	g.Timeout = 80 * time.Millisecond
@@ -229,8 +222,7 @@ func TestServerNotAnsweringIsCutByTheTimeout(t *testing.T) {
 	if !errors.Is(err, ErrNoGraphics) {
 		t.Errorf("the error %v is not ErrNoGraphics", err)
 	}
-	// The margin is ten times the timeout plus a second on purpose, since the measurement is wall
-	//clock.
+	// The margin is ten times the timeout plus a second: the measurement is wall clock.
 	if took > time.Second {
 		t.Errorf("it took %s with a timeout of 80ms: the timeout does not cut", took)
 	}
@@ -242,8 +234,6 @@ func TestServerNotAnsweringIsCutByTheTimeout(t *testing.T) {
 	}
 }
 
-// This is the case where Herdr says something useful —"no such pane", "method not available in this
-// version"— and that text has to reach the popup.
 func TestServerErrorArrivesWithItsCodeAndMessage(t *testing.T) {
 	g, _ := newServer(t, rpcErr("no_such_pane", "pane pane-1 not found"))
 
@@ -251,8 +241,7 @@ func TestServerErrorArrivesWithItsCodeAndMessage(t *testing.T) {
 	if err == nil {
 		t.Fatal("a server error gave nil")
 	}
-	// The server's error is NOT wrapped in ErrNoGraphics, and my first version assumed it was: only
-	// probe (which asks whether there is one) and SetImage ever look at it.
+	// The server's error is NOT wrapped in ErrNoGraphics: only probe and SetImage ever look at it.
 	for _, want := range []string{"no_such_pane", "not found"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error %q does not bring %q from the server", err, want)
@@ -260,8 +249,6 @@ func TestServerErrorArrivesWithItsCodeAndMessage(t *testing.T) {
 	}
 }
 
-// HERDR_SOCKET_PATH can point at another program's socket —an SSH server, an LSP, a thing left
-// running—and it answers.
 func TestNonJSONResponseIsRejectedAndNotPaddedWithZeros(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -315,8 +302,7 @@ func TestClearTravelsTheSocketWithItsLayerAndPane(t *testing.T) {
 	}
 }
 
-// "Without resizing" is the contract, not a detail: the caller already fitted the image and rescaling
-// again would throw detail away.
+// "Without resizing" is the contract: the caller already fitted the image.
 func TestSetImageSendsThePNGAndTheSizeWithoutResizing(t *testing.T) {
 	g, s := newServer(t, respondWith(map[string]any{}))
 

@@ -14,7 +14,6 @@ import (
 
 const halfGlyph = '▀'
 
-// The case that names the function: a PNG with the wrong suffix.
 func TestLoadOpensByContentNotByExtension(t *testing.T) {
 	dir := t.TempDir()
 	content := testJPEG(t, 5, 2, color.RGBA{R: 200, G: 100, B: 0, A: 255})
@@ -50,7 +49,6 @@ func TestLoadOpensByContentNotByExtension(t *testing.T) {
 	}
 }
 
-// Two failures and what each says.
 func TestLoadTellsMissingFromNotAnImage(t *testing.T) {
 	dir := t.TempDir()
 
@@ -144,8 +142,7 @@ func TestSlugLeavesAFileNameNotAPath(t *testing.T) {
 	if got := slug("group/project"); got != "group-project" {
 		t.Errorf("a slash gave %q", got)
 	}
-	// The character-class boundaries as exact values: the property checks above cannot tell
-	// 'z' from '-', and a boundary mutant lives exactly there.
+	// The property checks cannot tell 'z' from '-': a boundary mutant lives exactly there.
 	for in, want := range map[string]string{
 		"a": "a", "z": "z", "A": "A", "Z": "Z", "0": "0", "9": "9", "azAZ09": "azAZ09",
 	} {

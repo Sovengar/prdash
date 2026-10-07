@@ -137,8 +137,7 @@ func TestMutatingOperationsAreVetoedOutsideHerdr(t *testing.T) {
 	if err := inside.PaneFocus(context.Background(), "left"); err != nil {
 		t.Errorf("inside Herdr, pane focus failed: %v", err)
 	}
-	// Counting carefully is the trap: guard calls Available(), which queries the version, and THAT is
-	// a call to the binary.
+	// Counting carefully is the trap: the guard's Available() is also a call to the binary.
 	if len(seen) != 2 {
 		t.Errorf("inside Herdr %d calls were made, want 2 (version + operation): "+
 			"%v", len(seen), seen)
@@ -194,8 +193,7 @@ func TestRunTimeoutApplies(t *testing.T) {
 		t.Errorf("run took %s with a timeout of 50ms: the context is not cutting the "+
 			"call", elapsed)
 	}
-	// The default floor applies when Timeout is empty, and it is proved by checking what run computes
-	//rather than by waiting 30s.
+	// The default floor is proved by what run computes, not by waiting 30s.
 	bin1s := writeBinary(t, dir, "herdr-corto", "#!/bin/sh\nsleep 1\n")
 	c.Bin = bin1s
 	c.Timeout = 0

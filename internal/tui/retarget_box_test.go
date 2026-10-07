@@ -23,7 +23,6 @@ func linesOfThePopup(m Model) []string {
 	return strings.Split(stripANSI(m.retargetOverlay2()), "\n")
 }
 
-// The cursor is the row enter picks.
 func TestOnlyOneRowCarriesTheCursorAndItIsTheChosenOne(t *testing.T) {
 	branches := []string{"main", "release/2.0", "fix/one", "fix/two", "wip"}
 	for cursor := range len(branches) {
@@ -58,7 +57,6 @@ func TestOnlyOneRowCarriesTheCursorAndItIsTheChosenOne(t *testing.T) {
 	}
 }
 
-// Two different signals and the popup has to distinguish them.
 func TestTheCursorAndTheCurrentBaseDoNotShareASymbol(t *testing.T) {
 	m := branchesOfThePopup(t, "", "main", "other", "tercera")
 	m.retarget.cursor = 0
@@ -91,8 +89,7 @@ func TestTheCursorAndTheCurrentBaseDoNotShareASymbol(t *testing.T) {
 }
 
 func TestTheListAlignsInAColumn(t *testing.T) {
-	// A long base and a one-character one, which is what separates an aligned column from a
-	// coincidental one.
+	// A long base and a one-character one is what separates an aligned column from a coincidental one.
 	m := branchesOfThePopup(t, "", "main", "a-branch-with-name-naïve-and-quite-long", "wip")
 	m.retarget.cursor = 1
 	m.retarget.win = 0
@@ -109,7 +106,6 @@ func TestTheListAlignsInAColumn(t *testing.T) {
 		}
 	}
 
-	// The current base's suffix lands in the SAME column as the bare name.
 	colOfCurrent := -1
 	for _, l := range linesOfThePopup(m) {
 		i := strings.Index(l, "current")
@@ -126,7 +122,6 @@ func TestTheListAlignsInAColumn(t *testing.T) {
 	if colOfCurrent < 0 {
 		t.Error("the current bases suffix was not painted")
 	}
-	// The suffix ENDS at the inner edge, not in an arbitrary column.
 	end := colOfCurrent + len("current")
 	wantEnd := 1 + max(8, m.retargetBoxWidth()-2)
 	if end != wantEnd {
@@ -206,7 +201,6 @@ func countBranchRows(m Model) int {
 	return n
 }
 
-// The header names the base even when it does not know it.
 func TestTheHeaderNamesTheBaseEvenWhenItDoesNotKnowIt(t *testing.T) {
 	m := branchesOfThePopup(t, "", "main", "other")
 	if !strings.Contains(stripANSI(m.retargetOverlay2()), "from main") {
@@ -221,13 +215,11 @@ func TestTheHeaderNamesTheBaseEvenWhenItDoesNotKnowIt(t *testing.T) {
 	if strings.Contains(txt, "from  ") || strings.Contains(txt, "from ·") {
 		t.Errorf("with no known base the header left a gap: %q", txt)
 	}
-	// And with no known base no row carries a "current" marker.
 	if strings.Contains(txt, "current") {
 		t.Errorf("with no known base the base badge should not come out: %q", txt)
 	}
 }
 
-// With the filter off the box says how many branches the repo has.
 func TestTheBranchCountDistinguishesFilteredFromUnfiltered(t *testing.T) {
 	branches := []string{"main", "fix/one", "fix/two", "wip", "other"}
 	complete := []string{"main", "fix/one", "fix/two", "wip", "other"}
@@ -264,7 +256,6 @@ func TestTheBranchCountDistinguishesFilteredFromUnfiltered(t *testing.T) {
 	_ = branches
 }
 
-// Without a filter the field shows a dim placeholder.
 func TestTheFilterFieldDistinguishesThePlaceholderFromTheText(t *testing.T) {
 	m := branchesOfThePopup(t, "", "main", "other")
 	txt := stripANSI(m.retargetOverlay2())
@@ -301,7 +292,6 @@ func TestTheFilterFieldDistinguishesThePlaceholderFromTheText(t *testing.T) {
 	}
 }
 
-// A filter that matches nothing leaves the list empty and the box says so.
 func TestThePopupSaysWhenItFindsNothing(t *testing.T) {
 	m := branchesOfThePopup(t, "", "main", "other")
 	m.retarget.query = "noexiste"

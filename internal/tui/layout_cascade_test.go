@@ -2,7 +2,6 @@ package tui
 
 import "testing"
 
-// With just enough room the detail loses its rows first.
 func TestTheCascadePutsTheDetailBeforeTheBody(t *testing.T) {
 	cases := []struct {
 		height    int
@@ -85,7 +84,6 @@ func TestTheCascadeYieldsInTheDeclaredOrder(t *testing.T) {
 	}
 }
 
-// Leaving the cascade, nothing is clipped that does not need to be.
 func TestTheCascadeStopsAsSoonAsItFits(t *testing.T) {
 	for h := 1; h <= 80; h++ {
 		lay := computeLayout(h, maxHintLines, true)

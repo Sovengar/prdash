@@ -1,5 +1,3 @@
-// `prdash worktrees` manages the review worktrees that belong to prdash. Ownership lives in the
-// name/label, so a foreign worktree is never listed and never deleted.
 package main
 
 import (
@@ -14,11 +12,8 @@ import (
 	"prdash/internal/worktree"
 )
 
-// 30s; a literal because a const decl carries no coverage, so `*` here would be a mutant no test can reach (ADR 0011).
 const worktreeTimeout = time.Duration(30e9)
 
-// Injected writers, not os.Stdout: this is the command that DELETES files, so its output is the
-// evidence that it deleted what it said and nothing else.
 func runWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer, args []string) int {
 	sub := "list"
 	if len(args) > 0 && args[0] != "" {
@@ -40,8 +35,6 @@ func runWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer, args []stri
 	}
 }
 
-// Any token starting with `-` is a flag: the paths prdash manages are absolute, so a leading dash is
-// never a real path. Rejecting it turns a typo like `--orphan` into an error instead of a path.
 func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err error) {
 	for _, arg := range args {
 		if arg == "--orphans" {
@@ -66,8 +59,6 @@ func parseRemoveArgs(args []string) (orphans, dryRun bool, paths []string, err e
 	return orphans, dryRun, paths, nil
 }
 
-// The table goes to stdout and the warnings to stderr because they are different things: the
-// table is the result a script reads, the warning is why a row is marked.
 func listWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), worktreeTimeout)
 	defer cancel()
@@ -102,8 +93,6 @@ func removeWorktrees(pr worktree.Provisioner, stdout, stderr io.Writer,
 	return removeWorktreesWithin(pr, stdout, stderr, orphans, dryRun, paths, worktreeTimeout)
 }
 
-// Per-item budget rather than one global one: a slow item must not spend the time of the ones
-// after it, and a shared deadline turns one hang into a truncated batch.
 func removeWorktreesWithin(pr worktree.Provisioner, stdout, stderr io.Writer,
 	orphans, dryRun bool, paths []string, budget time.Duration) int {
 	if orphans {

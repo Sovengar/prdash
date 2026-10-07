@@ -66,7 +66,6 @@ func TestTheGraphQLListingBringsTheForgesCursor(t *testing.T) {
 	}
 }
 
-// The forge's cursor is passed through as given.
 func TestTheFirstPageUsesTheCursorAndTheNextOnePassesItThroughAsIs(t *testing.T) {
 	script, argsFile := glabThatLogs(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
 	a := New("h.example", script)
@@ -96,7 +95,6 @@ func TestTheFirstPageUsesTheCursorAndTheNextOnePassesItThroughAsIs(t *testing.T)
 	}
 }
 
-// Three cases and three different decisions.
 func TestTheRESTFallbackOnlyKicksInForTheFirstAuthoredPage(t *testing.T) {
 	ctx := context.Background()
 	body := `case "$*" in
@@ -239,9 +237,7 @@ func TestTheTodosListFollowsThePageCursor(t *testing.T) {
 	}
 }
 
-// The Assigned review listing is a different query from the plain Review one, and only a test
-// that asks for it tells the two apart: a negated section or kind silently falls through to the
-// other query and the page still parses.
+// The Assigned review listing uses a different query than the plain Review one, and only a test asking for it tells them apart.
 func TestTheAssignedReviewListingAsksForTheAssignedQuery(t *testing.T) {
 	script, argsFile := glabThatLogs(t, "cat <<'JSON'\n"+graphqlJSON+"\nJSON\n")
 	a := New("h.example", script)

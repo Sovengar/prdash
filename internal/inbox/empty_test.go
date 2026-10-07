@@ -6,10 +6,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// The two functions the TUI asks what to paint, and both have a "nothing here" answer that is
-//not a value but a state.
-
-// The case to watch is the UNKNOWN section's class.
 func TestAskingForASectionThatIsNotThereReturnsItEmptyButWithItsClass(t *testing.T) {
 	in := Inbox{Sections: []Section{
 		{Kind: model.SectionAuthored},
@@ -24,7 +20,6 @@ func TestAskingForASectionThatIsNotThereReturnsItEmptyButWithItsClass(t *testing
 		t.Errorf("the review section brings %d items, and the fixture puts none", len(review.Items))
 	}
 
-	// An absent class: empty BUT with its name, which is the case the "sections" table needs.
 	absent := in.Section("a-made-up-section")
 	if absent.Kind != "a-made-up-section" {
 		t.Errorf("the absent section came back with Kind %q: the column name would be lost", absent.Kind)
@@ -39,7 +34,6 @@ func TestAskingForASectionThatIsNotThereReturnsItEmptyButWithItsClass(t *testing
 		t.Error("modifying the returned section changed the inbox")
 	}
 
-	// And with an inbox with no sections: the same answer.
 	empty := Inbox{}
 	if s := empty.Section(model.SectionReview); s.Kind != model.SectionReview || len(s.Items) != 0 {
 		t.Errorf("an inbox with no sections returned %+v", s)
@@ -76,7 +70,6 @@ func TestEmptyIsFalseAsSoonAsThereIsAnItemInAnySection(t *testing.T) {
 	}
 }
 
-// Not a make-up check: they are the two functions the TUI uses to decide what to paint.
 func TestEmptyAndCountHaveToAgree(t *testing.T) {
 	in := Inbox{Sections: []Section{
 		{Kind: model.SectionReview, Items: []model.Item{{Number: 1}, {Number: 2}}},

@@ -10,7 +10,6 @@ import (
 	"prdash/internal/forge/model"
 )
 
-// Up and down have to be the SAME operation.
 func TestTheArrowsFollowTheListInBothDirections(t *testing.T) {
 	items := make([]model.Item, 4)
 	for i := range items {
@@ -72,7 +71,6 @@ func TestTheArrowsFollowTheListInBothDirections(t *testing.T) {
 	}
 }
 
-// With no rows there is nowhere to paint, and that is the first cut.
 func TestWithNoRowsNotEvenANoticeIsPainted(t *testing.T) {
 	m := modelWithComments(t, 45, []model.Comment{commentOf("alice", "hola")}, 1)
 	it := mustSelected(t, m)
@@ -186,7 +184,6 @@ func TestTheBoxTakesWhatItNeedsAndNoMore(t *testing.T) {
 	}
 }
 
-// The body goes INSIDE the box.
 func TestTheBodySplitsAtTheBoxWidthNotAtTheTerminals(t *testing.T) {
 	phrase := strings.Repeat("x", 400)
 	for _, inner := range []int{20, 30, 40, 60, 80, 120, 200} {
@@ -197,7 +194,6 @@ func TestTheBodySplitsAtTheBoxWidthNotAtTheTerminals(t *testing.T) {
 			t.Errorf("inner %d: the box was not painted", inner)
 			continue
 		}
-		// No row goes past the box's width. That is the invariant.
 		for i, l := range rows {
 			if w := utf8.RuneCountInString(stripANSI(l)); w > inner {
 				t.Errorf("inner %d: row %d measures %d columns, want <= %d: the body does not fit in its box",
@@ -205,7 +201,6 @@ func TestTheBodySplitsAtTheBoxWidthNotAtTheTerminals(t *testing.T) {
 			}
 		}
 	}
-	// The width really matters: the same body needs more rows in a narrow box.
 	body := strings.Repeat("palabra ", 60)
 	rowsOf := func(inner int) int {
 		m := modelWithComments(t, 45, []model.Comment{commentOf("alice", body)}, 1)
@@ -217,11 +212,9 @@ func TestTheBodySplitsAtTheBoxWidthNotAtTheTerminals(t *testing.T) {
 		t.Errorf("with the narrow box %d rows come out and with the wide one %d: the body width is not ruling",
 			estrechas, wide)
 	}
-	// The difference arrives even with maxCommentLines clipping both.
 	t.Logf("narrow %d rows, wide %d (cap per comment: %d)", estrechas, wide, maxCommentLines)
 }
 
-// The count lives on the border, not in the body.
 func TestTheLegendSaysHowManyAreShownOfHowManyThereAre(t *testing.T) {
 	list := make([]model.Comment, 3)
 	for i := range list {
@@ -244,7 +237,6 @@ func TestTheLegendSaysHowManyAreShownOfHowManyThereAre(t *testing.T) {
 	if !strings.Contains(plain, "3 of 12") {
 		t.Errorf("with 12 in the total the border should say 3 of 12: %q", plain)
 	}
-	// And the hint that there is more appears when there is more.
 	if !strings.Contains(plain, commentHint) {
 		t.Errorf("with 12 in the total the hint that there are more should come out: %q", plain)
 	}
@@ -266,13 +258,13 @@ func TestTheLegendSaysHowManyAreShownOfHowManyThereAre(t *testing.T) {
 		shown, total, outer int
 		wantHint            bool
 	}{
-		{3, 3, exactSpace, false},  // all seen: nothing to announce
-		{3, 12, exactSpace, true},  // there are more and it fits EXACTLY
-		{3, 12, shortSpace, false}, // one rune less and it no longer fits
-		{3, 12, 60, true},          // and with spare room, too
-		{1, 1, exactSpace, false},  // one of one
-		{5, 5, exactSpace, false},  // five of five
-		{3, 12, 8, false},          // not even the floor gives it
+		{3, 3, exactSpace, false},
+		{3, 12, exactSpace, true},
+		{3, 12, shortSpace, false},
+		{3, 12, 60, true},
+		{1, 1, exactSpace, false},
+		{5, 5, exactSpace, false},
+		{3, 12, 8, false},
 	} {
 		got := commentLegend(c.shown, c.total, c.outer)
 		if !strings.Contains(stripANSI(got), itoaSmall(c.shown)+" of "+itoaSmall(c.total)) {
@@ -290,7 +282,6 @@ func TestTheLegendSaysHowManyAreShownOfHowManyThereAre(t *testing.T) {
 	}
 }
 
-// At most five comments are shown, even when there are twenty.
 func TestTheCapOfFiveAppliesAndIsSaid(t *testing.T) {
 	for _, n := range []int{1, 4, 5, 6, 20} {
 		list := make([]model.Comment, n)

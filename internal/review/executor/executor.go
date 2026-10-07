@@ -1,5 +1,3 @@
-// Package executor applies the review plan through ports, orchestrating resolve → fetch → branch
-// → worktree → layout without knowing git, Herdr or the config. The Herdr port may be nil.
 package executor
 
 import (
@@ -111,8 +109,6 @@ func (e *Executor) ActiveReview(it model.Item) (worktree.Worktree, bool) {
 	}, true
 }
 
-// The record is only forgotten when the worktree was really deleted, so it never points at a checkout
-// that does not exist.
 func (e *Executor) RemoveReview(ctx context.Context, it model.Item) (bool, string, error) {
 	rec, ok := e.Resolver.ActiveReview(it.ID())
 	if !ok || rec.Worktree == "" {

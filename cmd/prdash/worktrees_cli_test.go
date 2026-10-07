@@ -12,9 +12,6 @@ import (
 	"prdash/internal/worktree"
 )
 
-// This file exists because the two functions wrote to a fixed os.Stdout, and without an
-// io.Writer in the path the only way to read the output was replacing the process's files.
-
 func TestListSeparatesOutputFromWarningAndEachThingIntoItsStream(t *testing.T) {
 	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -56,8 +53,7 @@ func TestListSeparatesOutputFromWarningAndEachThingIntoItsStream(t *testing.T) {
 	}
 }
 
-// The tabwriter is the only thing between the output and something an eye can read, and it is not
-// cosmetic.
+// The tabwriter is not cosmetic: it is what makes the output readable.
 func TestListAlignsTheColumnsSoTheTableIsReadable(t *testing.T) {
 	base, _, _ := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
@@ -109,7 +105,6 @@ func columnsOf(row string) []int {
 	return out
 }
 
-// A case with content, not a silent return.
 func TestWithNoWorktreesTheListSaysThereAreNoneAndIsNotAnError(t *testing.T) {
 	pr := worktree.NewGitDirect(t.TempDir())
 
@@ -152,10 +147,9 @@ func TestDryRunSaysWhatItWouldRemoveAndTouchesNothing(t *testing.T) {
 	}
 }
 
-// The "writes nothing to stderr" assertion is what makes it a test: an empty batch is the happy
-// path and must be quiet.
+// An empty batch is the happy path and must be quiet on stderr.
 func TestWithNoOrphansTheBatchRemovalSaysThereAreNoneAndWritesNothingToStderr(t *testing.T) {
-	base, _, _ := worktreeFixture(t) // healthy + foreign, no orphans
+	base, _, _ := worktreeFixture(t)
 	pr := worktree.NewGitDirect(base)
 
 	for _, dryRun := range []bool{false, true} {
@@ -173,13 +167,11 @@ func TestWithNoOrphansTheBatchRemovalSaysThereAreNoneAndWritesNothingToStderr(t 
 	}
 }
 
-// The most important case in the command, because it decides whether a user's work survives a
-// partly-failing batch.
+// It decides whether a user's work survives a partly-failing batch.
 func TestRejectedAndTouchedPathsGoToStderrAndTheCodeSkipsButTheRestIsRemoved(t *testing.T) {
 	base, orphans, healthy, foreign := worktreeOrphanFixture(t)
 	pr := worktree.NewGitDirect(base)
-	// User work that is NOT prdash's but sits under the root with the prefix's name: the case an
-	//`rm -rf` would take with it.
+	// User work under the root with the prefix's name: the case an rm -rf would take with it.
 	userOwned := filepath.Join(base, "prdash-user-owned")
 	if err := os.MkdirAll(userOwned, 0o755); err != nil {
 		t.Fatal(err)
@@ -214,8 +206,7 @@ func TestRejectedAndTouchedPathsGoToStderrAndTheCodeSkipsButTheRestIsRemoved(t *
 			t.Errorf("%s is still there after removing it", o)
 		}
 	}
-	// The "looks like prdash" name is the case Owned has to recognise by the label and not by the
-	//directory name.
+	// Owned must recognise this by the label, not by the directory name.
 	for _, untouched := range []string{foreign, healthy} {
 		if !worktree.Exists(untouched) {
 			t.Errorf("%s was removed, and it was not prdash's", untouched)
