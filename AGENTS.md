@@ -103,6 +103,12 @@ every `pull_request` and manually (`workflow_dispatch`). Not on push to `main`.
 `make test` (build + vet + gofmt + `go test -race`) the fastest: **run it before
 opening the PR**, because `mutation.yml` only measures mutation.
 
+### Waiting for CI
+
+To follow a PR's checks, wait with `gh run watch <run-id> --exit-status` (or
+`gh pr checks <n> --watch`). Never `sleep` + `gh pr checks`: runs go stale after
+a force-push and the id has to be asked for again.
+
 ## Architecture
 
 ```
