@@ -53,55 +53,95 @@ ALWAYS at the end of a code task, after verifying.
 **There is no need to close the TUI**: on Linux the binary is replaced on disk
 while the process keeps running with its in-memory copy.
 
+## New feature → docs/FEATURES.md
+
+Any **new feature** — and any user-visible change to an existing one — must be
+documented in `docs/FEATURES.md` **in the same change** (create the file if it does
+not exist yet): add or update its entry with what it does and how it is
+triggered (key, flag or command). A feature that is not in `docs/FEATURES.md` does
+not exist for the next reader. Keep it a concise inventory, not a tutorial: the
+details live in `README.md` and `docs/adr/`.
+
 ## CI
 
 Two workflows, same skeleton as dbx/gitdash/tsk/vroom: no `paths`, minimal
 permissions, `concurrency` with cancellation off `main`, `ubuntu-24.04` and
-actions pinned by SHA.
+actions pinned by SHA. Three required checks: `Lint`, `Test` and `Mutation`.
 
-`.github/workflows/ci.yml` — **Build / Lint / Test**. Runs on every
-`pull_request`, on push to `main`, and manually (`workflow_dispatch`).
+### `CI` (`.github/workflows/ci.yml`) — every PR, and pushes to `main`
 
-- **Build**: `go build ./...` + `go vet ./...` (5 min).
+The gate. `Mutation` is a job of this file: two jobs, `Lint` ∥ `Test`, plus the
+mutation job on PRs. Runs on every `pull_request`, on push to `main`, and
+manually (`workflow_dispatch`).
+
 - **Lint**: `make lint` = `vet` + `fmt-check` (gofmt) + golangci-lint **v2.13.2**
   pinned in the Makefile, run with `go run` (no global binary). There is no
   `.golangci.yml`, so it applies the default set (errcheck, govet, ineffassign,
   staticcheck, unused). The `Makefile` is part of the module cache key so that
   bumping the version does not reuse old modules.
 - **Test**: `go test -race -count=1 -covermode=atomic -coverprofile=coverage.out
-  ./...` plus a per-package coverage summary in the step summary. The suite is
-  self-contained (git fixtures in `t.TempDir()` via `internal/testutil`, fake
-  adapters), so it does not need `gh`/`glab`/`herdr`/`git-sim` in the PATH.
-- `-count=1` disables the test cache: with the build cache restored, a cached
-  `ok` can never let a failure through.
+  ./...` — the suite is self-contained (git fixtures in `t.TempDir()` via
+  `internal/testutil`, fake adapters), so it does not need `gh`/`glab`/`herdr`/
+  `git-sim` in the PATH. `-count=1` disables the test cache: with the build cache
+  restored, a cached `ok` can never let a failure through.
+- **Coverage gate**: `scripts/diff-coverage.sh` — the PR's **diff at 100%** and
+  the **total against `scripts/coverage-floor`** (100.00, can only go up). The
+  base is the explicit merge-base, hence `fetch-depth: 0`.
 
-`.github/workflows/mutation.yml` — **mutation testing** with gremlins. Runs on
-every `pull_request` and manually (`workflow_dispatch`). Not on push to `main`.
+### `CI fast` (`.github/workflows/ci-fast.yml`) — every commit on a branch
 
-- **Deliberately WITHOUT `paths`**: a workflow with a filter that becomes a
-  required check leaves that check `pending` forever in the PRs it skips, which
-  deadlocks the PRs. The `.go` scope is applied INSIDE the job, the same as the
-  `make mutate-diff` guard.
-- **Scope**: it only mutates if the diff against the base has `.go` files
-  (`make mutate-diff MUTATE_BASE=origin/<base>`). `ubuntu-24.04`, 20 min timeout.
+Build + unit tests, no lint, no mutation. **Not required**: a red never blocks a
+merge and a green never authorises one. Its 10m ceiling is for a cold runner, not
+for the ~40s the suite takes warm.
+
+### `Mutation` — a job of `ci.yml`, non-draft PRs only
+
+Runs on non-draft PRs (not on push to `main`). The job always reports — no
+`needs:`, no `continue-on-error`, the only `if:` is the event gate — which is
+what makes it a required check.
+
+- **Where the decision lives**: `scripts/mutate.sh` measures AND decides in one
+  step (`scripts/mutate.sh --diff --ci --summary …`); the workflow only brings
+  paths, refs and budget. *"Could not measure"* is a red, never a green: a
+  missing `report.json`, an unparseable one, a silent run or an expired mutant
+  nobody recorded all fail with the reason in the step summary.
 - **Gate (blocking)**: it fails if there is any **new surviving** mutant in the
   diff that is not in `.mutation-allowlist`. For a mutant that is only accepted
   if it is demonstrably equivalent, add the line to the allowlist with a comment
-  explaining why.
-- **Degradations to know**: if there is no `report.json` (timeout or a gremlins
-  crash) the gate **passes** — a crash is never read as a failure. And if
-  `.mutation-allowlist` **does not exist**, the whole `Mutation` job is
-  **SKIPPED** (visible as a not-a-pass) and does not block: without an allowlist
-  the gate is uncalibrated and measures nothing. Note: gremlins does not report
-  TIMED OUT mutants in `report.json` and the efficacy excludes them.
-- Uploads `report.json` as an artifact (14 days).
-- Consequence of the above: a skipped job is a skipped check, so `Mutation`
-  **must not** be marked as a required status check (same class of deadlock as
-  `paths`).
+  explaining why. A missing allowlist is a red with the command to seed it
+  (`make mutate`), never a skip: a skipped required check blocks every PR.
+- **Budget** (mandatory under `--ci`, asserted at startup):
+  `2*CAP < STALL < CEILING`, `CEILING + SETUP_RESERVE < JOB_CEILING` →
+  `180s · 4 workers · 8m · 13m · +600s · 25m`.
+- **Scope**: `MUTATE_EXCLUDE` in the `Makefile`, read by `scripts/mutate.sh` so
+  local and CI gate the same set; the `.go` scope is applied INSIDE the job, the
+  same as the `make mutate-diff` guard, so no `paths` filter can deadlock a PR.
+- **Local loop**: `make mutate` (whole module) and `make mutate-diff` (the diff
+  against `MUTATE_BASE`), same wiring as CI. `make coverage-check` is the local
+  equivalent of the coverage gate.
+- **Files that make the gate possible** (all committed): `.mutation-allowlist`
+  (survivors accepted **by line**), `.mutation-timeouts` (`<file> <ceiling>` for
+  mutants that expired and were never tested — gremlins omits TIMED OUT mutants
+  from `report.json`, so silence can never be a green), `scripts/coverage-floor`,
+  `scripts/watchdog.sh` + `scripts/watchdog_test.sh` (vendored frozen copy) and
+  `scripts/mutate_test.sh` (the gate's red paths, ~1s, run as the `Shell suites`
+  CI step).
+- Uploads the report and the run log as an artifact (14 days).
 
 `make check` (build + lint + test) is the local gate equivalent to `ci.yml`, and
 `make test` (build + vet + gofmt + `go test -race`) the fastest: **run it before
-opening the PR**, because `mutation.yml` only measures mutation.
+opening the PR**. `make coverage-check` and `make mutate-diff` reproduce the two
+blocking gates locally.
+
+### `main` protection
+
+Ruleset **`protect-main`**, reproducible with
+`scripts/setup-repo-protection.sh` (idempotent, `--dry-run` shows without
+mutating): merge only via PR with `Lint`, `Test` and `Mutation` green, force-push
+and deletion of `main` blocked, `delete_branch_on_merge=true`. `Build` is not a
+check anymore — it moved to the advisory `CI fast`, and a required `Build`
+context would deadlock every PR. The admin bypass is deliberate: the working
+intention is always the PR path.
 
 ### Waiting for CI
 

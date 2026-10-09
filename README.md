@@ -11,6 +11,10 @@ Status: **MVP F1 + F2**. F3 (auto-review with gate and allowlist) is a documente
 milestone, not implemented: see `docs/planning/archive/0001-mvp/f3-milestone.md`.
 Version history: [`CHANGELOG.md`](CHANGELOG.md).
 
+The inventory of features — what each one does and how it is triggered (key,
+flag or command) — lives in [`docs/FEATURES.md`](docs/FEATURES.md). This README
+keeps the usage details.
+
 ## Requirements
 
 - Go 1.26+ to build.
@@ -68,14 +72,12 @@ prdash --print    # the inbox as plain text (includes the worktree path of the
 prdash worktrees  # lists the review worktrees owned by prdash
 ```
 
-Default keys: `j`/`k` move, `pgup`/`pgdn` page, `home`/`end` ends, `tab` switches
-section (Assigned → Mentioned → Mine), `p` prefix mode (see
-[Path prefix](#path-prefix-three-modes-with-p)), `r` mount the review (the
-worktree always; the 2-tab layout requires Herdr), `R` refresh, `a` approve, `m`
-merge, `e` change the target branch, `v` simulate, `o` open in the browser, `q`
-quit. They are configurable in `[keybindings]`. With the merge armed,
-`m`/`r`/`s` pick the strategy, `tab` toggles whether the branch is deleted and
-any other key cancels (see [Merge](#merge-takes-two-keys-and-one-of-them-is-the-mode)).
+The keys are always visible in the TUI's keybar, and the actions are
+remappable in the `[keybindings]` table of
+`$XDG_CONFIG_HOME/prdash/config.toml`; the inventory of what each one does is in
+[`docs/FEATURES.md`](docs/FEATURES.md). With the merge armed, `m`/`r`/`s` pick
+the strategy, `tab` toggles whether the branch is deleted and any other key
+cancels (see [Merge](#merge-takes-two-keys-and-one-of-them-is-the-mode)).
 
 The Inbox paints **one section at a time**: on open it shows **Assigned**, and the
 top border carries the counts legend `Mine (n) · Assigned (n) · Mentioned (n)`,
@@ -590,7 +592,8 @@ there are no link handlers; for the second one, jump to the prdash pane and pres
 
 ## Development
 
-`make check` is the local equivalent of the CI gate (Build/Lint/Test jobs):
+`make check` is the local equivalent of the `Lint`/`Test` gates (`Mutation` is
+`make mutate-diff`, the coverage gate is `make coverage-check`):
 
 ```sh
 make check   # build + lint + test (never installs)
@@ -600,10 +603,12 @@ make fmt     # formats the code
 make print   # checks the pipeline without the TUI
 ```
 
-CI: `.github/workflows/ci.yml` runs on every PR, on push to `main` and by hand
-(Build, Lint and Test with a coverage summary);
-`.github/workflows/mutation.yml` runs on every PR and by hand (mutation testing
-with gremlins, blocking gate over the diff's surviving mutants).
+CI: `.github/workflows/ci.yml` runs on every PR, on push to `main` and by hand —
+**Lint**, **Test** (with a coverage gate: 100% of the diff, total against
+`scripts/coverage-floor`) and **Mutation** (blocking gate over the diff's
+surviving mutants, measured and decided by `scripts/mutate.sh`);
+`.github/workflows/ci-fast.yml` runs on every commit of a branch (build + unit
+tests, advisory — never a required check).
 
 Design: `docs/planning/archive/0001-mvp/` (plan, expected behaviour, context,
 closing summary); permanent decisions in `docs/adr/`; the Herdr integration

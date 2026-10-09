@@ -1,0 +1,50 @@
+name: CI fast
+
+# The PER-COMMIT signal; `ci.yml` is the gate. Two workflows on purpose: the gate asks for
+# Lint, Test and Mutation on every PR and every push to main, while a commit pushed to a
+# feature branch with no PR would otherwise get NO CI at all until the PR is opened.
+#
+# NOT a required check: `protect-main` requires Lint, Test and Mutation. A red `CI fast`
+# never blocks a merge and a green one never authorises one.
+#
+# The overlap this accepts is deliberate: a branch with an open PR gets this on push AND
+# `ci.yml` on pull_request. There is no native way to ask "does this branch have a PR", and
+# the cost is a minute of an advisory run.
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+# Least privilege by default; every job inherits this.
+permissions:
+  contents: read
+
+# Its own group, deliberately not `ci`'s: an advisory run must never cancel a required
+# one, and a required run must never leave this pending.
+concurrency:
+  group: cifast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Fast:
+    name: CI fast
+    runs-on: ubuntu-24.04
+    # 10m, not 5: the suite is ~40s on a warm machine, and the runner is cold (module
+    # download plus a full build before the first test binary links).
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      # The explicit compile gate: "does this commit compile" answered before the suite
+      # starts, in the job whose whole point is the fastest honest signal.
+      - name: Build
+        run: go build ./...
+      - name: Unit tests
+        run: go test -race -count=1 ./...
