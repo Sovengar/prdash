@@ -116,9 +116,23 @@ what makes it a required check.
 - **Scope**: `MUTATE_EXCLUDE` in the `Makefile`, read by `scripts/mutate.sh` so
   local and CI gate the same set; the `.go` scope is applied INSIDE the job, the
   same as the `make mutate-diff` guard, so no `paths` filter can deadlock a PR.
-- **Local loop**: `make mutate` (whole module) and `make mutate-diff` (the diff
-  against `MUTATE_BASE`), same wiring as CI. `make coverage-check` is the local
-  equivalent of the coverage gate.
+- **Where it runs**: the gate is CI (the `Mutation` job above). Locally it is
+  never automatic: run it manually, only when needed, with `make mutate`
+  (whole module) and `make mutate-diff` (the diff against `MUTATE_BASE`), same
+  wiring as CI. `make coverage-check` is the local equivalent of the coverage
+  gate.
+- **Two counts, and they are different numbers**: `WATCH_LINES` (every mutant
+  considered = the supervisor's denominator) and `EXPECTED_MEASURED` (in-scope
+  `RUNNABLE` only = what the verdict compares against the report's
+  `mutants_total`, which is `killed + lived + notViable`). `SKIPPED` leaves the
+  scope and `NOT COVERED` sits in no cover block (Go cover starts a case
+  clause after the colon), so neither can be measured and neither belongs in
+  the denominator; the exclusion and its reason are published by the verdict.
+- The gitconfig is neutralised (`GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` →
+  `/dev/null`, `GIT_CONFIG_NOSYSTEM=1`): gremlins computes its `--diff` ranges
+  with a plain `git diff` run with the AMBIENT config, so a dev's
+  `diff.algorithm`/`diff.interhunkcontext` would make the local loop measure a
+  different mutant set than CI's defaults. Hermetic by construction.
 - **Files that make the gate possible** (all committed): `.mutation-allowlist`
   (survivors accepted **by line**), `.mutation-timeouts` (`<file> <ceiling>` for
   mutants that expired and were never tested — gremlins omits TIMED OUT mutants
