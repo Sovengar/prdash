@@ -51,11 +51,11 @@ func parseOpts(args []string) (opts, error) {
 
 	fs := flag.NewFlagSet("prdash", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // `run` formats the errors, on the caller's stderr
-	print := fs.Bool("print", false, "print the inbox and exit")
+	printInbox := fs.Bool("print", false, "print the inbox and exit")
 	if err := fs.Parse(args); err != nil {
 		return opts{}, err
 	}
-	if *print {
+	if *printInbox {
 		o.mode = modePrint
 	}
 	o.args = fs.Args()

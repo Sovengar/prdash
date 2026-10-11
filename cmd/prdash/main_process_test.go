@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,11 +121,7 @@ func TestThatRunsTheRealMain(t *testing.T) {
 }
 
 func asExitError(err error, dst **exec.ExitError) bool {
-	e, ok := err.(*exec.ExitError)
-	if ok {
-		*dst = e
-	}
-	return ok
+	return errors.As(err, dst)
 }
 
 // Both halves of the same if: with a terminal-less subprocess only the failure was reachable.

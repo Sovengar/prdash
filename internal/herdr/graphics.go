@@ -183,7 +183,7 @@ func (g *Graphics) call(ctx context.Context, method string, params map[string]an
 	}
 	conn, err := dial(cctx, "unix", socket)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrNoGraphics, err)
+		return fmt.Errorf("%w: %w", ErrNoGraphics, err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -198,12 +198,12 @@ func (g *Graphics) call(ctx context.Context, method string, params map[string]an
 		return err
 	}
 	if _, err := conn.Write(append(body, '\n')); err != nil {
-		return fmt.Errorf("%w: %v", ErrNoGraphics, err)
+		return fmt.Errorf("%w: %w", ErrNoGraphics, err)
 	}
 
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil && len(line) == 0 {
-		return fmt.Errorf("%w: %v", ErrNoGraphics, err)
+		return fmt.Errorf("%w: %w", ErrNoGraphics, err)
 	}
 	return decodeResponse(line, out)
 }

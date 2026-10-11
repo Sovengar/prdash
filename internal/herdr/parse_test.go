@@ -87,7 +87,7 @@ const fixtureNotification = `{
 
 // A misplaced `>` disables or enables a capability wrongly: the versioning decides usability.
 func TestVersionAtLeastComparesCascade(t *testing.T) {
-	min := Version{Major: 0, Minor: 9, Patch: 3}
+	floor := Version{Major: 0, Minor: 9, Patch: 3}
 	cases := []struct {
 		name string
 		v    Version
@@ -104,8 +104,8 @@ func TestVersionAtLeastComparesCascade(t *testing.T) {
 	}
 	for _, c := range cases[:len(cases)-1] {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.v.AtLeast(min); got != c.want {
-				t.Errorf("Version(%s).AtLeast(%s) = %v, want %v", c.v, min, got, c.want)
+			if got := c.v.AtLeast(floor); got != c.want {
+				t.Errorf("Version(%s).AtLeast(%s) = %v, want %v", c.v, floor, got, c.want)
 			}
 		})
 	}
@@ -113,11 +113,11 @@ func TestVersionAtLeastComparesCascade(t *testing.T) {
 	if !(Version{}).AtLeast(Version{}) {
 		t.Error("0.0.0 should meet the 0.0.0 minimum: it is the degradation when the version is not read")
 	}
-	if (Version{}).AtLeast(min) {
+	if (Version{}).AtLeast(floor) {
 		t.Error("0.0.0 should not meet a 0.9.3 minimum")
 	}
 	// And a huge version qualifies, which is what makes Herdr's 0.x versioning useless here.
-	if !(Version{99, 0, 0, ""}).AtLeast(min) {
+	if !(Version{99, 0, 0, ""}).AtLeast(floor) {
 		t.Error("a very high major should meet any 0.x minimum")
 	}
 	// Only a positive-major minimum reaches the major-below return: 0.x minimums fall through to the minor comparison.

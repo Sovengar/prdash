@@ -11,39 +11,39 @@ import (
 // The width is in COLUMNS.
 func TestWrapTextSplitsByWordsAndRespectsTheWidth(t *testing.T) {
 	t.Run("it fits whole, it does not split", func(t *testing.T) {
-		for _, max := range []int{11, 12, 100} {
-			got := wrapText("hola mundo", max)
+		for _, maxWidth := range []int{11, 12, 100} {
+			got := wrapText("hola mundo", maxWidth)
 			if len(got) != 1 || got[0] != "hola mundo" {
-				t.Errorf("max=%d gave %q, want one unchanged line", max, got)
+				t.Errorf("maxWidth=%d gave %q, want one unchanged line", maxWidth, got)
 			}
 		}
 	})
 
 	t.Run("the width counts the space", func(t *testing.T) {
 		if got := wrapText("ab cd", 5); len(got) != 1 {
-			t.Errorf("max=5 gave %q, want one line (it measures exactly 5)", got)
+			t.Errorf("maxWidth=5 gave %q, want one line (it measures exactly 5)", got)
 		}
 		if got := wrapText("ab cd", 4); len(got) != 2 {
-			t.Errorf("max=4 gave %q, want two lines (5 columns do not fit in 4)", got)
+			t.Errorf("maxWidth=4 gave %q, want two lines (5 columns do not fit in 4)", got)
 		}
 	})
 
 	t.Run("nobody overflows the width when the words fit", func(t *testing.T) {
 		// Every word measures three, the minimum the consumer guarantees.
 		text := strings.Repeat("one two ", 12)
-		for max := 3; max <= 40; max++ {
-			for _, l := range wrapText(text, max) {
-				if w := ansi.StringWidth(l); w > max {
-					t.Errorf("max=%d: the line %q measures %d columns", max, l, w)
+		for maxWidth := 3; maxWidth <= 40; maxWidth++ {
+			for _, l := range wrapText(text, maxWidth) {
+				if w := ansi.StringWidth(l); w > maxWidth {
+					t.Errorf("maxWidth=%d: the line %q measures %d columns", maxWidth, l, w)
 				}
 			}
 		}
 	})
 
 	t.Run("no width or no words", func(t *testing.T) {
-		for _, max := range []int{0, -1, -100} {
-			if got := wrapText("one two three", max); len(got) != 1 || got[0] != "one two three" {
-				t.Errorf("max=%d gave %q, want the whole text in one line", max, got)
+		for _, maxWidth := range []int{0, -1, -100} {
+			if got := wrapText("one two three", maxWidth); len(got) != 1 || got[0] != "one two three" {
+				t.Errorf("maxWidth=%d gave %q, want the whole text in one line", maxWidth, got)
 			}
 		}
 		got := wrapText("     ", 3)
@@ -57,13 +57,13 @@ func TestWrapTextSplitsByWordsAndRespectsTheWidth(t *testing.T) {
 
 	t.Run("it neither loses nor invents words", func(t *testing.T) {
 		text := "one two three cuatro cinco six siete ocho nueve diez"
-		for max := 4; max <= 30; max++ {
+		for maxWidth := 4; maxWidth <= 30; maxWidth++ {
 			var out []string
-			for _, l := range wrapText(text, max) {
+			for _, l := range wrapText(text, maxWidth) {
 				out = append(out, strings.Fields(l)...)
 			}
 			if strings.Join(out, " ") != text {
-				t.Errorf("max=%d: the words are not preserved:\n%q", max, strings.Join(out, " "))
+				t.Errorf("maxWidth=%d: the words are not preserved:\n%q", maxWidth, strings.Join(out, " "))
 			}
 		}
 	})
@@ -81,12 +81,12 @@ func TestWrapTextSplitsByWordsAndRespectsTheWidth(t *testing.T) {
 }
 
 func TestToastExpiresByItsDuration(t *testing.T) {
-	new := func() *toastManager {
+	mk := func() *toastManager {
 		tm := &toastManager{now: func() time.Time { return time.Unix(1_000, 0) }}
 		return tm
 	}
 
-	tm := new()
+	tm := mk()
 	tm.show("hola", toastInfo)
 	if len(tm.texts()) != 1 {
 		t.Fatalf("texts = %q, want 1 notice", tm.texts())
@@ -96,7 +96,7 @@ func TestToastExpiresByItsDuration(t *testing.T) {
 		t.Errorf("a freshly created notice should not expire: %q", tm.texts())
 	}
 
-	tm = new()
+	tm = mk()
 	tm.show("hola", toastInfo)
 	dur := tm.toasts[0].duration
 	tm.now = func() time.Time { return time.Unix(1_000, 0).Add(dur) }
@@ -105,7 +105,7 @@ func TestToastExpiresByItsDuration(t *testing.T) {
 		t.Errorf("once the duration elapses the notice should expire, %q stays", tm.texts())
 	}
 
-	tm = new()
+	tm = mk()
 	tm.show("hola", toastInfo)
 	dur = tm.toasts[0].duration
 	tm.now = func() time.Time { return time.Unix(1_000, 0).Add(dur - time.Nanosecond) }
@@ -127,7 +127,7 @@ func TestToastExpiresByItsDuration(t *testing.T) {
 		t.Errorf("after 2 minutes %q stays, want only \"long\"", got)
 	}
 
-	tm = new()
+	tm = mk()
 	tm.update()
 	if len(tm.texts()) != 0 {
 		t.Errorf("with no notices, update left %q", tm.texts())

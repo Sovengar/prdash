@@ -181,8 +181,8 @@ func styleToast(level toastLevel) lipglossStyle {
 	}
 }
 
-func wrapText(text string, max int) []string {
-	if max <= 0 || ansi.StringWidth(text) <= max {
+func wrapText(text string, maxWidth int) []string {
+	if maxWidth <= 0 || ansi.StringWidth(text) <= maxWidth {
 		return []string{text}
 	}
 	words := strings.Fields(text)
@@ -192,7 +192,7 @@ func wrapText(text string, max int) []string {
 	lines := []string{words[0]}
 	for _, w := range words[1:] {
 		last := len(lines) - 1
-		if ansi.StringWidth(lines[last])+1+ansi.StringWidth(w) <= max {
+		if ansi.StringWidth(lines[last])+1+ansi.StringWidth(w) <= maxWidth {
 			lines[last] += " " + w
 			continue
 		}

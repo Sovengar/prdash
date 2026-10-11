@@ -86,14 +86,14 @@ func TestReplaceSwapsTheLiveNoticeAndDoesNotDuplicateTheText(t *testing.T) {
 }
 
 func TestTheHeaderShowsTheSpinnerFirstAndTheForgeStatusBehind(t *testing.T) {
-	new := func(t *testing.T) Model {
+	mk := func(t *testing.T) Model {
 		t.Helper()
 		m := newTestModel(t, &testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"})
 		m.width, m.height = 120, 40
 		return m
 	}
 
-	loading := new(t)
+	loading := mk(t)
 	loading.loading = true
 	text := loading.headerSection().text
 	if !strings.Contains(text, "refreshing") {
@@ -113,7 +113,7 @@ func TestTheHeaderShowsTheSpinnerFirstAndTheForgeStatusBehind(t *testing.T) {
 		t.Errorf("the forge status goes before the spinner: %q", text)
 	}
 
-	quieto := new(t)
+	quieto := mk(t)
 	quieto.loading = false
 	if strings.Contains(quieto.headerSection().text, "refreshing") {
 		t.Errorf("with no load the header still says it is refreshing:\n%s",
@@ -121,7 +121,7 @@ func TestTheHeaderShowsTheSpinnerFirstAndTheForgeStatusBehind(t *testing.T) {
 	}
 
 	// The narrow terminal is the reason for the order: the spinner survives and the forge statuses go.
-	narrow := new(t)
+	narrow := mk(t)
 	narrow.loading = true
 	narrow.width = 40
 	if !strings.Contains(narrow.headerSection().text, "refreshing") {

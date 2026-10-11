@@ -384,7 +384,7 @@ func TestPadAndTruncateMeasureInRunesAndInWidths(t *testing.T) {
 		t.Errorf("pad(ab,4) = %q, want \"ab  \"", got)
 	}
 	if got := pad("ab", 2); got != "ab" {
-		t.Errorf("pad with the exact string = %q, want %q (it does not overpad)", got, "ab")
+		t.Errorf("pad with the exact string = %q, want %q (it does not add padding)", got, "ab")
 	}
 	if got := pad("abcd", 2); got != "abcd" {
 		t.Errorf("pad of a longer string = %q, want unchanged (clipping wins)", got)

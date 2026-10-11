@@ -95,7 +95,7 @@ func TestPadRightAlignsByColumnsNotByBytes(t *testing.T) {
 		for n := 0; n <= 20; n++ {
 			got := padRight(s, n)
 			if w := ansi.StringWidth(got); w != max(n, ansi.StringWidth(s)) {
-				t.Errorf("padRight(%q, %d) mide %d columnas, want %d", s, n, w, max(n, ansi.StringWidth(s)))
+				t.Errorf("padRight(%q, %d) measures %d columns, want %d", s, n, w, max(n, ansi.StringWidth(s)))
 			}
 			ifTrimmed := strings.TrimRight(got, " ")
 			if ifTrimmed != s {
@@ -238,10 +238,10 @@ func sameMultiset(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	copy := append([]int(nil), a...)
+	remaining := append([]int(nil), a...)
 	for _, v := range b {
 		en := -1
-		for i, c := range copy {
+		for i, c := range remaining {
 			if c == v {
 				en = i
 				break
@@ -250,7 +250,7 @@ func sameMultiset(a, b []int) bool {
 		if en < 0 {
 			return false
 		}
-		copy = append(copy[:en], copy[en+1:]...)
+		remaining = append(remaining[:en], remaining[en+1:]...)
 	}
 	return true
 }

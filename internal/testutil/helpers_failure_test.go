@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -129,9 +130,8 @@ func runCaseInSubprocess(t *testing.T, c string) (string, int) {
 	code := 0
 	var outErr *exec.ExitError
 	if err != nil {
-		if e, ok := err.(*exec.ExitError); ok {
-			outErr = e
-			code = e.ExitCode()
+		if errors.As(err, &outErr) {
+			code = outErr.ExitCode()
 		} else {
 			t.Fatalf("the subprocess could not be run: %v", err)
 		}

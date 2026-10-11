@@ -18,20 +18,20 @@ type Version struct {
 	Raw   string
 }
 
-func (v Version) AtLeast(min Version) bool {
-	if v.Major > min.Major {
+func (v Version) AtLeast(floor Version) bool {
+	if v.Major > floor.Major {
 		return true
 	}
-	if v.Major < min.Major {
+	if v.Major < floor.Major {
 		return false
 	}
-	if v.Minor > min.Minor {
+	if v.Minor > floor.Minor {
 		return true
 	}
-	if v.Minor < min.Minor {
+	if v.Minor < floor.Minor {
 		return false
 	}
-	return v.Patch >= min.Patch
+	return v.Patch >= floor.Patch
 }
 
 func (v Version) String() string { return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch) }

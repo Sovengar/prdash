@@ -163,7 +163,7 @@ func TestMountWithAMountInFlightIsRefusedAndSaid(t *testing.T) {
 func TestTheQuitActionIsResolvedByTheConfigAndTheOverlayEatsItFirst(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Keybindings["quit"] = "0"
-	new := func(t *testing.T) Model {
+	mk := func(t *testing.T) Model {
 		t.Helper()
 		m := New(cfg, []forge.Adapter{
 			&testutil.FakeAdapter{ForgeName: "github", HostName: "github.com"},
@@ -174,13 +174,13 @@ func TestTheQuitActionIsResolvedByTheConfigAndTheOverlayEatsItFirst(t *testing.T
 		return m
 	}
 
-	m := new(t)
+	m := mk(t)
 	m = withSelection(t, m, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 	if _, cmd := pressWithCmd(t, m, "0"); cmd == nil {
 		t.Fatal("the reassigned quit key did not ask to leave the TUI")
 	}
 
-	m2 := new(t)
+	m2 := mk(t)
 	m2 = withSelection(t, m2, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 	m2.retarget.state = retargetChoosing
 	m2.retarget.all = []string{"main", "feat/x"}
@@ -200,7 +200,7 @@ func TestTheQuitActionIsResolvedByTheConfigAndTheOverlayEatsItFirst(t *testing.T
 	}
 
 	for _, key := range []string{"q", "ctrl+c"} {
-		m3 := new(t)
+		m3 := mk(t)
 		m3 = withSelection(t, m3, mkItem("github", "github.com", "acme/widget", "one", 7, ""))
 		m3.retarget.state = retargetChoosing
 		if _, cmd := pressWithCmd(t, m3, key); cmd == nil {

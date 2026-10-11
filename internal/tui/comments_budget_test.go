@@ -16,12 +16,12 @@ func TestTheArrowsFollowTheListInBothDirections(t *testing.T) {
 		items[i] = mkItem("github", "github.com", "acme/widget", "One", i+1, "")
 	}
 	n := len(items)
-	new := func() Model {
+	mk := func() Model {
 		return send(t, newTestModel(t, ghAdapter()),
 			page(1, "github", "github.com", model.SectionReview, model.ReviewRequested, items, false))
 	}
 
-	m := new()
+	m := mk()
 	if m.cursor != 0 {
 		t.Fatalf("the initial cursor = %d, want 0", m.cursor)
 	}
@@ -41,7 +41,7 @@ func TestTheArrowsFollowTheListInBothDirections(t *testing.T) {
 		t.Errorf("j on the last gave %d, want %d", m.cursor, n-1)
 	}
 
-	m = new()
+	m = mk()
 	m.cursor = n - 1
 	m = press(t, m, "up")
 	if m.cursor != n-2 {
@@ -61,7 +61,7 @@ func TestTheArrowsFollowTheListInBothDirections(t *testing.T) {
 		t.Errorf("up on the first gave %d, want 0: the list is not circular", m.cursor)
 	}
 
-	m = new()
+	m = mk()
 	m.cursor = n - 1
 	for want := n - 2; want >= 0; want-- {
 		m = press(t, m, "up")

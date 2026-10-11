@@ -99,17 +99,8 @@ func TestErrorUnwrapsAndNamesTheCommand(t *testing.T) {
 	}
 }
 
+// asError exists so the tests can name the wrapped *Error without repeating the walk;
+// errors.As is the walk, and it also follows the Unwrap() []error form this helper cannot.
 func asError(err error, target **Error) bool {
-	for err != nil {
-		if e, ok := err.(*Error); ok {
-			*target = e
-			return true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
+	return errors.As(err, target)
 }

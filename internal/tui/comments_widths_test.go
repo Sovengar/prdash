@@ -145,20 +145,20 @@ func TestCommentRowReservesTheGapForTheEllipsis(t *testing.T) {
 	if !strings.HasPrefix(next, contIndent) {
 		t.Errorf("the second row should go with the continuation indent, gave %q", next)
 	}
-	for _, autor := range []string{"a", "alice", "someone-with-a-long-name"} {
-		first := stripANSI(commentRow(0, autor, ": ", "text", w, false))
-		next := stripANSI(commentRow(1, autor, ": ", "text", w, false))
+	for _, author := range []string{"a", "alice", "someone-with-a-long-name"} {
+		first := stripANSI(commentRow(0, author, ": ", "text", w, false))
+		next := stripANSI(commentRow(1, author, ": ", "text", w, false))
 		colText := func(s string) int {
 			return utf8.RuneCountInString(s[:strings.Index(s, "text")])
 		}
-		want := utf8.RuneCountInString(commentIndent + autor + commentSep)
+		want := utf8.RuneCountInString(commentIndent + author + commentSep)
 		if colText(first) != want {
 			t.Errorf("with the author %q the first rows text starts at column %d, want %d",
-				autor, colText(first), want)
+				author, colText(first), want)
 		}
 		if colText(next) != utf8.RuneCountInString(contIndent) {
 			t.Errorf("with the author %q the continuation starts at column %d, want %d (fixed, it does not follow the author)",
-				autor, colText(next), utf8.RuneCountInString(contIndent))
+				author, colText(next), utf8.RuneCountInString(contIndent))
 		}
 	}
 }

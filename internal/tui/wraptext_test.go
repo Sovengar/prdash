@@ -16,18 +16,18 @@ func TestWrapTextDoesNotTouchWhatAlreadyFits(t *testing.T) {
 		{"ab  cd", "ab  cd"},
 		{"  with  LEADING  and  tail  ", "  with  LEADING  and  tail  "},
 	} {
-		for _, max := range []int{1, 4, 5, 6, 10, 100} {
-			if ansi.StringWidth(tc.text) > max {
+		for _, maxWidth := range []int{1, 4, 5, 6, 10, 100} {
+			if ansi.StringWidth(tc.text) > maxWidth {
 				continue
 			}
-			got := wrapText(tc.text, max)
+			got := wrapText(tc.text, maxWidth)
 			if len(got) != 1 {
-				t.Errorf("wrapText(%q, %d) returned %d lines, want 1: the text fits", tc.text, max, len(got))
+				t.Errorf("wrapText(%q, %d) returned %d lines, want 1: the text fits", tc.text, maxWidth, len(got))
 				continue
 			}
 			if got[0] != tc.wants {
 				t.Errorf("wrapText(%q, %d) returned %q, want %q: text that fits is not touched, not even a space",
-					tc.text, max, got[0], tc.wants)
+					tc.text, maxWidth, got[0], tc.wants)
 			}
 		}
 	}
@@ -45,12 +45,12 @@ func TestWrapTextDoesNotTouchWhatAlreadyFits(t *testing.T) {
 }
 
 func TestWrapTextJoinsTheWordThatWouldCloseTheWidth(t *testing.T) {
-	const max = 5
+	const maxWidth = 5
 
-	got := wrapText("ab cd ef", max)
+	got := wrapText("ab cd ef", maxWidth)
 	if len(got) != 2 {
 		t.Fatalf("wrapText(%q, %d) returned %q, want 2 lines: the second closes the exact width",
-			"ab cd ef", max, got)
+			"ab cd ef", maxWidth, got)
 	}
 	if got[0] != "ab cd" {
 		t.Errorf("the first line is %q, want %q: the word that closes the width has to be joined", got[0], "ab cd")
@@ -59,29 +59,29 @@ func TestWrapTextJoinsTheWordThatWouldCloseTheWidth(t *testing.T) {
 		t.Errorf("the second line is %q, want %q", got[1], "ef")
 	}
 
-	if got := wrapText("ab cd ef", max-1); len(got) != 3 {
+	if got := wrapText("ab cd ef", maxWidth-1); len(got) != 3 {
 		t.Errorf("wrapText(%q, %d) returned %q, want 3 lines: one column less and the word no longer closes",
-			"ab cd ef", max-1, got)
+			"ab cd ef", maxWidth-1, got)
 	}
 
-	got = wrapText("ab cd ef gh", max)
+	got = wrapText("ab cd ef gh", maxWidth)
 	if len(got) != 2 || got[0] != "ab cd" || got[1] != "ef gh" {
-		t.Errorf("wrapText(%q, %d) = %q, want [ab cd, ef gh]", "ab cd ef gh", max, got)
+		t.Errorf("wrapText(%q, %d) = %q, want [ab cd, ef gh]", "ab cd ef gh", maxWidth, got)
 	}
 }
 
 func TestWrapTextNonPositiveWidthDoesNotSplit(t *testing.T) {
-	for _, max := range []int{-20, -1, 0} {
+	for _, maxWidth := range []int{-20, -1, 0} {
 		for _, text := range []string{"ab cd ef", "one word", "a  b  c", ""} {
-			got := wrapText(text, max)
+			got := wrapText(text, maxWidth)
 			if len(got) != 1 {
 				t.Errorf("wrapText(%q, %d) returned %q, want a single line: with a non-positive width it does not split",
-					text, max, got)
+					text, maxWidth, got)
 				continue
 			}
 			if got[0] != text {
 				t.Errorf("wrapText(%q, %d) returned %q: without splitting, the text has to come back as given",
-					text, max, got[0])
+					text, maxWidth, got[0])
 			}
 		}
 	}
@@ -97,7 +97,7 @@ func TestWrapTextNonPositiveWidthDoesNotSplit(t *testing.T) {
 }
 
 func TestWrapTextEveryLineFitsAndNoWordIsSplit(t *testing.T) {
-	for max := 1; max <= 40; max++ {
+	for maxWidth := 1; maxWidth <= 40; maxWidth++ {
 		for _, text := range []string{
 			"ab cd ef gh ij",
 			"a very long word that does not fit in any way at all",
@@ -105,18 +105,18 @@ func TestWrapTextEveryLineFitsAndNoWordIsSplit(t *testing.T) {
 			"short",
 			"  spaces   at   the   beginning  and   at   the   end  ",
 		} {
-			for _, line := range wrapText(text, max) {
-				if ansi.StringWidth(line) > max {
+			for _, line := range wrapText(text, maxWidth) {
+				if ansi.StringWidth(line) > maxWidth {
 					if len(strings.Fields(line)) != 1 {
 						t.Errorf("wrapText(%.20q, %d) gave line %q, which does not fit and is not a single word",
-							text, max, line)
+							text, maxWidth, line)
 					}
 				}
 				if strings.TrimSpace(line) == "" && strings.TrimSpace(text) != "" {
-					t.Errorf("wrapText(%.20q, %d) gave a line of pure spaces: %q", text, max, line)
+					t.Errorf("wrapText(%.20q, %d) gave a line of pure spaces: %q", text, maxWidth, line)
 				}
 			}
-			juntas := wrapText(text, max)
+			juntas := wrapText(text, maxWidth)
 			for _, palabra := range strings.Fields(text) {
 				found := false
 				for _, line := range juntas {
@@ -127,7 +127,7 @@ func TestWrapTextEveryLineFitsAndNoWordIsSplit(t *testing.T) {
 					}
 				}
 				if !found {
-					t.Errorf("wrapText(%.20q, %d) lost or split the word %q", text, max, palabra)
+					t.Errorf("wrapText(%.20q, %d) lost or split the word %q", text, maxWidth, palabra)
 				}
 			}
 		}

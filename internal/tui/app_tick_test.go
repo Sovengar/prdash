@@ -96,20 +96,20 @@ func TestArmTickDoesNotChainTicks(t *testing.T) {
 
 // The backoff exists so as not to make a rate limit worse.
 func TestRecomputeBackoffGrowsOnlyWithRateLimitOrTimeout(t *testing.T) {
-	new := func() Model {
+	fresh := func() Model {
 		m := newTestModel(t, ghAdapter())
 		m.cfg.RefreshInterval = 30 * time.Second
 		return m
 	}
 
-	m := new()
+	m := fresh()
 	m.recomputeBackoff()
 	if m.backoff != 0 {
 		t.Errorf("with no warnings, backoff = %v, want 0", m.backoff)
 	}
 
 	for _, kind := range []string{"notfound", "permission", "auth", "validation", "conflict", "network"} {
-		m = new()
+		m = fresh()
 		m.statuses["github"].warnings = []model.Warning{{Forge: "github", Kind: kind, Msg: "x"}}
 		m.recomputeBackoff()
 		if m.backoff != 0 {
@@ -118,7 +118,7 @@ func TestRecomputeBackoffGrowsOnlyWithRateLimitOrTimeout(t *testing.T) {
 	}
 
 	for _, kind := range []string{"ratelimit", "timeout"} {
-		m = new()
+		m = fresh()
 		m.statuses["github"].warnings = []model.Warning{{Forge: "github", Kind: kind, Msg: "x"}}
 		m.recomputeBackoff()
 		if m.backoff != 30*time.Second {
@@ -138,7 +138,7 @@ func TestRecomputeBackoffGrowsOnlyWithRateLimitOrTimeout(t *testing.T) {
 	}
 
 	// With the interval at zero the backoff base drops to a minute instead of adding to zero.
-	m = new()
+	m = fresh()
 	m.cfg.RefreshInterval = 0
 	m.statuses["github"].warnings = []model.Warning{{Forge: "github", Kind: "ratelimit"}}
 	m.recomputeBackoff()

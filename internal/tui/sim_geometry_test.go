@@ -38,7 +38,7 @@ func TestSimMaxColsAndRowsRespectTheFloor(t *testing.T) {
 				t.Errorf("terminal %dx%d: %d columns, want >= %d (the floor)", w, h, cols, simMinCols)
 			}
 			if want := max(simMinCols, m.contentWidth()-simSideMargin); cols != want {
-				t.Errorf("terminal %dx%d: %d columnas, want %d", w, h, cols, want)
+				t.Errorf("terminal %dx%d: %d columns, want %d", w, h, cols, want)
 			}
 
 			rows := m.simMaxRows()

@@ -171,12 +171,12 @@ func (f *FakeAdapter) BranchCallCount(project string) int {
 	return f.branchCalls[project]
 }
 
-func (f *FakeAdapter) MergeDeleteCount(delete bool) int {
+func (f *FakeAdapter) MergeDeleteCount(isDelete bool) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	n := 0
 	for _, d := range f.MergeDeletes {
-		if d == delete {
+		if d == isDelete {
 			n++
 		}
 	}

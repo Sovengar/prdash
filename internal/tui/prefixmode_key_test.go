@@ -132,7 +132,7 @@ func TestPrefixModeStartsInCommonWithoutPersisting(t *testing.T) {
 	if m.prefixMode == prefixCommon {
 		t.Fatal("`p` did not change the mode: the test would prove nothing")
 	}
-	if new := newTestModel(t, ghAdapter()); new.prefixMode != prefixCommon {
-		t.Errorf("a new model starts at %v, want common (the mode is not persisted)", new.prefixMode)
+	if m := newTestModel(t, ghAdapter()); m.prefixMode != prefixCommon {
+		t.Errorf("a new model starts at %v, want common (the mode is not persisted)", m.prefixMode)
 	}
 }

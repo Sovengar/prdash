@@ -52,14 +52,14 @@ func TestAnItemThatIsNotThereIsAddedToTheRightStream(t *testing.T) {
 	m := newTestModel(t)
 	m.rebuild()
 
-	new := model.Item{
+	added := model.Item{
 		Section: model.SectionMentions, ReviewKind: "",
 		Forge: "gitlab", Host: "gitlab.com", Number: 3,
 		Ref: model.RepoRef{Project: "o/r"}, Title: "new",
 	}
-	m.applyItemUpdate(new)
+	m.applyItemUpdate(added)
 
-	it, ok := findItem(allTheItems(m), new.ID())
+	it, ok := findItem(allTheItems(m), added.ID())
 	if !ok {
 		t.Fatalf("the added item does not appear: %v", allTheItems(m))
 	}
@@ -69,7 +69,7 @@ func TestAnItemThatIsNotThereIsAddedToTheRightStream(t *testing.T) {
 	enReview := false
 	for k, s := range m.streams {
 		for _, streamed := range s.items {
-			if streamed.ID() == new.ID() && k.section != model.SectionMentions {
+			if streamed.ID() == added.ID() && k.section != model.SectionMentions {
 				enReview = true
 			}
 		}
@@ -78,7 +78,7 @@ func TestAnItemThatIsNotThereIsAddedToTheRightStream(t *testing.T) {
 		t.Error("the item went into a stream that is not its own")
 	}
 
-	other := new
+	other := added
 	other.Forge = "github"
 	other.Host = "github.com"
 	m.applyItemUpdate(other)

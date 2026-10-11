@@ -164,7 +164,7 @@ func TestFullLosesTheITEMColumnOnVeryNarrowTerminals(t *testing.T) {
 		lay := newRefLayout(segs, tc.mode)
 		exists := strings.Contains(titlesOf(lay, tc.inner), "ITEM")
 		if exists != tc.wantsITEM {
-			t.Errorf("%v a %d columnas interiores: ITEM presente = %v, want %v (columnas: %s)",
+			t.Errorf("%v with %d interior columns: ITEM present = %v, want %v (columns: %s)",
 				tc.mode, tc.inner, exists, tc.wantsITEM, titlesOf(lay, tc.inner))
 		}
 	}

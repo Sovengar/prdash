@@ -6,7 +6,7 @@ import (
 )
 
 func TestClipTopWithZeroRowsLeavesTheWholeDetail(t *testing.T) {
-	three := []string{"state: open", "review: aprobado", "rol: autor"}
+	three := []string{"state: open", "review: approved", "role: author"}
 
 	for _, rows := range []int{-5, 0} {
 		if got := clipTop(three, rows); len(got) != len(three) {
@@ -17,7 +17,7 @@ func TestClipTopWithZeroRowsLeavesTheWholeDetail(t *testing.T) {
 		}
 	}
 
-	if got := clipTop(three, 1); len(got) != 1 || got[0] != "rol: autor" {
+	if got := clipTop(three, 1); len(got) != 1 || got[0] != "role: author" {
 		t.Errorf("with one row it ended at %v, want the last: the clip is from the top so "+
 			"the end of the detail survives", got)
 	}

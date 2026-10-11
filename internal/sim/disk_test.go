@@ -179,11 +179,11 @@ func TestImageDisappearingBeforeLstatDoesNotBreakThePrune(t *testing.T) {
 	}
 
 	listing := func(string) ([]os.DirEntry, error) {
-		real, err := os.ReadDir(dir)
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return nil, err
 		}
-		return append(real,
+		return append(entries,
 			deadEntry{name: filepath.Base(base0), err: errors.New("lstat: no such file")},
 		), nil
 	}
@@ -216,12 +216,12 @@ func TestImageDisappearingBeforeLstatDoesNotBreakThePrune(t *testing.T) {
 		t.Errorf("an unreadable listing emptied the cache: %v", err)
 	}
 
-	real := t.TempDir()
+	plain := t.TempDir()
 	for i := 0; i <= keepImages; i++ {
-		fakeImage(t, real, "img-"+fourDigits(i)+".jpg", base.Add(time.Duration(i)*time.Hour))
+		fakeImage(t, plain, "img-"+fourDigits(i)+".jpg", base.Add(time.Duration(i)*time.Hour))
 	}
-	prune(real, keepImages)
-	remaining, err := filepath.Glob(filepath.Join(real, "img-*.jpg"))
+	prune(plain, keepImages)
+	remaining, err := filepath.Glob(filepath.Join(plain, "img-*.jpg"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -214,7 +214,7 @@ func TestArgvOfEachCommand(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		if !reflect.DeepEqual([]string(c.got), c.want) {
+		if !reflect.DeepEqual(c.got, c.want) {
 			t.Errorf("%s:\n  got  %q\n  want %q", c.name, c.got, c.want)
 		}
 	}

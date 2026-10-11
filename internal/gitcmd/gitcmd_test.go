@@ -89,8 +89,8 @@ func TestRunBringsTheRealGitError(t *testing.T) {
 	if err == nil {
 		t.Fatal("git cat-file on a nonexistent object gave nil")
 	}
-	gerr, ok := err.(*Error)
-	if !ok {
+	var gerr *Error
+	if !errors.As(err, &gerr) {
 		t.Fatalf("Run returned %T, want *Error", err)
 	}
 	if gerr.ExitCode == 0 {
@@ -128,8 +128,8 @@ func TestRunReturnsPartialOutputWhenItFails(t *testing.T) {
 	if !strings.Contains(out, "good line") {
 		t.Errorf("the output before the failure was lost: %q", out)
 	}
-	gerr, ok := err.(*Error)
-	if !ok {
+	var gerr *Error
+	if !errors.As(err, &gerr) {
 		t.Fatalf("Run returned %T, want *Error", err)
 	}
 	if gerr.ExitCode != 7 {
