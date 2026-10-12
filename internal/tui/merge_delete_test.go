@@ -62,6 +62,29 @@ func TestTabTogglesTheDeleteWithoutDisarming(t *testing.T) {
 	}
 }
 
+// A repo that auto-deletes head branches ignores the toggle: the confirmation
+// must say so instead of letting "no" read as "the branch survives".
+func TestConfirmSaysWhenTheRepoAutoDeletes(t *testing.T) {
+	it := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
+	it.AutoDeleteBranch = true
+	it.AutoDeleteKnown = true
+	f := newMergeFixture(t, it)
+
+	m := press(t, f.m, "m")
+	if view := stripANSI(m.View().Content); strings.Contains(view, "auto-deletes") {
+		t.Errorf("with the request on, the policy note is noise\n%s", view)
+	}
+
+	m = press(t, m, "tab")
+	view := stripANSI(m.View().Content)
+	if !strings.Contains(view, "delete branch: no") {
+		t.Errorf("the box does not reflect the new value\n%s", view)
+	}
+	if !strings.Contains(view, "auto-deletes") {
+		t.Errorf("with the request off the repo policy must be named\n%s", view)
+	}
+}
+
 func TestTabToggleReachesTheAdapter(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
 	m := press(t, f.m, "m")

@@ -61,6 +61,46 @@ func TestGHNodeWithoutRulesStaysUnknown(t *testing.T) {
 	}
 }
 
+// The repo policy the merge toggle cannot override has to reach the item.
+func TestGHNodeCarriesTheAutoDeletePolicy(t *testing.T) {
+	raw := `{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},
+		"nodes":[{"number":7,"title":"T","url":"u","state":"OPEN","isDraft":false,
+		"reviewDecision":"","headRefName":"f","baseRefName":"main",
+		"additions":1,"deletions":0,"changedFiles":1,
+		"author":{"login":"me"},
+		"repository":{"nameWithOwner":"acme/widget","name":"widget",
+			"owner":{"login":"acme"},"deleteBranchOnMerge":true}}]}}}`
+
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatalf("ParseGHGraphQLSearch: %v", err)
+	}
+	if !items[0].AutoDeleteKnown || !items[0].AutoDeleteBranch {
+		t.Errorf("AutoDelete = known:%v value:%v, want known true",
+			items[0].AutoDeleteKnown, items[0].AutoDeleteBranch)
+	}
+}
+
+// A repo that does not report the policy is unknown, not "off": the confirmation
+// must not invent a guarantee.
+func TestGHNodeWithoutAutoDeletePolicyStaysUnknown(t *testing.T) {
+	raw := `{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},
+		"nodes":[{"number":7,"title":"T","url":"u","state":"OPEN","isDraft":false,
+		"reviewDecision":"","headRefName":"f","baseRefName":"main",
+		"additions":1,"deletions":0,"changedFiles":1,
+		"author":{"login":"me"},
+		"repository":{"nameWithOwner":"acme/widget","name":"widget",
+			"owner":{"login":"acme"}}}]}}}`
+
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatalf("ParseGHGraphQLSearch: %v", err)
+	}
+	if items[0].AutoDeleteKnown {
+		t.Errorf("AutoDeleteKnown = true, want false without the field")
+	}
+}
+
 func TestGHNodeWithPartialRulesStaysUnknown(t *testing.T) {
 	raw := `{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},
 		"nodes":[{"number":7,"title":"T","url":"u","state":"OPEN","isDraft":false,

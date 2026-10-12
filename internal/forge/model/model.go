@@ -125,6 +125,12 @@ type Item struct {
 	Merge          MergeRules
 	Mergeable      Mergeability
 	UpdatedAt      time.Time
+
+	// AutoDeleteBranch reports a repository policy that deletes the head branch
+	// on merge whatever the client asks. The delete toggle cannot keep a "no"
+	// here, so the confirmation has to say so instead of promising it.
+	AutoDeleteBranch bool
+	AutoDeleteKnown  bool
 }
 
 func NewItem(ref RepoRef, number int) Item {
