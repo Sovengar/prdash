@@ -528,14 +528,16 @@ func itemFromGLMR(mr glMR, section model.Section, kind model.ReviewKind) model.I
 	return it
 }
 
+// Only the two definitive statuses are a claim; the rest (CHECKING, UNCHECKED,
+// NEED_REBASE, BROKEN_STATUS…) are not a yes and must not be painted as one.
 func mergeableFromGL(v string) model.Mergeability {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "conflict", "broken_status":
-		return model.Mergeability{Known: true, Conflicted: true}
-	case "":
-		return model.Mergeability{}
-	default:
+	case "mergeable":
 		return model.Mergeability{Known: true}
+	case "conflict":
+		return model.Mergeability{Known: true, Conflicted: true}
+	default:
+		return model.Mergeability{}
 	}
 }
 

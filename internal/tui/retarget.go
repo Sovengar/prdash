@@ -71,7 +71,7 @@ type ReviewLookup interface {
 }
 
 type ReviewCleaner interface {
-	CleanupAfterMerge(ctx context.Context, it model.Item) (executor.CleanupResult, error)
+	CleanupAfterMerge(ctx context.Context, it model.Item) executor.CleanupResult
 }
 
 func (m *Model) SetReviewCleaner(c ReviewCleaner) { m.reviewCleaner = c }

@@ -124,23 +124,29 @@ type CleanupResult struct {
 // CleanupAfterMerge removes the merged item's footprint beyond the remote
 // branch the forge already deletes: the review worktree (only if clean), the
 // review branch and tracking ref it created, and the PR branch in the user's
-// local clone. Branch failures are warnings, never a failed merge.
+// local clone. Every failure is a warning, never a failed merge: the merge has
+// already happened and no cleanup can undo it.
 //
 // The worktree goes first on purpose: git refuses `branch -D` on a branch a
 // worktree holds, so deleting the branch before the checkout would always fail.
-func (e *Executor) CleanupAfterMerge(ctx context.Context, it model.Item) (CleanupResult, error) {
+func (e *Executor) CleanupAfterMerge(ctx context.Context, it model.Item) CleanupResult {
 	var res CleanupResult
 	if rec, ok := e.Resolver.ActiveReview(it.ID()); ok && rec.Worktree != "" {
 		removed, reason, err := e.Worktrees.RemoveIfClean(ctx, rec.Worktree)
 		if err != nil {
-			return res, err
+			// The worktree's fate is unknown, so its branch may still be held:
+			// keep the review record and let the rest run.
+			res.Warnings = append(res.Warnings, "could not remove the worktree: "+err.Error())
+		} else {
+			res.WorktreeRemoved = removed
+			res.WorktreeReason = reason
 		}
-		res.WorktreeRemoved = removed
-		res.WorktreeReason = reason
-		// A kept worktree still holds the branch, so the branch stays; when
-		// nothing holds it (removed, or already absent) both can go.
+		// A kept worktree still holds the branch, so the branch stays; when the
+		// worktree is gone, both can go.
 		if reason == "" {
-			_ = e.Resolver.ForgetReview(it)
+			if err == nil {
+				_ = e.Resolver.ForgetReview(it)
+			}
 			deleted, warnings := e.Resolver.DeleteReviewRefs(ctx, rec.Repo, it)
 			res.Warnings = append(res.Warnings, warnings...)
 			if deleted {
@@ -149,6 +155,8 @@ func (e *Executor) CleanupAfterMerge(ctx context.Context, it model.Item) (Cleanu
 		}
 	}
 
+	// The local branch is a different branch from the review one, so it goes
+	// even when the worktree stayed.
 	deleted, warning := e.Resolver.DeleteLocalBranch(ctx, it.Ref, it.SourceBranch)
 	if warning != "" {
 		res.Warnings = append(res.Warnings, warning)
@@ -156,7 +164,7 @@ func (e *Executor) CleanupAfterMerge(ctx context.Context, it model.Item) (Cleanu
 	if deleted {
 		res.Deleted = append(res.Deleted, "local branch")
 	}
-	return res, nil
+	return res
 }
 
 func (e *Executor) resolveRepo(ctx context.Context, it model.Item) (path string, created bool, err error) {

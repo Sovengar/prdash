@@ -69,10 +69,9 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			name:           "gitlab rest: broken_status",
-			wantKnown:      true,
-			wantConflicted: true,
-			wantBlocked:    true,
+			// BROKEN_STATUS is not one of the two definitive statuses: it stays
+			// UNKNOWN rather than being rounded to a conflict or a yes.
+			name: "gitlab rest: broken_status stays unknown",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items, err := ParseGLMRList(glBasicConflictFixture)
 				if err != nil {
@@ -85,9 +84,9 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			},
 		},
 		{
-			// NEED_REBASE is not a conflict: the branch is behind but integrates without touching anything.
-			name:      "gitlab graphql: NEED_REBASE is not a conflict",
-			wantKnown: true,
+			// NEED_REBASE is neither MERGEABLE nor CONFLICT: it must not render
+			// as "yes" in the Mergeable field.
+			name: "gitlab graphql: NEED_REBASE stays unknown",
 			got: func(t *testing.T) (model.Mergeability, state.Block) {
 				items, _, err := ParseGLGraphQL(glNeedRebaseFixture)
 				if err != nil {
@@ -120,6 +119,35 @@ func TestMergeableFromEveryPath(t *testing.T) {
 			}
 			if blocked := block.Reason != "" && strings.Contains(block.Reason, "conflicts"); blocked != tc.wantBlocked {
 				t.Errorf("the gate warns about the conflict = %v (%q), want %v", blocked, block.Reason, tc.wantBlocked)
+			}
+		})
+	}
+}
+
+// Only MERGEABLE and CONFLICT are definitive; everything else is UNKNOWN, so an
+// uncomputed status can never render as a yes.
+func TestMergeableFromGLIsDefinitive(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		in             string
+		wantKnown      bool
+		wantConflicted bool
+	}{
+		{"mergeable", "mergeable", true, false},
+		{"mergeable uppercase with spaces", "  MERGEABLE ", true, false},
+		{"conflict", "conflict", true, true},
+		{"empty", "", false, false},
+		{"checking", "checking", false, false},
+		{"unchecked", "unchecked", false, false},
+		{"need_rebase", "need_rebase", false, false},
+		{"broken_status", "broken_status", false, false},
+		{"an invented value", "who_knows", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mergeableFromGL(tc.in)
+			if got.Known != tc.wantKnown || got.Conflicted != tc.wantConflicted {
+				t.Fatalf("mergeableFromGL(%q) = %+v, want Known=%v Conflicted=%v",
+					tc.in, got, tc.wantKnown, tc.wantConflicted)
 			}
 		})
 	}

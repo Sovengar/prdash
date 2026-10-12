@@ -410,9 +410,9 @@ func TestCleanupAfterMergeRemovesCleanAndForgets(t *testing.T) {
 	fake := &fakeProvisioner{removeIfCleanRemoved: true}
 	h.ex.Worktrees = fake
 
-	res, err := h.ex.CleanupAfterMerge(context.Background(), it)
-	if err != nil || !res.WorktreeRemoved || res.WorktreeReason != "" {
-		t.Fatalf("CleanupAfterMerge = %+v, %v; want the worktree deleted with no reason", res, err)
+	res := h.ex.CleanupAfterMerge(context.Background(), it)
+	if !res.WorktreeRemoved || res.WorktreeReason != "" {
+		t.Fatalf("CleanupAfterMerge = %+v; want the worktree deleted with no reason", res)
 	}
 	if want := h.resolver.WorktreePath(it.Ref, it.Number); fake.removeIfCleanID != want {
 		t.Fatalf("RemoveIfClean received %q, want %q", fake.removeIfCleanID, want)
@@ -426,9 +426,9 @@ func TestCleanupAfterMergeKeepsAndDoesNotForget(t *testing.T) {
 	h, it := mountReview(t, 5)
 	h.ex.Worktrees = &fakeProvisioner{removeIfCleanReason: worktree.KeptUncommitted}
 
-	res, err := h.ex.CleanupAfterMerge(context.Background(), it)
-	if err != nil || res.WorktreeRemoved || res.WorktreeReason != worktree.KeptUncommitted {
-		t.Fatalf("CleanupAfterMerge = %+v, %v; want kept for being dirty", res, err)
+	res := h.ex.CleanupAfterMerge(context.Background(), it)
+	if res.WorktreeRemoved || res.WorktreeReason != worktree.KeptUncommitted {
+		t.Fatalf("CleanupAfterMerge = %+v; want kept for being dirty", res)
 	}
 	if _, ok := h.ex.ActiveReview(it); !ok {
 		t.Fatal("keeping the worktree must not forget the record")
@@ -441,23 +441,64 @@ func TestCleanupAfterMergeWithoutActiveReviewIsNoop(t *testing.T) {
 	fake := &fakeProvisioner{removeIfCleanRemoved: true}
 	h.ex.Worktrees = fake
 
-	res, err := h.ex.CleanupAfterMerge(context.Background(), item(h.ref, 5))
-	if err != nil || res.WorktreeRemoved || res.WorktreeReason != "" || len(res.Deleted) != 0 || len(res.Warnings) != 0 {
-		t.Fatalf("CleanupAfterMerge = %+v, %v; want no-op", res, err)
+	res := h.ex.CleanupAfterMerge(context.Background(), item(h.ref, 5))
+	if res.WorktreeRemoved || res.WorktreeReason != "" || len(res.Deleted) != 0 || len(res.Warnings) != 0 {
+		t.Fatalf("CleanupAfterMerge = %+v; want no-op", res)
 	}
 	if fake.removeIfCleanID != "" {
 		t.Fatal("with no mounted review the provisioner should not be called")
 	}
 }
 
-func TestCleanupAfterMergePropagatesError(t *testing.T) {
+// A worktree that could not be removed is a warning, not a failed merge: the
+// review record stays (the worktree may still be there) and the rest runs.
+func TestCleanupAfterMergeWarnsWhenTheWorktreeCannotBeRemoved(t *testing.T) {
 	h, it := mountReview(t, 5)
 	h.ex.Worktrees = &fakeProvisioner{removeIfCleanErr: errors.New("boom")}
 
-	res, err := h.ex.CleanupAfterMerge(context.Background(), it)
-	if err == nil || res.WorktreeRemoved {
-		t.Fatalf("CleanupAfterMerge = (%+v, %v), want propagated error", res, err)
+	res := h.ex.CleanupAfterMerge(context.Background(), it)
+	if res.WorktreeRemoved {
+		t.Error("it claimed to have removed a worktree it could not")
 	}
+	if len(res.Warnings) == 0 || !strings.Contains(res.Warnings[0], "could not remove the worktree: boom") {
+		t.Fatalf("warnings = %v, want the worktree failure", res.Warnings)
+	}
+	if _, ok := h.ex.ActiveReview(it); !ok {
+		t.Error("the review record must stay while the worktree's fate is unknown")
+	}
+}
+
+// The local branch is not the review one: it is attempted even when the
+// worktree could not be removed.
+func TestCleanupAfterMergeStillDeletesTheLocalBranchAfterAWorktreeError(t *testing.T) {
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, 7, "seven")
+	testutil.RunGit(t, repo, "branch", "feat/x")
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	it := item(h.ref, 7)
+	it.SourceBranch = "feat/x"
+	ctx := context.Background()
+	if _, err := h.ex.Mount(ctx, it); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	h.ex.Worktrees = &fakeProvisioner{removeIfCleanErr: errors.New("boom")}
+
+	res := h.ex.CleanupAfterMerge(ctx, it)
+	if !contains(res.Deleted, "local branch") {
+		t.Fatalf("Deleted = %v, want the local branch gone despite the worktree error", res.Deleted)
+	}
+	if testutil.RefExists(t, repo, "refs/heads/feat/x") {
+		t.Error("the local branch survived a worktree error")
+	}
+}
+
+func contains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCleanupAfterMergeDeletesReviewAndLocalBranches(t *testing.T) {
@@ -472,10 +513,7 @@ func TestCleanupAfterMergeDeletesReviewAndLocalBranches(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 
-	res, err := h.ex.CleanupAfterMerge(ctx, it)
-	if err != nil {
-		t.Fatalf("CleanupAfterMerge: %v", err)
-	}
+	res := h.ex.CleanupAfterMerge(ctx, it)
 	if !res.WorktreeRemoved {
 		t.Fatalf("the worktree should be removed: %+v", res)
 	}
@@ -507,10 +545,7 @@ func TestCleanupAfterMergeDeletesReviewBranchFromTheBareClone(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 
-	cleaned, err := h.ex.CleanupAfterMerge(ctx, it)
-	if err != nil {
-		t.Fatalf("CleanupAfterMerge: %v", err)
-	}
+	cleaned := h.ex.CleanupAfterMerge(ctx, it)
 	if testutil.RefExists(t, res.RepoPath, "refs/heads/prdash/pr-8") {
 		t.Error("the review branch survived in the bare clone")
 	}
@@ -537,10 +572,7 @@ func TestCleanupAfterMergeDeletesTheBranchWhenTheWorktreeIsAlreadyGone(t *testin
 		t.Fatalf("Remove: %v", err)
 	}
 
-	cleaned, err := h.ex.CleanupAfterMerge(ctx, it)
-	if err != nil {
-		t.Fatalf("CleanupAfterMerge: %v", err)
-	}
+	cleaned := h.ex.CleanupAfterMerge(ctx, it)
 	if cleaned.WorktreeRemoved {
 		t.Error("the worktree was already gone; it should not claim to have removed it")
 	}
@@ -568,10 +600,7 @@ func TestCleanupAfterMergeKeepsTheBranchWhenTheWorktreeStaysDirty(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	cleaned, err := h.ex.CleanupAfterMerge(ctx, it)
-	if err != nil {
-		t.Fatalf("CleanupAfterMerge: %v", err)
-	}
+	cleaned := h.ex.CleanupAfterMerge(ctx, it)
 	if cleaned.WorktreeRemoved || cleaned.WorktreeReason != worktree.KeptUncommitted {
 		t.Fatalf("the dirty worktree should be kept: %+v", cleaned)
 	}
@@ -599,10 +628,7 @@ func TestCleanupAfterMergeWarnsWhenTheLocalBranchCannotBeDeleted(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 
-	res, err := h.ex.CleanupAfterMerge(ctx, it)
-	if err != nil {
-		t.Fatalf("CleanupAfterMerge: %v", err)
-	}
+	res := h.ex.CleanupAfterMerge(ctx, it)
 	if !res.WorktreeRemoved {
 		t.Fatalf("a branch refusal must not undo the worktree removal: %+v", res)
 	}
