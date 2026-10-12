@@ -13,6 +13,7 @@ import (
 
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
+	"prdash/internal/review/executor"
 	"prdash/internal/worktree"
 )
 
@@ -69,11 +70,11 @@ type ReviewLookup interface {
 	ActiveReview(it model.Item) (worktree.Worktree, bool)
 }
 
-type ReviewRemover interface {
-	RemoveReview(ctx context.Context, it model.Item) (removed bool, reason string, err error)
+type ReviewCleaner interface {
+	CleanupAfterMerge(ctx context.Context, it model.Item) (executor.CleanupResult, error)
 }
 
-func (m *Model) SetReviewRemover(r ReviewRemover) { m.reviewRemover = r }
+func (m *Model) SetReviewCleaner(c ReviewCleaner) { m.reviewCleaner = c }
 
 type branchesMsg struct {
 	seq    int

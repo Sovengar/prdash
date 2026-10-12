@@ -533,12 +533,12 @@ func TestTheHeaderShowsOnlyTheColumnsThatFit(t *testing.T) {
 	}
 }
 
-func TestFitColumnsAlwaysLeavesForge(t *testing.T) {
+func TestFitColumnsAlwaysLeavesTheFirstColumn(t *testing.T) {
 	m := longModel(t, 3)
 	lay := newRefLayout([]inbox.Section{{Kind: m.activeSection, Items: m.rows()}}, m.prefixMode)
 	total := len(lay.cols)
 	if total < 2 {
-		t.Fatalf("the layout needs at least FORGE and another column, has %d", total)
+		t.Fatalf("the layout needs at least the marker gutter and another column, has %d", total)
 	}
 
 	if got := fitColumns(lay, 100_000); got != total {
@@ -559,7 +559,7 @@ func TestFitColumnsAlwaysLeavesForge(t *testing.T) {
 	}
 	for _, w := range []int{0, 1, -5, -100} {
 		if got := fitColumns(lay, w); got != 1 {
-			t.Errorf("fitColumns(%d) = %d, want 1 (FORGE always fits)", w, got)
+			t.Errorf("fitColumns(%d) = %d, want 1 (the marker gutter always fits)", w, got)
 		}
 	}
 }

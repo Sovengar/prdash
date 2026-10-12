@@ -8,6 +8,7 @@ import (
 
 	"prdash/internal/forge/model"
 	"prdash/internal/herdr"
+	"prdash/internal/review/executor"
 	"prdash/internal/testutil"
 	"prdash/internal/worktree"
 )
@@ -18,11 +19,11 @@ func TestWiringReturnsExactlyWhatTheModelHasWired(t *testing.T) {
 	full.simulator = &stubSimulator{available: true}
 	full.graphics = &wiringGraphics{}
 	full.reviewLookup = &wiringReviewLookup{}
-	full.reviewRemover = &wiringReviewRemover{}
+	full.reviewCleaner = &wiringReviewCleaner{}
 
 	w := full.Wiring()
 	if w.Mounter == nil || w.Simulator == nil || w.Graphics == nil ||
-		w.ReviewLookup == nil || w.ReviewRemover == nil {
+		w.ReviewLookup == nil || w.ReviewCleaner == nil {
 		t.Errorf("Wiring lost some dependency: %+v", w)
 	}
 	// And they are the SAME instances, which is what makes the accessor worth having.
@@ -39,7 +40,7 @@ func TestWiringReturnsExactlyWhatTheModelHasWired(t *testing.T) {
 	empty.graphics = nil
 	wv := empty.Wiring()
 	if wv.Mounter != nil || wv.Simulator != nil || wv.Graphics != nil ||
-		wv.ReviewLookup != nil || wv.ReviewRemover != nil {
+		wv.ReviewLookup != nil || wv.ReviewCleaner != nil {
 		t.Errorf("Wiring on an empty model returned something: %+v", wv)
 	}
 }
@@ -134,10 +135,10 @@ func (wiringReviewLookup) ActiveReview(model.Item) (worktree.Worktree, bool) {
 	return worktree.Worktree{}, false
 }
 
-type wiringReviewRemover struct{}
+type wiringReviewCleaner struct{}
 
-func (wiringReviewRemover) RemoveReview(context.Context, model.Item) (bool, string, error) {
-	return false, "", nil
+func (wiringReviewCleaner) CleanupAfterMerge(context.Context, model.Item) (executor.CleanupResult, error) {
+	return executor.CleanupResult{}, nil
 }
 
 func modelWithLoadingStatuses(t *testing.T) Model {

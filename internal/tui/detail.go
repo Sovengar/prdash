@@ -37,6 +37,7 @@ func (m *Model) detailLines(it model.Item, ok bool, rows int) []string {
 	}
 	status := []detailField{
 		{"State", state.Derive(it).String()},
+		{"Mergeable", mergeableDetail(it)},
 		{"Draft", yesNo(it.IsDraft)},
 		{"Checks", checksDetail(it.Checks)},
 		{"Diff", diffDetail(it.Diff)},
@@ -185,6 +186,22 @@ func checksDetail(c model.Checks) string {
 		base += fmt.Sprintf(" (%d)", c.Total)
 	}
 	return base
+}
+
+// Truthful three ways: a conflict is named with its target, absence of data
+// stays "unknown" and is never rounded up to a yes.
+func mergeableDetail(it model.Item) string {
+	switch {
+	case !it.Mergeable.Known:
+		return "unknown"
+	case it.Mergeable.Conflicted:
+		if target := strings.TrimSpace(it.TargetBranch); target != "" {
+			return "no (conflicts with " + target + ")"
+		}
+		return "no (conflicts with the target)"
+	default:
+		return "yes"
+	}
 }
 
 func diffDetail(d model.DiffStat) string {

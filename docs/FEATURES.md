@@ -55,9 +55,10 @@ Concise feature inventory of prdash. Details live in `../README.md` and `adr/`.
 - **Strategies** — `r` rebase, `m` merge commit, `s` squash; only modes the repository allows are offered.
 - **Branch deletion** — `tab` requests delete-after-merge (default: yes); shown in confirmation. The request only controls the client-side delete: on GitHub, a repo with "Automatically delete head branches" (`deleteBranchOnMerge`) deletes the branch on merge regardless, so with the toggle off and that policy on the confirmation says `repo auto-deletes head branches` instead of promising "no".
 - **Cancel** — `esc` cancels; any other key cancels and is consumed (no re-dispatch).
-- **Pre-merge checks** — draft/merged/closed = hard block; conflict/CI failing/CI running/changes requested = soft warning (arms with notice).
+- **Pre-merge checks** — draft/merged/closed = hard block; a known branch conflict is also a hard block (the forge cannot merge it); CI failing/CI running/changes requested = soft warning (arms with notice).
+- **Lazy mergeability** — GitHub/GitLab compute it on demand, so selecting an item re-reads its state in the background; a conflict gets a `✗` in the row's own marker gutter (never inside the title) and a `Mergeable` field in the detail card (`yes` / `no (conflicts with <target>)` / `unknown`). `UNKNOWN` is never painted as mergeable, and arming one warns that the forge may refuse (ADR 0014).
 - **Commit pinning** — merge pinned to the commit read (`--match-head-commit` / `--sha`); refused if forge does not report it.
-- **Post-merge cleanup** — worktree deleted only if clean; kept with notice if uncommitted changes or status unreadable.
+- **Post-merge cleanup** — worktree deleted only if clean; kept with notice if uncommitted changes or status unreadable. Then the branch is deleted from the review clone (`prdash/pr-N` + tracking ref) and from the local clone (PR source branch, only if not checked out); failures are warnings in the notice, never a failed merge (ADR 0013).
 
 ## Approve
 

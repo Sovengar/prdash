@@ -67,11 +67,15 @@ type mountMsg struct {
 }
 
 type reviewCleanupMsg struct {
-	base    string
-	level   noticeLevel
-	removed bool
-	reason  string
-	err     error
+	base   string
+	level  noticeLevel
+	result executor.CleanupResult
+	err    error
+}
+
+type mergeabilityMsg struct {
+	id   model.ID
+	item model.Item
 }
 
 type commentsTickMsg struct{}
@@ -95,6 +99,8 @@ const actionTimeout = time.Duration(60e9)
 const reviewCleanupTimeout = time.Duration(30e9)
 
 const commentsTimeout = time.Duration(20e9)
+
+const mergeabilityTimeout = time.Duration(20e9)
 
 const commentsPoll = time.Duration(200e6)
 
@@ -196,12 +202,14 @@ type Model struct {
 	branchSeq     int
 	branchCache   map[repoKey]branchCache
 	reviewLookup  ReviewLookup
-	reviewRemover ReviewRemover
+	reviewCleaner ReviewCleaner
 
 	mergeArmed       bool
 	mergeArmedID     model.ID
 	mergeBlockReason string
 	deleteBranch     bool
+	mergeAttempts    map[model.ID]int
+	mergeInFlight    map[model.ID]bool
 
 	events  chan event
 	ctx     context.Context
@@ -247,6 +255,8 @@ func New(cfg config.Config, adapters []forge.Adapter) Model {
 		pos:           map[model.Section]sectionPos{},
 		branchCache:   map[repoKey]branchCache{},
 		deleteBranch:  true,
+		mergeAttempts: map[model.ID]int{},
+		mergeInFlight: map[model.ID]bool{},
 	}
 	m.tickPending = cfg.RefreshInterval > 0
 	m.spinner = spinner.New(spinner.WithSpinner(spinner.Dot))
@@ -814,7 +824,7 @@ type Wiring struct {
 	Simulator     Simulator
 	Graphics      Graphics
 	ReviewLookup  ReviewLookup
-	ReviewRemover ReviewRemover
+	ReviewCleaner ReviewCleaner
 }
 
 func (m *Model) Wiring() Wiring {
@@ -823,6 +833,6 @@ func (m *Model) Wiring() Wiring {
 		Simulator:     m.simulator,
 		Graphics:      m.graphics,
 		ReviewLookup:  m.reviewLookup,
-		ReviewRemover: m.reviewRemover,
+		ReviewCleaner: m.reviewCleaner,
 	}
 }

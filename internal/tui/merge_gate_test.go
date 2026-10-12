@@ -59,23 +59,20 @@ func TestMergeOnFailingCIStillArmsButSays(t *testing.T) {
 	}
 }
 
-// A PR whose branches collide is not going to be integrated anyway.
-func TestMergeOnConflictingBranchesStillArmsButSays(t *testing.T) {
+// A PR whose branches collide is not going to be integrated: the forge cannot
+// merge it, so arming is refused up front instead of after the failure.
+func TestMergeOnConflictingBranchesDoesNotArm(t *testing.T) {
 	items := gatedItems(model.MergeRulesAll())
 	items[0].TargetBranch = "main"
 	items[0].Mergeable = model.Mergeability{Known: true, Conflicted: true}
 	f := newMergeFixture(t, items...)
 
 	m := press(t, f.m, "m")
-	if !m.mergeArmed {
-		t.Fatal("with conflicting branches the merge should arm: a rebase fixes it")
+	if m.mergeArmed {
+		t.Fatal("with conflicting branches the merge should not arm")
 	}
-	view := stripANSI(m.View().Content)
-	if !strings.Contains(view, "conflicts with main") {
-		t.Errorf("the confirmation does not say what it clashes with:\n%s", view)
-	}
-	if !strings.Contains(view, "anyway") {
-		t.Errorf("the confirmation does not say that choosing the mode goes ahead:\n%s", view)
+	if !strings.Contains(toasts(m), "conflicts with main") {
+		t.Errorf("the notice does not say what it clashes with: %q", toasts(m))
 	}
 }
 

@@ -152,16 +152,16 @@ func TestTheWiringInjectsTheFiveModelPieces(t *testing.T) {
 	if w.ReviewLookup == nil {
 		t.Error("wire did not inject the review registry: a base change would warn about nothing")
 	}
-	if w.ReviewRemover == nil {
-		t.Error("wire did not inject the remover: a merge would not delete the worktree")
+	if w.ReviewCleaner == nil {
+		t.Error("wire did not inject the cleaner: a merge would not delete the worktree or the branches")
 	}
 
 	// The four review pieces are the same executor instance, which prevents "works in tests, breaks in production".
 	if m, ok := w.Mounter.(*executor.Executor); !ok || m != ex {
 		t.Errorf("the mounter is not the executor it was given: %T", w.Mounter)
 	}
-	if _, ok := w.ReviewRemover.(*executor.Executor); !ok {
-		t.Errorf("the remover is not an executor: %T", w.ReviewRemover)
+	if _, ok := w.ReviewCleaner.(*executor.Executor); !ok {
+		t.Errorf("the cleaner is not an executor: %T", w.ReviewCleaner)
 	}
 	if _, ok := w.ReviewLookup.(*executor.Executor); !ok {
 		t.Errorf("the registry is not an executor: %T", w.ReviewLookup)

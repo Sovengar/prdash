@@ -150,13 +150,13 @@ func TestFullLosesTheITEMColumnOnVeryNarrowTerminals(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")
 	segs := []inbox.Section{section(model.SectionReview, items...)}
 
-	const threshold = 48 // colForge(14) + itemWidthCap(34)
+	const threshold = colMark + colForge + itemWidthCap // the marker gutter + FORGE + the widest ITEM
 	for _, tc := range []struct {
 		mode      prefixMode
 		inner     int
 		wantsITEM bool
 	}{
-		{prefixCommon, 38, true},
+		{prefixCommon, 40, true},
 		{prefixLeaf, 38, true},
 		{prefixFull, 47, false},
 		{prefixFull, threshold, true},

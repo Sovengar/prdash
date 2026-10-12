@@ -9,6 +9,7 @@ import (
 type lipglossStyle = lipgloss.Style
 
 const (
+	colMark   = 2  // "✗ "
 	colForge  = 14 // "GLab@umane"
 	colTitle  = 40
 	colRole   = 11 // "review req" (10) + separation gap

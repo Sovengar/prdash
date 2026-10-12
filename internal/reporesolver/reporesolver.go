@@ -155,6 +155,59 @@ func (r *Resolver) FetchReviewRef(ctx context.Context, repo string, it model.Ite
 	return branch, nil
 }
 
+// DeleteReviewRefs removes the review branch and its tracking ref that
+// FetchReviewRef created in repo. Missing refs are not an error: the review may
+// never have been mounted. A ref still checked out in a worktree makes git
+// refuse, and that refusal is reported so the caller does not claim a deletion
+// that did not happen.
+func (r *Resolver) DeleteReviewRefs(ctx context.Context, repo string, it model.Item) (bool, []string) {
+	if repo == "" || !isRepo(repo) {
+		return false, nil
+	}
+	branchDeleted := false
+	var warnings []string
+	branch := ReviewBranch(it.Number)
+	if r.refExists(ctx, repo, "refs/heads/"+branch) {
+		if _, err := r.git.Run(ctx, repo, "branch", "-D", branch); err != nil {
+			warnings = append(warnings, "could not delete the review branch "+branch+": "+err.Error())
+		} else {
+			branchDeleted = true
+		}
+	}
+	// The tracking ref is bookkeeping: deleting it does not mean the branch is
+	// gone, so it never turns into a "review branch deleted" claim.
+	track := fmt.Sprintf("refs/prdash/%s/%d", it.Forge, it.Number)
+	if r.refExists(ctx, repo, track) {
+		if _, err := r.git.Run(ctx, repo, "update-ref", "-d", track); err != nil {
+			warnings = append(warnings, "could not delete the review ref "+track+": "+err.Error())
+		}
+	}
+	return branchDeleted, warnings
+}
+
+// DeleteLocalBranch removes branch from the clone ResolveLocal maps to ref, but
+// only when no worktree holds it: deleting a checked-out branch is refused by
+// git and would surprise the user anyway. No local clone, an unknown branch and
+// a checked-out branch are all silent no-ops — prdash does not own the user's
+// clone and never touches a branch it cannot confidently identify.
+func (r *Resolver) DeleteLocalBranch(ctx context.Context, ref model.RepoRef, branch string) (bool, string) {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return false, ""
+	}
+	repo, ok := r.ResolveLocal(ref)
+	if !ok || !isRepo(repo) {
+		return false, ""
+	}
+	if !r.refExists(ctx, repo, "refs/heads/"+branch) || r.checkedOut(ctx, repo, branch) {
+		return false, ""
+	}
+	if _, err := r.git.Run(ctx, repo, "branch", "-D", branch); err != nil {
+		return false, "could not delete the local branch " + branch + ": " + err.Error()
+	}
+	return true, ""
+}
+
 func (r *Resolver) Remember(ref model.RepoRef, path string) {
 	if path == "" {
 		return
@@ -191,8 +244,29 @@ func (r *Resolver) barePath(ref model.RepoRef) string {
 }
 
 func (r *Resolver) branchExists(ctx context.Context, repo, branch string) bool {
-	_, err := r.git.Run(ctx, repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	return r.refExists(ctx, repo, "refs/heads/"+branch)
+}
+
+func (r *Resolver) refExists(ctx context.Context, repo, ref string) bool {
+	_, err := r.git.Run(ctx, repo, "show-ref", "--verify", "--quiet", ref)
 	return err == nil
+}
+
+// `worktree list` is the only view that sees every checkout: HEAD alone misses
+// the linked worktrees of the same clone, and one of those is exactly the
+// review worktree this cleanup is racing.
+func (r *Resolver) checkedOut(ctx context.Context, repo, branch string) bool {
+	out, err := r.git.Run(ctx, repo, "worktree", "list", "--porcelain")
+	if err != nil {
+		return false
+	}
+	want := "branch refs/heads/" + branch
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Resolver) buildIndex() map[string]string {

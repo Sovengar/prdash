@@ -17,6 +17,8 @@ type Resolver interface {
 	EnsureBare(ctx context.Context, ref model.RepoRef) (string, error)
 	RemoveBare(ref model.RepoRef) error
 	FetchReviewRef(ctx context.Context, repo string, it model.Item) (string, error)
+	DeleteReviewRefs(ctx context.Context, repo string, it model.Item) (bool, []string)
+	DeleteLocalBranch(ctx context.Context, ref model.RepoRef, branch string) (bool, string)
 	WorktreePath(ref model.RepoRef, number int) string
 	Remember(ref model.RepoRef, path string)
 	RecordReview(it model.Item, rec cache.ReviewRecord) error
@@ -109,20 +111,52 @@ func (e *Executor) ActiveReview(it model.Item) (worktree.Worktree, bool) {
 	}, true
 }
 
-func (e *Executor) RemoveReview(ctx context.Context, it model.Item) (bool, string, error) {
-	rec, ok := e.Resolver.ActiveReview(it.ID())
-	if !ok || rec.Worktree == "" {
-		return false, "", nil
+// CleanupResult reports what a post-merge cleanup actually did, target by
+// target. It exists so the notice can say what was deleted and what could not
+// be, instead of guessing.
+type CleanupResult struct {
+	WorktreeRemoved bool
+	WorktreeReason  string
+	Deleted         []string
+	Warnings        []string
+}
+
+// CleanupAfterMerge removes the merged item's footprint beyond the remote
+// branch the forge already deletes: the review worktree (only if clean), the
+// review branch and tracking ref it created, and the PR branch in the user's
+// local clone. Branch failures are warnings, never a failed merge.
+//
+// The worktree goes first on purpose: git refuses `branch -D` on a branch a
+// worktree holds, so deleting the branch before the checkout would always fail.
+func (e *Executor) CleanupAfterMerge(ctx context.Context, it model.Item) (CleanupResult, error) {
+	var res CleanupResult
+	if rec, ok := e.Resolver.ActiveReview(it.ID()); ok && rec.Worktree != "" {
+		removed, reason, err := e.Worktrees.RemoveIfClean(ctx, rec.Worktree)
+		if err != nil {
+			return res, err
+		}
+		res.WorktreeRemoved = removed
+		res.WorktreeReason = reason
+		// A kept worktree still holds the branch, so the branch stays; when
+		// nothing holds it (removed, or already absent) both can go.
+		if reason == "" {
+			_ = e.Resolver.ForgetReview(it)
+			deleted, warnings := e.Resolver.DeleteReviewRefs(ctx, rec.Repo, it)
+			res.Warnings = append(res.Warnings, warnings...)
+			if deleted {
+				res.Deleted = append(res.Deleted, "review branch")
+			}
+		}
 	}
-	removed, reason, err := e.Worktrees.RemoveIfClean(ctx, rec.Worktree)
-	if err != nil {
-		return false, reason, err
+
+	deleted, warning := e.Resolver.DeleteLocalBranch(ctx, it.Ref, it.SourceBranch)
+	if warning != "" {
+		res.Warnings = append(res.Warnings, warning)
 	}
-	if !removed {
-		return false, reason, nil
+	if deleted {
+		res.Deleted = append(res.Deleted, "local branch")
 	}
-	_ = e.Resolver.ForgetReview(it)
-	return true, "", nil
+	return res, nil
 }
 
 func (e *Executor) resolveRepo(ctx context.Context, it model.Item) (path string, created bool, err error) {

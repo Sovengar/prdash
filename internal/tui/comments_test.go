@@ -71,7 +71,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 
 var detailLabels = []string{
 	"Item:", "Forge:", "Author:", "Source:", "Target:",
-	"State:", "Draft:", "Checks:", "Diff:", "Updated:", "Review:", "Role:",
+	"State:", "Mergeable:", "Draft:", "Checks:", "Diff:", "Updated:", "Review:", "Role:",
 }
 
 func rowWithField(rows []string, label string) int {
@@ -359,8 +359,8 @@ func TestURLRowDoesNotCostHeight(t *testing.T) {
 	if urlRow < 0 {
 		t.Fatalf("there is no URL row:\n%s", strings.Join(rows, "\n"))
 	}
-	if got := len(detailLabels); got != 12 {
-		t.Fatalf("the test waits 12 grid labels, has %d", got)
+	if got := len(detailLabels); got != 13 {
+		t.Fatalf("the test waits 13 grid labels, has %d", got)
 	}
 	seen := map[string]bool{}
 	for _, l := range rows {
@@ -391,8 +391,8 @@ func TestURLRowDoesNotCostHeight(t *testing.T) {
 			}
 		}
 	}
-	if gridRows != 6 {
-		t.Errorf("the grid takes %d rows, want 6 (12 fields in two columns):\n%s",
+	if gridRows != 7 {
+		t.Errorf("the grid takes %d rows, want 7 (13 fields in two columns):\n%s",
 			gridRows, strings.Join(rows, "\n"))
 	}
 }
@@ -596,7 +596,7 @@ func TestCountLivesInTheBorder(t *testing.T) {
 		commentOf("alice", "one"), commentOf("bob", "two"), commentOf("carol", "three"),
 		commentOf("dave", "four"), commentOf("erin", "five"),
 	}
-	m := modelWithComments(t, 45, list, 23)
+	m := modelWithComments(t, 48, list, 23)
 	it := mustSelected(t, m)
 	// The forge's warning tightens the panel to check the count no longer depends on the budget.
 	m.denied[it.ID()] = "the forge refused the action"

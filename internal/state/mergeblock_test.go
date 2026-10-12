@@ -64,7 +64,9 @@ func TestMergeBlockSeesTheDraftUnderAnyReviewDecision(t *testing.T) {
 	}
 }
 
-func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
+// A known conflict cannot be merged by the forge, so the gate is hard: there is
+// no mode to choose and no way to force it from prdash.
+func TestMergeBlockForbidsConflictingBranches(t *testing.T) {
 	it := base()
 	it.TargetBranch = "main"
 	it.Mergeable = model.Mergeability{Known: true, Conflicted: true}
@@ -73,12 +75,11 @@ func TestMergeBlockWarnsAboutConflictingBranches(t *testing.T) {
 	if !strings.Contains(block.Reason, "conflicts") {
 		t.Fatalf("Reason = %q, want it to mention the conflict", block.Reason)
 	}
-	// The branch name first says what to rebase against, without vetoing: a rebase resolves it.
 	if !strings.Contains(block.Reason, "main") {
 		t.Errorf("Reason = %q, want it to name the target branch", block.Reason)
 	}
-	if block.Hard {
-		t.Error("Hard = true, want false: a rebase fixes it and the veto has no way out")
+	if !block.Hard {
+		t.Error("Hard = false, want true: the forge cannot merge a conflict")
 	}
 }
 
