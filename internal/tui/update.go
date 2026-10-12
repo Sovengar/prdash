@@ -104,7 +104,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyBranches(msg)
 		return m.withPump(nil)
 
+	case mergeabilityMsg:
+		m.applyMergeability(msg)
+		return m.withPump(nil)
+
 	case commentsTickMsg:
+		m.requestMergeability()
 		return m, m.requestComments()
 
 	case commentsMsg:
@@ -170,43 +175,49 @@ func triggersReviewCleanup(out forge.Outcome) bool {
 
 // In the background so the Update handler does not block on a git subprocess.
 func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) tea.Cmd {
-	if m.reviewRemover == nil {
+	if m.reviewCleaner == nil {
 		return nil
 	}
-	appCtx, remover := m.ctx, m.reviewRemover
+	appCtx, cleaner := m.ctx, m.reviewCleaner
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(appCtx, reviewCleanupTimeout)
 		defer cancel()
-		removed, reason, err := remover.RemoveReview(ctx, it)
-		return reviewCleanupMsg{base: base, level: level, removed: removed, reason: reason, err: err}
+		result, err := cleaner.CleanupAfterMerge(ctx, it)
+		return reviewCleanupMsg{base: base, level: level, result: result, err: err}
 	}
 }
 
 // A no-op re-emits nothing: re-stacking would duplicate the merge notice.
 func (m *Model) applyReviewCleanup(msg reviewCleanupMsg) {
-	if !msg.removed && msg.reason == "" && msg.err == nil {
+	if msg.err == nil && !msg.result.WorktreeRemoved && msg.result.WorktreeReason == "" &&
+		len(msg.result.Deleted) == 0 && len(msg.result.Warnings) == 0 {
 		return
 	}
-	text, level := reviewCleanupNotice(msg.base, msg.level, msg.removed, msg.reason, msg.err)
+	text, level := reviewCleanupNotice(msg.base, msg.level, msg.result, msg.err)
 	m.setNoticeReplacing(msg.base, text, level)
 }
 
-// Never suppresses the merge's facts; it prefixes them with the worktree's outcome.
-func reviewCleanupNotice(base string, baseLevel noticeLevel, removed bool, reason string, err error) (string, noticeLevel) {
+// Never suppresses the merge's facts; it appends what the cleanup did, target
+// by target, and warns when any target could not be cleaned.
+func reviewCleanupNotice(base string, baseLevel noticeLevel, res executor.CleanupResult, err error) (string, noticeLevel) {
 	if err != nil {
 		return base + " · could not remove the worktree: " + err.Error(), levelWarn
 	}
-	if removed {
-		level := levelOK
-		if baseLevel == levelWarn {
-			level = levelWarn
-		}
-		return base + " · worktree removed", level
+	text, level := base, baseLevel
+	if res.WorktreeRemoved {
+		text += " · worktree removed"
+	} else if res.WorktreeReason != "" {
+		text += " · " + keptReviewNotice(res.WorktreeReason)
+		level = levelWarn
 	}
-	if reason != "" {
-		return base + " · " + keptReviewNotice(reason), levelWarn
+	for _, target := range res.Deleted {
+		text += " · " + target + " deleted"
 	}
-	return base, baseLevel
+	for _, warning := range res.Warnings {
+		text += " · " + warning
+		level = levelWarn
+	}
+	return text, level
 }
 
 func keptReviewNotice(reason string) string {
@@ -304,6 +315,11 @@ func (m Model) armMerge() (tea.Model, tea.Cmd) {
 		return m, nil
 	} else {
 		m.mergeBlockReason = block.Reason
+	}
+	// An UNKNOWN mergeability is not a yes: warn at arm time, but keep the
+	// forge's verdict as the fallback rather than blocking a maybe.
+	if !it.Mergeable.Known {
+		m.setNotice(state.UnmergeabilityUnknown, levelWarn)
 	}
 	m.mergeArmed = true
 	m.mergeArmedID = it.ID()

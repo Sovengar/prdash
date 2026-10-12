@@ -190,6 +190,12 @@ func (fakeRepoResolver) RemoveBare(model.RepoRef) error { return nil }
 func (fakeRepoResolver) FetchReviewRef(context.Context, string, model.Item) (string, error) {
 	return "", nil
 }
+func (fakeRepoResolver) DeleteReviewRefs(context.Context, string, model.Item) (bool, []string) {
+	return false, nil
+}
+func (fakeRepoResolver) DeleteLocalBranch(context.Context, model.RepoRef, string) (bool, string) {
+	return false, ""
+}
 func (fakeRepoResolver) WorktreePath(model.RepoRef, int) string            { return "" }
 func (fakeRepoResolver) Remember(model.RepoRef, string)                    {}
 func (fakeRepoResolver) RecordReview(model.Item, cache.ReviewRecord) error { return nil }

@@ -11,6 +11,7 @@ import (
 
 	"prdash/internal/forge"
 	"prdash/internal/forge/model"
+	"prdash/internal/review/executor"
 	"prdash/internal/testutil"
 	"prdash/internal/worktree"
 )
@@ -263,35 +264,42 @@ func TestMergeNoticeNamesTheMode(t *testing.T) {
 	}
 }
 
-type fakeRemover struct {
-	removed bool
-	reason  string
-	err     error
-	got     model.Item
-	calls   int
+type fakeCleaner struct {
+	removed  bool
+	reason   string
+	deleted  []string
+	warnings []string
+	err      error
+	got      model.Item
+	calls    int
 }
 
-func (f *fakeRemover) RemoveReview(_ context.Context, it model.Item) (bool, string, error) {
+func (f *fakeCleaner) CleanupAfterMerge(_ context.Context, it model.Item) (executor.CleanupResult, error) {
 	f.got = it
 	f.calls++
-	return f.removed, f.reason, f.err
+	return executor.CleanupResult{
+		WorktreeRemoved: f.removed,
+		WorktreeReason:  f.reason,
+		Deleted:         f.deleted,
+		Warnings:        f.warnings,
+	}, f.err
 }
 
-func mergeOutcome(t *testing.T, remove ReviewRemover) (Model, forge.Outcome) {
+func mergeOutcome(t *testing.T, cleaner ReviewCleaner) (Model, forge.Outcome) {
 	t.Helper()
 	f := newMergeFixture(t, mergeItems()...)
 	m := f.m
-	if remove != nil {
-		m.SetReviewRemover(remove)
+	if cleaner != nil {
+		m.SetReviewCleaner(cleaner)
 	}
 	m = press(t, m, "m")
 	m = press(t, m, "r")
 	return m, waitOutcome(t, m)
 }
 
-func applyMerge(t *testing.T, remove ReviewRemover) (Model, tea.Cmd) {
+func applyMerge(t *testing.T, cleaner ReviewCleaner) (Model, tea.Cmd) {
 	t.Helper()
-	m, out := mergeOutcome(t, remove)
+	m, out := mergeOutcome(t, cleaner)
 	return m, m.applyAction(out, m.cycle)
 }
 
@@ -308,16 +316,16 @@ func runCleanup(t *testing.T, m Model, cmd tea.Cmd) (Model, bool) {
 }
 
 func TestMergeOKRemovesCleanWorktree(t *testing.T) {
-	remove := &fakeRemover{removed: true}
-	m, out := mergeOutcome(t, remove)
+	cleaner := &fakeCleaner{removed: true}
+	m, out := mergeOutcome(t, cleaner)
 	cmd := m.applyAction(out, m.cycle)
 	if cmd == nil {
 		t.Fatal("a successful merge should return the cleanup command")
 	}
 	m, _ = runCleanup(t, m, cmd)
 
-	if remove.calls != 1 || remove.got.ID() != out.Item.ID() {
-		t.Fatalf("remove calls=%d item=%v, want the merged item %v", remove.calls, remove.got.ID(), out.Item.ID())
+	if cleaner.calls != 1 || cleaner.got.ID() != out.Item.ID() {
+		t.Fatalf("cleaner calls=%d item=%v, want the merged item %v", cleaner.calls, cleaner.got.ID(), out.Item.ID())
 	}
 	toast := lastToast(m)
 	if !strings.Contains(toast, "worktree removed") || !strings.Contains(toast, "ok") {
@@ -326,8 +334,8 @@ func TestMergeOKRemovesCleanWorktree(t *testing.T) {
 }
 
 func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
-	remove := &fakeRemover{reason: worktree.KeptUncommitted}
-	m, cmd := applyMerge(t, remove)
+	cleaner := &fakeCleaner{reason: worktree.KeptUncommitted}
+	m, cmd := applyMerge(t, cleaner)
 	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "merged, but the worktree has uncommitted changes — kept") {
@@ -336,8 +344,8 @@ func TestMergeOKKeepsDirtyWorktree(t *testing.T) {
 }
 
 func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
-	remove := &fakeRemover{reason: worktree.KeptUnreadable}
-	m, cmd := applyMerge(t, remove)
+	cleaner := &fakeCleaner{reason: worktree.KeptUnreadable}
+	m, cmd := applyMerge(t, cleaner)
 	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "could not read the worktree status") {
@@ -346,10 +354,10 @@ func TestMergeOKKeepsUnreadableWorktree(t *testing.T) {
 }
 
 func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
-	remove := &fakeRemover{}
-	m, cmd := applyMerge(t, remove)
+	cleaner := &fakeCleaner{}
+	m, cmd := applyMerge(t, cleaner)
 	if cmd == nil {
-		t.Fatal("with an injected remover a successful merge should return a command")
+		t.Fatal("with an injected cleaner a successful merge should return a command")
 	}
 	m, _ = runCleanup(t, m, cmd)
 
@@ -363,8 +371,8 @@ func TestMergeOKWithoutReviewReportsNoError(t *testing.T) {
 }
 
 func TestMergeCleanupNoopDoesNotDuplicateToast(t *testing.T) {
-	remove := &fakeRemover{}
-	m, cmd := applyMerge(t, remove)
+	cleaner := &fakeCleaner{}
+	m, cmd := applyMerge(t, cleaner)
 	before := len(toastTexts(m))
 	m, _ = runCleanup(t, m, cmd)
 	if got := len(toastTexts(m)); got != before {
@@ -372,10 +380,39 @@ func TestMergeCleanupNoopDoesNotDuplicateToast(t *testing.T) {
 	}
 }
 
+// The no-op guard is exact: a cleanup that deleted only a branch (the worktree
+// was already gone) still has something to say, and mentioning it is not the
+// empty case the guard exists to swallow.
+func TestApplyReviewCleanupSpeaksWhenOnlyABranchWasDeleted(t *testing.T) {
+	f := newMergeFixture(t, mergeItems()...)
+	m := f.m
+	m.applyReviewCleanup(reviewCleanupMsg{
+		base:   "merge ok",
+		level:  levelOK,
+		result: executor.CleanupResult{Deleted: []string{"local branch"}},
+	})
+	if !strings.Contains(lastToast(m), "local branch deleted") {
+		t.Fatalf("notice = %q, want the deleted branch named", lastToast(m))
+	}
+}
+
+func TestApplyReviewCleanupSpeaksWhenOnlyAWarningCameBack(t *testing.T) {
+	f := newMergeFixture(t, mergeItems()...)
+	m := f.m
+	m.applyReviewCleanup(reviewCleanupMsg{
+		base:   "merge ok",
+		level:  levelOK,
+		result: executor.CleanupResult{Warnings: []string{"could not delete the local branch feat/x"}},
+	})
+	if !strings.Contains(lastToast(m), "could not delete the local branch") {
+		t.Fatalf("notice = %q, want the warning surfaced", lastToast(m))
+	}
+}
+
 // reviewCleanupMsg comes from a Cmd, not the events channel.
 func TestReviewCleanupMsgDoesNotArmChannelReader(t *testing.T) {
-	remove := &fakeRemover{removed: true}
-	m, cmd := applyMerge(t, remove)
+	cleaner := &fakeCleaner{removed: true}
+	m, cmd := applyMerge(t, cleaner)
 	msg, ok := cmd().(reviewCleanupMsg)
 	if !ok {
 		t.Fatalf("the cleanup command returned %T, want reviewCleanupMsg", cmd())
@@ -391,8 +428,8 @@ func TestReviewCleanupMsgDoesNotArmChannelReader(t *testing.T) {
 }
 
 func TestMergeCleanupRemovedDoesNotDuplicateToast(t *testing.T) {
-	remove := &fakeRemover{removed: true}
-	m, out := mergeOutcome(t, remove)
+	cleaner := &fakeCleaner{removed: true}
+	m, out := mergeOutcome(t, cleaner)
 	cmd := m.applyAction(out, m.cycle)
 	m, _ = runCleanup(t, m, cmd)
 
@@ -416,8 +453,8 @@ func TestMergeCleanupRemovedDoesNotDuplicateToast(t *testing.T) {
 }
 
 func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
-	remove := &fakeRemover{err: errors.New("boom")}
-	m, cmd := applyMerge(t, remove)
+	cleaner := &fakeCleaner{err: errors.New("boom")}
+	m, cmd := applyMerge(t, cleaner)
 	m, _ = runCleanup(t, m, cmd)
 
 	if !strings.Contains(lastToast(m), "could not remove the worktree: boom") {
@@ -425,9 +462,37 @@ func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
 	}
 }
 
+func TestMergeNoticeNamesTheDeletedBranches(t *testing.T) {
+	cleaner := &fakeCleaner{removed: true, deleted: []string{"review branch", "local branch"}}
+	m, cmd := applyMerge(t, cleaner)
+	m, _ = runCleanup(t, m, cmd)
+
+	toast := lastToast(m)
+	for _, want := range []string{"worktree removed", "review branch deleted", "local branch deleted"} {
+		if !strings.Contains(toast, want) {
+			t.Errorf("notice = %q, missing %q", toast, want)
+		}
+	}
+}
+
+func TestMergeNoticeWarnsWhenABranchCouldNotBeDeleted(t *testing.T) {
+	cleaner := &fakeCleaner{removed: true, warnings: []string{
+		"could not delete the review branch prdash/pr-1: used by worktree",
+	}}
+	m, cmd := applyMerge(t, cleaner)
+	m, _ = runCleanup(t, m, cmd)
+
+	if !strings.Contains(lastToast(m), "could not delete the review branch") {
+		t.Errorf("notice = %q, want the branch warning", lastToast(m))
+	}
+	if lastToastLevel(m) != toastWarning {
+		t.Errorf("level = %d, want warning", lastToastLevel(m))
+	}
+}
+
 func TestMergeCleanupComposesWithBranchNotDeleted(t *testing.T) {
-	remove := &fakeRemover{reason: worktree.KeptUncommitted}
-	m, out := mergeOutcome(t, remove)
+	cleaner := &fakeCleaner{reason: worktree.KeptUncommitted}
+	m, out := mergeOutcome(t, cleaner)
 	out.DeleteMsg = "the protected branch was kept"
 	cmd := m.applyAction(out, m.cycle)
 	m, _ = runCleanup(t, m, cmd)
@@ -445,22 +510,23 @@ func TestReviewCleanupNoticeLevels(t *testing.T) {
 	cases := []struct {
 		name      string
 		baseLevel noticeLevel
-		removed   bool
-		reason    string
+		result    executor.CleanupResult
 		err       error
 		wantLevel noticeLevel
 	}{
-		{"deleted on base OK", levelOK, true, "", nil, levelOK},
-		{"deleted on base warn", levelWarn, true, "", nil, levelWarn},
-		{"kept because dirty", levelOK, false, worktree.KeptUncommitted, nil, levelWarn},
-		{"kept because unreadable", levelOK, false, worktree.KeptUnreadable, nil, levelWarn},
-		{"delete failure", levelOK, false, "", errors.New("boom"), levelWarn},
-		{"no review mounted", levelOK, false, "", nil, levelOK},
-		{"no review on base warn", levelWarn, false, "", nil, levelWarn},
+		{"deleted on base OK", levelOK, executor.CleanupResult{WorktreeRemoved: true}, nil, levelOK},
+		{"deleted on base warn", levelWarn, executor.CleanupResult{WorktreeRemoved: true}, nil, levelWarn},
+		{"kept because dirty", levelOK, executor.CleanupResult{WorktreeReason: worktree.KeptUncommitted}, nil, levelWarn},
+		{"kept because unreadable", levelOK, executor.CleanupResult{WorktreeReason: worktree.KeptUnreadable}, nil, levelWarn},
+		{"delete failure", levelOK, executor.CleanupResult{}, errors.New("boom"), levelWarn},
+		{"deleted a branch", levelOK, executor.CleanupResult{Deleted: []string{"review branch"}}, nil, levelOK},
+		{"branch warning", levelOK, executor.CleanupResult{Warnings: []string{"could not delete"}}, nil, levelWarn},
+		{"no review mounted", levelOK, executor.CleanupResult{}, nil, levelOK},
+		{"no review on base warn", levelWarn, executor.CleanupResult{}, nil, levelWarn},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, level := reviewCleanupNotice(base, tc.baseLevel, tc.removed, tc.reason, tc.err)
+			_, level := reviewCleanupNotice(base, tc.baseLevel, tc.result, tc.err)
 			if level != tc.wantLevel {
 				t.Fatalf("level = %d, want %d", level, tc.wantLevel)
 			}
@@ -469,8 +535,8 @@ func TestReviewCleanupNoticeLevels(t *testing.T) {
 }
 
 func TestMergeCleanupRemovedKeepsWarnLevel(t *testing.T) {
-	remove := &fakeRemover{removed: true}
-	m, out := mergeOutcome(t, remove)
+	cleaner := &fakeCleaner{removed: true}
+	m, out := mergeOutcome(t, cleaner)
 	out.DeleteMsg = "the protected branch was kept"
 	cmd := m.applyAction(out, m.cycle)
 	m, _ = runCleanup(t, m, cmd)
@@ -522,14 +588,14 @@ func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newMergeFixture(t, mergeItems()...)
-			remove := &fakeRemover{removed: true}
+			cleaner := &fakeCleaner{removed: true}
 			m := f.m
-			m.SetReviewRemover(remove)
+			m.SetReviewCleaner(cleaner)
 			if cmd := m.applyAction(tc.out, m.cycle); cmd != nil {
 				t.Fatalf("it should not return a cleanup command for %s", tc.name)
 			}
-			if remove.calls != 0 {
-				t.Errorf("remove called %d times, want 0", remove.calls)
+			if cleaner.calls != 0 {
+				t.Errorf("cleaner called %d times, want 0", cleaner.calls)
 			}
 		})
 	}
@@ -538,7 +604,7 @@ func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 func TestMergeOKWithoutRemoverStillWorks(t *testing.T) {
 	m, cmd := applyMerge(t, nil)
 	if cmd != nil {
-		t.Fatal("with no remover there should be no cleanup command")
+		t.Fatal("with no cleaner there should be no cleanup command")
 	}
 	if !strings.Contains(lastToast(m), "ok") {
 		t.Fatalf("notice = %q", lastToast(m))
@@ -547,30 +613,30 @@ func TestMergeOKWithoutRemoverStillWorks(t *testing.T) {
 
 func TestQuitDoesNotRemoveWorktrees(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
-	remove := &fakeRemover{removed: true}
+	cleaner := &fakeCleaner{removed: true}
 	m := f.m
-	m.SetReviewRemover(remove)
+	m.SetReviewCleaner(cleaner)
 
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if out == nil {
 		t.Fatal("q should keep closing the TUI")
 	}
-	if remove.calls != 0 {
-		t.Errorf("closing the app must not delete anything (calls=%d)", remove.calls)
+	if cleaner.calls != 0 {
+		t.Errorf("closing the app must not delete anything (calls=%d)", cleaner.calls)
 	}
 }
 
 func TestRefreshMergedItemDoesNotTriggerCleanup(t *testing.T) {
 	f := newMergeFixture(t, mergeItems()...)
-	remove := &fakeRemover{removed: true}
+	cleaner := &fakeCleaner{removed: true}
 	m := f.m
-	m.SetReviewRemover(remove)
+	m.SetReviewCleaner(cleaner)
 
 	merged := f.items[0]
 	merged.State = "MERGED"
 	m = send(t, m, page(m.cycle, "github", "github.com", model.SectionReview, model.ReviewRequested, []model.Item{merged}, false))
 
-	if remove.calls != 0 {
-		t.Errorf("a refresh must not trigger the cleanup (calls=%d)", remove.calls)
+	if cleaner.calls != 0 {
+		t.Errorf("a refresh must not trigger the cleanup (calls=%d)", cleaner.calls)
 	}
 }

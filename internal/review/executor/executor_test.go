@@ -405,14 +405,14 @@ func mountReview(t *testing.T, number int) (*harness, model.Item) {
 	return h, it
 }
 
-func TestRemoveReviewRemovesCleanAndForgets(t *testing.T) {
+func TestCleanupAfterMergeRemovesCleanAndForgets(t *testing.T) {
 	h, it := mountReview(t, 5)
 	fake := &fakeProvisioner{removeIfCleanRemoved: true}
 	h.ex.Worktrees = fake
 
-	removed, reason, err := h.ex.RemoveReview(context.Background(), it)
-	if err != nil || !removed || reason != "" {
-		t.Fatalf("RemoveReview = (%v, %q, %v), want deleted with no reason", removed, reason, err)
+	res, err := h.ex.CleanupAfterMerge(context.Background(), it)
+	if err != nil || !res.WorktreeRemoved || res.WorktreeReason != "" {
+		t.Fatalf("CleanupAfterMerge = %+v, %v; want the worktree deleted with no reason", res, err)
 	}
 	if want := h.resolver.WorktreePath(it.Ref, it.Number); fake.removeIfCleanID != want {
 		t.Fatalf("RemoveIfClean received %q, want %q", fake.removeIfCleanID, want)
@@ -422,40 +422,208 @@ func TestRemoveReviewRemovesCleanAndForgets(t *testing.T) {
 	}
 }
 
-func TestRemoveReviewKeepsAndDoesNotForget(t *testing.T) {
+func TestCleanupAfterMergeKeepsAndDoesNotForget(t *testing.T) {
 	h, it := mountReview(t, 5)
 	h.ex.Worktrees = &fakeProvisioner{removeIfCleanReason: worktree.KeptUncommitted}
 
-	removed, reason, err := h.ex.RemoveReview(context.Background(), it)
-	if err != nil || removed || reason != worktree.KeptUncommitted {
-		t.Fatalf("RemoveReview = (%v, %q, %v), want kept for being dirty", removed, reason, err)
+	res, err := h.ex.CleanupAfterMerge(context.Background(), it)
+	if err != nil || res.WorktreeRemoved || res.WorktreeReason != worktree.KeptUncommitted {
+		t.Fatalf("CleanupAfterMerge = %+v, %v; want kept for being dirty", res, err)
 	}
 	if _, ok := h.ex.ActiveReview(it); !ok {
 		t.Fatal("keeping the worktree must not forget the record")
 	}
 }
 
-func TestRemoveReviewWithoutActiveReviewIsNoop(t *testing.T) {
+func TestCleanupAfterMergeWithoutActiveReviewIsNoop(t *testing.T) {
 	origin, repo := baseFixture(t)
 	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
 	fake := &fakeProvisioner{removeIfCleanRemoved: true}
 	h.ex.Worktrees = fake
 
-	removed, reason, err := h.ex.RemoveReview(context.Background(), item(h.ref, 5))
-	if err != nil || removed || reason != "" {
-		t.Fatalf("RemoveReview = (%v, %q, %v), want no-op", removed, reason, err)
+	res, err := h.ex.CleanupAfterMerge(context.Background(), item(h.ref, 5))
+	if err != nil || res.WorktreeRemoved || res.WorktreeReason != "" || len(res.Deleted) != 0 || len(res.Warnings) != 0 {
+		t.Fatalf("CleanupAfterMerge = %+v, %v; want no-op", res, err)
 	}
 	if fake.removeIfCleanID != "" {
 		t.Fatal("with no mounted review the provisioner should not be called")
 	}
 }
 
-func TestRemoveReviewPropagatesError(t *testing.T) {
+func TestCleanupAfterMergePropagatesError(t *testing.T) {
 	h, it := mountReview(t, 5)
 	h.ex.Worktrees = &fakeProvisioner{removeIfCleanErr: errors.New("boom")}
 
-	removed, _, err := h.ex.RemoveReview(context.Background(), it)
-	if err == nil || removed {
-		t.Fatalf("RemoveReview = (%v, _, %v), want propagated error", removed, err)
+	res, err := h.ex.CleanupAfterMerge(context.Background(), it)
+	if err == nil || res.WorktreeRemoved {
+		t.Fatalf("CleanupAfterMerge = (%+v, %v), want propagated error", res, err)
+	}
+}
+
+func TestCleanupAfterMergeDeletesReviewAndLocalBranches(t *testing.T) {
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, 7, "seven")
+	testutil.RunGit(t, repo, "branch", "feat/x")
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	it := item(h.ref, 7)
+	it.SourceBranch = "feat/x"
+	ctx := context.Background()
+	if _, err := h.ex.Mount(ctx, it); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	res, err := h.ex.CleanupAfterMerge(ctx, it)
+	if err != nil {
+		t.Fatalf("CleanupAfterMerge: %v", err)
+	}
+	if !res.WorktreeRemoved {
+		t.Fatalf("the worktree should be removed: %+v", res)
+	}
+	if testutil.RefExists(t, repo, "refs/heads/prdash/pr-7") {
+		t.Error("the review branch survived in the local clone")
+	}
+	if testutil.RefExists(t, repo, "refs/prdash/github/7") {
+		t.Error("the tracking ref survived in the local clone")
+	}
+	if testutil.RefExists(t, repo, "refs/heads/feat/x") {
+		t.Error("the PR source branch survived in the local clone")
+	}
+	if got := strings.Join(res.Deleted, ","); got != "review branch,local branch" {
+		t.Errorf("Deleted = %q, want both branches", got)
+	}
+	if len(res.Warnings) != 0 {
+		t.Errorf("no warning expected, got %v", res.Warnings)
+	}
+}
+
+func TestCleanupAfterMergeDeletesReviewBranchFromTheBareClone(t *testing.T) {
+	origin, _ := baseFixture(t)
+	pushPR(t, origin, 8, "eight")
+	h := newHarness(t, harnessOpts{origin: origin}) // no roots: the bare clone is used
+	it := item(h.ref, 8)
+	ctx := context.Background()
+	res, err := h.ex.Mount(ctx, it)
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	cleaned, err := h.ex.CleanupAfterMerge(ctx, it)
+	if err != nil {
+		t.Fatalf("CleanupAfterMerge: %v", err)
+	}
+	if testutil.RefExists(t, res.RepoPath, "refs/heads/prdash/pr-8") {
+		t.Error("the review branch survived in the bare clone")
+	}
+	if testutil.RefExists(t, res.RepoPath, "refs/prdash/github/8") {
+		t.Error("the tracking ref survived in the bare clone")
+	}
+	if len(cleaned.Warnings) != 0 {
+		t.Errorf("no warning expected, got %v", cleaned.Warnings)
+	}
+}
+
+// An already-absent worktree holds nothing, so the branch is still fair game.
+func TestCleanupAfterMergeDeletesTheBranchWhenTheWorktreeIsAlreadyGone(t *testing.T) {
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, 7, "seven")
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	it := item(h.ref, 7)
+	ctx := context.Background()
+	res, err := h.ex.Mount(ctx, it)
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	if err := h.pr.Remove(ctx, res.Worktree.Path); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	cleaned, err := h.ex.CleanupAfterMerge(ctx, it)
+	if err != nil {
+		t.Fatalf("CleanupAfterMerge: %v", err)
+	}
+	if cleaned.WorktreeRemoved {
+		t.Error("the worktree was already gone; it should not claim to have removed it")
+	}
+	if testutil.RefExists(t, repo, "refs/heads/prdash/pr-7") {
+		t.Error("the review branch survived despite nothing holding it")
+	}
+	if len(cleaned.Deleted) == 0 {
+		t.Errorf("the deletion should be reported: %+v", cleaned)
+	}
+}
+
+// The worktree is deleted first on purpose: a branch a worktree holds cannot be
+// deleted, and pretending otherwise would leave it behind silently.
+func TestCleanupAfterMergeKeepsTheBranchWhenTheWorktreeStaysDirty(t *testing.T) {
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, 7, "seven")
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	it := item(h.ref, 7)
+	ctx := context.Background()
+	res, err := h.ex.Mount(ctx, it)
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(res.Worktree.Path, "dirty.txt"), []byte("wip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cleaned, err := h.ex.CleanupAfterMerge(ctx, it)
+	if err != nil {
+		t.Fatalf("CleanupAfterMerge: %v", err)
+	}
+	if cleaned.WorktreeRemoved || cleaned.WorktreeReason != worktree.KeptUncommitted {
+		t.Fatalf("the dirty worktree should be kept: %+v", cleaned)
+	}
+	if !testutil.RefExists(t, repo, "refs/heads/prdash/pr-7") {
+		t.Error("the review branch was deleted while its worktree still held it")
+	}
+	if len(cleaned.Deleted) != 0 {
+		t.Errorf("nothing should be reported deleted, got %v", cleaned.Deleted)
+	}
+}
+
+// A branch git refuses to delete is a warning on the merge, never a failure: the
+// merge already happened and the cleanup cannot undo it. A lock next to the ref
+// is what makes git refuse without a broken git.
+func TestCleanupAfterMergeWarnsWhenTheLocalBranchCannotBeDeleted(t *testing.T) {
+	origin, repo := baseFixture(t)
+	pushPR(t, origin, 7, "seven")
+	testutil.RunGit(t, repo, "branch", "feat/x")
+	lockRef(t, repo, "refs/heads/feat/x")
+	h := newHarness(t, harnessOpts{origin: origin, roots: []string{filepath.Dir(repo)}})
+	it := item(h.ref, 7)
+	it.SourceBranch = "feat/x"
+	ctx := context.Background()
+	if _, err := h.ex.Mount(ctx, it); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	res, err := h.ex.CleanupAfterMerge(ctx, it)
+	if err != nil {
+		t.Fatalf("CleanupAfterMerge: %v", err)
+	}
+	if !res.WorktreeRemoved {
+		t.Fatalf("a branch refusal must not undo the worktree removal: %+v", res)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "feat/x") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("warnings = %v, want the local branch refusal", res.Warnings)
+	}
+}
+
+func lockRef(t *testing.T, repo, ref string) {
+	t.Helper()
+	path := filepath.Join(repo, ".git", filepath.FromSlash(ref)+".lock")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

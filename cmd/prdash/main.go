@@ -109,7 +109,7 @@ func wire(cfg config.Config, adapters []forge.Adapter, ex *executor.Executor) tu
 	model.SetSimulator(buildSimulator(cfg, ex))
 	model.SetGraphics(herdr.NewGraphics())
 	model.SetReviewLookup(ex)
-	model.SetReviewRemover(ex)
+	model.SetReviewCleaner(ex)
 	return model
 }
 

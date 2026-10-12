@@ -117,8 +117,11 @@ func MergeBlock(it model.Item) Block {
 	if it.IsDraft {
 		return Block{Reason: "item is a draft", Hard: true}
 	}
+	// A conflict is a hard block, not a warning: the forge cannot merge it, and
+	// the fix (rebase onto the target) is outside prdash, so there is nothing
+	// the confirmation could still decide.
 	if it.Mergeable.Known && it.Mergeable.Conflicted {
-		return Block{Reason: conflictedReason(it.TargetBranch)}
+		return Block{Reason: conflictedReason(it.TargetBranch), Hard: true}
 	}
 	if it.Checks.State == model.ChecksFailing {
 		return Block{Reason: checksFailingReason(it.Checks)}
@@ -133,6 +136,10 @@ func MergeBlock(it model.Item) Block {
 }
 
 const UnmergeableReason = "the forge will not merge it as it is: rebase the branch onto the target and push"
+
+// Said instead of silence when the forge has not computed mergeability: silence
+// would paint an unknown state as mergeable.
+const UnmergeabilityUnknown = "the forge has not computed the mergeability yet; it may refuse"
 
 func conflictedReason(target string) string {
 	if strings.TrimSpace(target) == "" {

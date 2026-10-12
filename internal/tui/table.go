@@ -15,7 +15,8 @@ type tableColumn struct {
 }
 
 const (
-	colForgeIdx = iota
+	colMarkIdx = iota
+	colForgeIdx
 	colRefIdx
 	colTitleIdx
 	colRoleIdx
@@ -25,6 +26,7 @@ const (
 )
 
 var tableColumns = []tableColumn{
+	{"", colMark},
 	{"FORGE", colForge},
 	{"ITEM", itemWidthMin},
 	{"TITLE", colTitle},
@@ -72,6 +74,7 @@ func headerLine(l refLayout, innerWidth int) string {
 func itemCells(it model.Item, sec model.Section, viewer string, l refLayout) []cell {
 	refW := l.cols[colRefIdx].width
 	return []cell{
+		markCell(it, l.cols[colMarkIdx].width),
 		{text: truncate(forgeBadge(it), textWidth(l.cols[colForgeIdx].width)), style: styleForge, width: l.cols[colForgeIdx].width},
 		{text: truncateTail(refCellText(it, l.mode, l.prefixOf(sec)), textWidth(refW)), style: styleRef, width: refW},
 		{text: truncate(it.Title, textWidth(l.cols[colTitleIdx].width)), style: styleTitle, width: l.cols[colTitleIdx].width},
@@ -80,6 +83,15 @@ func itemCells(it model.Item, sec model.Section, viewer string, l refLayout) []c
 		{text: truncate(checksText(it.Checks), textWidth(l.cols[colChecksIdx].width)), style: styleChecks(it.Checks), width: l.cols[colChecksIdx].width},
 		diffCell(it.Diff, l.cols[colDiffIdx].width),
 	}
+}
+
+// The row's own gutter, kept out of the title: marked only for a conflict the
+// forge actually reported, because absence of data (UNKNOWN) is not a claim.
+func markCell(it model.Item, width int) cell {
+	if it.Mergeable.Known && it.Mergeable.Conflicted {
+		return cell{text: "✗", style: styleWarn, width: width}
+	}
+	return cell{width: width}
 }
 
 func renderCells(cells []cell, l refLayout, innerWidth int) string {
