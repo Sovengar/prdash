@@ -42,9 +42,12 @@ func (m *Model) requestMergeability() {
 }
 
 func (m *Model) applyMergeability(msg mergeabilityMsg) {
-	m.mergeInFlight[msg.id] = false
+	// The result always arrives, so the in-flight entry is pruned here instead
+	// of being left to grow for the TUI's lifetime; the attempt count is only
+	// needed while the item stays UNKNOWN.
+	delete(m.mergeInFlight, msg.id)
 	if msg.item.Mergeable.Known {
-		m.mergeAttempts[msg.id] = 0
+		delete(m.mergeAttempts, msg.id)
 	}
 	if msg.item.Number == 0 {
 		return
