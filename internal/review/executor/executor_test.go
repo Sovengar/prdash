@@ -36,6 +36,9 @@ func baseFixture(t *testing.T) (origin, repo string) {
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
 	testutil.SetRemote(t, repo, "origin", origin)
 	testutil.Push(t, repo, "-u", "origin", "main")
+	// A real `git clone` records the remote's default in origin/HEAD; the
+	// fixture must too, or the default-branch guard has nothing to read.
+	testutil.RunGit(t, repo, "remote", "set-head", "origin", "main")
 	return origin, repo
 }
 

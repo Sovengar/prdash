@@ -58,7 +58,7 @@ Concise feature inventory of prdash. Details live in `../README.md` and `adr/`.
 - **Pre-merge checks** — draft/merged/closed = hard block; a known branch conflict is also a hard block (the forge cannot merge it); CI failing/CI running/changes requested = soft warning (arms with notice).
 - **Lazy mergeability** — GitHub/GitLab compute it on demand, so selecting an item re-reads its state in the background; a conflict gets a `✗` in the row's own marker gutter (never inside the title) and a `Mergeable` field in the detail card (`yes` / `no (conflicts with <target>)` / `unknown`). `UNKNOWN` is never painted as mergeable, and arming one warns that the forge may refuse (ADR 0014).
 - **Commit pinning** — merge pinned to the commit read (`--match-head-commit` / `--sha`); refused if forge does not report it.
-- **Post-merge cleanup** — worktree deleted only if clean; kept with notice if uncommitted changes or status unreadable. Then the branch is deleted from the review clone (`prdash/pr-N` + tracking ref) and from the local clone (PR source branch, only if not checked out); failures are warnings in the notice, never a failed merge (ADR 0013).
+- **Post-merge cleanup** — worktree deleted only if clean; kept with notice if uncommitted changes or status unreadable. Then the branch is deleted from the review clone (`prdash/pr-N` + tracking ref) and from the local clone (PR source branch, only if it is a valid ref, is not checked out and is not that clone's default branch); a worktree error or any failed deletion is a warning in the notice, never a failed merge (ADR 0013).
 
 ## Approve
 

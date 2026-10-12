@@ -7,7 +7,26 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Lazy mergeability is resolved and a known conflict blocks the merge (ADR
+  0014).** GitHub's `mergeable` and GitLab's `detailedMergeStatus` are computed on
+  demand, so a selected item whose value is not known yet is re-read in the
+  background (capped at three attempts, reset once a real value arrives). A
+  reported conflict gets a `✗` in the row's own marker gutter and a `Mergeable`
+  field on the card (`yes` / `no (conflicts with <target>)` / `unknown`), and
+  `merge` no longer arms; `UNKNOWN` is never painted as mergeable, and arming one
+  warns that the forge may still refuse.
+
 ### Changed
+
+- **A successful merge now deletes the branch the CLI leaves behind (ADR 0013).**
+  Beyond the forge's `--delete-branch`, prdash removes the review branch
+  `prdash/pr-N` and its tracking ref in the clone that served the worktree, and
+  the PR source branch in the local clone it can resolve —never that clone's
+  default branch, and only when the branch is not checked out—. Every failure is
+  a warning in the notice, never a failed merge, and a worktree that was kept
+  still keeps its branch.
 
 - **Mutation: the code is shaped so tests can measure it (ADR 0011).** Every
   tagless `switch` became an `if/else` chain — go-cover never instruments
@@ -35,6 +54,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   promising a "no" the forge will not keep. The label is unchanged when the
   policy is off or unknown and on GitLab, where the per-MR `remove source
   branch` flag is honoured.
+
+- **An unreadable default branch no longer deletes the local branch.** When
+  `origin/HEAD` (or, on a bare clone, `HEAD`) cannot be read, prdash cannot tell
+  whether the branch it is about to delete is the clone's default, so it keeps the
+  branch and warns (`could not read the local default branch; left <branch>
+  alone…`) instead of failing open.
 
 - **`Version.AtLeast` covered its major-below branch.** Every test compared
   against a `0.x` minimum, whose `Major` is 0, so `v.Major < min.Major` never

@@ -39,12 +39,22 @@ worktree`, exit 1. So any deletion has to run **after** the worktree is gone.
 3. **Deletion is target-scoped and best-effort.** Each target is attempted on
    its own; a failure becomes a warning in the notice, never a failed merge. The
    notice says exactly what was deleted (`review branch`, `local branch`) and
-   what could not be.
+   what could not be. A failure to remove the worktree does not stop the rest: it
+   is a warning, the review record is kept (the worktree may still be there) and
+   the local branch is still attempted.
 4. **The local clone is deletable only when prdash can identify it**:
-   `ResolveLocal` maps the item's repo to a path, and the branch exists there and
-   is checked out **nowhere** (`worktree list` sees every checkout). An unknown
-   repo, a missing branch or a checked-out branch is a silent no-op: prdash does
-   not own the user's clone and never guesses.
+   `ResolveLocal` maps the item's repo to a path, the name is a valid ref
+   (`check-ref-format --branch`, so a glob or an option-looking name is refused
+   before any mutation), the branch exists there, it is **not** that clone's
+   default branch and it is checked out **nowhere** (`worktree list` sees every
+   checkout). The default is read from `origin/HEAD`, and for a bare clone
+   (`EnsureBare` clones `--bare`, so it has no `origin/HEAD`) from its own `HEAD`,
+   the default it was cloned with. An unknown repo, a missing branch or a
+   checked-out branch is a silent no-op: prdash does not own the user's clone and
+   never guesses. Everything that cannot be read fails **closed** and says why:
+   an unverifiable checkout (`could not check whether <branch> is checked out…`),
+   an unreadable `origin/HEAD` on a non-bare clone or an unreadable `HEAD` on a
+   bare one (`could not read the local default branch; left <branch> alone…`).
 5. **The tracking ref is bookkeeping, not a deletion claim.** Removing
    `refs/prdash/<forge>/<n>` does not mean the branch is gone, so only the branch
    deletion produces "review branch deleted".
@@ -74,10 +84,14 @@ worktree`, exit 1. So any deletion has to run **after** the worktree is gone.
 
 **Negative / costs**
 - An implicit deletion now reaches the user's clone. It is bounded to a
-  configured root, an existing branch and no checkout, and it is recorded here so
-  that it does not generalize.
+  configured root, a valid ref, a non-default branch and no checkout, and it is
+  recorded here so that it does not generalize.
 - A branch checked out somewhere is reported as kept only by omission (no
-  warning), because it is a legitimate state, not a failure.
+  warning), because it is a legitimate state, not a failure. So is a branch name
+  that is not a ref. The default branch, an unverifiable checkout and an
+  unreadable default all warn, so the user knows the branch was left alone and
+  why; an unreadable default is never read as "not the default", because that
+  would delete the branch the clone is built around.
 
 **Verification (closed with `make test`)**
 - Review branch and tracking ref disappear from the bare clone and from the local
@@ -85,4 +99,12 @@ worktree`, exit 1. So any deletion has to run **after** the worktree is gone.
 - A branch held by a worktree is refused and reported; after the worktree is
   removed the same call succeeds.
 - A checked-out local branch and an unresolvable local repo are no-ops.
-- A dirty worktree leaves the review branch in place and reports nothing deleted.
+- The clone's default branch is never deleted, even when checked out nowhere: read
+  from `origin/HEAD` on a normal clone and from `HEAD` on a bare one; a name that
+  is not a ref is refused.
+- An unreadable `origin/HEAD` (non-bare) and an unreadable `HEAD` (bare, detached)
+  both fail closed with a warning and the branch stays; an unverifiable checkout
+  does the same.
+- A dirty worktree leaves the review branch in place and reports nothing deleted;
+  a worktree that could not be removed is a warning and the local branch is still
+  attempted.

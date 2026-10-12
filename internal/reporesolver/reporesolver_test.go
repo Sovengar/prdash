@@ -128,6 +128,9 @@ func fixture(t *testing.T) (origin, repo string) {
 	testutil.CommitFile(t, repo, "base.txt", "base", "base")
 	testutil.SetRemote(t, repo, "origin", origin)
 	testutil.Push(t, repo, "-u", "origin", "main")
+	// A real `git clone` records the remote's default in origin/HEAD; the
+	// fixture must too, or the default-branch guard has nothing to read.
+	testutil.RunGit(t, repo, "remote", "set-head", "origin", "main")
 	return origin, repo
 }
 
@@ -589,6 +592,114 @@ func TestDeleteLocalBranchNeverDeletesTheDefaultBranch(t *testing.T) {
 	}
 	if !testutil.RefExists(t, repo, "refs/heads/main") {
 		t.Error("the default branch disappeared")
+	}
+}
+
+// origin/HEAD can be unreadable (a clone made with `git remote add` and no
+// `set-head`): then the default branch is not known, and "not known" is not "no".
+func TestLocalBranchDeletionFailsClosedWithoutOriginHead(t *testing.T) {
+	origin, repo := fixture(t)
+	ref := ghRef()
+	r := newResolver(t, origin, ref)
+	r.roots = []string{filepath.Dir(repo)}
+	testutil.RunGit(t, repo, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+	ctx := context.Background()
+
+	if isDefault, err := r.isDefaultBranch(ctx, repo, "main"); err == nil {
+		t.Errorf("isDefaultBranch = (%v, %v), want the unreadable default surfaced", isDefault, err)
+	}
+
+	testutil.RunGit(t, repo, "branch", "feat/x")
+	deleted, warning := r.DeleteLocalBranch(ctx, ref, "feat/x")
+	if deleted {
+		t.Error("a branch was deleted while the default branch could not be read")
+	}
+	if warning == "" {
+		t.Error("the refusal should say the default branch could not be read")
+	}
+	if !testutil.RefExists(t, repo, "refs/heads/feat/x") {
+		t.Error("the branch disappeared despite the unreadable default")
+	}
+
+	// The point of failing closed: the default itself stays put too.
+	if deleted, _ := r.DeleteLocalBranch(ctx, ref, "main"); deleted {
+		t.Error("the default branch was deleted with an unreadable origin/HEAD")
+	}
+	if !testutil.RefExists(t, repo, "refs/heads/main") {
+		t.Error("the default branch disappeared")
+	}
+}
+
+// A bare clone (EnsureBare clones --bare) has no remotes/origin/HEAD, but its
+// own HEAD holds the default it was cloned with.
+func TestIsDefaultBranchReadsABareClonesHead(t *testing.T) {
+	origin, _ := fixture(t)
+	ref := ghRef()
+	r := New(Options{
+		CloneDir: filepath.Join(t.TempDir(), "repos"),
+		CloneURL: func(model.RepoRef) string { return origin },
+	})
+	ctx := context.Background()
+	bare, err := r.EnsureBare(ctx, ref)
+	if err != nil {
+		t.Fatalf("EnsureBare: %v", err)
+	}
+	if out := testutil.RunGit(t, bare, "rev-parse", "--is-bare-repository"); out != "true" {
+		t.Fatalf("the fixture is not a bare clone: %q", out)
+	}
+
+	if isDefault, err := r.isDefaultBranch(ctx, bare, "main"); err != nil || !isDefault {
+		t.Fatalf("isDefaultBranch(bare, main) = (%v, %v), want true with no error", isDefault, err)
+	}
+	if isDefault, err := r.isDefaultBranch(ctx, bare, "feat/x"); err != nil || isDefault {
+		t.Fatalf("isDefaultBranch(bare, feat/x) = (%v, %v), want false with no error", isDefault, err)
+	}
+}
+
+// A normal clone whose origin/HEAD is readable answers the default directly.
+func TestIsDefaultBranchReadsANonBareClonesOriginHead(t *testing.T) {
+	origin, repo := fixture(t)
+	ref := ghRef()
+	r := newResolver(t, origin, ref)
+	r.roots = []string{filepath.Dir(repo)}
+	ctx := context.Background()
+
+	if isDefault, err := r.isDefaultBranch(ctx, repo, "main"); err != nil || !isDefault {
+		t.Fatalf("isDefaultBranch(repo, main) = (%v, %v), want (true, nil)", isDefault, err)
+	}
+	if isDefault, err := r.isDefaultBranch(ctx, repo, "feat/x"); err != nil || isDefault {
+		t.Fatalf("isDefaultBranch(repo, feat/x) = (%v, %v), want (false, nil)", isDefault, err)
+	}
+}
+
+// If the bare clone's own HEAD is unreadable too (detached), nothing can name
+// the default branch: the deletion fails closed and keeps the branch.
+func TestLocalBranchDeletionFailsClosedWhenABareClonesHeadIsUnreadable(t *testing.T) {
+	origin, _ := fixture(t)
+	ref := ghRef()
+	r := New(Options{
+		CloneDir: filepath.Join(t.TempDir(), "repos"),
+		CloneURL: func(model.RepoRef) string { return origin },
+	})
+	ctx := context.Background()
+	bare, err := r.EnsureBare(ctx, ref)
+	if err != nil {
+		t.Fatalf("EnsureBare: %v", err)
+	}
+	testutil.RunGit(t, bare, "branch", "feat/x", "main")
+	sha := testutil.RunGit(t, bare, "rev-parse", "main")
+	testutil.RunGit(t, bare, "update-ref", "--no-deref", "HEAD", sha)
+	r.Remember(ref, bare) // the local clone prdash resolved is this bare one
+
+	deleted, warning := r.DeleteLocalBranch(ctx, ref, "feat/x")
+	if deleted {
+		t.Error("a branch was deleted while the default branch could not be read")
+	}
+	if !strings.Contains(warning, "could not read the local default branch") {
+		t.Fatalf("warning = %q, want the unreadable default named", warning)
+	}
+	if !testutil.RefExists(t, bare, "refs/heads/feat/x") {
+		t.Error("the branch disappeared despite the unreadable default")
 	}
 }
 

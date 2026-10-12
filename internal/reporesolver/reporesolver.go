@@ -208,11 +208,17 @@ func (r *Resolver) DeleteLocalBranch(ctx context.Context, ref model.RepoRef, bra
 	if !r.validBranch(ctx, repo, branch) {
 		return false, ""
 	}
-	if r.isDefaultBranch(ctx, repo, branch) {
-		return false, "left the local default branch " + branch + " alone"
-	}
+	// Nothing to delete is decided before the default-branch guard: a branch
+	// that is not there cannot be the default one either.
 	if !r.refExists(ctx, repo, "refs/heads/"+branch) {
 		return false, ""
+	}
+	isDefault, err := r.isDefaultBranch(ctx, repo, branch)
+	if err != nil {
+		return false, "could not read the local default branch; left " + branch + " alone: " + err.Error()
+	}
+	if isDefault {
+		return false, "left the local default branch " + branch + " alone"
 	}
 	// An unverifiable checkout is a reason to keep, not to proceed: the branch
 	// stays and the notice says why.
@@ -298,14 +304,35 @@ func (r *Resolver) validBranch(ctx context.Context, repo, branch string) bool {
 	return err == nil
 }
 
-// origin/HEAD is the clone's default branch as the remote names it; a short
-// read like origin/main is what symbolic-ref --short hands back.
-func (r *Resolver) isDefaultBranch(ctx context.Context, repo, branch string) bool {
+// isDefaultBranch reports whether branch is the clone's default branch. An
+// unreadable default is an error, never a silent "no": failing open would let
+// the deletion take the branch the whole clone is built around. A bare clone has
+// no remotes/origin/HEAD (EnsureBare clones --bare), but its own HEAD is the
+// default branch it was cloned with, so that is the one fallback.
+func (r *Resolver) isDefaultBranch(ctx context.Context, repo, branch string) (bool, error) {
 	out, err := r.git.Run(ctx, repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
 	if err != nil {
-		return false
+		if !r.isBare(ctx, repo) {
+			return false, err
+		}
+		out, err = r.git.Run(ctx, repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if err != nil {
+			return false, err
+		}
 	}
-	return strings.TrimPrefix(strings.TrimSpace(out), "origin/") == branch
+	return defaultName(out) == branch, nil
+}
+
+func (r *Resolver) isBare(ctx context.Context, repo string) bool {
+	out, err := r.git.Run(ctx, repo, "rev-parse", "--is-bare-repository")
+	return err == nil && strings.TrimSpace(out) == "true"
+}
+
+func defaultName(out string) string {
+	name := strings.TrimSpace(out)
+	name = strings.TrimPrefix(name, "refs/remotes/")
+	name = strings.TrimPrefix(name, "refs/heads/")
+	return strings.TrimPrefix(name, "origin/")
 }
 
 func (r *Resolver) buildIndex() map[string]string {

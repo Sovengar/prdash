@@ -310,8 +310,12 @@ delete in the target repo, and `gh` takes that for granted and exits successfull
 Without saying it, "branch deleted" would be a lie.
 
 What the call does **not** touch is the local repository: with `--repo` (GitHub)
-and `-R` (GitLab), the CLI only deletes the remote branch. The bare clones and
-the worktrees that prdash manages stay intact.
+and `-R` (GitLab), the CLI only deletes the remote branch. prdash cleans the
+copies the forge does not own: the review branch `prdash/pr-N` and its tracking
+ref in the clone that served the worktree, and the PR source branch in the local
+clone prdash can resolve —only if it is not checked out and is not that clone's
+default branch—. It is best-effort: a failure is a warning in the notice, never a
+failed merge (`docs/adr/0013`).
 
 ### Change the target branch with `e`
 
@@ -396,7 +400,7 @@ not look at them, so `merge` came out the same in the three cases. Now:
 | State | What happens |
 |---|---|
 | Draft, already merged, already closed | **It does not arm.** It is a property of the forge: GitHub refuses the merge of a draft PR, and offering it only spends a call to receive an error. |
-| **The branches conflict** | **It arms, and warns**, naming the branch: `merge acme/widget#6 with the branch conflicts with main · press the mode anyway…`. It is a rebase, and a rebase is done by the user. |
+| **The branches conflict** | **It does not arm.** The forge cannot merge a conflicting branch, and the fix —a rebase onto the target— is the user's, outside prdash: `merge blocked: the branch conflicts with main`. |
 | CI red | It arms, and the confirmation says `merge acme/widget#7 with CI is failing (2 of 5) · press the mode anyway…` |
 | CI still running | It arms, and warns: merging while the CI runs is the race that the head pin does not close, because the CI can pass *after* the merge. |
 | Requested changes | It arms, and warns. |
@@ -412,13 +416,16 @@ without it: `State` sorts by attention to the operator and an approved draft com
 out as `approved`. The card says it in its own `Draft` row instead of hiding it
 inside `State`.
 
-The branch conflict is also warned about earlier, and for the same reason: it
-comes out in the box (`the branch conflicts with main`) and not as a refusal of
-the CLI after spending the call. The two data travel in the query that was
-already made for the item (`mergeable` on GitHub, `detailedMergeStatus` on
-GitLab), so they cost no call, and where the forge does not know it yet —GitHub
-returns `UNKNOWN` while it computes it— nothing is said: a warning with no data
-is a false warning.
+The branch conflict is different: it is looked at **before** the confirmation and
+it stops the merge. The data travels in the query that was already made for the
+item (`mergeable` on GitHub, `detailedMergeStatus` on GitLab), so it costs no
+call, but the forge computes it lazily —GitHub answers `UNKNOWN` until it
+does—, so an item whose mergeability is not known yet is re-read in the background
+when it is selected. A conflict the forge did report gets a `✗` in the row's own
+gutter and a `Mergeable` field in the card (`no (conflicts with main)`), and
+pressing `m` does not arm. An `UNKNOWN` is never painted as mergeable: the row
+stays unmarked, the card says `unknown`, and arming one warns that the forge may
+refuse (`docs/adr/0014`).
 
 When the refusal comes anyway —because the PR was pushed between the refresh and
 the keystroke, or because the data was not there—, the notice says what to do and
@@ -541,9 +548,17 @@ clean**. If it has uncommitted changes (including new untracked files) it is
 **kept** and the notice says so (`merged, but the worktree has uncommitted
 changes — kept`). If its git status cannot be checked either, it is also **kept**,
 with a different notice (`worktree kept: could not read the worktree status`).
-When in doubt, never delete. No other path —approve, retarget, a merge that does
-not go out well, the refresh that sees a PR merged outside prdash, closing the
-app— deletes anything.
+When in doubt, never delete.
+
+The same merge then deletes the branches the forge's `--delete-branch` leaves
+behind: the review branch `prdash/pr-N` and its tracking ref in the clone that
+served the worktree, and the PR source branch in the local clone prdash can
+resolve —only if it is not checked out and is not that clone's default branch—. A
+worktree that was kept still holds its branch, so that branch stays. Every failure
+here is a warning in the notice, never a failed merge (`docs/adr/0013`).
+
+No other path —approve, retarget, a merge that does not go out well, the refresh
+that sees a PR merged outside prdash, closing the app— deletes anything.
 
 The editor is the only one that adjusts better with `[tools].editor`, which is a
 shortcut for its base with no override:
