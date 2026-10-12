@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"prdash/internal/cache"
 	"prdash/internal/forge/model"
+	"prdash/internal/gitcmd"
 	"prdash/internal/testutil"
 )
 
@@ -560,11 +562,87 @@ func TestDeleteLocalBranchReportsAGitRefusal(t *testing.T) {
 	}
 }
 
-func TestCheckedOutIsFalseWhenTheWorktreeListFails(t *testing.T) {
+func TestCheckedOutReportsWhenTheWorktreeListFails(t *testing.T) {
 	r := New(Options{MemoPath: filepath.Join(t.TempDir(), "memo.json")})
-	if r.checkedOut(context.Background(), t.TempDir(), "main") {
-		t.Error("a failing worktree list must not be read as checked out")
+	held, err := r.checkedOut(context.Background(), t.TempDir(), "main")
+	if err == nil || held {
+		t.Errorf("checkedOut = (%v, %v), want the error surfaced and no claim of being checked out", held, err)
 	}
+}
+
+// The clone's default branch is protected regardless of where HEAD points: a PR
+// whose head is named like it must not delete the branch the clone is built on.
+func TestDeleteLocalBranchNeverDeletesTheDefaultBranch(t *testing.T) {
+	origin, repo := fixture(t)
+	ref := ghRef()
+	r := newResolver(t, origin, ref)
+	r.roots = []string{filepath.Dir(repo)}
+	testutil.RunGit(t, repo, "remote", "set-head", "origin", "main")
+	testutil.RunGit(t, repo, "checkout", "-b", "feat/x") // main is now checked out nowhere
+
+	deleted, warning := r.DeleteLocalBranch(context.Background(), ref, "main")
+	if deleted {
+		t.Fatal("the default branch was deleted")
+	}
+	if warning == "" {
+		t.Error("the refusal should say why the default branch was left alone")
+	}
+	if !testutil.RefExists(t, repo, "refs/heads/main") {
+		t.Error("the default branch disappeared")
+	}
+}
+
+// A forge-supplied name that is not a valid ref (a glob, an option-looking name)
+// is refused before any git mutation runs.
+func TestDeleteLocalBranchRefusesANameThatIsNotARef(t *testing.T) {
+	origin, repo := fixture(t)
+	ref := ghRef()
+	r := newResolver(t, origin, ref)
+	r.roots = []string{filepath.Dir(repo)}
+
+	for _, bad := range []string{"feat/*", "--all", "-D", "HEAD", "feat/../x"} {
+		if deleted, warning := r.DeleteLocalBranch(context.Background(), ref, bad); deleted || warning != "" {
+			t.Errorf("DeleteLocalBranch(%q) = (%v, %q), want a silent no-op", bad, deleted, warning)
+		}
+	}
+}
+
+// The checkout check fails closed: when git cannot say, the branch is left alone
+// and the notice says so.
+func TestDeleteLocalBranchRefusesWhenTheCheckoutCannotBeVerified(t *testing.T) {
+	origin, repo := fixture(t)
+	ref := ghRef()
+	r := newResolver(t, origin, ref)
+	r.roots = []string{filepath.Dir(repo)}
+	r.git = &gitcmd.Runner{Bin: gitFailingWorktreeList(t)}
+	testutil.RunGit(t, repo, "branch", "feat/x")
+
+	deleted, warning := r.DeleteLocalBranch(context.Background(), ref, "feat/x")
+	if deleted {
+		t.Error("it deleted a branch it could not verify")
+	}
+	if !strings.Contains(warning, "feat/x") {
+		t.Fatalf("warning = %q, want the unverifiable checkout named", warning)
+	}
+	if !testutil.RefExists(t, repo, "refs/heads/feat/x") {
+		t.Error("the branch was deleted despite the failed verification")
+	}
+}
+
+// gitFailingWorktreeList delegates to the real git and fails only `worktree
+// list`, so the fail-closed path is exercised without a corrupt repository.
+func gitFailingWorktreeList(t *testing.T) string {
+	t.Helper()
+	bin, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git not found: %v", err)
+	}
+	body := "#!/bin/sh\nif [ \"$1\" = \"worktree\" ]; then echo 'fake: no worktrees' >&2; exit 1; fi\nexec " + bin + " \"$@\"\n"
+	path := filepath.Join(t.TempDir(), "git-no-worktrees")
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // lockRef drops the `.lock` git itself would create: its presence makes the ref
