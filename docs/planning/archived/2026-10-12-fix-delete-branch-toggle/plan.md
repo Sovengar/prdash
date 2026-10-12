@@ -88,8 +88,11 @@ today's exact output.
 4. Orchestrator (out-of-env) updates the global skill in the same change.
 
 ## Progress
-Phase: review
+Phase: close
+Close: started 2026-10-12
 Review: 2026-10-12 — verdict FAIL (5 reviews: behavior + code/security/performance/docs lenses) — 0 critical, 0 high, 2 medium, 5 low → `fix`, change #29 left unopened
+Fix: 2026-10-12 — findings addressed: `ghPRFields` assertion added, README wording reconciled, return values named; gates green (test, coverage, mutation, lint)
+Review: 2026-10-12 (round 2, delta `8c19a60..HEAD`) — verdict PASS: 0 critical, 0 high, 0 medium, 0 low; round-1 findings verified resolved (3 LOWs deferred by decision) → change #29 opened for integration
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
 | GitHub repo auto-deletes and the request is no — the confirmation says so | ✅ | 4e3fb8f |

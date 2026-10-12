@@ -76,7 +76,7 @@ The keys are always visible in the TUI's keybar, and the actions are
 remappable in the `[keybindings]` table of
 `$XDG_CONFIG_HOME/prdash/config.toml`; the inventory of what each one does is in
 [`docs/FEATURES.md`](docs/FEATURES.md). With the merge armed, `m`/`r`/`s` pick
-the strategy, `tab` toggles whether the branch is deleted and any other key
+the strategy, `tab` toggles the branch-deletion request and any other key
 cancels (see [Merge](#merge-takes-two-keys-and-one-of-them-is-the-mode)).
 
 The Inbox paints **one section at a time**: on open it shows **Assigned**, and the
@@ -237,7 +237,7 @@ second key **is** the choice of mode, and there is no default mode:
 | `r` | rebase |
 | `m` | merge commit |
 | `s` | squash |
-| `tab` | toggle branch deletion |
+| `tab` | toggle the branch-deletion request |
 | `esc` | cancel |
 
 The reason is that a merge rewrites history and cannot be undone with a command,
@@ -262,11 +262,12 @@ when finishing (`merge (squash) ok · branch deleted`), because without that a
 
 ### The merge also names whether the branch is deleted
 
-The second of the two things the merge decides is whether the source branch is
-deleted once integrated. It lives in the same Confirmation and is changed with
-the same key that already had another target: `tab`. The box shows it whenever
-the merge is armed — `delete branch: yes (tab)` — and nowhere else, because it is
-not a decision that can be taken anywhere else.
+The second of the two things the merge decides is whether to **ask** for the
+source branch to be deleted once integrated — a request, not a guarantee. It
+lives in the same Confirmation and is changed with the same key that already had
+another target: `tab`. The box shows it whenever the merge is armed —
+`delete branch: yes (tab)` — and nowhere else, because it is not a decision that
+can be taken anywhere else.
 
 **The default is to delete.** That is what the forges do on their own and what
 whoever cleans up after a merged PR expects; asking for an extra gesture to avoid
@@ -277,9 +278,9 @@ of you.
 
 **On GitHub the request can be moot.** A repository with *"Automatically delete
 head branches"* (`deleteBranchOnMerge`) deletes the head branch on merge whatever
-the client asks; no `--delete-branch=false` prevents it. Where prdash knows the
-policy is on, turning the toggle off no longer reads as "the branch survives":
-the confirmation names the repository instead —
+the client asks — omitting `--delete-branch` does not stop it. Where prdash knows
+the policy is on, turning the toggle off no longer reads as "the branch
+survives": the confirmation names the repository instead —
 `delete branch: no (tab) — repo auto-deletes head branches`. When the policy is
 off or unknown nothing changes, and GitLab's per-MR `remove source branch` flag
 is honoured, so it keeps the compact label. The caveat is honest signalling, not
