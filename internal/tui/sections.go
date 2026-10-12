@@ -167,7 +167,7 @@ func (m Model) mergeConfirmText() string {
 	if len(parts) == 0 {
 		parts = append(parts, "the repository allows no merge strategy")
 	}
-	head := "merge " + refLabel(it) + "? " + m.deleteLabel()
+	head := "merge " + refLabel(it) + "? " + m.deleteLabel(it)
 	if reason := m.mergeBlockReason; reason != "" {
 		return head + " with " + reason +
 			" · press the mode anyway: " + strings.Join(parts, " · ") + " · esc cancel"
@@ -175,11 +175,18 @@ func (m Model) mergeConfirmText() string {
 	return head + " press the mode: " + strings.Join(parts, " · ") + " · esc cancel"
 }
 
-func (m Model) deleteLabel() string {
+// The toggle only requests deletion, and a repo with "automatically delete head
+// branches" deletes the branch on merge whatever the client asks: promising "no"
+// there would be a lie the forge breaks, so the confirmation says it instead.
+func (m Model) deleteLabel(it model.Item) string {
 	if m.deleteBranch {
 		return "delete branch: yes (tab)"
 	}
-	return "delete branch: no (tab)"
+	label := "delete branch: no (tab)"
+	if it.AutoDeleteKnown && it.AutoDeleteBranch {
+		label += " — repo auto-deletes head branches"
+	}
+	return label
 }
 
 func modeKey(mode forge.MergeMode) string {

@@ -53,7 +53,7 @@ Concise feature inventory of prdash. Details live in `../README.md` and `adr/`.
 
 - **Two-key merge** — first `m` arms; second key picks strategy.
 - **Strategies** — `r` rebase, `m` merge commit, `s` squash; only modes the repository allows are offered.
-- **Branch deletion** — `tab` toggles delete-after-merge (default: yes); shown in confirmation.
+- **Branch deletion** — `tab` requests delete-after-merge (default: yes); shown in confirmation. The request only controls the client-side delete: on GitHub, a repo with "Automatically delete head branches" (`deleteBranchOnMerge`) deletes the branch on merge regardless, so with the toggle off and that policy on the confirmation says `repo auto-deletes head branches` instead of promising "no".
 - **Cancel** — `esc` cancels; any other key cancels and is consumed (no re-dispatch).
 - **Pre-merge checks** — draft/merged/closed = hard block; conflict/CI failing/CI running/changes requested = soft warning (arms with notice).
 - **Commit pinning** — merge pinned to the commit read (`--match-head-commit` / `--sha`); refused if forge does not report it.

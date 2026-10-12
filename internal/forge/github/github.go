@@ -271,7 +271,7 @@ func qualifierFor(q forge.Query) (string, bool) {
 	}
 }
 
-const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName headRefOid additions deletions changedFiles author { login } repository { nameWithOwner name owner { login } mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed } commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
+const ghPRFields = `number title url state isDraft isCrossRepository mergeable reviewDecision updatedAt headRefName baseRefName headRefOid additions deletions changedFiles author { login } repository { nameWithOwner name owner { login } mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed deleteBranchOnMerge } commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 50) { nodes { __typename ... on CheckRun { status conclusion } ... on StatusContext { state context } } } } } } }`
 
 func searchQuery(qualifier, cursor string) string {
 	after := ""

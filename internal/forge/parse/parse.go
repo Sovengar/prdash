@@ -63,9 +63,10 @@ type ghPRNodeRepository struct {
 	Owner         struct {
 		Login string `json:"login"`
 	} `json:"owner"`
-	MergeCommitAllowed *bool `json:"mergeCommitAllowed"`
-	RebaseMergeAllowed *bool `json:"rebaseMergeAllowed"`
-	SquashMergeAllowed *bool `json:"squashMergeAllowed"`
+	MergeCommitAllowed  *bool `json:"mergeCommitAllowed"`
+	RebaseMergeAllowed  *bool `json:"rebaseMergeAllowed"`
+	SquashMergeAllowed  *bool `json:"squashMergeAllowed"`
+	DeleteBranchOnMerge *bool `json:"deleteBranchOnMerge"`
 }
 
 type ghPRNode struct {
@@ -182,6 +183,7 @@ func itemFromGHNode(n ghPRNode) model.Item {
 	it.Diff = diffFromGHNode(n)
 	it.HeadSHA = n.HeadRefOid
 	it.Merge = mergeRulesFromGHRepo(n.Repository)
+	it.AutoDeleteBranch, it.AutoDeleteKnown = autoDeleteFromGHRepo(n.Repository)
 	it.Mergeable = mergeableFromGH(n.Mergeable)
 	it.UpdatedAt = parseTime(n.UpdatedAt)
 	return it
@@ -197,6 +199,15 @@ func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 		Rebase:      *r.RebaseMergeAllowed,
 		Squash:      *r.SquashMergeAllowed,
 	}
+}
+
+// A nil pointer means the repository did not report the field: not knowing is
+// not the same as the policy being off.
+func autoDeleteFromGHRepo(r ghPRNodeRepository) (bool, bool) {
+	if r.DeleteBranchOnMerge == nil {
+		return false, false
+	}
+	return *r.DeleteBranchOnMerge, true
 }
 
 func mergeableFromGH(v string) model.Mergeability {
