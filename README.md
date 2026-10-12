@@ -613,3 +613,5 @@ tests, advisory — never a required check).
 Design: `docs/planning/archive/0001-mvp/` (plan, expected behaviour, context,
 closing summary); permanent decisions in `docs/adr/`; the Herdr integration
 contract in `docs/research/herdr-0.9.1-contract.md`.
+
+Smoke-test PR 3/10: a throwaway note to exercise the PR resolution cycle.
