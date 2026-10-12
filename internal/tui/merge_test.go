@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -269,12 +268,11 @@ type fakeCleaner struct {
 	reason   string
 	deleted  []string
 	warnings []string
-	err      error
 	got      model.Item
 	calls    int
 }
 
-func (f *fakeCleaner) CleanupAfterMerge(_ context.Context, it model.Item) (executor.CleanupResult, error) {
+func (f *fakeCleaner) CleanupAfterMerge(_ context.Context, it model.Item) executor.CleanupResult {
 	f.got = it
 	f.calls++
 	return executor.CleanupResult{
@@ -282,7 +280,7 @@ func (f *fakeCleaner) CleanupAfterMerge(_ context.Context, it model.Item) (execu
 		WorktreeReason:  f.reason,
 		Deleted:         f.deleted,
 		Warnings:        f.warnings,
-	}, f.err
+	}
 }
 
 func mergeOutcome(t *testing.T, cleaner ReviewCleaner) (Model, forge.Outcome) {
@@ -423,7 +421,7 @@ func TestReviewCleanupMsgDoesNotArmChannelReader(t *testing.T) {
 		t.Fatalf("a Cmd-delivered message must not return a cmd (withPump would arm an extra reader): %T", follow)
 	}
 	if got := updated.(Model).readers; got != 1 {
-		t.Fatalf("readers = %d, quiero 1", got)
+		t.Fatalf("readers = %d, want 1", got)
 	}
 }
 
@@ -452,13 +450,22 @@ func TestMergeCleanupRemovedDoesNotDuplicateToast(t *testing.T) {
 	}
 }
 
-func TestMergeOKCleanupErrorIsWarn(t *testing.T) {
-	cleaner := &fakeCleaner{err: errors.New("boom")}
+// A worktree that could not be removed is a warning on the merge, not a failed
+// merge: the rest of the cleanup still runs.
+func TestMergeOKCleanupWorktreeErrorIsWarn(t *testing.T) {
+	cleaner := &fakeCleaner{warnings: []string{"could not remove the worktree: boom"}}
 	m, cmd := applyMerge(t, cleaner)
 	m, _ = runCleanup(t, m, cmd)
 
-	if !strings.Contains(lastToast(m), "could not remove the worktree: boom") {
-		t.Errorf("notice = %q, want the reason of the delete failure", lastToast(m))
+	toast := lastToast(m)
+	if !strings.Contains(toast, "could not remove the worktree: boom") {
+		t.Errorf("notice = %q, want the reason of the delete failure", toast)
+	}
+	if !strings.Contains(toast, "ok") {
+		t.Errorf("notice = %q, the merge must still read as ok", toast)
+	}
+	if lastToastLevel(m) != toastWarning {
+		t.Errorf("level = %d, want warning", lastToastLevel(m))
 	}
 }
 
@@ -511,22 +518,21 @@ func TestReviewCleanupNoticeLevels(t *testing.T) {
 		name      string
 		baseLevel noticeLevel
 		result    executor.CleanupResult
-		err       error
 		wantLevel noticeLevel
 	}{
-		{"deleted on base OK", levelOK, executor.CleanupResult{WorktreeRemoved: true}, nil, levelOK},
-		{"deleted on base warn", levelWarn, executor.CleanupResult{WorktreeRemoved: true}, nil, levelWarn},
-		{"kept because dirty", levelOK, executor.CleanupResult{WorktreeReason: worktree.KeptUncommitted}, nil, levelWarn},
-		{"kept because unreadable", levelOK, executor.CleanupResult{WorktreeReason: worktree.KeptUnreadable}, nil, levelWarn},
-		{"delete failure", levelOK, executor.CleanupResult{}, errors.New("boom"), levelWarn},
-		{"deleted a branch", levelOK, executor.CleanupResult{Deleted: []string{"review branch"}}, nil, levelOK},
-		{"branch warning", levelOK, executor.CleanupResult{Warnings: []string{"could not delete"}}, nil, levelWarn},
-		{"no review mounted", levelOK, executor.CleanupResult{}, nil, levelOK},
-		{"no review on base warn", levelWarn, executor.CleanupResult{}, nil, levelWarn},
+		{"deleted on base OK", levelOK, executor.CleanupResult{WorktreeRemoved: true}, levelOK},
+		{"deleted on base warn", levelWarn, executor.CleanupResult{WorktreeRemoved: true}, levelWarn},
+		{"kept because dirty", levelOK, executor.CleanupResult{WorktreeReason: worktree.KeptUncommitted}, levelWarn},
+		{"kept because unreadable", levelOK, executor.CleanupResult{WorktreeReason: worktree.KeptUnreadable}, levelWarn},
+		{"removed with a warning", levelOK, executor.CleanupResult{WorktreeRemoved: true, Warnings: []string{"could not delete"}}, levelWarn},
+		{"deleted a branch", levelOK, executor.CleanupResult{Deleted: []string{"review branch"}}, levelOK},
+		{"branch warning", levelOK, executor.CleanupResult{Warnings: []string{"could not delete"}}, levelWarn},
+		{"no review mounted", levelOK, executor.CleanupResult{}, levelOK},
+		{"no review on base warn", levelWarn, executor.CleanupResult{}, levelWarn},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, level := reviewCleanupNotice(base, tc.baseLevel, tc.result, tc.err)
+			_, level := reviewCleanupNotice(base, tc.baseLevel, tc.result)
 			if level != tc.wantLevel {
 				t.Fatalf("level = %d, want %d", level, tc.wantLevel)
 			}
@@ -581,9 +587,9 @@ func TestCleanupDoesNotTriggerOnOtherOutcomes(t *testing.T) {
 		{"approve", forge.Outcome{Kind: forge.ActionApprove, OK: true}},
 		{"retarget", forge.Outcome{Kind: forge.ActionRetarget, OK: true, Base: "main"}},
 		{"merge fails", forge.Outcome{Kind: forge.ActionMerge, OK: false, Msg: "boom"}},
-		{"conflicto", forge.Outcome{Kind: forge.ActionMerge, Conflict: true, Msg: "changed"}},
+		{"conflict", forge.Outcome{Kind: forge.ActionMerge, Conflict: true, Msg: "changed"}},
 		{"no mergeable", forge.Outcome{Kind: forge.ActionMerge, Unmergeable: true, Msg: "rebase"}},
-		{"permiso", forge.Outcome{Kind: forge.ActionMerge, Perm: true, Msg: "no"}},
+		{"permission", forge.Outcome{Kind: forge.ActionMerge, Perm: true, Msg: "no"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

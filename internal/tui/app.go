@@ -70,7 +70,6 @@ type reviewCleanupMsg struct {
 	base   string
 	level  noticeLevel
 	result executor.CleanupResult
-	err    error
 }
 
 type mergeabilityMsg struct {

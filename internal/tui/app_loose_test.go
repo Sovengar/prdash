@@ -137,8 +137,8 @@ func (wiringReviewLookup) ActiveReview(model.Item) (worktree.Worktree, bool) {
 
 type wiringReviewCleaner struct{}
 
-func (wiringReviewCleaner) CleanupAfterMerge(context.Context, model.Item) (executor.CleanupResult, error) {
-	return executor.CleanupResult{}, nil
+func (wiringReviewCleaner) CleanupAfterMerge(context.Context, model.Item) executor.CleanupResult {
+	return executor.CleanupResult{}
 }
 
 func modelWithLoadingStatuses(t *testing.T) Model {

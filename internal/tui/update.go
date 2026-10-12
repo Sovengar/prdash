@@ -182,27 +182,23 @@ func (m *Model) reviewCleanupCmd(it model.Item, base string, level noticeLevel) 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(appCtx, reviewCleanupTimeout)
 		defer cancel()
-		result, err := cleaner.CleanupAfterMerge(ctx, it)
-		return reviewCleanupMsg{base: base, level: level, result: result, err: err}
+		return reviewCleanupMsg{base: base, level: level, result: cleaner.CleanupAfterMerge(ctx, it)}
 	}
 }
 
 // A no-op re-emits nothing: re-stacking would duplicate the merge notice.
 func (m *Model) applyReviewCleanup(msg reviewCleanupMsg) {
-	if msg.err == nil && !msg.result.WorktreeRemoved && msg.result.WorktreeReason == "" &&
+	if !msg.result.WorktreeRemoved && msg.result.WorktreeReason == "" &&
 		len(msg.result.Deleted) == 0 && len(msg.result.Warnings) == 0 {
 		return
 	}
-	text, level := reviewCleanupNotice(msg.base, msg.level, msg.result, msg.err)
+	text, level := reviewCleanupNotice(msg.base, msg.level, msg.result)
 	m.setNoticeReplacing(msg.base, text, level)
 }
 
 // Never suppresses the merge's facts; it appends what the cleanup did, target
 // by target, and warns when any target could not be cleaned.
-func reviewCleanupNotice(base string, baseLevel noticeLevel, res executor.CleanupResult, err error) (string, noticeLevel) {
-	if err != nil {
-		return base + " · could not remove the worktree: " + err.Error(), levelWarn
-	}
+func reviewCleanupNotice(base string, baseLevel noticeLevel, res executor.CleanupResult) (string, noticeLevel) {
 	text, level := base, baseLevel
 	if res.WorktreeRemoved {
 		text += " · worktree removed"
