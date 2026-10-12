@@ -27,6 +27,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The delete-branch toggle no longer lies on GitHub auto-delete repos.** A
+  repository with "Automatically delete head branches" (`deleteBranchOnMerge`)
+  deletes the head branch on merge whatever the client sends, so with the toggle
+  off the confirmation now reads
+  `delete branch: no (tab) — repo auto-deletes head branches` instead of
+  promising a "no" the forge will not keep. The label is unchanged when the
+  policy is off or unknown and on GitLab, where the per-MR `remove source
+  branch` flag is honoured.
+
 - **`Version.AtLeast` covered its major-below branch.** Every test compared
   against a `0.x` minimum, whose `Major` is 0, so `v.Major < min.Major` never
   executed. A `1.0.0` minimum case closes it: `internal/herdr` back to 100%.
