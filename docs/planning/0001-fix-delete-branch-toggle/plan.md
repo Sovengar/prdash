@@ -91,12 +91,12 @@ today's exact output.
 Phase: execution
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
-| GitHub repo auto-deletes and the request is no — the confirmation says so | ⬜ | |
-| GitHub repo auto-deletes but the request is yes — no caveat | ⬜ | |
-| GitHub repo policy explicitly off and the request is no — no caveat | ⬜ | |
-| GitHub repo policy unknown and the request is no — no caveat | ⬜ | |
-| GitLab is unchanged | ⬜ | |
-| The request still drives the client-side delete flag | ⬜ | |
-| The toggle still turns off without disarming or firing | ⬜ | |
-| A narrow terminal degrades honestly | ⬜ | |
-| The policy travels with the item data | ✅ | |
+| GitHub repo auto-deletes and the request is no — the confirmation says so | ✅ | 4e3fb8f |
+| GitHub repo auto-deletes but the request is yes — no caveat | ✅ | 4e3fb8f |
+| GitHub repo policy explicitly off and the request is no — no caveat | ✅ | be8ad59 |
+| GitHub repo policy unknown and the request is no — no caveat | ✅ | be8ad59 |
+| GitLab is unchanged | ✅ | be8ad59 |
+| The request still drives the client-side delete flag | ✅ | 4e3fb8f |
+| The toggle still turns off without disarming or firing | ✅ | 4e3fb8f |
+| A narrow terminal degrades honestly | ✅ | be8ad59 |
+| The policy travels with the item data | ✅ | 88d9dbe |

@@ -275,6 +275,16 @@ the rest of the session, and `tab` again brings it back. The value is per sessio
 not per item: the housekeeping delete does not depend on the PR you have in front
 of you.
 
+**On GitHub the request can be moot.** A repository with *"Automatically delete
+head branches"* (`deleteBranchOnMerge`) deletes the head branch on merge whatever
+the client asks; no `--delete-branch=false` prevents it. Where prdash knows the
+policy is on, turning the toggle off no longer reads as "the branch survives":
+the confirmation names the repository instead —
+`delete branch: no (tab) — repo auto-deletes head branches`. When the policy is
+off or unknown nothing changes, and GitLab's per-MR `remove source branch` flag
+is honoured, so it keeps the compact label. The caveat is honest signalling, not
+enforcement: prdash cannot keep the "no" there and does not pretend to.
+
 The final notice says what happened to the branch, and there are three different
 endings because they are three different situations:
 
