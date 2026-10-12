@@ -1,4 +1,4 @@
-Status: approved
+Status: implemented
 
 # 0001 — The delete-branch toggle stops lying on auto-delete repos (fix)
 

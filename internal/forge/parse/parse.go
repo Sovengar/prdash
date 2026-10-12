@@ -203,7 +203,7 @@ func mergeRulesFromGHRepo(r ghPRNodeRepository) model.MergeRules {
 
 // A nil pointer means the repository did not report the field: not knowing is
 // not the same as the policy being off.
-func autoDeleteFromGHRepo(r ghPRNodeRepository) (bool, bool) {
+func autoDeleteFromGHRepo(r ghPRNodeRepository) (branch, known bool) {
 	if r.DeleteBranchOnMerge == nil {
 		return false, false
 	}

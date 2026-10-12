@@ -71,3 +71,11 @@ func TestPRFieldsAskForThePinAndTheRules(t *testing.T) {
 		}
 	}
 }
+
+// The caveat is only as good as the query that fetches it: without this field the
+// policy stays unknown and the auto-delete warning silently disappears.
+func TestPRFieldsAskForTheAutoDeletePolicy(t *testing.T) {
+	if !strings.Contains(ghPRFields, "deleteBranchOnMerge") {
+		t.Error("ghPRFields does not ask for deleteBranchOnMerge")
+	}
+}
