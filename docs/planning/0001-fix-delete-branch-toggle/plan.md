@@ -88,7 +88,7 @@ today's exact output.
 4. Orchestrator (out-of-env) updates the global skill in the same change.
 
 ## Progress
-Phase: planning
+Phase: execution
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
 | GitHub repo auto-deletes and the request is no — the confirmation says so | ⬜ | |
@@ -99,4 +99,4 @@ Phase: planning
 | The request still drives the client-side delete flag | ⬜ | |
 | The toggle still turns off without disarming or firing | ⬜ | |
 | A narrow terminal degrades honestly | ⬜ | |
-| The policy travels with the item data | ⬜ | |
+| The policy travels with the item data | ✅ | |

@@ -81,6 +81,28 @@ func TestGHNodeCarriesTheAutoDeletePolicy(t *testing.T) {
 	}
 }
 
+// A repo that reports the policy off is known-off, not unknown: the value came
+// in as false and must stay false, or "off" would read as auto-delete.
+func TestGHNodeWithAutoDeleteOffKeepsTheValue(t *testing.T) {
+	raw := `{"data":{"search":{"pageInfo":{"hasNextPage":false,"endCursor":null},
+		"nodes":[{"number":7,"title":"T","url":"u","state":"OPEN","isDraft":false,
+		"reviewDecision":"","headRefName":"f","baseRefName":"main",
+		"additions":1,"deletions":0,"changedFiles":1,
+		"author":{"login":"me"},
+		"repository":{"nameWithOwner":"acme/widget","name":"widget",
+			"owner":{"login":"acme"},"deleteBranchOnMerge":false}}]}}}`
+	items, _, err := ParseGHGraphQLSearch(raw)
+	if err != nil {
+		t.Fatalf("ParseGHGraphQLSearch: %v", err)
+	}
+	if !items[0].AutoDeleteKnown {
+		t.Error("AutoDeleteKnown = false, want true: the repository did report the policy")
+	}
+	if items[0].AutoDeleteBranch {
+		t.Error("AutoDeleteBranch = true, want false: the repository reported it off")
+	}
+}
+
 // A repo that does not report the policy is unknown, not "off": the confirmation
 // must not invent a guarantee.
 func TestGHNodeWithoutAutoDeletePolicyStaysUnknown(t *testing.T) {
