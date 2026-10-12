@@ -190,6 +190,12 @@ func (r *Resolver) DeleteReviewRefs(ctx context.Context, repo string, it model.I
 // git and would surprise the user anyway. No local clone, an unknown branch and
 // a checked-out branch are all silent no-ops — prdash does not own the user's
 // clone and never touches a branch it cannot confidently identify.
+//
+// The branch is a forge-supplied string used as an argument to a destructive
+// command, so it is validated as a ref before anything else, and the clone's
+// default branch (origin/HEAD) is never a candidate even when checked out
+// nowhere: a PR whose head is named like the default would otherwise delete the
+// branch the whole clone is built around.
 func (r *Resolver) DeleteLocalBranch(ctx context.Context, ref model.RepoRef, branch string) (bool, string) {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
@@ -199,7 +205,22 @@ func (r *Resolver) DeleteLocalBranch(ctx context.Context, ref model.RepoRef, bra
 	if !ok || !isRepo(repo) {
 		return false, ""
 	}
-	if !r.refExists(ctx, repo, "refs/heads/"+branch) || r.checkedOut(ctx, repo, branch) {
+	if !r.validBranch(ctx, repo, branch) {
+		return false, ""
+	}
+	if r.isDefaultBranch(ctx, repo, branch) {
+		return false, "left the local default branch " + branch + " alone"
+	}
+	if !r.refExists(ctx, repo, "refs/heads/"+branch) {
+		return false, ""
+	}
+	// An unverifiable checkout is a reason to keep, not to proceed: the branch
+	// stays and the notice says why.
+	held, err := r.checkedOut(ctx, repo, branch)
+	if err != nil {
+		return false, "could not check whether " + branch + " is checked out: " + err.Error()
+	}
+	if held {
 		return false, ""
 	}
 	if _, err := r.git.Run(ctx, repo, "branch", "-D", branch); err != nil {
@@ -255,18 +276,36 @@ func (r *Resolver) refExists(ctx context.Context, repo, ref string) bool {
 // `worktree list` is the only view that sees every checkout: HEAD alone misses
 // the linked worktrees of the same clone, and one of those is exactly the
 // review worktree this cleanup is racing.
-func (r *Resolver) checkedOut(ctx context.Context, repo, branch string) bool {
+func (r *Resolver) checkedOut(ctx context.Context, repo, branch string) (bool, error) {
 	out, err := r.git.Run(ctx, repo, "worktree", "list", "--porcelain")
 	if err != nil {
-		return false
+		return false, err
 	}
 	want := "branch refs/heads/" + branch
 	for _, line := range strings.Split(out, "\n") {
 		if strings.TrimSpace(line) == want {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
+}
+
+// check-ref-format and not a pattern of our own: it is git's own rule for what
+// a branch name may be, and it rejects the globs show-ref would match and the
+// option-looking names branch -D would read as switches.
+func (r *Resolver) validBranch(ctx context.Context, repo, branch string) bool {
+	_, err := r.git.Run(ctx, repo, "check-ref-format", "--branch", branch)
+	return err == nil
+}
+
+// origin/HEAD is the clone's default branch as the remote names it; a short
+// read like origin/main is what symbolic-ref --short hands back.
+func (r *Resolver) isDefaultBranch(ctx context.Context, repo, branch string) bool {
+	out, err := r.git.Run(ctx, repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+	if err != nil {
+		return false
+	}
+	return strings.TrimPrefix(strings.TrimSpace(out), "origin/") == branch
 }
 
 func (r *Resolver) buildIndex() map[string]string {
