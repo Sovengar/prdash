@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"prdash/internal/config"
 	"prdash/internal/forge"
@@ -141,7 +143,67 @@ func (m Model) hintLines() []string {
 	if m.mergeArmed {
 		return wrapHint(m.mergeConfirmText(), m.contentWidth(), func(s string) string { return styleWarn.Render(s) })
 	}
-	return wrapHint(strings.Join(m.cfg.Hints(m.dynamicHints()), hintSep), m.contentWidth(), func(s string) string { return styleHint.Render(s) })
+	hints := m.cfg.Hints(m.dynamicHints())
+	return wrapHintKeys(strings.Join(hints, hintSep), hints, m.contentWidth())
+}
+
+func wrapHintKeys(text string, hints []string, width int) []string {
+	plain := wrapText(text, width)
+	plain = plain[:max(0, min(maxHintLines, len(plain)))]
+	marks := hintKeyMarks(hints)
+	next := 0
+	lines := make([]string, 0, len(plain))
+	for _, line := range plain {
+		lines = append(lines, paintHintLine(line, marks, &next))
+	}
+	return lines
+}
+
+func hintKeyMarks(hints []string) []bool {
+	var marks []bool
+	for i, h := range hints {
+		if i > 0 {
+			marks = append(marks, false)
+		}
+		words := strings.Fields(h)
+		if len(words) == 0 {
+			continue
+		}
+		marks = append(marks, true)
+		for range words[1:] {
+			marks = append(marks, false)
+		}
+	}
+	return marks
+}
+
+func paintHintLine(line string, marks []bool, next *int) string {
+	var b strings.Builder
+	b.Grow(len(line))
+	for i := 0; i < len(line); {
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if unicode.IsSpace(r) {
+			b.WriteString(line[i : i+size])
+			i += size
+			continue
+		}
+		j := i + size
+		for j < len(line) {
+			r, size = utf8.DecodeRuneInString(line[j:])
+			if unicode.IsSpace(r) {
+				break
+			}
+			j += size
+		}
+		style := styleHint
+		if *next < len(marks) && marks[*next] {
+			style = styleCursor
+		}
+		*next++
+		b.WriteString(style.Render(line[i:j]))
+		i = j
+	}
+	return b.String()
 }
 
 func (m Model) dynamicHints() config.HintState {
