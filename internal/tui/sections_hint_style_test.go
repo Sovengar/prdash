@@ -1,9 +1,29 @@
 package tui
 
 import (
+	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestMain(m *testing.M) {
+	done := make(chan struct{})
+	go func() {
+		next := 0
+		paintHintLine("q quit", []bool{true}, &next)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		fmt.Fprintln(os.Stderr, "paintHintLine did not terminate")
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
 
 func TestHintLinesPaintTheKeyWithTheCursorStyleAndKeepTheDescriptionDim(t *testing.T) {
 	m := newTestModel(t)
@@ -78,5 +98,118 @@ func TestMergeConfirmKeepsTheWholeLineWarning(t *testing.T) {
 		if want := styleWarn.Render(plain); line != want {
 			t.Errorf("the merge confirmation changed its style: got %q, want %q", line, want)
 		}
+	}
+}
+
+func TestHintKeyMarksMarkOnlyTheFirstWordOfEachHint(t *testing.T) {
+	tests := []struct {
+		name  string
+		hints []string
+		want  []bool
+	}{
+		{"no hints", nil, []bool{}},
+		{"one hint", []string{"q quit"}, []bool{true, false}},
+		{"multi-word description", []string{"tab select the next section"}, []bool{true, false, false, false, false}},
+		{"several hints", []string{"q quit", "j/k move"}, []bool{true, false, false, true, false}},
+		{"empty hint between", []string{"", "q quit"}, []bool{false, true, false}},
+		{"blank hint between", []string{"  \t ", "q quit"}, []bool{false, true, false}},
+		{"only empty", []string{""}, []bool{}},
+		{"only blank", []string{"   "}, []bool{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hintKeyMarks(tt.hints); !slices.Equal(got, tt.want) {
+				t.Errorf("hintKeyMarks(%q) = %v, want %v", tt.hints, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPaintHintLinePaintsOnlyMarkedTokens(t *testing.T) {
+	tests := []struct {
+		name  string
+		line  string
+		marks []bool
+		want  string
+	}{
+		{
+			"marked token",
+			"q quit",
+			[]bool{true},
+			styleCursor.Render("q") + " " + styleHint.Render("quit"),
+		},
+		{
+			"leading space",
+			" q quit",
+			[]bool{true},
+			" " + styleCursor.Render("q") + " " + styleHint.Render("quit"),
+		},
+		{
+			"marker exhausts before the line",
+			"q quit now",
+			[]bool{true},
+			styleCursor.Render("q") + " " + styleHint.Render("quit") + " " + styleHint.Render("now"),
+		},
+		{
+			"more markers than words",
+			"q",
+			[]bool{true, false, true},
+			styleCursor.Render("q"),
+		},
+		{
+			"no markers",
+			"q quit",
+			nil,
+			styleHint.Render("q") + " " + styleHint.Render("quit"),
+		},
+		{
+			"empty line",
+			"",
+			[]bool{true},
+			"",
+		},
+		{
+			"blank line",
+			"   ",
+			[]bool{true},
+			"   ",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			next := 0
+			if got := paintHintLine(tt.line, tt.marks, &next); got != tt.want {
+				t.Errorf("paintHintLine(%q, %v) = %q, want %q", tt.line, tt.marks, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWrapHintKeysKeepsThePlainLineWhenThereAreNoHints(t *testing.T) {
+	got := wrapHintKeys("", nil, 80)
+	if len(got) != 1 || got[0] != "" {
+		t.Errorf("wrapHintKeys with no hints = %q, want one empty line", got)
+	}
+}
+
+func TestPaintHintLineTerminates(t *testing.T) {
+	type painted struct {
+		line string
+		next int
+	}
+	done := make(chan painted, 1)
+	go func() {
+		next := 0
+		done <- painted{paintHintLine("q quit", []bool{true}, &next), next}
+	}()
+
+	select {
+	case got := <-done:
+		want := styleCursor.Render("q") + " " + styleHint.Render("quit")
+		if got.line != want || got.next != 2 {
+			t.Errorf("paintHintLine = %q, next %d; want %q, next 2", got.line, got.next, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("paintHintLine did not terminate")
 	}
 }
