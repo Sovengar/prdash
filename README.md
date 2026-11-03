@@ -79,6 +79,7 @@ prdash            # the inbox TUI
 prdash --print    # the inbox as plain text (includes the worktree path of the
                   # reviews already mounted), without opening the interface
 prdash worktrees  # lists the review worktrees owned by prdash
+prdash attach [prompt...]   # opens the configured AI harness on this checkout
 ```
 
 The keys are always visible in the TUI's keybar, and the actions are
@@ -527,6 +528,27 @@ hunk = "hunk diff main...HEAD --watch"
 The panes receive `PRDASH_BASE` with the target branch of the item, besides
 `PRDASH_REPO`, `PRDASH_NUMBER`, `PRDASH_WORKTREE`, `PRDASH_BRANCH` and
 `PRDASH_URL`.
+
+### Ask AI (`[ai]`)
+
+`prdash attach [prompt...]` opens an AI harness on the current checkout. The
+argv is built by [`agentbridge`](https://github.com/Sovengar/agentbridge), never
+by prdash: adding an agent is a config value, not a code change.
+
+```toml
+[ai]
+harness = "pi"      # display name from `agentbridge agents`
+model   = ""        # empty omits the flag
+effort  = ""        # effort level; empty omits the flag
+```
+
+With Herdr available the agent opens in a **new pane** (`pane split` + `pane
+run`) and prdash stays in the inbox; without it the agent replaces the process
+in the foreground, so it keeps the TTY, the signals and its exit code.
+
+An agent whose interactive UI takes no initial prompt (`jcode`, `hermes chat`)
+is started in its one-shot form instead, so the prompt is not silently dropped.
+With no prompt, the interactive session starts bare.
 
 ### Worktree management (`prdash worktrees`)
 
