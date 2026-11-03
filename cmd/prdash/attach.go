@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sovengar/ai"
+	"github.com/sovengar/agentbridge"
 
 	"prdash/internal/config"
 	"prdash/internal/herdr"
@@ -21,19 +21,19 @@ import (
 // initial prompt falls back to its headless form so the prompt is not lost.
 func attachArgv(cfg config.AIConfig, prompt string) ([]string, error) {
 	if cfg.Harness == "" {
-		return nil, fmt.Errorf("no AI harness configured (ai.harness in the config)")
+		return nil, fmt.Errorf("no AI harness configured (agentbridge.harness in the config)")
 	}
-	req := ai.Request{
-		Agent:  ai.Agent{Name: cfg.Harness, Binary: cfg.Harness},
+	req := agentbridge.Request{
+		Agent:  agentbridge.Agent{Name: cfg.Harness, Binary: cfg.Harness},
 		Model:  cfg.Model,
 		Effort: cfg.Effort,
 		Prompt: prompt,
 	}
-	caps := ai.CapabilitiesFor(cfg.Harness)
+	caps := agentbridge.CapabilitiesFor(cfg.Harness)
 	if caps.NoInteractivePrompt && prompt != "" {
-		return ai.HeadlessArgs(req)
+		return agentbridge.HeadlessArgs(req)
 	}
-	return ai.InteractiveArgs(req), nil
+	return agentbridge.InteractiveArgs(req), nil
 }
 
 // runAttach starts the configured agent with the prompt in a herdr pane when
