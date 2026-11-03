@@ -96,7 +96,7 @@ type Config struct {
 }
 
 // AIConfig is the harness route for `prdash attach`. The argv comes from the
-// shared github.com/sovengar/ai capability table, so prdash holds no per-agent
+// shared github.com/sovengar/agentbridge capability table, so prdash holds no per-agent
 // flags.
 type AIConfig struct {
 	Harness string
