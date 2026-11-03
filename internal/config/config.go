@@ -89,9 +89,19 @@ type Config struct {
 	WorktreeDir     string
 	Forges          Forges
 	Tools           Tools
+	AI              AIConfig
 	AutoReview      AutoReview
 	Keybindings     Keybindings
 	Commands        Commands
+}
+
+// AIConfig is the harness route for `prdash attach`. The argv comes from the
+// shared github.com/sovengar/ai capability table, so prdash holds no per-agent
+// flags.
+type AIConfig struct {
+	Harness string
+	Model   string
+	Effort  string
 }
 
 type fileConfig struct {
@@ -102,6 +112,7 @@ type fileConfig struct {
 	WorktreeDir     *string           `toml:"worktree_dir"`
 	Forge           *forgeFile        `toml:"forge"`
 	Tools           *toolsFile        `toml:"tools"`
+	AI              *aiFile           `toml:"ai"`
 	AutoReview      *autoReviewFile   `toml:"autoreview"`
 	Keybindings     map[string]string `toml:"keybindings"`
 	Commands        map[string]string `toml:"commands"`
@@ -138,6 +149,12 @@ type toolsFile struct {
 	Editor *string `toml:"editor"`
 	GH     *string `toml:"gh"`
 	Glab   *string `toml:"glab"`
+}
+
+type aiFile struct {
+	Harness *string `toml:"harness"`
+	Model   *string `toml:"model"`
+	Effort  *string `toml:"effort"`
 }
 
 type autoReviewFile struct {
@@ -196,6 +213,11 @@ func LoadFrom(path string) (Config, string) {
 		mergeString(fc.Tools.Editor, &cfg.Tools.Editor)
 		mergeString(fc.Tools.GH, &cfg.Tools.GH)
 		mergeString(fc.Tools.Glab, &cfg.Tools.Glab)
+	}
+	if fc.AI != nil {
+		mergeString(fc.AI.Harness, &cfg.AI.Harness)
+		mergeString(fc.AI.Model, &cfg.AI.Model)
+		mergeString(fc.AI.Effort, &cfg.AI.Effort)
 	}
 	if fc.AutoReview != nil {
 		if fc.AutoReview.Enabled != nil {
@@ -270,6 +292,7 @@ func Defaults() Config {
 			GH:     "gh",
 			Glab:   "glab",
 		},
+		AI:          AIConfig{},
 		AutoReview:  AutoReview{Allowlist: []string{}},
 		Keybindings: DefaultKeybindings(),
 		Commands:    DefaultCommands(),

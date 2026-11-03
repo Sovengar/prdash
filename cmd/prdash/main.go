@@ -29,6 +29,7 @@ const (
 	modeTUI mode = iota
 	modePrint
 	modeWorktrees
+	modeAttach
 )
 
 type opts struct {
@@ -39,6 +40,12 @@ type opts struct {
 
 func parseOpts(args []string) (opts, error) {
 	o := opts{mode: modeTUI, sub: "list"}
+
+	if len(args) > 0 && args[0] == "attach" {
+		o.mode = modeAttach
+		o.args = args[1:]
+		return o, nil
+	}
 
 	if len(args) > 0 && args[0] == "worktrees" {
 		o.mode = modeWorktrees
@@ -72,6 +79,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	cfg, warn := config.Load()
 	if warn != "" {
 		_, _ = fmt.Fprintln(stderr, "prdash:", warn)
+	}
+
+	if o.mode == modeAttach {
+		return runAttach(cfg, o.args, stdout, stderr)
 	}
 
 	if o.mode == modeWorktrees {
