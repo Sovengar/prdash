@@ -97,6 +97,11 @@ func (e *Executor) Mount(ctx context.Context, it model.Item) (Result, error) {
 	return res, nil
 }
 
+// LocalRepo reports the user's clone for ref, without requiring a mounted review.
+func (e *Executor) LocalRepo(ref model.RepoRef) (string, bool) {
+	return e.Resolver.ResolveLocal(ref)
+}
+
 func (e *Executor) ActiveReview(it model.Item) (worktree.Worktree, bool) {
 	rec, ok := e.Resolver.ActiveReview(it.ID())
 	if !ok || rec.Worktree == "" {

@@ -157,13 +157,13 @@ func TestRebaseRunsFromTheItemBranch(t *testing.T) {
 	}
 }
 
-func TestSimulateNeedsAMountedReview(t *testing.T) {
+func TestSimulateNeedsALocalClone(t *testing.T) {
 	_, _, it := fixture(t)
 	svc := newService(t, stubLocator{}, fakeSim(t, writeJPEG(t)))
 
 	_, err := svc.Simulate(context.Background(), it, KindMerge)
-	if err == nil || !strings.Contains(err.Error(), "mounted") {
-		t.Fatalf("err = %v, want a warning that the review is not mounted", err)
+	if err == nil || !strings.Contains(err.Error(), "clone") {
+		t.Fatalf("err = %v, want a warning that there is no local clone", err)
 	}
 }
 

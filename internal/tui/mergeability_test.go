@@ -190,7 +190,7 @@ func TestConflictMarkerIsNotInTheTitleCell(t *testing.T) {
 	it := mkItem("github", "github.com", "acme/widget", "Add widget", 1, "")
 	it.Mergeable = model.Mergeability{Known: true, Conflicted: true}
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, it)}, prefixCommon)
-	cells := itemCells(it, model.SectionReview, "me", lay)
+	cells := itemCells(it, model.SectionReview, lay)
 
 	if got := cells[colTitleIdx].text; got != "Add widget" {
 		t.Fatalf("title cell = %q, want the plain title", got)

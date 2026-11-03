@@ -19,7 +19,6 @@ const (
 	colForgeIdx
 	colRefIdx
 	colTitleIdx
-	colRoleIdx
 	colStateIdx
 	colChecksIdx
 	colDiffIdx
@@ -30,7 +29,6 @@ var tableColumns = []tableColumn{
 	{"FORGE", colForge},
 	{"ITEM", itemWidthMin},
 	{"TITLE", colTitle},
-	{"ROLE", colRole},
 	{"STATE", colState},
 	{"CHECKS", colChecks},
 	{"DIFF", colDiff},
@@ -71,14 +69,13 @@ func headerLine(l refLayout, innerWidth int) string {
 	return styleCount.Render(strings.TrimRight(b.String(), " "))
 }
 
-func itemCells(it model.Item, sec model.Section, viewer string, l refLayout) []cell {
+func itemCells(it model.Item, sec model.Section, l refLayout) []cell {
 	refW := l.cols[colRefIdx].width
 	return []cell{
 		markCell(it, l.cols[colMarkIdx].width),
 		{text: truncate(forgeBadge(it), textWidth(l.cols[colForgeIdx].width)), style: styleForge, width: l.cols[colForgeIdx].width},
 		{text: truncateTail(refCellText(it, l.mode, l.prefixOf(sec)), textWidth(refW)), style: styleRef, width: refW},
 		{text: truncate(it.Title, textWidth(l.cols[colTitleIdx].width)), style: styleTitle, width: l.cols[colTitleIdx].width},
-		{text: truncate(roleText(it, viewer), textWidth(l.cols[colRoleIdx].width)), style: styleRole, width: l.cols[colRoleIdx].width},
 		{text: truncate(state.Derive(it).String(), textWidth(l.cols[colStateIdx].width)), style: styleForState(state.Derive(it)), width: l.cols[colStateIdx].width},
 		{text: truncate(checksText(it.Checks), textWidth(l.cols[colChecksIdx].width)), style: styleChecks(it.Checks), width: l.cols[colChecksIdx].width},
 		diffCell(it.Diff, l.cols[colDiffIdx].width),

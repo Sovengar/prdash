@@ -106,6 +106,20 @@ func newHarness(t *testing.T, opts harnessOpts) *harness {
 	return &harness{origin: opts.origin, ref: ref, cloneDir: cloneDir, wtDir: wtDir, resolver: resolver, pr: pr, ex: ex}
 }
 
+func TestLocalRepoReportsTheCloneEvenWithoutAMountedReview(t *testing.T) {
+	_, repo := baseFixture(t)
+	h := newHarness(t, harnessOpts{})
+
+	if _, ok := h.ex.LocalRepo(h.ref); ok {
+		t.Fatal("LocalRepo claimed a clone before any was remembered")
+	}
+	h.ex.Resolver.Remember(h.ref, repo)
+	got, ok := h.ex.LocalRepo(h.ref)
+	if !ok || got != repo {
+		t.Errorf("LocalRepo = (%q, %v), want (%q, true)", got, ok, repo)
+	}
+}
+
 func TestMountFromLocalRepoRegistersActiveReview(t *testing.T) {
 	origin, repo := baseFixture(t)
 	pushPR(t, origin, 7, "one")

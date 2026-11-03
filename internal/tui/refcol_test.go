@@ -119,7 +119,7 @@ func TestItemCellsKeepTheNumberWhenClipped(t *testing.T) {
 		"APPCITTI/vsocial/backend/other-naïve-service-with-a-very-long-name",
 	)
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixCommon)
-	ref := itemCells(items[0], model.SectionReview, "me", lay)[colRefIdx].text
+	ref := itemCells(items[0], model.SectionReview, lay)[colRefIdx].text
 
 	if !strings.HasSuffix(ref, "#100") {
 		t.Errorf("cell ITEM = %q, want the suffix %q", ref, "#100")
@@ -267,7 +267,7 @@ func TestRefColInvariantes(t *testing.T) {
 							t.Fatalf("round %d in %v: cell %q, want the suffix %q of %q", round, mode, want, recon, full)
 						}
 					}
-					cell := itemCells(it, sec.Kind, "me", lay)[colRefIdx].text
+					cell := itemCells(it, sec.Kind, lay)[colRefIdx].text
 					if cell == "" {
 						t.Fatalf("round %d in %v: empty cell for %q", round, mode, full)
 					}

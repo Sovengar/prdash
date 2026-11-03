@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"prdash/internal/forge/model"
@@ -18,6 +19,8 @@ import (
 type Place struct {
 	Repo   string
 	Branch string
+	// Source is the forge ref to fetch when no review worktree exists yet, e.g. refs/pull/7/head.
+	Source string
 }
 
 type Locator interface {
@@ -33,12 +36,18 @@ type Result struct {
 
 const keepImages = 20
 
+// simBranch is the throwaway branch the temporary clone checks out; the clone is deleted with it.
+const simBranch = "prdash-sim"
+
 type Service struct {
 	Locator  Locator
 	Runner   *Runner
 	CacheDir string
 	Mkdir    func(path string, perm fs.FileMode) error
 	Git      *gitcmd.Runner
+
+	kindsOnce sync.Once
+	kinds     []Kind
 }
 
 func New(locator Locator) *Service {
@@ -69,6 +78,19 @@ func DefaultCacheDir() (string, error) {
 
 func (s *Service) Available() bool { return s.runner().Available() }
 
+// Kinds probes the binary once: git-sim only learned to draw rebase in 0.4.0.
+func (s *Service) Kinds() []Kind {
+	s.kindsOnce.Do(func() {
+		s.kinds = []Kind{KindMerge}
+		ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
+		defer cancel()
+		if s.runner().Supports(ctx, KindRebase) {
+			s.kinds = append(s.kinds, KindRebase)
+		}
+	})
+	return s.kinds
+}
+
 func (s *Service) runner() *Runner {
 	if s.Runner == nil {
 		s.Runner = NewRunner()
@@ -94,7 +116,7 @@ func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Resul
 	}
 	place, ok := s.Locator.Locate(it)
 	if !ok || place.Repo == "" {
-		return Result{}, errors.New("the review must be mounted first: the local refs do not exist yet")
+		return Result{}, errors.New("no local clone is known for this item: clone it or mount the review first")
 	}
 
 	base := strings.TrimSpace(it.TargetBranch)
@@ -129,7 +151,7 @@ func (s *Service) Simulate(ctx context.Context, it model.Item, kind Kind) (Resul
 }
 
 func (s *Service) stage(ctx context.Context, place Place, kind Kind, base, tmp string) (string, Spec, error) {
-	if place.Branch == "" {
+	if place.Branch == "" && place.Source == "" {
 		return "", Spec{}, errors.New("the review branch is unknown; mount the review first")
 	}
 
@@ -138,21 +160,42 @@ func (s *Service) stage(ctx context.Context, place Place, kind Kind, base, tmp s
 		return "", Spec{}, fmt.Errorf("clone the local refs of %s: %w", place.Repo, err)
 	}
 
-	if err := s.materialize(ctx, path, place.Branch); err != nil {
+	branch := place.Branch
+	if branch == "" {
+		branch = simBranch
+		if err := s.fetchReview(ctx, place, path); err != nil {
+			return "", Spec{}, err
+		}
+	}
+
+	if err := s.materialize(ctx, path, branch); err != nil {
 		return "", Spec{}, err
 	}
 	if err := s.materialize(ctx, path, base); err != nil {
 		return "", Spec{}, err
 	}
 
-	active, ref := base, place.Branch
+	active, ref := base, branch
 	if kind == KindRebase {
-		active, ref = place.Branch, base
+		active, ref = branch, base
 	}
 	if _, err := s.gitRunner().Run(ctx, path, "checkout", "--quiet", active); err != nil {
 		return "", Spec{}, fmt.Errorf("check out %s in the simulation clone: %w", active, err)
 	}
 	return path, Spec{Kind: kind, Ref: ref}, nil
+}
+
+// fetchReview brings the forge ref into the throwaway clone, so simulating never writes refs to the user's clone.
+func (s *Service) fetchReview(ctx context.Context, place Place, dir string) error {
+	raw, err := s.gitRunner().Run(ctx, place.Repo, "remote", "get-url", "origin")
+	url := strings.TrimSpace(raw)
+	if err != nil || url == "" {
+		return fmt.Errorf("the local clone %s has no origin remote to fetch %s from", place.Repo, place.Source)
+	}
+	if _, err := s.gitRunner().Run(ctx, dir, "fetch", "--no-tags", "--quiet", url, "+"+place.Source+":refs/heads/"+simBranch); err != nil {
+		return fmt.Errorf("fetch %s from the origin of %s: %w", place.Source, place.Repo, err)
+	}
+	return nil
 }
 
 func (s *Service) materialize(ctx context.Context, dir, name string) error {
@@ -176,7 +219,11 @@ func (s *Service) keep(image string, it model.Item, kind Kind) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create the simulation cache: %w", err)
 	}
-	name := fmt.Sprintf("%s-%s-%d-%d.jpg", it.Forge, slug(it.Ref.Project), it.Number, time.Now().UnixNano())
+	ext := filepath.Ext(image)
+	if ext == "" {
+		ext = ".html"
+	}
+	name := fmt.Sprintf("%s-%s-%d-%d%s", it.Forge, slug(it.Ref.Project), it.Number, time.Now().UnixNano(), ext)
 	dst := filepath.Join(dir, name)
 	if err := copyFile(image, dst); err != nil {
 		return "", fmt.Errorf("keep the simulation image: %w", err)

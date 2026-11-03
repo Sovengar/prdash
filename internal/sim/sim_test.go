@@ -15,6 +15,8 @@ func TestArgsPutGlobalsBeforeTheSubcommand(t *testing.T) {
 	want := []string{
 		"--output-only-path",
 		"--no-animate",
+		"--img-format", "html",
+		"--open-in", "local",
 		"--media-dir", "/tmp/media",
 		"merge", "prdash/pr-7",
 	}

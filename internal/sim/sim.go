@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,6 +30,10 @@ const (
 	DefaultBin     = "git-sim"
 	DefaultTimeout = time.Duration(60e9)
 
+	// rebaseSince is the first release whose rebase renderer replays commits instead of indexing a short SHA list.
+	rebaseSince = "0.4.0"
+
+	versionTimeout = time.Duration(5e9)
 	pipeCloseGrace = time.Duration(250e6)
 )
 
@@ -56,6 +61,72 @@ func (r *Runner) bin() string {
 	return r.Bin
 }
 
+// Supports answers whether this git-sim can draw the kind. A version it cannot read is a no.
+func (r *Runner) Supports(ctx context.Context, kind Kind) bool {
+	if kind == KindMerge {
+		return true
+	}
+	if kind != KindRebase {
+		return false
+	}
+	version, err := r.Version(ctx)
+	if err != nil {
+		return false
+	}
+	return atLeast(version, rebaseSince)
+}
+
+// Version reads the semver from `git-sim --version`, which prints "git-sim version X.Y.Z".
+func (r *Runner) Version(ctx context.Context) (string, error) {
+	cctx, cancel := context.WithTimeout(ctx, versionTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(cctx, r.bin(), "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	for _, field := range strings.Fields(string(out)) {
+		if isVersion(field) {
+			return field, nil
+		}
+	}
+	return "", fmt.Errorf("sim: cannot read the git-sim version from %q", strings.TrimSpace(string(out)))
+}
+
+func isVersion(field string) bool {
+	parts := strings.Split(strings.TrimPrefix(field, "v"), ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, part := range parts {
+		if _, err := strconv.Atoi(part); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func atLeast(have, want string) bool {
+	h, w := versionParts(have), versionParts(want)
+	for i := range h {
+		if h[i] != w[i] {
+			return h[i] > w[i]
+		}
+	}
+	return true
+}
+
+func versionParts(v string) [3]int {
+	var out [3]int
+	for i, part := range strings.Split(strings.TrimPrefix(v, "v"), ".") {
+		if i >= len(out) {
+			break
+		}
+		out[i], _ = strconv.Atoi(part)
+	}
+	return out
+}
+
 type Error struct {
 	Args     []string
 	Dir      string
@@ -81,6 +152,8 @@ func (r *Runner) args(spec Spec, mediaDir string) []string {
 	return []string{
 		"--output-only-path",
 		"--no-animate",
+		"--img-format", "html",
+		"--open-in", "local",
 		"--media-dir", mediaDir,
 		string(spec.Kind), spec.Ref,
 	}
@@ -111,7 +184,7 @@ func (r *Runner) Render(ctx context.Context, workdir, mediaDir string, spec Spec
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
-		simErr := &Error{Args: args, Dir: workdir, Msg: message(errb.String(), err), Err: err}
+		simErr := &Error{Args: args, Dir: workdir, Msg: message(errb.String(), out.String(), err), Err: err}
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
 			simErr.ExitCode = exit.ExitCode()
@@ -136,9 +209,27 @@ func env() []string {
 	return append(out, "git_sim_auto_open=false")
 }
 
-func message(stderr string, err error) string {
+func indexErrorLine(stderr string) string {
+	for _, line := range strings.Split(stderr, "\n") {
+		if s := strings.TrimSpace(line); strings.Contains(s, "IndexError") {
+			return s
+		}
+	}
+	return ""
+}
+
+func message(stderr, stdout string, err error) string {
+	if line := indexErrorLine(stderr); line != "" {
+		return "git-sim crashed inside its renderer (" + line + "); upgrade to " + rebaseSince + " or newer"
+	}
 	for _, line := range strings.Split(stderr, "\n") {
 		if s := strings.TrimSpace(line); s != "" {
+			return s
+		}
+	}
+	// git-sim prints its own user errors (unknown ref, already based) on stdout, not stderr.
+	for _, line := range strings.Split(stdout, "\n") {
+		if s := strings.TrimSpace(line); strings.HasPrefix(s, "git-sim error") {
 			return s
 		}
 	}

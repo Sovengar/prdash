@@ -259,8 +259,8 @@ func TestSimulateRefusesWithoutLocatorAndWithoutClone(t *testing.T) {
 	s = &Service{Locator: fakeLocator{ok: false}}
 	if _, err := s.Simulate(context.Background(), it, KindMerge); err == nil {
 		t.Error("with a locator that finds nothing it gave nil")
-	} else if !strings.Contains(err.Error(), "mounted") {
-		t.Errorf("the error %q does not say the review is not mounted", err)
+	} else if !strings.Contains(err.Error(), "clone") {
+		t.Errorf("the error %q does not say there is no local clone", err)
 	}
 
 	s = &Service{Locator: fakeLocator{ok: true, place: Place{}}}
@@ -294,7 +294,7 @@ func TestAvailableAndRunnerDoNotBreakWithAnEmptyService(t *testing.T) {
 
 // Whether the process complained or hung separates two completely different diagnoses.
 func TestSimErrorMessageTellsComplainingFromHanging(t *testing.T) {
-	got := message("first\nsecond\nthird", errors.New("exit status 1"))
+	got := message("first\nsecond\nthird", "", errors.New("exit status 1"))
 	if !strings.Contains(got, "first") {
 		t.Errorf("the message %q does not bring stderr's first line", got)
 	}
@@ -302,7 +302,7 @@ func TestSimErrorMessageTellsComplainingFromHanging(t *testing.T) {
 		t.Errorf("the message %q brings more than one line", got)
 	}
 
-	got = message("   \n  ", errors.New("exit status 137"))
+	got = message("   \n  ", "", errors.New("exit status 137"))
 	if strings.TrimSpace(got) == "" {
 		t.Error("without stderr the message ended up empty")
 	}
@@ -310,7 +310,7 @@ func TestSimErrorMessageTellsComplainingFromHanging(t *testing.T) {
 		t.Errorf("the message %q lost the exit code", got)
 	}
 
-	if got := message("", nil); strings.TrimSpace(got) == "" {
+	if got := message("", "", nil); strings.TrimSpace(got) == "" {
 		t.Error("without stderr nor error the message ended up empty")
 	}
 }

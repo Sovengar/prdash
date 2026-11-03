@@ -34,14 +34,8 @@ func TestNoCellFillsItsColumn(t *testing.T) {
 		strings.Repeat("t", colTitle+5), 1198, "")
 	it.ReviewKind = model.ReviewRequested
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, mkItems("APPCITTI/vsocial/backend/mobile-frontend")...)}, prefixCommon)
-	cells := itemCells(it, model.SectionReview, "me", lay)
+	cells := itemCells(it, model.SectionReview, lay)
 
-	if got, want := utf8.RuneCountInString(roleText(it, "me")), colRole-1; got != want {
-		t.Fatalf("the ROLE text measures %d runes, want %d: the case that overflowed is no longer being tested", got, want)
-	}
-	if got, want := utf8.RuneCountInString(cells[colRoleIdx].text), colRole-1; got != want {
-		t.Fatalf("cell ROLE = %d runes, want %d (colRole - gap)", got, want)
-	}
 	if got, want := utf8.RuneCountInString(cells[colTitleIdx].text), colTitle-1; got != want {
 		t.Fatalf("cell TITLE = %d runes, want %d (colTitle - gap)", got, want)
 	}

@@ -15,14 +15,23 @@ The inventory of features — what each one does and how it is triggered (key,
 flag or command) — lives in [`docs/FEATURES.md`](docs/FEATURES.md). This README
 keeps the usage details.
 
-## Requirements
+## Dependencies
 
-- Go 1.26+ to build.
-- `gh` authenticated against GitHub and `glab` authenticated against the
-  self-managed GitLab.
-- Optional: [Herdr](https://herdr.dev) 0.9.x inside the session for the review
-  layout. Outside Herdr, the inbox (F1) stays operational and the review
-  assembly reports that it needs Herdr.
+Go 1.26+ is required only to build from source. The installed binary uses the
+following runtime tools; an unavailable optional tool warns and degrades the
+relevant action instead of preventing the inbox from opening.
+
+| Area | Tools | Used for |
+|---|---|---|
+| Core | `git` | Cloning repositories and creating and managing review worktrees. |
+| Forge authentication | `gh`, `glab` | The GitHub and GitLab adapters, respectively. Authenticate each CLI for every forge that is enabled. |
+| Secret injection | `op` (optional) | 1Password may inject `GH_TOKEN` or `GLAB_TOKEN` before launching `prdash`; it is not invoked by prdash and is not otherwise required. |
+| Review layout | [Herdr](https://herdr.dev) 0.9.x, `tuicr`, `hunk`, `opencode`, and an editor (`vi` by default; `nvim` is a common replacement) | `r` creates the two-tab review layout in Herdr and opens these pane commands. Herdr is required only for that layout; missing pane tools leave their panes out and warn. The editor is configured with `[tools].editor` or `[commands].editor`. |
+| Simulation | `git-sim`, plus its `manim`, OpenCV (`cv2`), and Python dependencies | The optional `v` history preview. Without them, `v` warns and does nothing. |
+
+`gh` and `glab` are configurable under `[tools]`; every pane command is
+replaceable under `[commands]`. See [Pane commands (`[commands]`)](#pane-commands-commands)
+for their exact defaults and overrides.
 
 Test PR 1/10: smoke note to practice the PR resolution cycle.
 
@@ -116,41 +125,41 @@ different groups with the same leaf look the same (`acme/one#7` and `other/one#8
 ### Simulation (`v`)
 
 `v` opens a popup that renders with [git-sim](https://github.com/initialcommit/git-sim)
-how the history would end up after integrating the PR, and shows it **on top** of
-the inbox: the background view stays visible except where the box covers it.
-`enter` renders, `esc` closes and `o` opens the image in the system viewer.
+how the history would end up after integrating the PR. `enter` renders,
+`esc` closes and `o` reopens the page. The result is an **interactive HTML page**
+opened beside the TUI with `terminal-browser open <path> --split right`; without
+terminal-browser the desktop browser is the fallback. The popup keeps the inbox
+visible and reports what was opened instead of painting pixels.
 
 It is not a gate: git-sim draws, it does not execute, and its verdict only exists
-inside the image. It is a viewer. To know whether a merge **collides**, `v` is no
+inside the page. It is a viewer. To know whether a merge **collides**, `v` is no
 use.
 
 Requirements and limits:
 
 - It needs `git-sim` on the PATH (with `manim`, `cv2` and Python). If it is not
   there, the action warns and does nothing.
-- It needs the review mounted (`r`): the refs only exist locally after the
-  `fetch`. Without it, it warns.
+- It does **not** need the review mounted. When no review worktree exists, it
+  fetches the PR/MR head from the local clone's origin into a throwaway clone,
+  renders there and deletes it with the clone. It warns only when the item's
+  repository is not cloned locally at all.
 - The whole render happens in a **temporary clone** of those refs, with the base
   branch active, and it is deleted when done. It does not touch the review's
   worktree nor the user's clone: it leaves no refs, worktrees, branches or
   uncommitted changes behind.
-- Only `merge` is offered. git-sim 0.3.5 does not know how to draw a `rebase`: if
-  the PR branch is already based on the base —the normal case— it answers with an
-  inverted message, and if they diverge it blows up with an `IndexError`. When the
-  project fixes it, the strategy list in `internal/tui/sim.go` is the only thing
-  that needs to change.
-- The box is sized to what the image needs while keeping its aspect ratio, and it
-  settles at 75% of the terminal height, leaving background around it.
-- **Inside Herdr with `terminal.kitty_graphics` on** (and an outer terminal that
-  supports it, like kitty), the image is published on the **graphics layer of the
-  pane** and the terminal paints it at native resolution. That is what removes the
-  mosaic look: the half-blocks are quantized to the cell grid, so a 1920 px image
-  on 84 columns came out with every pixel turned into a 23×23-cell block.
-- **Without Herdr, or with the layer off or unresponsive**, the image is painted
-  with half-blocks in truecolor (two pixels per cell). It looks pixelated —it is
-  the ceiling of a character grid— but it is the honest degradation. `o` opens it
-  in the viewer in any case.
-- The images are kept in `$XDG_CACHE_HOME/prdash/sim` (the last 20).
+- `merge` is always offered. `rebase` appears only when `git-sim --version` reports
+  0.4.0 or newer: 0.3.5 crashes with an `IndexError` when the branches diverge,
+  and answers with an inverted message when the PR is already based on the base.
+  The probe runs once per session; an unreadable version means merge only.
+- A git-sim crash inside its renderer (`IndexError`) is shown as a short message
+  with the required upgrade, not as a Python traceback.
+- The render asks git-sim for `--img-format html --open-in local`: 0.4.0
+  defaults to an interactive page, and `local` keeps it from uploading to the
+  hosted viewer (which blocks a captured render).
+- **terminal-browser** is optional. With it, the page opens in a split beside the
+  TUI (`terminal-browser open <path> --split right`). Without it, `xdg-open`
+  opens the page in the desktop browser; the popup still carries the kept path.
+- The pages are kept in `$XDG_CACHE_HOME/prdash/sim` (the last 20).
 
 The screen splits in two: the scrollable list on top and the detail of the
 selected item in the bottom 40%, which moves with the cursor. There is no

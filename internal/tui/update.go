@@ -97,8 +97,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case simMsg:
-		m.applySim(msg)
-		return m.withPump(nil)
+		return m.withPump(m.applySim(msg))
 
 	case branchesMsg:
 		m.applyBranches(msg)
@@ -569,7 +568,7 @@ func (m *Model) renderItem(it model.Item, sec model.Section, lay refLayout, sele
 	if selected {
 		prefix = styleCursor.Render("▸ ")
 	}
-	return prefix + renderCells(itemCells(it, sec, m.viewerLogin(it.Forge), lay), lay, inner)
+	return prefix + renderCells(itemCells(it, sec, lay), lay, inner)
 }
 
 func (m *Model) contentWidth() int {

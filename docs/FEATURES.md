@@ -31,6 +31,7 @@ Concise feature inventory of prdash. Details live in `../README.md` and `adr/`.
 - **Navigation** — `j`/`k` or `↑`/`↓` move cursor; `pgup`/`pgdn` page; `home`/`end` jump to top/bottom.
 - **Counts legend** — top border shows `Mine (n) · Assigned (n) · Mentioned (n)` with active section highlighted.
 - **One section at a time** — only the active section is painted; no full-screen view.
+- **Role context** — the redundant `ROLE` table column is omitted; the detail panel still shows the selected item's role.
 
 ## Item card & comments
 
@@ -77,11 +78,11 @@ Concise feature inventory of prdash. Details live in `../README.md` and `adr/`.
 
 ## Simulation
 
-- **git-sim integration** — `v` renders how history would look after merge.
-- **Strategy chooser** — only `merge` offered (git-sim 0.3.5 does not draw rebase).
-- **Graphics layer** — inside Herdr with `terminal.kitty_graphics`, image published on pane graphics layer at native resolution.
-- **Half-block fallback** — without Herdr or with layer off, image painted with half-blocks in truecolor.
-- **Open image** — `o` opens rendered image in system viewer.
+- **git-sim integration** — `v` renders how history would look after the chosen integration; no mounted review is needed, the PR head is fetched into a throwaway clone.
+- **Strategy chooser** — `merge` always; `rebase` only when git-sim is 0.4.0 or newer (version probed once per session).
+- **HTML page** — the render asks git-sim for `--img-format html` and opens it with `terminal-browser open <path> --split right`; without terminal-browser it falls back to `xdg-open`.
+- **Open page** — `o` reopens the rendered page; the popup shows its file name.
+- **Clear failures** — git-sim's own stdout error is surfaced, and an `IndexError` crash becomes an upgrade hint.
 - **Cache** — images kept in `$XDG_CACHE_HOME/prdash/sim` (last 20).
 - **Temporary clone** — render happens in a temporary clone; no refs or worktrees left behind.
 

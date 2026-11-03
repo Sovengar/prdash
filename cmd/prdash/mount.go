@@ -18,11 +18,18 @@ import (
 type simLocator struct{ ex *executor.Executor }
 
 func (l simLocator) Locate(it model.Item) (sim.Place, bool) {
-	wt, ok := l.ex.ActiveReview(it)
-	if !ok || wt.Repo == "" {
+	if wt, ok := l.ex.ActiveReview(it); ok && wt.Repo != "" {
+		return sim.Place{Repo: wt.Repo, Branch: wt.Branch}, true
+	}
+	repo, ok := l.ex.LocalRepo(it.Ref)
+	if !ok {
 		return sim.Place{}, false
 	}
-	return sim.Place{Repo: wt.Repo, Branch: wt.Branch}, true
+	source, ok := reporesolver.ReviewRef(it)
+	if !ok {
+		return sim.Place{}, false
+	}
+	return sim.Place{Repo: repo, Source: source}, true
 }
 
 func buildSimulator(cfg config.Config, ex *executor.Executor) *sim.Service {

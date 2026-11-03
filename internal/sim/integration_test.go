@@ -24,15 +24,25 @@ func TestSimulateWithRealGitSimMerge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Simulate(merge): %v", err)
 	}
-	img, err := Load(res.Path)
-	if err != nil {
-		t.Fatalf("the image does not decode: %v", err)
-	}
-	if b := img.Bounds(); b.Dx() < 32 || b.Dy() < 32 {
-		t.Errorf("image of %dx%d, too small for a graph", b.Dx(), b.Dy())
-	}
-	if cells := Cells(img, 20, 10); len(cells) != 10 {
-		t.Errorf("Cells returned %d lines, want 10", len(cells))
+	if strings.HasSuffix(res.Path, ".html") {
+		raw, err := os.ReadFile(res.Path)
+		if err != nil {
+			t.Fatalf("the page does not read: %v", err)
+		}
+		if len(raw) < 1024 {
+			t.Errorf("page of %d bytes, too small for a graph", len(raw))
+		}
+	} else {
+		img, err := Load(res.Path)
+		if err != nil {
+			t.Fatalf("the image does not decode: %v", err)
+		}
+		if b := img.Bounds(); b.Dx() < 32 || b.Dy() < 32 {
+			t.Errorf("image of %dx%d, too small for a graph", b.Dx(), b.Dy())
+		}
+		if cells := Cells(img, 20, 10); len(cells) != 10 {
+			t.Errorf("Cells returned %d lines, want 10", len(cells))
+		}
 	}
 	t.Logf("merge -> %s", filepath.Base(res.Path))
 

@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"image"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -47,6 +49,7 @@ type simPanel struct {
 	item        model.Item
 	cursor      int
 	kind        sim.Kind
+	kinds       []sim.Kind
 	img         image.Image
 	cells       []string
 	cellW       int
@@ -61,6 +64,11 @@ type simPanel struct {
 type Simulator interface {
 	Available() bool
 	Simulate(ctx context.Context, it model.Item, kind sim.Kind) (sim.Result, error)
+}
+
+// KindLister is optional: only the real service knows which strategies its git-sim can draw.
+type KindLister interface {
+	Kinds() []sim.Kind
 }
 
 type Graphics interface {
@@ -98,19 +106,37 @@ func (m Model) openSimulator() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.disarmMerge()
-	m.sim = simPanel{state: simChoosing, item: it}
+	m.sim = simPanel{state: simChoosing, item: it, kinds: m.availableSimKinds()}
 	return m, nil
 }
 
+func (m Model) availableSimKinds() []sim.Kind {
+	if lister, ok := m.simulator.(KindLister); ok {
+		if kinds := lister.Kinds(); len(kinds) > 0 {
+			return kinds
+		}
+	}
+	return simKinds
+}
+
+// simKindsNow tolerates a panel opened directly, as tests do, without a strategy list.
+func (m Model) simKindsNow() []sim.Kind {
+	if len(m.sim.kinds) > 0 {
+		return m.sim.kinds
+	}
+	return simKinds
+}
+
 func (m *Model) moveSimCursor(key string) bool {
-	if len(simKinds) < 2 {
+	kinds := m.simKindsNow()
+	if len(kinds) < 2 {
 		return false
 	}
 	switch key {
 	case "up", "k":
-		m.sim.cursor = (m.sim.cursor - 1 + len(simKinds)) % len(simKinds)
+		m.sim.cursor = (m.sim.cursor - 1 + len(kinds)) % len(kinds)
 	case "down", "j", "right", "tab":
-		m.sim.cursor = (m.sim.cursor + 1) % len(simKinds)
+		m.sim.cursor = (m.sim.cursor + 1) % len(kinds)
 	default:
 		return false
 	}
@@ -143,7 +169,7 @@ func (m Model) handleSimKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd
 		return m, tea.Quit
 	case "o":
 		if m.sim.state == simShowing && m.sim.image != "" {
-			return m, m.openBrowserCmd(m.sim.image)
+			return m, m.openSimPageCmd(m.sim.image)
 		}
 		m.closeSim()
 		return m, nil
@@ -158,7 +184,7 @@ func (m Model) handleSimKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd
 			return m, nil
 		}
 		if key == "enter" {
-			return m, m.startSim(simKinds[m.sim.cursor])
+			return m, m.startSim(m.simKindsNow()[m.sim.cursor])
 		}
 		m.closeSim()
 		return m, nil
@@ -186,20 +212,26 @@ func (m *Model) startSim(kind sim.Kind) tea.Cmd {
 	return nil
 }
 
-func (m *Model) applySim(msg simMsg) {
+func (m *Model) applySim(msg simMsg) tea.Cmd {
 	if msg.seq != m.simSeq {
-		return
+		return nil
 	}
 	if msg.err != nil {
 		m.closeSim()
 		m.setNotice("simulate "+string(msg.kind)+": "+msg.err.Error(), levelError)
-		return
+		return nil
+	}
+	if strings.HasSuffix(msg.res.Path, ".html") {
+		m.sim.state = simShowing
+		m.sim.image = msg.res.Path
+		m.sim.img = nil
+		return m.openSimPageCmd(msg.res.Path)
 	}
 	img, err := sim.Load(msg.res.Path)
 	if err != nil {
 		m.closeSim()
 		m.setNotice("simulate: "+err.Error(), levelError)
-		return
+		return nil
 	}
 	m.sim.state = simShowing
 	m.sim.image = msg.res.Path
@@ -207,6 +239,32 @@ func (m *Model) applySim(msg simMsg) {
 	if !m.publishSimImage(img) {
 		m.renderSimCells()
 	}
+	return nil
+}
+
+func (m *Model) openSimPageCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		if err := openSimPage(path); err != nil {
+			return notifyMsg{text: "simulate: " + err.Error(), level: levelWarn}
+		}
+		return notifyMsg{text: "opened " + filepath.Base(path), level: levelInfo}
+	}
+}
+
+// The HTML page opens beside the TUI; without terminal-browser the desktop browser is the honest fallback.
+func openSimPage(path string) error {
+	if _, err := exec.LookPath("terminal-browser"); err == nil {
+		cmd := exec.Command("terminal-browser", "open", path, "--split", "right")
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		return cmd.Process.Release()
+	}
+	cmd := exec.Command("xdg-open", path)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
 }
 
 func (m *Model) publishSimImage(img image.Image) bool {
@@ -257,6 +315,9 @@ func (m Model) simBox() (w, h int) {
 		return min(m.contentWidth(), simChooserWidth), simChrome + 2
 	}
 
+	if m.sim.img == nil {
+		return min(m.contentWidth(), simChooserWidth), simChrome + 2
+	}
 	cellW, cellH := m.cellSize()
 	cols, rows := sim.FitCells(m.sim.img, cellW, cellH, m.simMaxCols(), m.simMaxRows())
 	return cols + 2, rows + simChrome
@@ -319,7 +380,7 @@ func (m Model) simChooserBox() string {
 	base := it.TargetBranch
 
 	lines := make([]string, 0, 4)
-	for i, kind := range simKinds {
+	for i, kind := range m.simKindsNow() {
 		flow := base + " ← " + branch
 		if kind == sim.KindRebase {
 			flow = branch + " → " + base
@@ -344,6 +405,14 @@ func (m Model) simBusyBox() string {
 
 func (m Model) simImageBox() string {
 	width, height := m.simBox()
+	if m.sim.img == nil {
+		body := padLines([]string{
+			styleInfo.Render("opened in terminal-browser"),
+			styleDim.Render(filepath.Base(m.sim.image)),
+		}, height-simChrome)
+		body = append(body, styleDim.Render("esc close · o reopen"))
+		return borderedBox(" simulate: "+string(m.sim.kind)+" "+refLabel(m.sim.item), strings.Join(body, "\n"), width)
+	}
 	body := padLines(m.sim.cells, height-simChrome)
 	body = append(body, styleDim.Render("esc close · o open image"))
 	return borderedBox(" simulate: "+string(m.sim.kind)+" "+refLabel(m.sim.item), strings.Join(body, "\n"), width)

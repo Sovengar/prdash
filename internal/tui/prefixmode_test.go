@@ -112,7 +112,7 @@ func TestRefCellTextByMode(t *testing.T) {
 func TestFullClipsTheTailAndKeepsTheNumber(t *testing.T) {
 	items := mkItems("APPCITTI/vsocial/backend/api-gateway", "APPCITTI/vsocial/web-app")
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixFull)
-	cell := itemCells(items[0], model.SectionReview, "me", lay)[colRefIdx].text
+	cell := itemCells(items[0], model.SectionReview, lay)[colRefIdx].text
 
 	if want := "…/vsocial/backend/api-gateway#100"; cell != want {
 		t.Errorf("cell ITEM = %q, want %q", cell, want)
@@ -126,10 +126,10 @@ func TestLeafDoesNotDisambiguateRepeatedLeaves(t *testing.T) {
 	items := mkItems("acme/one", "other/one")
 	lay := newRefLayout([]inbox.Section{section(model.SectionReview, items...)}, prefixLeaf)
 
-	if got := itemCells(items[0], model.SectionReview, "me", lay)[colRefIdx].text; got != "one#100" {
+	if got := itemCells(items[0], model.SectionReview, lay)[colRefIdx].text; got != "one#100" {
 		t.Errorf("cell of the first = %q, want %q", got, "one#100")
 	}
-	if got := itemCells(items[1], model.SectionReview, "me", lay)[colRefIdx].text; got != "one#101" {
+	if got := itemCells(items[1], model.SectionReview, lay)[colRefIdx].text; got != "one#101" {
 		t.Errorf("cell of the second = %q, want %q", got, "one#101")
 	}
 }
@@ -140,7 +140,7 @@ func TestRefCellTextDoesNotRepeatThePathInTheLine(t *testing.T) {
 	if got := lay.prefixOf(model.SectionReview); got != "" {
 		t.Fatalf("prefix = %q, want empty", got)
 	}
-	cell := itemCells(items[0], model.SectionReview, "me", lay)[colRefIdx].text
+	cell := itemCells(items[0], model.SectionReview, lay)[colRefIdx].text
 	if got := strings.Count(cell, "acme"); got != 1 {
 		t.Errorf("the cell says %q: the group appears %d times, want 1", cell, got)
 	}

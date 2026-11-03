@@ -12,7 +12,6 @@ const (
 	colMark   = 2  // "✗ "
 	colForge  = 14 // "GLab@umane"
 	colTitle  = 40
-	colRole   = 11 // "review req" (10) + separation gap
 	colState  = 18 // "changes requested"
 	colChecks = 8
 	colDiff   = 12
@@ -33,7 +32,6 @@ var (
 	styleForge        = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 	styleRef          = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	styleTitle        = lipgloss.NewStyle()
-	styleRole         = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	styleEmpty        = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
 	styleWarn         = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
 	styleHint         = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))

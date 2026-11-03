@@ -91,16 +91,11 @@ func TestSimulateEndToEndWithRealGitSim(t *testing.T) {
 	if !strings.Contains(view, "Assigned (1)") {
 		t.Error("the popup covered the background view")
 	}
-	if len(m.sim.cells) != m.sim.cellH {
-		t.Errorf("cells = %d lines, want %d", len(m.sim.cells), m.sim.cellH)
+	if len(m.sim.cells) != 0 {
+		t.Errorf("cells = %d, want none: the page opens in terminal-browser", len(m.sim.cells))
 	}
-	// The cells go to the middle of the box, not the first line: the overlay's arithmetic owns that.
-	block := strings.Index(view, "▀")
-	if block < 0 {
-		t.Fatalf("the view contains no half-block:\n%s", view)
-	}
-	if row := strings.Count(view[:block], "\n"); row < 2 {
-		t.Errorf("the popup stuck to the top border (row %d)", row)
+	if !strings.Contains(view, "opened in terminal-browser") {
+		t.Errorf("the popup does not say the page was opened:\n%s", view)
 	}
 
 	m = press(t, m, "esc")

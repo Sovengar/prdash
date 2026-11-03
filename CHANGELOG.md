@@ -20,6 +20,23 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Simulation no longer needs the review mounted.** When no review worktree
+  exists, `v` resolves the item's local clone, fetches the PR/MR head from its
+  `origin` into the throwaway clone, renders there and deletes it with the
+  clone. Nothing is written to the user's clone: no branch, no ref, no worktree.
+  Only an item whose repository is not cloned at all still warns. The render asks
+  git-sim for `--img-format html --open-in local` and opens the page with
+  `terminal-browser open <path> --split right` (fallback `xdg-open`); the popup
+  reports its file name instead of painting half-blocks, and `o` reopens it.
+
+- **Simulation probes git-sim and offers `rebase` when it can draw it.** The
+  strategy list is no longer a constant: `git-sim --version` is read once per
+  session, and `rebase` appears only for 0.4.0 or newer, where the renderer
+  replays commits instead of indexing a short SHA list. An unreadable version
+  keeps the old merge-only list. A failing run now surfaces git-sim's own
+  `git-sim error:` line from stdout instead of a bare exit status, and an
+  `IndexError` traceback becomes a short upgrade hint.
+
 - **A successful merge now deletes the branch the CLI leaves behind (ADR 0013).**
   Beyond the forge's `--delete-branch`, prdash removes the review branch
   `prdash/pr-N` and its tracking ref in the clone that served the worktree, and
